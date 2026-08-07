@@ -1,0 +1,15 @@
+{
+    "name": "Arka01",
+    "short_name": "Arka01",
+    "description": "Movilidad de confianza: armá tu flota de conductores, pedí carreras y viajá seguro.",
+    "start_url": "/dashboard",
+    "id": "/dashboard",
+    "display": "standalone",
+    "background_color": "#0a0f0c",
+    "theme_color": "#0a0f0c",
+    "orientation": "portrait-primary",
+    "lang": "es-EC",
+    "icons": [
+        { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    ]
+}

@@ -1,0 +1,14 @@
+/* Leaflet necesita su propio CSS para que el mapa y los controles se vean bien.
+   Tiene que ir antes que cualquier otra regla (regla del propio CSS para @import). */
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Evita el "flash" blanco al cargar, ya que Arka01 siempre se ve en modo oscuro */
+@layer base {
+    html {
+        color-scheme: dark;
+    }
+}

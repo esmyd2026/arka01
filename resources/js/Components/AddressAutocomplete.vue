@@ -1,0 +1,216 @@
+<script setup>
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue';
+import { loadGooglePlaces } from '@/Utils/googleMaps';
+
+// Input de dirección con sugerencias de Google Places (decisión explícita del
+// usuario: Google se usa SOLO acá, para autocompletar — el mapa y el trazado
+// de ruta siguen siendo Leaflet + OSRM, gratis, ver Components/FleetMap.vue).
+// Sin VITE_GOOGLE_MAPS_API_KEY configurada, se comporta como un campo de
+// texto libre normal, sin sugerencias (no rompe nada).
+const props = defineProps({
+    modelValue: { type: String, default: '' },
+    placeholder: { type: String, default: '' },
+    id: { type: String, default: null },
+    // Centro para preferir resultados cercanos (ej. la ciudad elegida en el
+    // formulario de carrera) — solo una preferencia, no restringe el resto.
+    cityBias: { type: Object, default: null },
+    // Pedido explícito del usuario ("guardá las que ya ha realizado para que
+    // aparezcan como favoritas"): direcciones que este cliente ya usó antes —
+    // [{ address, lat, lng, sector_id }]. Aparecen al enfocar el campo VACÍO,
+    // antes de escribir nada (mismo criterio que "lugares recientes" de
+    // cualquier app de viajes), y no gastan cuota de Google porque no
+    // disparan ninguna búsqueda — ya se sabe lat/lng de antes.
+    favorites: { type: Array, default: () => [] },
+});
+
+const emit = defineEmits(['update:modelValue', 'place-selected']);
+
+let placesLib = null;
+let sessionToken = null;
+let debounceTimer = null;
+
+// Bug real reportado por el usuario (lista de sugerencias con datos válidos
+// en la respuesta de Google, pero "Unhandled error during execution of
+// render function" al pintarla): un ref() común envuelve su contenido en un
+// Proxy reactivo de Vue — los objetos que devuelve el SDK de Google
+// (AutocompleteSuggestion/PlacePrediction) dependen de estado interno
+// atado a su identidad real, y ese Proxy se la cambia, rompiendo sus
+// getters. shallowRef() reacciona igual (reemplazamos la lista entera, nunca
+// mutamos un elemento suelto) pero deja el contenido tal cual, sin envolver.
+const suggestions = shallowRef([]);
+const open = ref(false);
+const loading = ref(false);
+
+loadGooglePlaces().then((lib) => {
+    placesLib = lib;
+});
+
+function newSessionToken() {
+    if (!placesLib) return null;
+    sessionToken = new placesLib.AutocompleteSessionToken();
+    return sessionToken;
+}
+
+function onInput(event) {
+    const value = event.target.value;
+    emit('update:modelValue', value);
+
+    clearTimeout(debounceTimer);
+
+    if (!value.trim()) {
+        // Campo vaciado de nuevo: volver a ofrecer los favoritos en vez de
+        // dejar el dropdown cerrado sin más.
+        suggestions.value = [];
+        open.value = props.favorites.length > 0;
+        return;
+    }
+
+    if (!placesLib || value.trim().length < 3) {
+        suggestions.value = [];
+        open.value = false;
+        return;
+    }
+
+    debounceTimer = setTimeout(() => fetchSuggestions(value), 300);
+}
+
+const showFavorites = computed(() => open.value && !props.modelValue?.trim() && props.favorites.length > 0);
+const showSuggestions = computed(() => open.value && !showFavorites.value && suggestions.value.length > 0);
+
+function selectFavorite(place) {
+    emit('update:modelValue', place.address);
+    // sectorId solo viene en favoritos (ya se sabía de cuando se usó antes) —
+    // una sugerencia de Google en vivo no tiene forma de saber el sector.
+    emit('place-selected', { lat: place.lat, lng: place.lng, address: place.address, sectorId: place.sector_id ?? null });
+    open.value = false;
+}
+
+async function fetchSuggestions(text) {
+    // Bug real reportado: con la key mal configurada del lado de Google
+    // Cloud (falta habilitar "Places API (New)" o la facturación), esta
+    // clase puede faltar aunque la librería haya cargado — llamarla igual
+    // tira un error dentro del propio SDK de Google que no se puede atrapar
+    // desde acá. Mejor no intentarlo — mismo comportamiento que sin key.
+    if (!placesLib?.AutocompleteSuggestion) return;
+
+    loading.value = true;
+
+    try {
+        const request = {
+            input: text,
+            sessionToken: sessionToken ?? newSessionToken(),
+            includedRegionCodes: ['ec'],
+        };
+
+        // Preferir resultados cerca de la ciudad elegida, sin restringir el
+        // resto del país (alguien puede escribir una referencia de otra ciudad).
+        if (props.cityBias?.lat != null) {
+            request.locationBias = {
+                center: { lat: props.cityBias.lat, lng: props.cityBias.lng },
+                radius: 30000,
+            };
+        }
+
+        const { suggestions: results } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+        suggestions.value = results ?? [];
+        open.value = suggestions.value.length > 0;
+    } catch (error) {
+        // Si la API falla (key inválida, cuota, red), no rompemos el
+        // formulario — el campo sigue funcionando como texto libre. Pedido
+        // explícito del usuario ("coloca log también"): sin este log, un
+        // error acá quedaba completamente invisible (el pedido a Google
+        // podía llegar a verse "exitoso" en Network y sin embargo esto
+        // fallar después, al armar los objetos de sugerencia).
+        console.warn('Arka01: Google Places respondió pero no se pudieron armar las sugerencias.', error);
+        suggestions.value = [];
+        open.value = false;
+    } finally {
+        loading.value = false;
+    }
+}
+
+async function selectSuggestion(suggestion) {
+    try {
+        const place = suggestion.placePrediction.toPlace();
+        await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+        emit('update:modelValue', place.formattedAddress ?? suggestion.placePrediction.text.text);
+        emit('place-selected', {
+            lat: place.location.lat(),
+            lng: place.location.lng(),
+            address: place.formattedAddress ?? suggestion.placePrediction.text.text,
+        });
+    } catch {
+        // Se pudo listar la sugerencia pero no resolver sus coordenadas — se
+        // deja el texto nomás, el cliente puede marcar el punto en el mapa.
+        emit('update:modelValue', suggestion.placePrediction.text.text);
+    }
+
+    suggestions.value = [];
+    open.value = false;
+    // Nueva sesión para la próxima búsqueda (así se factura como una sola
+    // sesión de autocompletado + selección, no una por cada tecla).
+    sessionToken = null;
+}
+
+function close() {
+    open.value = false;
+}
+
+onBeforeUnmount(() => clearTimeout(debounceTimer));
+</script>
+
+<template>
+    <div class="relative">
+        <input
+            :id="id"
+            type="text"
+            :value="modelValue"
+            :placeholder="placeholder"
+            class="w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary focus:ring-arka-primary"
+            autocomplete="off"
+            @input="onInput"
+            @keydown.escape="close"
+            @focus="() => (open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0)"
+        />
+
+        <!-- Bug reportado por el usuario: el mapa de Leaflet (Components/FleetMap.vue,
+             más abajo en la pantalla) trae sus propios controles internos con
+             z-index hasta 1000 (.leaflet-control) — con el z-40/z-50 de acá,
+             el mapa terminaba tapando el desplegable. Subido bien por encima
+             de eso para que gane siempre, sin importar qué mapa haya debajo. -->
+        <div v-if="open" class="fixed inset-0 z-[1400]" @click="close" />
+
+        <!-- Lugares ya usados antes (pedido explícito del usuario) — solo
+             antes de escribir nada, como "lugares recientes". -->
+        <ul
+            v-if="showFavorites"
+            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg py-1"
+        >
+            <li v-for="place in favorites" :key="place.address">
+                <button
+                    type="button"
+                    class="w-full px-3 py-2 text-start text-sm text-arka-text hover:bg-arka-base flex items-center gap-2"
+                    @click="selectFavorite(place)"
+                >
+                    <span class="text-arka-primary-bright shrink-0">★</span>
+                    <span class="truncate">{{ place.address }}</span>
+                </button>
+            </li>
+        </ul>
+
+        <ul
+            v-else-if="showSuggestions"
+            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg py-1"
+        >
+            <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
+                <button
+                    type="button"
+                    class="w-full px-3 py-2 text-start text-sm text-arka-text hover:bg-arka-base"
+                    @click="selectSuggestion(suggestion)"
+                >
+                    {{ suggestion.placePrediction.text.text }}
+                </button>
+            </li>
+        </ul>
+    </div>
+</template>

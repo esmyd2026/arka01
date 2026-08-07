@@ -1,0 +1,74 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+/**
+ * Rendimiento/seguridad de cara a producción (pedido explícito del usuario):
+ * ninguna respuesta traía headers de seguridad — cualquiera podía embeber la
+ * app en un iframe ajeno (clickjacking) y no había ninguna política de qué
+ * orígenes pueden cargar scripts/imágenes/conexiones.
+ *
+ * El CSP no es "todo 'self'" a propósito: Ziggy (@routes) imprime un
+ * <script> inline en cada página (de ahí 'unsafe-inline' en script-src — una
+ * versión más estricta necesitaría migrar a nonces, fuera de este alcance),
+ * y la app de verdad carga recursos de estos orígenes externos:
+ * - OpenStreetMap (mapa base, Components/FleetMap.vue)
+ * - OSRM (trazado de ruta, Pages/Ride/Request.vue)
+ * - Nominatim/OSM (geocodificación inversa para "usar mi ubicación actual",
+ *   Pages/Ride/Request.vue — gratis, sin key, mismo criterio que OSRM)
+ * - Google Maps JS/Places (autocompletado de direcciones, Utils/googleMaps.js,
+ *   opcional según VITE_GOOGLE_MAPS_API_KEY)
+ * - Reverb (WebSocket en vivo, wss/ws según entorno)
+ */
+class SecurityHeaders
+{
+    public function handle(Request $request, Closure $next): Response
+    {
+        $response = $next($request);
+
+        // El CSP NO se aplica en local (pedido explícito del usuario, fix de
+        // un bug real: pantalla en blanco). El servidor de desarrollo de Vite
+        // sirve los scripts del hot-reload desde otro origen/puerto (5173),
+        // y Chrome directamente descarta como "origen inválido" cualquier
+        // fuente CSP con el literal IPv6 `[::1]` que Vite eligió acá —
+        // ninguna lista de orígenes explícitos alcanza a cubrirlo de forma
+        // confiable. El CSP es una protección pensada para producción (mismo
+        // origen sirviendo todo, sin dev server); en local, la única persona
+        // navegando es quien está programando en su propia máquina, así que
+        // no hay una amenaza real que mitigar acá.
+        if (! app()->environment('local')) {
+            $csp = implode('; ', [
+                "default-src 'self'",
+                "script-src 'self' 'unsafe-inline' https://maps.googleapis.com",
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                "font-src 'self' data: https://fonts.gstatic.com",
+                "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.gstatic.com https://maps.googleapis.com",
+                "connect-src 'self' ws: wss: https://router.project-osrm.org https://nominatim.openstreetmap.org https://maps.googleapis.com",
+                "worker-src 'self'",
+                "object-src 'none'",
+                "base-uri 'self'",
+                "form-action 'self'",
+                "frame-ancestors 'none'",
+            ]);
+
+            $response->headers->set('Content-Security-Policy', $csp);
+        }
+
+        $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
+        $response->headers->set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
+
+        // HSTS solo tiene sentido si de verdad se sirve por HTTPS (en local,
+        // sobre HTTP, este header no hace nada dañino pero tampoco aporta).
+        if ($request->secure()) {
+            $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        }
+
+        return $response;
+    }
+}

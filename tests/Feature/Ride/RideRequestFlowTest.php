@@ -1,0 +1,936 @@
+<?php
+
+namespace Tests\Feature\Ride;
+
+use App\Events\RideCancelled;
+use App\Events\RideCompleted;
+use App\Events\RideRequestDeclined;
+use App\Jobs\ExpireRideOffer;
+use App\Models\DriverProfile;
+use App\Models\Fleet;
+use App\Models\FleetMember;
+use App\Models\PricingSetting;
+use App\Models\Ride;
+use App\Models\RideRequest;
+use App\Models\Sector;
+use App\Models\User;
+use App\Notifications\RideCancelledPushNotification;
+use App\Notifications\RideRequestDeclinedPushNotification;
+use App\Services\PriceCalculator;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
+use Tests\TestCase;
+
+/**
+ * Cubre la Fase 2 del roadmap: pedir una carrera (a un conductor puntual o a
+ * toda la flota), aceptarla, y el ciclo de completarla y pagarla.
+ */
+class RideRequestFlowTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Mediodía fijo para que el cálculo de precio (sin recargo nocturno,
+        // sección 5) sea siempre el mismo en las aserciones.
+        Carbon::setTestNow(Carbon::parse('2026-01-15 12:00:00'));
+    }
+
+    /**
+     * Cliente con su flota (con al menos un conductor activo) y ese conductor,
+     * listos para pedirle una carrera. Reutilizado por varios tests.
+     */
+    private function clientWithFleetDriver(): array
+    {
+        $client = User::factory()->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['rate_per_km' => 0.50, 'is_available' => true]);
+
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        return [$client, $driver, $fleet];
+    }
+
+    /**
+     * Regresión: "/flota/{fleet}" (ruta comodín) está registrada antes que
+     * "/flota/solicitar" en routes/web.php — si el orden se invierte, un GET
+     * acá cae en fleet.show con {fleet}="solicitar" y devuelve 404 en vez de
+     * mostrar el formulario de pedir carrera.
+     */
+    public function test_the_request_screen_loads_and_is_not_swallowed_by_the_fleet_show_route(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->get(route('ride-requests.create'))->assertOk();
+    }
+
+    /**
+     * Pedido explícito del usuario ("quitemos ese botón"): un conductor no
+     * puede pedir una carrera — cada cuenta es cliente o conductor, nunca las
+     * dos (sección 3.1). Sin este chequeo, entrar por URL directa le
+     * terminaba provisionando una flota propia solo por pisar la pantalla
+     * (resolveFleet() la crea sola si no existe).
+     */
+    public function test_a_driver_cannot_open_the_request_screen(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($driver)->get(route('ride-requests.create'))->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseMissing('fleets', ['owner_user_id' => $driver->id]);
+    }
+
+    public function test_a_driver_cannot_submit_a_ride_request(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($driver)->post(route('ride-requests.store'), [
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertSessionHasErrors('driver_user_id');
+
+        $this->assertDatabaseCount('ride_requests', 0);
+    }
+
+    /**
+     * Pedido explícito del usuario: elegir un conductor (desde "Mi flota", el
+     * directorio o su perfil) tiene que arrancar la pantalla de pedir carrera
+     * con ESE conductor ya elegido, no "toda la flota disponible".
+     */
+    public function test_choosing_a_driver_beforehand_preselects_them_on_the_request_screen(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create', ['conductor' => $driver->id]));
+
+        $response->assertInertia(fn ($page) => $page->where('preselectedDriverId', $driver->id));
+    }
+
+    /**
+     * El backend pasa el id tal cual llegue (validarlo contra quién es
+     * seleccionable de verdad es responsabilidad del frontend, que ya tiene
+     * `fleetDrivers`/`publicDrivers` cargados) — sin el query param, no hay
+     * preselección.
+     */
+    public function test_no_driver_is_preselected_without_the_query_param(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page->where('preselectedDriverId', null));
+    }
+
+    /**
+     * Fix reportado por el usuario: el frontend calculaba el estimado sin
+     * saber que existe una tarifa mínima — necesita este valor para poder
+     * replicar el mismo max(distancia×tarifa, mínimo) que ya usa el backend
+     * (PriceCalculator) y no mostrar un desglose por km engañoso.
+     */
+    public function test_the_request_screen_exposes_the_configured_minimum_fare(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        PricingSetting::current()->update(['minimum_fare' => 2.00]);
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page->where('minimumFare', fn ($value) => (float) $value === 2.0));
+    }
+
+    /**
+     * Pedido explícito del usuario: "guardá las que ya ha realizado para que
+     * aparezcan como favoritas" — direcciones que el cliente ya usó antes
+     * (de origen o de destino), la más repetida primero.
+     */
+    public function test_the_request_screen_exposes_frequently_used_places(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        // "Casa" se repite dos veces (una como origen, otra como destino) —
+        // tiene que salir primero. "Trabajo" una sola vez.
+        RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'origin_address' => 'Casa',
+            'origin_lat' => -2.15,
+            'origin_lng' => -79.90,
+            'destination_address' => 'Trabajo',
+            'destination_lat' => -2.20,
+            'destination_lng' => -79.88,
+        ]);
+
+        RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'origin_address' => 'Trabajo',
+            'origin_lat' => -2.20,
+            'origin_lng' => -79.88,
+            'destination_address' => 'Casa',
+            'destination_lat' => -2.15,
+            'destination_lng' => -79.90,
+        ]);
+
+        // Un tercer viaje solo de "Casa" a un lugar sin nombre, para que
+        // quede con más repeticiones que "Trabajo" y el orden sea inequívoco.
+        RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'origin_address' => 'Casa',
+            'origin_lat' => -2.15,
+            'origin_lng' => -79.90,
+            'destination_address' => null,
+        ]);
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('frequentPlaces.0.address', 'Casa')
+            ->where('frequentPlaces.0.count', 3)
+            ->where('frequentPlaces.1.address', 'Trabajo')
+            ->where('frequentPlaces.1.count', 2)
+            ->has('frequentPlaces', 2)
+        );
+    }
+
+    /**
+     * No tiene sentido mostrar una "dirección frecuente" en blanco cuando el
+     * cliente no escribió ninguna referencia — solo dejó el mapa/sector.
+     */
+    public function test_requests_without_an_address_do_not_pollute_frequent_places(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'origin_address' => null,
+            'destination_address' => null,
+        ]);
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page->has('frequentPlaces', 0));
+    }
+
+    /**
+     * Feedback tipo Uber (consideración agregada al alcance): si nadie
+     * respondió todavía, el cliente puede subir su propia oferta.
+     */
+    public function test_client_can_raise_their_own_offer_while_pending(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'current_offered_price' => 5,
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('ride-requests.raise-offer', $rideRequest), ['offered_amount' => 7])
+            ->assertRedirect();
+
+        $this->assertSame('7.00', $rideRequest->fresh()->current_offered_price);
+    }
+
+    public function test_cannot_raise_the_offer_below_the_current_amount(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'current_offered_price' => 5,
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('ride-requests.raise-offer', $rideRequest), ['offered_amount' => 3])
+            ->assertSessionHasErrors('offered_amount');
+    }
+
+    public function test_client_can_request_a_ride_to_a_specific_driver(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('ride_requests', [
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Forma de pago (pedido explícito del usuario): el cliente todavía no
+     * podía elegirla — "efectivo" queda de default si no manda nada.
+     */
+    public function test_a_ride_request_defaults_to_cash_payment(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', ['client_user_id' => $client->id, 'payment_method' => 'efectivo']);
+    }
+
+    /**
+     * El cliente puede elegir transferencia, y queda copiada a la carrera
+     * confirmada al aceptar (mismo patrón que rate_per_km_snapshot/price,
+     * ver RideRequestController::accept()).
+     */
+    public function test_the_chosen_payment_method_is_saved_and_copied_to_the_confirmed_ride(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'payment_method' => 'transferencia',
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::where('client_user_id', $client->id)->firstOrFail();
+        $this->assertSame('transferencia', $rideRequest->payment_method);
+
+        $this->actingAs($driver)->post(route('ride-requests.accept', $rideRequest))->assertRedirect();
+
+        $this->assertDatabaseHas('rides', ['ride_request_id' => $rideRequest->id, 'payment_method' => 'transferencia']);
+    }
+
+    /**
+     * Despacho secuencial estilo Uber (pedido explícito del usuario): "toda
+     * la flota" ya no manda la solicitud a todos a la vez con driver_user_id
+     * en null — se le ofrece de una al primer candidato (acá, el único que
+     * hay), con dispatch_pool guardado y un cronómetro de 30 seg. armado
+     * para la cascada. Queue::fake() evita que ese Job corra de una bajo
+     * QUEUE_CONNECTION=sync (forzado en phpunit.xml) y adelante la cascada
+     * dentro del mismo test.
+     */
+    public function test_client_can_request_a_ride_to_the_whole_fleet(): void
+    {
+        Queue::fake();
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => null,
+            'dispatch_pool' => 'fleet',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', [
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'dispatch_pool' => 'fleet',
+            'status' => 'pending',
+        ]);
+
+        Queue::assertPushed(ExpireRideOffer::class);
+    }
+
+    /**
+     * Zonas del Ecuador (consideración agregada al alcance): además del mapa,
+     * el cliente indica el sector de origen/destino — ej. "Sauces 1" → "Samanes 3".
+     */
+    public function test_client_can_request_a_ride_with_origin_and_destination_sectors(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $sauces = Sector::query()->where('name', 'Sauces 1')->firstOrFail();
+        $samanes = Sector::query()->where('name', 'Samanes 3')->firstOrFail();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'origin_sector_id' => $sauces->id,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'destination_sector_id' => $samanes->id,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', [
+            'client_user_id' => $client->id,
+            'origin_sector_id' => $sauces->id,
+            'destination_sector_id' => $samanes->id,
+        ]);
+    }
+
+    /**
+     * Regresión reportada por el usuario: pedir "ahora mismo" quedaba
+     * bloqueado con un error de formato de fecha. Causa real: el formulario
+     * manda `scheduled_date`/`scheduled_time` como '' (string vacío, no
+     * ausentes) en modo "ahora mismo" — sin 'nullable' en la validación,
+     * `date_format` los rechazaba igual aunque `required_if` no los exigiera.
+     */
+    public function test_requesting_a_ride_for_right_now_works_even_though_the_form_sends_empty_schedule_fields(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => false,
+            'scheduled_date' => '',
+            'scheduled_time' => '',
+            'round_trip' => false,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('ride_requests', [
+            'client_user_id' => $client->id,
+            'is_scheduled' => false,
+            'scheduled_at' => null,
+        ]);
+    }
+
+    /**
+     * "Ahora mismo" (default) vs "programada" (consideración agregada al
+     * alcance, pedido explícito del usuario): fecha/hora futura + ida y vuelta.
+     */
+    public function test_a_ride_request_can_be_scheduled_for_later_and_marked_round_trip(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-16',
+            'scheduled_time' => '08:00',
+            'round_trip' => true,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', [
+            'client_user_id' => $client->id,
+            'is_scheduled' => true,
+            'scheduled_at' => '2026-01-16 08:00:00',
+            'round_trip' => true,
+        ]);
+    }
+
+    public function test_scheduling_a_ride_in_the_past_is_rejected(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-15',
+            'scheduled_time' => '08:00',
+        ])->assertSessionHasErrors('scheduled_time');
+    }
+
+    /**
+     * El punto central de 'scheduled' (consideración agregada al alcance):
+     * aceptar una solicitud programada NO puede dejar al conductor "ocupado"
+     * desde ya — recién lo está cuando arranca de verdad (RideController::start()).
+     */
+    public function test_accepting_a_scheduled_request_creates_a_ride_that_does_not_start_yet(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'is_scheduled' => true,
+            'scheduled_at' => '2026-01-16 08:00:00',
+            'round_trip' => true,
+        ]);
+
+        $this->actingAs($driver)->post(route('ride-requests.accept', $rideRequest))->assertRedirect();
+
+        $this->assertDatabaseHas('rides', [
+            'ride_request_id' => $rideRequest->id,
+            'status' => 'scheduled',
+            'started_at' => null,
+            'round_trip' => true,
+        ]);
+    }
+
+    public function test_driver_can_start_a_scheduled_ride(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'scheduled',
+            'started_at' => null,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.start', $ride))->assertRedirect();
+
+        $ride->refresh();
+        $this->assertSame('in_progress', $ride->status);
+        $this->assertNotNull($ride->started_at);
+    }
+
+    public function test_the_client_cannot_start_a_scheduled_ride(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'scheduled',
+            'started_at' => null,
+        ]);
+
+        $this->actingAs($client)->post(route('rides.start', $ride))->assertForbidden();
+    }
+
+    public function test_cannot_start_a_ride_that_is_already_in_progress(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.start', $ride))->assertSessionHasErrors('ride');
+    }
+
+    public function test_accepting_a_ride_request_copies_the_sectors_into_the_ride(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $sauces = Sector::query()->where('name', 'Sauces 1')->firstOrFail();
+        $samanes = Sector::query()->where('name', 'Samanes 3')->firstOrFail();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'origin_sector_id' => $sauces->id,
+            'destination_sector_id' => $samanes->id,
+        ]);
+
+        $this->actingAs($driver)->post(route('ride-requests.accept', $rideRequest))->assertRedirect();
+
+        $this->assertDatabaseHas('rides', [
+            'ride_request_id' => $rideRequest->id,
+            'origin_sector_id' => $sauces->id,
+            'destination_sector_id' => $samanes->id,
+        ]);
+    }
+
+    public function test_driver_can_accept_and_a_ride_is_created_with_the_right_price(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        // Desde la Fase 4, el precio que se acepta es el que quedó vigente en
+        // la negociación (current_offered_price) — se fija al crear la
+        // solicitud, no se recalcula en el momento de aceptar.
+        $expectedPrice = PriceCalculator::suggestedPrice(10.0, 0.50)['total'];
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'distance_km' => 10,
+            'status' => 'pending',
+            'current_offered_price' => $expectedPrice,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.accept', $rideRequest))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', [
+            'id' => $rideRequest->id,
+            'status' => 'accepted',
+            'accepted_by' => $driver->id,
+        ]);
+
+        $this->assertDatabaseHas('rides', [
+            'ride_request_id' => $rideRequest->id,
+            'driver_user_id' => $driver->id,
+            'client_user_id' => $client->id,
+            'price' => number_format($expectedPrice, 2, '.', ''),
+            'status' => 'in_progress',
+        ]);
+    }
+
+    public function test_only_the_first_driver_wins_a_whole_fleet_request(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+
+        $driverA = User::factory()->create();
+        DriverProfile::factory()->for($driverA)->create(['rate_per_km' => 0.5]);
+        FleetMember::factory()->for($fleet)->for($driverA, 'driver')->create(['added_by' => $client->id]);
+
+        $driverB = User::factory()->create();
+        DriverProfile::factory()->for($driverB)->create(['rate_per_km' => 0.6]);
+        FleetMember::factory()->for($fleet)->for($driverB, 'driver')->create(['added_by' => $client->id]);
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => null,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($driverA)->post(route('ride-requests.accept', $rideRequest))->assertRedirect();
+
+        // El segundo conductor llega tarde: la solicitud ya no está pendiente.
+        $this->actingAs($driverB)
+            ->post(route('ride-requests.accept', $rideRequest))
+            ->assertSessionHasErrors('ride_request');
+
+        $this->assertSame(1, Ride::where('ride_request_id', $rideRequest->id)->count());
+        $this->assertDatabaseHas('rides', ['ride_request_id' => $rideRequest->id, 'driver_user_id' => $driverA->id]);
+    }
+
+    public function test_driver_can_reject_a_directed_request(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.reject', $rideRequest))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', ['id' => $rideRequest->id, 'status' => 'cancelled']);
+        $this->assertDatabaseMissing('rides', ['ride_request_id' => $rideRequest->id]);
+    }
+
+    /**
+     * Bug reportado por el usuario: el cliente le pedía la carrera a un
+     * conductor puntual, ese conductor la rechazaba, y no había ningún
+     * aviso — la tarjeta de "Esperando respuesta" se quedaba pegada en
+     * silencio. `RideRequestCancelled` no sirve para esto (avisa al canal
+     * del CONDUCTOR, no del cliente) — hace falta `RideRequestDeclined`.
+     */
+    public function test_rejecting_a_directed_request_notifies_the_client(): void
+    {
+        Event::fake([RideRequestDeclined::class]);
+        Notification::fake();
+
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.reject', $rideRequest))
+            ->assertRedirect();
+
+        Event::assertDispatched(RideRequestDeclined::class, fn ($event) => $event->rideRequest->id === $rideRequest->id
+            && $event->driverName === $driver->name);
+        Notification::assertSentTo($client, RideRequestDeclinedPushNotification::class);
+    }
+
+    public function test_client_can_cancel_a_pending_request(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('ride-requests.cancel', $rideRequest))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('ride_requests', ['id' => $rideRequest->id, 'status' => 'cancelled']);
+    }
+
+    /**
+     * Pedido explícito del usuario: la carrera la finaliza ÚNICAMENTE el
+     * conductor — antes cualquiera de las dos partes podía.
+     */
+    public function test_only_the_driver_can_complete_a_ride(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+        $this->assertDatabaseHas('rides', ['id' => $ride->id, 'status' => 'completed']);
+    }
+
+    public function test_the_client_cannot_complete_a_ride(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)->post(route('rides.complete', $ride))->assertForbidden();
+
+        $this->assertSame('in_progress', $ride->fresh()->status);
+    }
+
+    /**
+     * Pedido explícito del usuario: antes de esto no existía ninguna forma
+     * de cancelar una carrera ya aceptada — el cliente quedaba sin salida
+     * hasta que se completara, ni siquiera si el conductor todavía no había
+     * arrancado. "Que eso también cuente para medir": por eso se verifica
+     * `cancelled_at`, no solo el status.
+     */
+    public function test_client_can_cancel_an_accepted_ride_that_is_in_progress(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertRedirect();
+
+        $ride->refresh();
+        $this->assertSame('cancelled', $ride->status);
+        $this->assertNotNull($ride->cancelled_at);
+    }
+
+    public function test_client_can_cancel_a_scheduled_ride_before_the_driver_starts_it(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'scheduled',
+            'started_at' => null,
+        ]);
+
+        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertRedirect();
+
+        $this->assertSame('cancelled', $ride->fresh()->status);
+    }
+
+    public function test_the_driver_cannot_cancel_a_ride(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.cancel', $ride))->assertForbidden();
+
+        $this->assertSame('in_progress', $ride->fresh()->status);
+    }
+
+    public function test_a_completed_ride_cannot_be_cancelled(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'completed',
+            'completed_at' => now(),
+        ]);
+
+        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertSessionHasErrors('ride');
+    }
+
+    /**
+     * Si el conductor ya iba en camino, tiene que enterarse — y quedar libre
+     * de nuevo en su flota, mismo criterio que al completar una carrera.
+     */
+    public function test_cancelling_a_ride_notifies_and_frees_the_driver(): void
+    {
+        Event::fake([RideCancelled::class]);
+        Notification::fake();
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertRedirect();
+
+        Event::assertDispatched(RideCancelled::class, fn ($event) => $event->ride->id === $ride->id);
+        Notification::assertSentTo($driver, RideCancelledPushNotification::class);
+    }
+
+    /**
+     * Sin este aviso, el conductor seguía viéndose "en carrera" en "Mi
+     * flota"/"¿A quién se la pedís?" aunque ya hubiese terminado el viaje
+     * (consideración agregada al alcance, reportado por el usuario).
+     */
+    public function test_completing_a_ride_broadcasts_that_the_driver_is_free_again(): void
+    {
+        Event::fake([RideCompleted::class]);
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        Event::assertDispatched(RideCompleted::class, fn ($event) => $event->ride->id === $ride->id);
+    }
+
+    /**
+     * Fidelización por puntos (pedido explícito del usuario): completar una
+     * carrera corta desde la app suma 1 punto — ver
+     * RideController::complete() y App\Models\DriverTier.
+     */
+    public function test_completing_a_short_ride_awards_one_point(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'distance_km' => 3,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        $this->assertDatabaseHas('rides', ['id' => $ride->id, 'points_earned' => 1]);
+        $this->assertSame(1, $driver->driverProfile->fresh()->total_points);
+    }
+
+    /**
+     * Simétrico: desde 5 km (el corte de RideController::complete()) son 2 puntos.
+     */
+    public function test_completing_a_long_ride_awards_two_points(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'distance_km' => 8,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        $this->assertDatabaseHas('rides', ['id' => $ride->id, 'points_earned' => 2]);
+        $this->assertSame(2, $driver->driverProfile->fresh()->total_points);
+    }
+
+    /**
+     * Los puntos se acumulan entre carreras, no se pisan (increment(), no
+     * update() a un valor fijo).
+     */
+    public function test_points_accumulate_across_multiple_completed_rides(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        foreach ([3, 8] as $distanceKm) {
+            $ride = Ride::factory()->create([
+                'fleet_id' => $fleet->id,
+                'client_user_id' => $client->id,
+                'driver_user_id' => $driver->id,
+                'status' => 'in_progress',
+                'distance_km' => $distanceKm,
+            ]);
+
+            $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+        }
+
+        $this->assertSame(3, $driver->driverProfile->fresh()->total_points);
+    }
+
+    public function test_a_stranger_cannot_accept_a_request_for_a_fleet_they_do_not_belong_to(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+        $stranger = User::factory()->create();
+        DriverProfile::factory()->for($stranger)->create();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => null,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($stranger)
+            ->post(route('ride-requests.accept', $rideRequest))
+            ->assertForbidden();
+    }
+}

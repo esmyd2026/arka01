@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <!-- "log" en vez de "reverb": los tests no deben depender de que el
+             servidor de WebSockets esté corriendo. -->
+        <env name="BROADCAST_CONNECTION" value="log"/>
+        <env name="CACHE_DRIVER" value="array"/>
+        <!-- SQLite en memoria para tests: así RefreshDatabase nunca toca la base
+             de datos real de desarrollo (arka01) configurada en .env. -->
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <!-- "database" (no "array"): la sesión única por dispositivo necesita
+             poder consultar la tabla `sessions` real, incluso en tests. -->
+        <env name="SESSION_DRIVER" value="database"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <!-- Igual que DB_CONNECTION arriba: los tests nunca deben depender de
+             que el .env real tenga (o no tenga) credenciales de verdad — sin
+             esto, cargar el token real de WhatsApp en .env hacía que
+             WhatsAppVerificationSender::enabled() se activara sola durante los
+             tests y rompiera el camino "no configurado" (auto-verificado) que
+             varios tests dan por hecho. Los tests que SÍ quieren probar el
+             camino "configurado" ya lo hacen a mano con Config::set()+Http::fake()
+             (ver PhoneVerificationTest, WhatsAppRideAlertTest). -->
+        <env name="WHATSAPP_TOKEN" value=""/>
+        <env name="WHATSAPP_PHONE_NUMBER_ID" value=""/>
+        <env name="WHATSAPP_BUSINESS_NUMBER" value=""/>
+        <env name="WHATSAPP_WEBHOOK_VERIFY_TOKEN" value=""/>
+        <env name="GOOGLE_CLIENT_ID" value=""/>
+        <env name="GOOGLE_CLIENT_SECRET" value=""/>
+        <!-- Mismo criterio: los tests nunca deben mandar eventos a un
+             proyecto real de Sentry, aunque el .env real ya tenga un DSN
+             configurado. -->
+        <env name="SENTRY_LARAVEL_DSN" value=""/>
+    </php>
+</phpunit>

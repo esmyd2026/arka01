@@ -1,0 +1,85 @@
+<?php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Exceptions\ActiveSessionExistsException;
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
+
+/**
+ * "Iniciar sesión con Google" (Socialite / OAuth): alternativa al login con
+ * usuario y contraseña de siempre, no lo reemplaza. Si ya existía una cuenta
+ * con ese correo (ej. una de las cuentas de demo) se linkea sola; si no,
+ * se crea una cuenta nueva.
+ */
+class GoogleAuthController extends Controller
+{
+    public function redirect(): RedirectResponse
+    {
+        return Socialite::driver('google')->redirect();
+    }
+
+    public function callback(): RedirectResponse
+    {
+        try {
+            $googleUser = Socialite::driver('google')->user();
+        } catch (InvalidStateException) {
+            // El usuario volvió con un link viejo o expirado — se lo manda
+            // de nuevo al login en vez de mostrarle un error críptico.
+            return redirect()->route('login')->with('status', 'El enlace de Google expiró, pruebe de nuevo.');
+        }
+
+        $user = User::query()->where('google_id', $googleUser->getId())->first()
+            ?? User::query()->where('email', $googleUser->getEmail())->first();
+
+        // Bloqueo de cuenta (pedido explícito del usuario): mismo chequeo
+        // que el login con contraseña (App\Http\Requests\Auth\LoginRequest)
+        // — Google no pasa por ahí, necesita su propia verificación.
+        if ($user?->isLocked()) {
+            return redirect()->route('login')->with('status', 'Esta cuenta está bloqueada por seguridad. Contáctenos para reactivarla.');
+        }
+
+        if ($user) {
+            // Cuenta que ya existía por email (ej. una de demo) pero todavía
+            // no tenía Google linkeado — queda linkeada a partir de ahora.
+            if (! $user->google_id) {
+                $user->forceFill([
+                    'google_id' => $googleUser->getId(),
+                    'avatar_path' => $user->avatar_path ?? $googleUser->getAvatar(),
+                    'email_verified_at' => $user->email_verified_at ?? now(),
+                ])->save();
+            }
+        } else {
+            $user = User::query()->create([
+                'name' => $googleUser->getName() ?: explode('@', $googleUser->getEmail())[0],
+                'email' => $googleUser->getEmail(),
+                'google_id' => $googleUser->getId(),
+                'avatar_path' => $googleUser->getAvatar(),
+                // Nunca se usa para entrar (siempre va a ser por Google), pero
+                // la columna es obligatoria — una al azar que nadie conoce.
+                'password' => Hash::make(Str::random(40)),
+            ]);
+
+            // email_verified_at no es mass-assignable a propósito (no debería
+            // poder mandarse desde un formulario cualquiera), así que se marca
+            // aparte: Google ya verificó ese correo por su cuenta.
+            $user->forceFill(['email_verified_at' => now()])->save();
+        }
+
+        // Sin "recordarme" (ver App\Listeners\EnforceSingleActiveSession): la
+        // sesión única por cuenta necesita que todo login pase por acá.
+        try {
+            Auth::login($user);
+        } catch (ActiveSessionExistsException $e) {
+            return redirect()->route('login')->with('status', $e->getMessage());
+        }
+
+        return redirect()->intended(route('dashboard', absolute: false));
+    }
+}

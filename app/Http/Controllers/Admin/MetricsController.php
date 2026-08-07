@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Fleet;
+use App\Models\Ride;
+use App\Models\SubscriptionPlan;
+use App\Models\User;
+use Illuminate\Support\Collection;
+use Inertia\Inertia;
+use Inertia\Response;
+
+/**
+ * Indicadores básicos del negocio (sección 9.5-C): cuántos usuarios hay en
+ * cada plan (para "saber quién es quién" — quién paga, quién no, y cuánto
+ * factura cada categoría) y una estimación de ingreso mensual recurrente.
+ */
+class MetricsController extends Controller
+{
+    public function index(): Response
+    {
+        $driverPlans = $this->planBreakdown('driver');
+        $clientPlans = $this->planBreakdown('client');
+
+        $mrr = $driverPlans->sum('monthly_total') + $clientPlans->sum('monthly_total');
+
+        return Inertia::render('Admin/Metrics', [
+            'driverPlans' => $driverPlans,
+            'clientPlans' => $clientPlans,
+            'estimatedMrr' => round($mrr, 2),
+            'totals' => [
+                'users' => User::query()->count(),
+                'drivers' => User::query()->whereHas('driverProfile')->count(),
+                'clients' => User::query()->whereHas('fleets')->count(),
+                'fleets' => Fleet::query()->count(),
+                'completedRides' => Ride::query()->where('status', 'completed')->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Para cada plan de un lado (driver o cliente): cuántos usuarios tienen
+     * una suscripción vigente de ese plan puntual, y cuánto suman en ingreso
+     * mensual. Los que no tienen ninguna suscripción vigente cuentan como
+     * Gratis — mismo criterio que PlanLimits (sección 9.6).
+     *
+     * @return Collection<int, array{code: string, name: string, monthly_price: float, subscriber_count: int, monthly_total: float}>
+     */
+    private function planBreakdown(string $ownerType)
+    {
+        $plans = SubscriptionPlan::query()
+            ->where('owner_type', $ownerType)
+            ->orderBy('sort_order')
+            ->get();
+
+        // Usuarios con una suscripción vigente (activa o en gracia) de este
+        // lado, agrupados por plan — para no contar dos veces si alguien
+        // tuviera más de una fila histórica.
+        // Rendimiento de cara a producción (pedido explícito del usuario):
+        // esto SÍ era un N+1 real — `activeSubscription()` dispara una
+        // consulta nueva por cada usuario, a pesar de que la relación de
+        // abajo ya trae exactamente esos mismos datos precargados (y ya
+        // ordenados por `latest('started_at')`, así que el primero de la
+        // colección es el mismo que devolvería `activeSubscription()`).
+        $subscriberCounts = User::query()
+            ->whereHas('subscriptions', fn ($query) => $query
+                ->whereIn('status', ['active', 'grace'])
+                ->whereHas('plan', fn ($query) => $query->where('owner_type', $ownerType))
+            )
+            ->with(['subscriptions' => fn ($query) => $query
+                ->whereIn('status', ['active', 'grace'])
+                ->whereHas('plan', fn ($query) => $query->where('owner_type', $ownerType))
+                ->latest('started_at'),
+            ])
+            ->get()
+            ->countBy(fn (User $user) => $user->subscriptions->first()?->subscription_plan_id);
+
+        // El universo base de este lado: conductores (con perfil) o clientes
+        // (con al menos una flota) — así el plan Gratis también muestra cuántos
+        // hay, no solo los que pagan.
+        $baseCount = $ownerType === 'driver'
+            ? User::query()->whereHas('driverProfile')->count()
+            : User::query()->whereHas('fleets')->count();
+
+        $paidSubscriberTotal = $subscriberCounts->sum();
+
+        return $plans->map(function (SubscriptionPlan $plan) use ($subscriberCounts, $baseCount, $paidSubscriberTotal) {
+            $isFree = $plan->code === 'gratis';
+            $subscriberCount = $isFree
+                ? max($baseCount - $paidSubscriberTotal, 0)
+                : ($subscriberCounts[$plan->id] ?? 0);
+
+            return [
+                'code' => $plan->code,
+                'name' => $plan->name,
+                'monthly_price' => (float) $plan->monthly_price,
+                'subscriber_count' => $subscriberCount,
+                'monthly_total' => round($subscriberCount * (float) $plan->monthly_price, 2),
+            ];
+        });
+    }
+}
