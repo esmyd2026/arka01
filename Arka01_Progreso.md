@@ -1845,6 +1845,29 @@ Investigado antes de construir: el único estado que ya existía era `in_progres
 ### Tests
 `tests/Feature/Ride/RideRequestFlowTest.php` (+6: el conductor puede marcar llegada y el cliente recibe el push; el cliente no puede marcarla; no se puede marcar dos veces; el conductor puede marcar recogido con el evento correspondiente; tampoco se puede marcar dos veces). Suite completa: 515 tests OK, Pint limpio, build limpio.
 
+### La tarifa mínima del conductor no tenía ningún efecto
+El usuario reportó: "la tarifa mínima que coloca el conductor no tiene efecto porque el admin es el que tiene prioridad". Investigado antes de tocar nada: no era una cuestión de prioridad — `DriverProfile.minimum_fare` (el campo "Tarifa mínima" del perfil del conductor) nunca se leía en ningún lado. `PriceCalculator::suggestedPrice()` solo usaba la tarifa mínima general de `/admin/tarifas`, sin enterarse jamás de lo que el conductor hubiera declarado — un campo del formulario completamente muerto.
+
+Pedido explícito del usuario para la nueva jerarquía: la tarifa mínima del conductor SÍ se respeta, siempre que sea menor o igual a la de la plataforma (un conductor dispuesto a cobrar menos puede hacerlo); si intenta declarar una mayor, se le indica en su configuración que la plataforma no lo permite, en vez de guardarla en silencio sin que sirva para nada.
+
+- **`PriceCalculator::suggestedPrice()`**: nuevo parámetro opcional `driverMinimumFare` — si viene, el piso usado es `min(la del conductor, la de la plataforma)` (doble candado: aunque alguien se salte la validación de abajo, o el admin haya bajado su tarifa después de que el conductor guardó una más alta cuando todavía era válida, nunca se cobra de más).
+- **`DriverProfileController::update()`**: la regla `minimum_fare` ahora tiene un `max:` dinámico contra `PricingSetting::current()->minimum_fare`, con mensaje explicando el tope. `edit()` manda `platformMinimumFare` a la pantalla.
+- **`Driver/Profile.vue`**: texto de ayuda junto al campo ("No puede superar $X, tope de la plataforma").
+- **`RideRequestController`**: nuevo `referenceMinimumFare()` (mismo criterio que `referenceRatePerKm()`) — si la solicitud es a un conductor puntual, usa la suya; si es "a toda la flota" (todavía sin conductor), usa la general, sin promediar mínimos entre conductores. También se expone `minimum_fare` por conductor en la ficha que ya arma `driverCardData()`.
+- **`Ride/Request.vue`**: el estimado que ve el cliente antes de mandar la solicitud ahora replica la misma jerarquía (mismo criterio que ya existía para no mostrar un estimado mentiroso por el mínimo general).
+
+### Tests
+`tests/Feature/Driver/DriverMinimumFareTest.php` (nuevo, 3: guardar una menor funciona; guardar una mayor se rechaza con el mensaje correcto; la pantalla expone el tope). `tests/Feature/Ride/RidePriceNegotiationTest.php` (+2: la tarifa propia del conductor gana si es menor; una tarifa vieja por encima del tope igual se recorta al cobrar). Suite completa: 521 tests OK, Pint limpio, build limpio.
+
+### Mensajes en español al subir una foto de perfil que pesa de más
+El usuario reportó que el mensaje de error al subir una foto de perfil demasiado pesada no era claro. Investigado: no existe `lang/es/validation.php` en el proyecto — Laravel cae al inglés del framework para cualquier regla de validación sin mensaje propio explícito (no es solo esta pantalla, es cualquier campo sin un mensaje a medida). Se cubrió puntualmente para la foto de perfil en vez de traducir todo el archivo de validación del framework (mucho más de lo que hacía falta):
+
+- **`ProfileUpdateRequest::messages()`** (nuevo): mensajes en español para `avatar.image` y `avatar.max`.
+- **`Profile/Partials/UpdateProfileInformationForm.vue`**: aviso del límite (4 MB) visible ANTES de elegir el archivo, y una validación del lado del navegador que avisa al toque si la foto pesa de más (con el peso real de la foto en el mensaje) — sin esperar a mandarla entera al servidor para recién ahí enterarse.
+
+### Tests
+`tests/Feature/ProfileTest.php` (+1: subir una foto de más de 4 MB devuelve el mensaje en español esperado). Suite completa incluida en el conteo de arriba (521 tests OK).
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

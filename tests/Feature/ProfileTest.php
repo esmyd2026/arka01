@@ -134,6 +134,28 @@ class ProfileTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario: el mensaje de "la foto pesa demasiado"
+     * salía en inglés (no existe lang/es/validation.php, Laravel cae al
+     * inglés del framework para cualquier regla sin mensaje propio) — ahora
+     * ProfileUpdateRequest::messages() lo cubre en español.
+     */
+    public function test_uploading_an_oversized_avatar_shows_a_spanish_error_message(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->patch('/profile', [
+                'name' => $user->name,
+                'email' => $user->email,
+                'avatar' => UploadedFile::fake()->create('foto.jpg', 5000)->size(5000),
+            ]);
+
+        $response->assertSessionHasErrors(['avatar' => 'La foto pesa demasiado — el máximo es 4 MB. Probá con una de menor resolución o comprimida.']);
+    }
+
+    /**
      * Subir una foto nueva borra la anterior del disco — pero si la que
      * tenía era una URL externa (login con Google), no hay que intentar
      * borrar nada del disco 'public'.

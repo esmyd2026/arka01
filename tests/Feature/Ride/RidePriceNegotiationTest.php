@@ -5,6 +5,7 @@ namespace Tests\Feature\Ride;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
+use App\Models\PricingSetting;
 use App\Models\RideRequest;
 use App\Models\User;
 use App\Services\PriceCalculator;
@@ -64,6 +65,62 @@ class RidePriceNegotiationTest extends TestCase
             'ride_request_id' => $rideRequest->id,
             'offered_by_user_id' => $client->id,
         ]);
+    }
+
+    /**
+     * Pedido explícito del usuario: la tarifa mínima que declara el
+     * conductor en su perfil se respeta si es MENOR o igual a la de la
+     * plataforma — antes se ignoraba por completo, siempre se usaba la de
+     * /admin/tarifas sin importar lo que el conductor hubiera puesto.
+     */
+    public function test_a_drivers_own_lower_minimum_fare_is_used_over_the_platform_one(): void
+    {
+        PricingSetting::current()->update(['minimum_fare' => 3.00]);
+
+        [$client, $driver] = $this->clientWithFleetDriver(ratePerKm: 0.1);
+        $driver->driverProfile()->update(['minimum_fare' => 1.00]);
+
+        // Distancia corta a propósito: distancia × tarifa da bien por debajo
+        // de cualquiera de los dos mínimos, así el que gana se ve directo en
+        // el precio final.
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.1808,
+            'destination_lng' => -78.4679,
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::firstOrFail();
+        $this->assertSame('1.00', (string) $rideRequest->current_offered_price);
+    }
+
+    /**
+     * Red de seguridad además de la validación al guardar el perfil
+     * (DriverProfileController::update()): si el admin bajó su tarifa
+     * DESPUÉS de que el conductor hubiera guardado una más alta cuando
+     * todavía era válida, PriceCalculator igual la recorta a la de la
+     * plataforma — nunca se cobra más que el tope vigente.
+     */
+    public function test_a_stale_driver_minimum_fare_above_the_platform_one_gets_capped(): void
+    {
+        PricingSetting::current()->update(['minimum_fare' => 2.00]);
+
+        [$client, $driver] = $this->clientWithFleetDriver(ratePerKm: 0.1);
+        // forceFill: se salta la validación de DriverProfileController a
+        // propósito, para simular el escenario de "ya no es válida".
+        $driver->driverProfile()->update(['minimum_fare' => 5.00]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.1808,
+            'destination_lng' => -78.4679,
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::firstOrFail();
+        $this->assertSame('2.00', (string) $rideRequest->current_offered_price);
     }
 
     public function test_client_can_propose_a_custom_price(): void

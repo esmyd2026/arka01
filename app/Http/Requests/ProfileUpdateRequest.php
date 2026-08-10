@@ -24,4 +24,22 @@ class ProfileUpdateRequest extends FormRequest
             'avatar' => ['nullable', 'image', 'max:4096'],
         ];
     }
+
+    /**
+     * Mensajes en español (pedido explícito del usuario: el mensaje de "la
+     * foto pesa demasiado" salía en inglés porque no existe lang/es/validation.php
+     * — Laravel cae al inglés del framework para cualquier regla sin mensaje
+     * propio, no solo esta. Se cubre acá puntualmente en vez de publicar todo
+     * el archivo de validación del framework, que sería mucho más para
+     * traducir de lo que hace falta.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'avatar.image' => 'El archivo tiene que ser una imagen (JPG, PNG o similar).',
+            'avatar.max' => 'La foto pesa demasiado — el máximo es 4 MB. Probá con una de menor resolución o comprimida.',
+        ];
+    }
 }

@@ -16,7 +16,7 @@ class PriceCalculator
      *
      * @return array{base: float, night_surcharge: float, total: float, is_night: bool}
      */
-    public static function suggestedPrice(float $distanceKm, float $ratePerKm, ?Carbon $at = null): array
+    public static function suggestedPrice(float $distanceKm, float $ratePerKm, ?Carbon $at = null, ?float $driverMinimumFare = null): array
     {
         $at ??= now();
         $settings = PricingSetting::current();
@@ -26,7 +26,21 @@ class PriceCalculator
         // le convenga al conductor por los km. Si distancia × tarifa da menos
         // que el mínimo, se cobra el mínimo — el recargo nocturno se sigue
         // calculando sobre esta base ya ajustada, no sobre la de antes.
-        $base = max(round($distanceKm * $ratePerKm, 2), (float) $settings->minimum_fare);
+        //
+        // El conductor puede declarar SU PROPIA tarifa mínima en su perfil
+        // (pedido explícito del usuario, sección "el conductor define su
+        // propia tarifa, la plataforma no impone precio") — se respeta
+        // siempre que sea MENOR o igual a la de la plataforma (un conductor
+        // dispuesto a aceptar carreras más baratas puede hacerlo). Si la
+        // suya fuera mayor, acá se la recorta igual (además de bloquearse ya
+        // al guardar el perfil, ver DriverProfileController::update()) —
+        // doble candado por si el admin bajó su tarifa DESPUÉS de que el
+        // conductor hubiera guardado una más alta cuando todavía era válida.
+        $floor = $driverMinimumFare !== null
+            ? min($driverMinimumFare, (float) $settings->minimum_fare)
+            : (float) $settings->minimum_fare;
+
+        $base = max(round($distanceKm * $ratePerKm, 2), $floor);
         $isNight = self::isNightTime($at, $settings);
 
         $surchargePercent = $isNight ? $settings->night_surcharge_percent : 0;

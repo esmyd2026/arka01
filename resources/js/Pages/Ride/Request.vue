@@ -446,11 +446,24 @@ const rawPriceByDistance = computed(() => {
     return Math.round(estimatedDistanceKm.value * referenceRatePerKm.value * 100) / 100;
 });
 
-const isMinimumFareApplied = computed(() => rawPriceByDistance.value != null && rawPriceByDistance.value < props.minimumFare);
+// Pedido explícito del usuario: si el conductor elegido declaró SU PROPIA
+// tarifa mínima (y no supera la de la plataforma, ya validado al guardar su
+// perfil), el estimado tiene que respetarla en vez de mostrar siempre la
+// general — mismo criterio que referenceRatePerKm, pero sin promediar entre
+// conductores en "toda la flota" (ver RideRequestController::referenceMinimumFare()).
+const referenceMinimumFare = computed(() => {
+    if (selectedDriverId.value === WHOLE_FLEET) return props.minimumFare;
+
+    const chosen = driversWithDistance.value.find((driver) => driver.user_id === selectedDriverId.value);
+    const driverFloor = chosen?.minimum_fare != null ? Number(chosen.minimum_fare) : null;
+    return driverFloor != null ? Math.min(driverFloor, props.minimumFare) : props.minimumFare;
+});
+
+const isMinimumFareApplied = computed(() => rawPriceByDistance.value != null && rawPriceByDistance.value < referenceMinimumFare.value);
 
 const estimatedPrice = computed(() => {
     if (rawPriceByDistance.value == null) return null;
-    return Math.max(rawPriceByDistance.value, props.minimumFare);
+    return Math.max(rawPriceByDistance.value, referenceMinimumFare.value);
 });
 
 // El cliente puede aceptar el precio estimado tal cual, o proponer otro monto

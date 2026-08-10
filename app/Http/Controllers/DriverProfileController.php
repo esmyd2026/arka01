@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
+use App\Models\PricingSetting;
 use App\Models\User;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppVerificationSender;
@@ -70,6 +71,12 @@ class DriverProfileController extends Controller
             // el que usa para conectarse por WhatsApp.
             'currentPhone' => $user->phone,
             'phoneVerified' => $user->phone_verified_at !== null,
+            // Pedido explícito del usuario: la tarifa mínima que el
+            // conductor declara acá no puede superar la de la plataforma
+            // (/admin/tarifas) — se muestra como tope junto al campo, y
+            // update() la rechaza si la supera (ver PriceCalculator para
+            // dónde se aplica esta jerarquía en el cálculo del precio).
+            'platformMinimumFare' => (float) PricingSetting::current()->minimum_fare,
         ]);
     }
 
@@ -85,6 +92,14 @@ class DriverProfileController extends Controller
         if (! $user->isDriver() && $user->fleets()->exists()) {
             throw ValidationException::withMessages(['license_number' => self::SINGLE_ROLE_MESSAGE]);
         }
+
+        // Tope de la tarifa mínima propia del conductor (pedido explícito
+        // del usuario): puede declarar una MENOR a la de la plataforma (la
+        // plataforma la respeta en el cálculo del precio, ver
+        // PriceCalculator::suggestedPrice()), pero no una mayor — si no, un
+        // conductor podría inflar el piso de sus carreras por encima de lo
+        // que el admin definió como base general.
+        $adminMinimumFare = (float) PricingSetting::current()->minimum_fare;
 
         $validated = $request->validate([
             // Pedido explícito del usuario: el conductor puede corregir/cambiar
@@ -109,7 +124,7 @@ class DriverProfileController extends Controller
             'passenger_capacity' => ['required', 'integer', 'min:1', 'max:8'],
             'has_trunk' => ['required', 'boolean'],
             'rate_per_km' => ['required', 'numeric', 'min:0'],
-            'minimum_fare' => ['nullable', 'numeric', 'min:0'],
+            'minimum_fare' => ['nullable', 'numeric', 'min:0', 'max:'.$adminMinimumFare],
             // Zona de cobertura (pedido explícito del usuario): en blanco =
             // sin límite, sigue recibiendo solicitudes sin importar la distancia.
             'max_request_distance_km' => ['nullable', 'integer', 'min:1', 'max:500'],
@@ -127,6 +142,7 @@ class DriverProfileController extends Controller
             'vehicle_photo' => ['nullable', 'image', 'max:4096'],
         ], [
             'phone_local.regex' => 'El número tiene que tener entre 7 y 10 dígitos, sin espacios ni guiones.',
+            'minimum_fare.max' => 'La plataforma no permite superar $'.number_format($adminMinimumFare, 2).' como tarifa mínima de una carrera (tope general definido en /admin/tarifas). Puede dejarla en blanco o poner una menor.',
         ]);
 
         // Cambio de número de WhatsApp (pedido explícito del usuario, caso

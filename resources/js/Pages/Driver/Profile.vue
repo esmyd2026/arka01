@@ -42,6 +42,9 @@ const props = defineProps({
     tier: { type: Object, required: true },
     // null si ya está en la medalla más alta habilitada para el directorio.
     nextPublicTier: { type: Object, default: null },
+    // Pedido explícito del usuario: tope de la tarifa mínima propia — puede
+    // declarar una MENOR (la plataforma la respeta), pero no una mayor.
+    platformMinimumFare: { type: Number, required: true },
 });
 
 const WHATSAPP_STATUS_LABEL = { active: 'Activa', expiring_soon: 'Próxima a vencer', expired: 'Expirada' };
@@ -441,9 +444,17 @@ const VERIFICATION_LABELS = {
                                     type="number"
                                     step="0.01"
                                     min="0"
+                                    :max="platformMinimumFare"
                                     class="mt-1 block w-full"
                                     v-model="form.minimum_fare"
                                 />
+                                <!-- Pedido explícito del usuario: que se le indique en su
+                                     configuración que la plataforma no permite superar el
+                                     tope general — puede poner una MENOR, esa sí se respeta
+                                     en el cálculo del precio (ver PriceCalculator). -->
+                                <p class="mt-1 text-xs text-arka-text-muted">
+                                    No puede superar ${{ platformMinimumFare.toFixed(2) }} (tope de la plataforma). Si la deja en blanco, se usa ese tope.
+                                </p>
                                 <InputError class="mt-2" :message="form.errors.minimum_fare" />
                             </div>
                         </div>

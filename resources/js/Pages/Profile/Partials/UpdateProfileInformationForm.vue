@@ -35,8 +35,25 @@ const form = useForm({
 // sigue mostrando el avatar actual vía UserAvatar más abajo.
 const avatarPreview = ref(null);
 
+// Pedido explícito del usuario: el mensaje de "la foto pesa demasiado" no
+// era claro. Mismo límite que el backend (ProfileUpdateRequest, 4 MB), pero
+// avisando ACÁ, antes de subir nada — no tiene sentido mandar un archivo
+// pesado entero para recién enterarse del error al volver la respuesta.
+const MAX_AVATAR_SIZE_MB = 4;
+const avatarSizeError = ref(null);
+
 function onAvatarChange(event) {
     const file = event.target.files[0];
+    avatarSizeError.value = null;
+
+    if (file && file.size > MAX_AVATAR_SIZE_MB * 1024 * 1024) {
+        avatarSizeError.value = `La foto pesa ${(file.size / 1024 / 1024).toFixed(1)} MB — el máximo es ${MAX_AVATAR_SIZE_MB} MB. Elegí una más liviana o comprimida.`;
+        event.target.value = '';
+        form.avatar = null;
+        avatarPreview.value = null;
+        return;
+    }
+
     form.avatar = file ?? null;
     avatarPreview.value = file ? URL.createObjectURL(file) : null;
 }
@@ -77,7 +94,8 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
                         @change="onAvatarChange"
                     />
                 </div>
-                <InputError class="mt-2" :message="form.errors.avatar" />
+                <p class="mt-1 text-xs text-arka-text-muted">JPG o PNG, máximo {{ MAX_AVATAR_SIZE_MB }} MB.</p>
+                <InputError class="mt-2" :message="avatarSizeError ?? form.errors.avatar" />
             </div>
 
             <div>

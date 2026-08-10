@@ -193,6 +193,11 @@ class RideRequestController extends Controller
             'user_id' => $driver->id,
             'name' => $driver->name,
             'rate_per_km' => $profile?->rate_per_km,
+            // Pedido explícito del usuario: si este conductor declaró su
+            // propia tarifa mínima (y no supera la de la plataforma), el
+            // estimado del frontend tiene que replicarla — ver
+            // referenceMinimumFare() y PriceCalculator::suggestedPrice().
+            'minimum_fare' => $profile?->minimum_fare,
             'current_lat' => $profile?->current_lat,
             'current_lng' => $profile?->current_lng,
             // Zona de cobertura (pedido explícito del usuario): el frontend ya
@@ -458,7 +463,11 @@ class RideRequestController extends Controller
         $distanceKm = round($distanceKm, 2);
 
         $ratePerKm = $this->referenceRatePerKm($fleet, $driverUserId);
-        $suggestedPrice = PriceCalculator::suggestedPrice($distanceKm, $ratePerKm)['total'];
+        $suggestedPrice = PriceCalculator::suggestedPrice(
+            $distanceKm,
+            $ratePerKm,
+            driverMinimumFare: $this->referenceMinimumFare($driverUserId),
+        )['total'];
 
         // Pedido explícito del usuario: la contraoferta inicial no puede ser
         // menor al precio estimado — evita que alguien proponga un monto
@@ -633,6 +642,24 @@ class RideRequestController extends Controller
             ->filter();
 
         return $rates->isEmpty() ? 0.0 : round($rates->avg(), 2);
+    }
+
+    /**
+     * Tarifa mínima propia de ESE conductor (pedido explícito del usuario),
+     * si la declaró en su perfil — null si es "a toda la flota" (todavía no
+     * hay un conductor puntual) o si no declaró ninguna, y ahí
+     * PriceCalculator usa directo la de la plataforma. Nunca se promedia
+     * entre conductores: es una excepción individual, no un dato de flota.
+     */
+    private function referenceMinimumFare(?int $driverUserId): ?float
+    {
+        if (! $driverUserId) {
+            return null;
+        }
+
+        $minimumFare = User::find($driverUserId)?->driverProfile?->minimum_fare;
+
+        return $minimumFare !== null ? (float) $minimumFare : null;
     }
 
     /**
