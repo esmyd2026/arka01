@@ -47,7 +47,13 @@ class SecurityHeaders
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                 "font-src 'self' data: https://fonts.gstatic.com",
                 "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.gstatic.com https://maps.googleapis.com",
-                "connect-src 'self' ws: wss: https://router.project-osrm.org https://nominatim.openstreetmap.org https://maps.googleapis.com",
+                // La API "nueva" de Google Places (Utils/googleMaps.js) manda las
+                // llamadas de autocompletado por gRPC-Web a places.googleapis.com
+                // — un origen DISTINTO del que usa el resto de Maps
+                // (maps.googleapis.com, ya permitido arriba). Bug real reportado
+                // por el usuario: sin este origen, el CSP bloqueaba la conexión
+                // en silencio (el script cargaba bien, la sugerencia nunca volvía).
+                "connect-src 'self' ws: wss: https://router.project-osrm.org https://nominatim.openstreetmap.org https://maps.googleapis.com https://places.googleapis.com",
                 "worker-src 'self'",
                 "object-src 'none'",
                 "base-uri 'self'",

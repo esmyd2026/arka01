@@ -78,15 +78,19 @@ composer install --no-dev --optimize-autoloader
 npm ci
 npm run build          # genera public/build/ (no está en git)
 
+# Permisos ANTES de correr artisan (config:cache y storage:link ya escriben
+# ahí) — el dueño queda compartido entre tu propio usuario (para poder
+# correr `artisan` directo, sin sudo, en el día a día) y `www-data` (quien
+# corre PHP-FPM), con el grupo con permiso de escritura.
+sudo chown -R $(whoami):www-data storage bootstrap/cache
+sudo chmod -R 775 storage bootstrap/cache
+
 php artisan key:generate
 php artisan migrate --force
 php artisan storage:link
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
-
-sudo chown -R www-data:www-data storage bootstrap/cache
-sudo chmod -R 775 storage bootstrap/cache
 ```
 
 ### 6. Nginx

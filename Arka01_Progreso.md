@@ -1681,6 +1681,40 @@ Costo estimado: ~$18-22/mes (VM + disco + snapshots + backups + egress) — en l
 ### Tests
 No aplica `php artisan test`/Pint/`npm run build` (son scripts de infraestructura, no código de la app) — se verificó la sintaxis de los 4 scripts `.sh` con `bash -n` (sin errores). La verificación real (que el servidor levante, que Reverb conecte, que una carrera de prueba funcione de punta a punta) queda documentada paso a paso en `deploy/README.md` para que la corra el usuario, ya que no hay una VM real disponible en este entorno para probarlo de antemano.
 
+### Arka01 en producción: `https://arka01.com` está en vivo
+Continuación directa de la pasada anterior — con el SDK instalado y autenticado, se ejecutó el plan completo en la infraestructura real del usuario (no solo se dejaron los scripts listos). Dos hallazgos reales en el camino:
+
+- **Cloud Shell no estaba disponible** para la cuenta del usuario ("cuenta de Google Workspace no apta"), así que se instaló el Google Cloud SDK local (`winget install Google.CloudSDK`) en su Windows — mismo `gcloud`, misma sesión autenticada (`gcloud init`, corrido por el usuario por el login interactivo), pero corriendo desde su propia máquina en vez del navegador. Confirmado que funciona igual: aprovisionó la VM, el bucket, el snapshot y el resto sin diferencias.
+- **`composer.lock` pedía PHP 8.4+** (se había generado con el PHP 8.5 del entorno local), pero el servidor tenía 8.3 instalado según `composer.json` (`^8.2`) — `composer install` fallaba. Se instaló PHP 8.4 en el servidor en vez de tocar el lock file (evita arriesgar versiones de paquetes ya probadas con la suite completa), y se corrigieron `deploy/bootstrap-server.sh`, `deploy/deploy.sh` y `deploy/nginx-arka01.conf` para que apunten a 8.4 de manera consistente en cualquier despliegue futuro.
+
+Importante sobre los límites que se respetaron: en ningún momento se corrió un comando `git` desde acá — ni local ni en el servidor remoto por SSH. El `git clone` y los dos `git pull` (uno normal, otro después del fix de PHP) los ejecutó el usuario a pedido; todo lo demás (aprovisionar, instalar paquetes, `.env`, Composer, `npm run build`, migraciones, Nginx, Supervisor, Certbot, backup) se corrió directo por SSH con `gcloud compute ssh --tunnel-through-iap`.
+
+Estado final verificado en vivo:
+- VM `arka01-vm` (`e2-small`, `us-central1-a`), IP estática `35.254.73.121`, DNS de `arka01.com`/`www.arka01.com` propagado y apuntando ahí.
+- `https://arka01.com` responde `200`, con certificado válido (Let's Encrypt, vence 2026-11-08, renovación automática ya programada por Certbot) y todos los headers de `SecurityHeaders.php` presentes.
+- Los 74 migraciones corrieron limpias sobre la base `arka01` nueva.
+- `arka01-queue-worker:00/01` y `arka01-reverb` en `RUNNING` bajo Supervisor; se confirmó el WebSocket de punta a punta con un handshake real (`101 Switching Protocols`, header `X-Powered-By: Laravel Reverb`) a través del proxy de Nginx.
+- Cron del scheduler instalado (`* * * * *`).
+- Backup diario de MySQL a Cloud Storage instalado, corrido una vez a mano para confirmar que funciona (subió 16KB — base recién migrada, sin datos de demo todavía).
+- Bloqueo de `.env`/`.git` por URL confirmado andando solo (los primeros bots ya empezaron a escanear la IP a los pocos minutos, todos devueltos con 403).
+
+Pendiente, deliberadamente fuera de esta pasada (documentado en `deploy/.env.production.example` y `deploy/README.md`): completar las variables opcionales antes de invitar gente real (WhatsApp App Secret, Google OAuth, Maps, Sentry, VAPID, SMTP real) y decidir si se siembra algo de catálogo/demo o se arranca en blanco. También quedó un aviso de "reinicio de kernel pendiente" del propio Ubuntu (normal tras instalar paquetes) — no urgente, se puede reiniciar la VM en cualquier momento sin perder nada (todo corre bajo Supervisor/systemd, vuelve solo).
+
+### Tests
+No aplica — despliegue real de infraestructura, no cambios de código. Verificación end-to-end hecha en vivo contra el servidor real: `curl -I https://arka01.com` (200 + headers), handshake WSS real contra Reverb, `sudo supervisorctl status` (los 3 procesos `RUNNING`), backup de prueba confirmado en el bucket.
+
+### Post-despliegue: permisos, y por qué completar el `.env` no alcanzaba solo
+Tres problemas reales encontrados por el usuario ya con la app en producción, completando las variables opcionales una por una:
+
+- **Permisos de `storage/`/`bootstrap/cache` mal pensados**: quedaron con dueño `www-data:www-data` — el propio usuario (su cuenta SSH) no podía correr `artisan` sin `sudo` (`php artisan config:cache` tiraba "Permission denied"). Se corrigió a dueño compartido (`$(whoami):www-data`, grupo con permiso de escritura) tanto en el servidor real como en `deploy/README.md`, y se reordenó la guía para fijar permisos ANTES de los comandos `artisan` que ya escriben ahí (antes quedaban después, mismo problema en el primer intento).
+- **`config:cache` no alcanzaba para que tomaran efecto las credenciales nuevas** (Google, WhatsApp): la causa real era `opcache.validate_timestamps=0` (activado a propósito por rendimiento en `bootstrap-server.sh`) — PHP-FPM sigue sirviendo desde memoria la versión VIEJA de `bootstrap/cache/config.php` aunque el archivo en disco ya se haya reescrito, hasta que se reinicia el proceso. Hace falta `sudo systemctl reload php8.4-fpm` después de cada `config:cache` para que se note.
+- **El autocompletado de Google Maps no aparecía ni con eso**: `VITE_GOOGLE_MAPS_API_KEY` se "hornea" en el JavaScript compilado en build time (`npm run build`), no se lee en runtime como el resto de las variables — cambiar el `.env` nunca iba a alcanzar sin recompilar. Se corrió `npm run build` de nuevo con la clave ya puesta; confirmado que quedó grabada en el chunk `AddressAutocomplete-*.js`.
+
+Se agregó la secuencia correcta a `deploy/README.md` para que no se repita: **cualquier cambio de variable no-`VITE_`** → `config:cache` + `systemctl reload php8.4-fpm`; **cualquier variable `VITE_...`** → además, `npm run build` antes de esos dos pasos.
+
+### Tests
+No aplica — mismo motivo que la pasada anterior. Verificado en vivo: `googleLoginEnabled":true` en el HTML servido de `/login`, `config('services.whatsapp.business_number')` resuelto en `tinker` después del reload, y la clave de Google Maps confirmada dentro del build con `grep`.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)
