@@ -170,7 +170,7 @@ class WhatsAppFreeformSender
     {
         $registeredHint = $intendedDriver->phone ? substr($intendedDriver->phone, -4) : null;
 
-        $message = "⚠️ Este número no coincide con el que tiene registrado en su perfil de Arka01"
+        $message = '⚠️ Este número no coincide con el que tiene registrado en su perfil de Arka01'
             .($registeredHint ? " (termina en {$registeredHint})" : '').".\n\n"
             .'Para conectar los avisos de carreras, escríbanos desde ese mismo número, o actualice su teléfono desde su perfil en la app.';
 
@@ -205,6 +205,28 @@ class WhatsAppFreeformSender
      * usted, solicitar bloquear la cuenta" — no alcanzaba con "ignore este
      * mensaje").
      */
+    /**
+     * Pedido explícito del usuario: en vez de que "Pedir código" sea el
+     * primer paso (y ahí recién intentar mandarlo por WhatsApp, fallando en
+     * silencio a correo si la ventana de 24h no estaba abierta), el widget
+     * de sesión única en Auth/Login.vue ahora invita a escribir primero al
+     * WhatsApp oficial — este es el "bot" confirmando que ya puede volver a
+     * la web y tocar "Pedir código" de una, con el WhatsApp ya listo para
+     * recibirlo. Ver WhatsAppWebhookController::receive() (detecta la frase
+     * exacta de Utils/whatsapp.js::buildSessionRecoveryWhatsAppUrl()) y
+     * SessionTakeoverController::request() (el que manda el código en sí).
+     */
+    public static function sendSessionRecoveryPrompt(User $user): void
+    {
+        if (! $user->phone || ! $user->hasActiveWhatsAppSession()) {
+            return;
+        }
+
+        $message = '✅ ¡Listo! Ya puede volver a la página de inicio de sesión de Arka01 y tocar "Pedir código" — se lo mandamos por acá.';
+
+        self::sendText($user->phone, $message);
+    }
+
     public static function sendSessionTakeoverCode(User $user, string $code, string $lockUrl): void
     {
         if (! $user->phone || ! $user->hasActiveWhatsAppSession()) {

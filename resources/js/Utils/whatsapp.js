@@ -15,3 +15,18 @@ export function buildWhatsAppOptInUrl(businessNumber, userId) {
     const message = `Buen día, inicio mi turno en Arka01 🚗 (ref:${userId})`;
     return `https://wa.me/${businessNumber}?text=${encodeURIComponent(message)}`;
 }
+
+// Sesión única por cuenta (pedido explícito del usuario): antes de "Pedir
+// código" en Auth/Login.vue, se ofrece escribirle primero al WhatsApp
+// oficial con esta frase exacta — abre la ventana de 24h, y
+// WhatsAppWebhookController::receive() la reconoce (comparación de texto,
+// sin "(ref:ID)" a propósito: acá el usuario todavía no probó nada, exponer
+// un ID filtraría si la cuenta existe) para responder con un mensaje
+// distinto al de "activarme" del conductor, guiándolo de vuelta a la web.
+// El texto tiene que coincidir con SESSION_RECOVERY_TRIGGER_PHRASE en
+// App\Http\Controllers\WhatsAppWebhookController — si se cambia acá, hay que
+// cambiarlo ahí también.
+export function buildSessionRecoveryWhatsAppUrl(businessNumber) {
+    if (!businessNumber) return null;
+    return `https://wa.me/${businessNumber}?text=${encodeURIComponent('Necesito recuperar mi sesión')}`;
+}

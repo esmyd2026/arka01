@@ -41,19 +41,32 @@ class GoogleAuthTest extends TestCase
         $response->assertRedirect();
     }
 
-    public function test_callback_creates_a_new_account_and_logs_in(): void
+    /**
+     * Pedido explícito del usuario: una cuenta de Google nueva no puede
+     * quedar como "cliente" en silencio — se manda a elegir tipo de cuenta,
+     * mismo primer paso que ya exige el registro normal (Register.vue).
+     */
+    public function test_callback_creates_a_new_account_and_sends_it_to_choose_account_type(): void
     {
         $this->fakeGoogleUser('google-123', 'nuevo@example.com', 'Nueva Persona');
 
         $response = $this->get(route('auth.google.callback'));
 
-        $response->assertRedirect(route('dashboard'));
+        $response->assertRedirect(route('account-type.choose'));
         $this->assertAuthenticated();
 
         $user = User::query()->where('email', 'nuevo@example.com')->firstOrFail();
         $this->assertSame('google-123', $user->google_id);
         $this->assertSame('Nueva Persona', $user->name);
         $this->assertNotNull($user->email_verified_at);
+    }
+
+    public function test_the_choose_account_type_screen_is_reachable_after_a_new_google_signup(): void
+    {
+        $this->fakeGoogleUser('google-999', 'flamante@example.com', 'Flamante');
+        $this->get(route('auth.google.callback'));
+
+        $this->get(route('account-type.choose'))->assertOk();
     }
 
     public function test_callback_links_an_existing_account_found_by_email(): void

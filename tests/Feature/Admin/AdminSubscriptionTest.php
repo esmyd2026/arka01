@@ -139,6 +139,82 @@ class AdminSubscriptionTest extends TestCase
         );
     }
 
+    /**
+     * Pedido explícito del usuario: la lista de suscriptores pasó de tarjetas
+     * apiladas a una tabla con filtro por rol/estado de plan y orden por
+     * nombre o vencimiento — cubre que el filtrado y el orden lleguen
+     * correctamente hasta la vista, no solo que la página cargue.
+     */
+    public function test_the_subscriptions_list_can_be_filtered_by_role_and_plan_status(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $client = User::factory()->create(['role' => 'cliente']);
+        $driverWithPlan = User::factory()->create(['role' => 'conductor']);
+        DriverProfile::factory()->for($driverWithPlan)->create();
+        $plusPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driverWithPlan)->create([
+            'subscription_plan_id' => $plusPlan->id,
+            'status' => 'active',
+            'expires_at' => now()->addDays(10),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index', ['role' => 'conductor']));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Admin/Subscriptions')
+            ->has('users.data', 1)
+            ->where('users.data.0.id', $driverWithPlan->id)
+        );
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index', ['plan_status' => 'con_plan']));
+        $response->assertInertia(fn ($page) => $page
+            ->has('users.data', 1)
+            ->where('users.data.0.id', $driverWithPlan->id)
+        );
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index', ['plan_status' => 'gratis']));
+        $response->assertInertia(fn ($page) => $page
+            ->has('users.data', 1)
+            ->where('users.data.0.id', $client->id)
+        );
+    }
+
+    public function test_the_subscriptions_list_can_be_sorted_by_soonest_expiry(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $plusPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+
+        $expiresSoon = User::factory()->create(['role' => 'conductor']);
+        DriverProfile::factory()->for($expiresSoon)->create();
+        Subscription::factory()->for($expiresSoon)->create([
+            'subscription_plan_id' => $plusPlan->id,
+            'status' => 'active',
+            'expires_at' => now()->addDays(2),
+        ]);
+
+        $expiresLater = User::factory()->create(['role' => 'conductor']);
+        DriverProfile::factory()->for($expiresLater)->create();
+        Subscription::factory()->for($expiresLater)->create([
+            'subscription_plan_id' => $plusPlan->id,
+            'status' => 'active',
+            'expires_at' => now()->addDays(20),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index', [
+            'role' => 'conductor',
+            'sort' => 'expiry',
+            'direction' => 'asc',
+        ]));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('users.data.0.id', $expiresSoon->id)
+            ->where('users.data.1.id', $expiresLater->id)
+        );
+    }
+
     public function test_admin_metrics_page_reports_the_plan_breakdown(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

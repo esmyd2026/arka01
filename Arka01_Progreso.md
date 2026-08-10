@@ -1755,6 +1755,76 @@ Reportado por el usuario con captura, en pantalla angosta: el avatar y el nombre
 ### Tests
 `npm run build` compila limpio. Cambio de clases de Tailwind únicamente, sin lógica — no aplica `php artisan test` ni Pint.
 
+### Invitar por WhatsApp a un cliente desde "Mis clientes de confianza"
+Pedido explícito del usuario: que el conductor pueda invitar por WhatsApp a un cliente para que lo sume a su flota.
+
+Investigado antes de construir nada: la mayor parte ya existía. "Referí a tu conductor" (pasada anterior, del lado cliente) ya arma un link público por `invite_code` (`/referidos/{invite_code}`, `ReferralController`) donde cualquier cliente logueado puede sumar a ese conductor a su flota con un clic, o crear cuenta si no tiene una — el conductor ya tiene ese mismo `invite_code` (`Driver/Profile.vue` lo muestra como QR, `Dashboard.vue` deja copiarlo pelado). Lo único que faltaba era una forma cómoda de que el conductor comparta ESE link — hoy solo podía copiar el código suelto, sin el link ni un botón de WhatsApp.
+
+- **`DriverInvitationController::index()`**: suma `inviteCode` (`driverProfile->invite_code`) a los props de "Mis clientes de confianza".
+- **`Driver/Invitations.vue`**: nueva tarjeta "Invite a un cliente" arriba de todo, con los mismos dos botones que ya usa `Fleet/Show.vue` del lado cliente (`shareInviteByWhatsApp`/`shareInviteGeneric`) — mismo cuidado de no duplicar el link en el mensaje de WhatsApp (bug real de una pasada anterior), reutilizando `route('referrals.show', inviteCode)` en vez del link genérico de registro.
+
+No hizo falta tocar `ReferralController`/`Referral/Show.vue` ni la lógica de invitación en sí — la invitación que se manda al aceptar en esa pantalla sigue pasando por el mismo `FleetInvitationController::store()` de siempre (el conductor igual tiene que aceptarla desde "Invitaciones recibidas", protección contra que alguien reenvíe el link sin que él se entere).
+
+### Tests
+`tests/Feature/Fleet/FleetInvitationFlowTest.php` (+1: la pantalla expone el `inviteCode` correcto del conductor logueado). Suite completa: 505 tests OK, Pint limpio, build limpio.
+
+### SMTP en producción no mandaba correos, aunque el usuario ya había completado las credenciales
+El usuario pegó directo los logs de producción (ya con `LOG_LEVEL=info` de la pasada anterior — se usaron tal cual, sin pedirle nada más) mostrando `stream_socket_client(): ... getaddrinfo for  failed` al mandar el aviso de sesión concurrente por correo. Dos problemas encadenados, diagnosticados mandando un correo de prueba real desde `tinker` (más rápido que pedirle reintentar una acción real cada vez):
+
+- **`MAIL_ENCRYPTION=tls` con `MAIL_PORT=465`**: combinación inválida — 465 es SSL directo, `tls` (STARTTLS) es la pareja del puerto 587. Corregido a `MAIL_ENCRYPTION=ssl`.
+- **`MAIL_FROM_ADDRESS=soporte@arka01.com` no existe como buzón real** en el servidor de correo (`mail.siglotecnologico.com`, de un dominio distinto) — el servidor rechazaba tanto usarlo de remitente ("Sender verify failed") como de destinatario de prueba ("No Such User Here"). El usuario eligió, para probar ya, usar el mismo buzón autenticado (`wpgo@siglotecnologico.com`) como remitente en vez de crear un buzón nuevo — queda pendiente, a su criterio, crear `soporte@arka01.com` de verdad más adelante para los correos reales a usuarios.
+
+Confirmado con un envío real a un correo externo (Gmail) — llegó.
+
+### Tests
+No aplica — configuración de infraestructura (`.env`), no código. Verificado con un envío real desde `tinker` en el servidor.
+
+### Recuperar sesión primero por WhatsApp, luego pedir el código
+Pedido explícito del usuario: que el widget de sesión única invite a escribirle primero al WhatsApp oficial (sin que se note el mecanismo interno) — el bot confirma y recién ahí tiene sentido tocar "Pedir código" en la web, en vez de arriesgarse a que salga por correo porque la ventana de 24h todavía no estaba abierta.
+
+- **`WhatsAppWebhookController`**: nueva frase disparadora ("recuperar mi sesión", comparada sin mayúsculas ni tilde) — si el mensaje entrante la contiene, `openWindowFor()` despacha `SendWhatsAppSessionRecoveryPrompt` en vez de la confirmación genérica de "activarme" del conductor (que no tenía sentido acá, ni para un cliente ni para un conductor que solo quería recuperar su sesión).
+- **`WhatsAppFreeformSender::sendSessionRecoveryPrompt()`** (nuevo): "✅ ¡Listo! Ya puede volver a la página de inicio de sesión de Arka01 y tocar 'Pedir código'".
+- **`Utils/whatsapp.js`**: `buildSessionRecoveryWhatsAppUrl()` arma el link `wa.me` con la frase exacta — a propósito SIN `(ref:ID)` como el de "activarme" (acá el usuario todavía no probó nada; exponer un ID filtraría si la cuenta existe, violando el mismo criterio de privacidad que ya usa `SessionTakeoverController::request()`).
+- **`Auth/Login.vue`**: el widget ahora numera dos pasos — "1. Escríbanos por WhatsApp primero →" (opcional, si ya tenía la ventana abierta puede saltarlo) y "2. Pedir código". `AuthenticatedSessionController::create()` suma `whatsappBusinessNumber` para armar el link.
+
+### Tests
+`tests/Feature/WhatsApp/WhatsAppSessionTest.php` (+2: la frase dispara el job de recuperación y no el genérico; la comparación tolera falta de tilde/mayúsculas). Suite completa: 507 tests OK, Pint limpio (reformateó comillas en `WhatsAppFreeformSender.php`), build limpio.
+
+### Tanda de mejoras de registro/login y de "Mis flotas"
+Cinco pedidos en un mismo mensaje, del usuario probando la app ya en producción:
+
+- **Google no preguntaba tipo de cuenta**: registrarse (o loguearse por primera vez) con Google armaba la cuenta directo como "cliente", sin el paso de elegir que sí tiene el registro normal (`Register.vue`, paso "account_type" — ni siquiera se persiste en `users`, la fuente de verdad real es si existe un `DriverProfile`). Investigado antes de tocar nada: `GoogleAuthController::callback()` solo distinguía "cuenta encontrada" vs "cuenta nueva" — nunca por si el click vino del botón de Login o de Register, así que no hacía falta duplicar nada por ahí.
+  - **`Auth/ChooseAccountType.vue`** (nueva) + **`AccountTypeController`** + ruta `cuenta/tipo`: mismo diseño del paso 1 de `Register.vue` (dos tarjetas grandes), pero como pantalla propia — sin formulario propio, "Conductor" enlaza directo a `driver.profile.edit` (ya soporta "todavía no tengo perfil", lo usa el registro normal) y "Pasajero" a Inicio.
+  - **`GoogleAuthController::callback()`**: agregado `$isNewUser` — solo una cuenta CREADA en este mismo request (ni por `google_id` ni por email) redirige a `cuenta/tipo`; una cuenta que ya existía (aunque recién se linkee con Google ahora) sigue directo a Inicio como siempre, porque ya tiene un rol elegido. Esto resuelve los dos pedidos del usuario a la vez (registro con Google Y login con Google a una cuenta inexistente), porque los dos casos pasan por la misma rama "cuenta nueva".
+- **Ojito de mostrar/ocultar contraseña en el registro**: no existía (sí en `Login.vue`) — mismo ícono/comportamiento ahora en los dos campos de contraseña del paso 5, un solo toggle para ambos (no tiene sentido mostrar uno sí y el otro no cuando lo que se compara es que coincidan).
+- **"Mis flotas" (`Fleet/List.vue`)**:
+  - Botón nuevo **"+ Agregar conductores"** en cada fila de flota, al lado del nombre — antes la única entrada a esa función era tocar el nombre y encontrar el buscador ya adentro de `Fleet/Show.vue`.
+  - El botón de crear flota ya no queda deshabilitado con un texto de ayuda al costado (fácil de pasar por alto) — ahora siempre está activo: si el plan no alcanza, lleva directo a `Mi plan` (`client.plan.edit`) en vez de mostrar el formulario.
+- **Consistencia del flujo de WhatsApp del conductor** (a pedido del usuario, comparándolo con el widget de recuperar sesión que armamos antes): el aviso de `Dashboard.vue` ("le enviamos a WhatsApp para confirmar su turno") y la tarjeta de `Driver/Profile.vue` ahora usan el mismo lenguaje numerado "1. .../2. ..." en vez de una sola oración — no cambió el mecanismo (sigue siendo un solo click + confirmación automática del bot), solo la forma de explicarlo, para que se sienta el mismo patrón en toda la app.
+
+### Tests
+`tests/Feature/Auth/GoogleAuthTest.php` (renombrado y ajustado: una cuenta nueva ahora redirige a `account-type.choose`, no a `dashboard`; +1: esa pantalla responde `200` después de un alta nueva por Google). Suite completa: 508 tests OK, Pint limpio, build limpio (hizo falta recompilar para que el manifest de Vite conociera `ChooseAccountType.vue` antes de que los tests de Inertia pudieran renderizarla).
+
+### Tarjeta de invitación recibida, pareja a las de "Mis clientes de confianza"
+El usuario mostró capturas: la tarjeta de una invitación pendiente (`Driver/Invitations.vue`) se veía pelada (solo nombre + Aceptar/Rechazar) al lado de las fichas ricas de "Flotas a las que pertenecés" (foto, calificación, medalla). También pidió confirmar que la tarjeta "Invite a un cliente" (de la pasada anterior) ya estuviera ahí — sí estaba, el problema era que producción sigue atrasada (ver más abajo), no que faltara construirla.
+
+- **`DriverInvitationController`**: la lógica de calificación/categoría del cliente (antes duplicada solo en `activeMemberships`) pasó a un método privado `clientReviewStats()`, reutilizado también en `pendingInvitations` (que antes no llevaba ningún cálculo extra, solo el registro crudo de la invitación).
+- **`Driver/Invitations.vue`**: la tarjeta de invitación pendiente ahora usa `UserAvatar`, la insignia de calificación (`★ X.X` / "Sin calificaciones") y la medalla de categoría — mismo bloque visual que ya usan las flotas activas, sin duplicar el cálculo en el frontend.
+
+Pendiente aparte, no de código: producción quedó confirmada (por SSH, revisando el commit desplegado) todavía en el fix de "admin/suscripciones" de dos pasadas atrás — nada de lo construido después (esta tarjeta, invitar por WhatsApp, recuperar sesión, selector de cuenta de Google, botones de flota) llegó al servidor. Falta que el usuario suba y confirme el `git push`/`pull` para desplegar todo el atraso junto.
+
+### Tests
+`tests/Feature/Fleet/FleetInvitationFlowTest.php` sigue OK sin cambios (la tarjeta es solo presentación, no cambia contrato de datos más allá de los dos campos nuevos que el backend ya mandaba desde antes). Suite completa: 508 tests OK, Pint limpio, build limpio.
+
+### Tabla de "Suscripciones" del panel admin, con filtro y orden
+El usuario mostró una captura: la lista de suscriptores era una pila de tarjetas grandes (una por usuario, con avatar, insignia de plan y botones apilados) — ocupaba mucho espacio por cada uno y no había forma de filtrar ni de ordenar, solo un buscador de texto.
+
+- **`Admin/SubscriptionController::index()`**: suma filtro por rol (`role=cliente|conductor|admin`), por estado de plan (`plan_status=con_plan|gratis` — descarta admins, que no tienen plan de ningún lado) y orden (`sort=name|expiry`, `direction=asc|desc`). El orden por vencimiento trae el `expires_at` más próximo de la suscripción vigente del usuario como columna aparte (`selectSub`) solo para poder ordenar por ella — no se puede resolver en el navegador porque depende de datos de otros usuarios (paginado).
+- **`Admin/Subscriptions.vue`**: la lista pasó de tarjetas a una tabla (Usuario · Rol · Plan vigente · Acciones), con encabezados de columna clicables para ordenar (nombre / plan vigente) y una barra de filtros arriba (buscador + rol + estado de plan + "Limpiar filtros"). El formulario de activar plan, que antes se abría inline empujando la fila hacia abajo, pasó a un modal (ya no calza con una tabla de columnas fijas).
+
+### Tests
+`tests/Feature/Admin/AdminSubscriptionTest.php` (+2: filtrar por rol y por estado de plan devuelve exactamente los usuarios esperados, incluido que un admin no cae en "gratis"; ordenar por vencimiento próximo trae primero al que vence antes). Suite completa: 510 tests OK, Pint limpio (reordenó imports y espaciado en `SubscriptionController.php`), build limpio.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

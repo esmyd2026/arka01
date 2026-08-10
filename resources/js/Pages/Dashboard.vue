@@ -585,13 +585,16 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          respaldo visible por si el navegador bloqueó la pestaña nueva,
                          o si la pantalla cargó con el conductor ya disponible. Se puede
                          cerrar sin conectar (no bloquea nada) — vuelve a aparecer la
-                         próxima vez que se active mientras siga sin ventana. -->
+                         próxima vez que se active mientras siga sin ventana. Mismo
+                         lenguaje de "pasos" que el widget de recuperar sesión del login,
+                         para que se sienta el mismo mecanismo en toda la app. -->
                     <div
                         v-if="showWhatsappPrompt"
                         class="p-3 rounded-arka bg-arka-primary/10 flex items-center justify-between gap-3 text-sm"
                     >
                         <span class="text-arka-text">
-                            📲 Le enviamos a WhatsApp para confirmar su turno — si no se abrió la pestaña, toque acá.
+                            📲 1. Mándenos ese WhatsApp ya listo (si no se abrió la pestaña, toque acá) — 2. apenas lo
+                            envíe, queda conectado solo para recibir avisos.
                         </span>
                         <div class="flex items-center gap-3 shrink-0">
                             <a

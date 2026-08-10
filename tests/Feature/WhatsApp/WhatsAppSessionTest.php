@@ -4,6 +4,7 @@ namespace Tests\Feature\WhatsApp;
 
 use App\Jobs\SendWhatsAppNumberAlreadyRegisteredNotice;
 use App\Jobs\SendWhatsAppPhoneMismatchNotice;
+use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
 use App\Jobs\SendWhatsAppWindowConfirmation;
 use App\Models\User;
 use App\Models\WhatsAppSession;
@@ -89,6 +90,54 @@ class WhatsAppSessionTest extends TestCase
         $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
 
         Queue::assertPushed(SendWhatsAppWindowConfirmation::class, fn ($job) => $job->driverUserId === $user->id);
+    }
+
+    /**
+     * Pedido explícito del usuario: en vez de que "Pedir código" sea el
+     * primer paso, el widget de sesión única en Auth/Login.vue ahora invita
+     * a escribir primero al WhatsApp oficial con esta frase exacta — el
+     * "bot" tiene que reaccionar distinto (mandarlo de vuelta a la web),
+     * no con la confirmación genérica de "activarme" pensada para conductores.
+     */
+    public function test_the_session_recovery_phrase_dispatches_a_different_confirmation_job(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $payload = [
+            'entry' => [[
+                'changes' => [[
+                    'value' => ['messages' => [['from' => '593991234567', 'text' => ['body' => 'Necesito recuperar mi sesión'], 'type' => 'text']]],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
+
+        Queue::assertPushed(SendWhatsAppSessionRecoveryPrompt::class, fn ($job) => $job->userId === $user->id);
+        Queue::assertNotPushed(SendWhatsAppWindowConfirmation::class);
+    }
+
+    /**
+     * La comparación no puede depender de la tilde exacta — el navegador o
+     * WhatsApp podrían normalizar el texto distinto.
+     */
+    public function test_the_session_recovery_phrase_matches_without_the_accent(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $payload = [
+            'entry' => [[
+                'changes' => [[
+                    'value' => ['messages' => [['from' => '593991234567', 'text' => ['body' => 'necesito RECUPERAR MI SESION porfa'], 'type' => 'text']]],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
+
+        Queue::assertPushed(SendWhatsAppSessionRecoveryPrompt::class, fn ($job) => $job->userId === $user->id);
     }
 
     public function test_the_window_confirmation_actually_sends_a_whatsapp_message(): void

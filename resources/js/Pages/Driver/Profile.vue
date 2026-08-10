@@ -240,7 +240,10 @@ const VERIFICATION_LABELS = {
 
                         <!-- Avisos de carrera nueva por WhatsApp (pedido explícito
                              del usuario): estado de la ventana de 24h + link para
-                             abrirla o renovarla escribiéndole al número oficial. -->
+                             abrirla o renovarla escribiéndole al número oficial.
+                             Mismo lenguaje de "pasos" que el widget de recuperar
+                             sesión del login, para que se sienta el mismo mecanismo
+                             en toda la app (escribir primero, el bot lo conecta solo). -->
                         <div v-if="driverProfile && whatsappBusinessNumber" class="mt-4 p-3 rounded-arka border border-arka-text-muted/20">
                             <p class="text-sm font-medium text-arka-text">Avisos de carrera nueva por WhatsApp</p>
                             <p class="mt-1 text-sm text-arka-text-muted">
@@ -248,8 +251,7 @@ const VERIFICATION_LABELS = {
                                     Ventana {{ WHATSAPP_STATUS_LABEL[whatsappSession.status] }} — le quedan {{ whatsappTimeRemaining() }}.
                                 </template>
                                 <template v-else>
-                                    {{ whatsappSession ? 'Su ventana de WhatsApp expiró' : 'Todavía no conectó WhatsApp' }} — escríbale
-                                    "Hola" al número oficial para (re)activar los avisos por 24 horas.
+                                    {{ whatsappSession ? 'Su ventana de WhatsApp expiró' : 'Todavía no conectó WhatsApp' }}.
                                 </template>
                             </p>
                             <a
@@ -258,8 +260,11 @@ const VERIFICATION_LABELS = {
                                 rel="noopener"
                                 class="mt-2 inline-block text-sm text-arka-primary hover:text-arka-primary-bright"
                             >
-                                {{ whatsappSession && whatsappSession.status !== 'expired' ? 'Renovar por WhatsApp' : 'Conectar WhatsApp' }} &rarr;
+                                1. {{ whatsappSession && whatsappSession.status !== 'expired' ? 'Renovar por WhatsApp' : 'Conectar WhatsApp' }} &rarr;
                             </a>
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                2. Apenas lo mande, queda conectado solo — sin nada más que hacer acá.
+                            </p>
                         </div>
                     </header>
 

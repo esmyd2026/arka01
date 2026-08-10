@@ -45,6 +45,14 @@ class GoogleAuthController extends Controller
             return redirect()->route('login')->with('status', 'Esta cuenta está bloqueada por seguridad. Contáctenos para reactivarla.');
         }
 
+        // Pedido explícito del usuario: una cuenta de Google NUEVA (ni por
+        // google_id ni por email) no tiene que quedar como "cliente" en
+        // silencio — se manda a elegir tipo de cuenta (ver el redirect de
+        // abajo), mismo primer paso que ya exige el registro normal. Una
+        // cuenta que YA EXISTÍA (aunque recién ahora se linkee con Google)
+        // sigue directo a Inicio, como siempre — ya tiene un rol elegido.
+        $isNewUser = $user === null;
+
         if ($user) {
             // Cuenta que ya existía por email (ej. una de demo) pero todavía
             // no tenía Google linkeado — queda linkeada a partir de ahora.
@@ -88,6 +96,10 @@ class GoogleAuthController extends Controller
             return redirect()->route('login')
                 ->with('status', $e->getMessage())
                 ->with('login_hint', $user->email);
+        }
+
+        if ($isNewUser) {
+            return redirect()->route('account-type.choose');
         }
 
         return redirect()->intended(route('dashboard', absolute: false));

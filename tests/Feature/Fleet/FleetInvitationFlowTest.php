@@ -194,6 +194,23 @@ class FleetInvitationFlowTest extends TestCase
         $this->assertDatabaseMissing('fleet_members', ['driver_user_id' => $driver->id]);
     }
 
+    /**
+     * Pedido explícito del usuario: que el conductor pueda invitar por
+     * WhatsApp a un cliente a que lo sume a su flota — reutiliza el mismo
+     * `invite_code` de "Referí a tu conductor" (ver ReferralTest), acá lo
+     * necesita "Mis clientes de confianza" (Driver/Invitations.vue) para
+     * armar el link a compartir.
+     */
+    public function test_driver_invitations_screen_exposes_their_own_invite_code(): void
+    {
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->actingAs($driver)->get(route('driver.invitations.index'));
+
+        $response->assertInertia(fn ($page) => $page->where('inviteCode', $profile->invite_code));
+    }
+
     public function test_client_can_remove_a_driver_from_their_fleet(): void
     {
         $client = User::factory()->create();

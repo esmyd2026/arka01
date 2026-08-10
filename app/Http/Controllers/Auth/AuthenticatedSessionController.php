@@ -29,6 +29,12 @@ class AuthenticatedSessionController extends Controller
             // tenía forma de saber a qué cuenta mandárselo — GoogleAuthController
             // lo deja acá (ver Auth/Login.vue).
             'loginHint' => session('login_hint'),
+            // Pedido explícito del usuario: antes de "Pedir código", ofrecer
+            // que le escriba primero al WhatsApp oficial — así la ventana de
+            // 24h ya está abierta cuando pide el código, y le llega por ahí
+            // en vez de por correo (ver WhatsAppWebhookController::receive()
+            // y WhatsAppFreeformSender::sendSessionRecoveryPrompt()).
+            'whatsappBusinessNumber' => config('services.whatsapp.business_number'),
         ]);
     }
 

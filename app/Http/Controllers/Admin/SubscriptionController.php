@@ -10,6 +10,7 @@ use App\Models\SubscriptionRequest;
 use App\Models\User;
 use App\Services\SubscriptionActivator;
 use App\Services\SubscriptionPlanEligibility;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -32,23 +33,62 @@ class SubscriptionController extends Controller
     /**
      * Buscador de usuarios + su plan vigente (driver y cliente) para activar
      * o cambiar, más el historial de cambios reciente como bitácora.
+     *
+     * Pedido explícito del usuario: la lista se veía como una pila de
+     * tarjetas que ocupaba mucho espacio y no tenía forma de filtrar ni
+     * ordenar — se suma filtro por rol, por si tiene plan pago o está en el
+     * gratis, y orden por nombre o por vencimiento (próximo a vencer primero).
      */
     public function index(Request $request): Response
     {
         $search = $request->string('q')->trim()->toString();
+        $roleFilter = $request->string('role')->toString();
+        $planStatusFilter = $request->string('plan_status')->toString();
+        $sort = in_array($request->string('sort')->toString(), ['name', 'expiry'], true)
+            ? $request->string('sort')->toString()
+            : 'name';
+        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
 
         $users = User::query()
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($query) use ($search) {
+            ->when($search !== '', function (Builder $query) use ($search) {
+                $query->where(function (Builder $query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%");
                 });
             })
+            ->when($roleFilter !== '', fn (Builder $query) => $query->where('role', $roleFilter))
+            // El estado de plan (con plan pago / en el gratis) no aplica al
+            // admin, que no tiene perfil de cliente ni de conductor — sin
+            // este descarte, un admin caía siempre del lado "gratis" al no
+            // tener ninguna suscripción, aunque el filtro no es para él.
+            ->when($planStatusFilter === 'con_plan', fn (Builder $query) => $query->where('role', '!=', 'admin')->whereHas(
+                'subscriptions',
+                fn (Builder $query) => $query->whereIn('status', ['active', 'grace'])
+            ))
+            ->when($planStatusFilter === 'gratis', fn (Builder $query) => $query->where('role', '!=', 'admin')->whereDoesntHave(
+                'subscriptions',
+                fn (Builder $query) => $query->whereIn('status', ['active', 'grace'])
+            ))
             ->with([
                 'subscriptions' => fn ($query) => $query->whereIn('status', ['active', 'grace'])->with('plan'),
             ])
-            ->orderBy('name')
-            ->paginate(15)
+            // Vencimiento más próximo entre las suscripciones vigentes del
+            // usuario (a lo sumo tiene una del lado conductor y una del lado
+            // cliente, pero solo una le corresponde según su rol único) — se
+            // trae como columna aparte solo para poder ordenar por ella.
+            ->selectSub(
+                Subscription::query()
+                    ->selectRaw('expires_at')
+                    ->whereColumn('subscriptions.user_id', 'users.id')
+                    ->whereIn('status', ['active', 'grace'])
+                    ->orderByRaw('expires_at is null, expires_at asc')
+                    ->limit(1),
+                'next_expiry'
+            )
+            ->addSelect('users.*')
+            ->when($sort === 'expiry', fn (Builder $query) => $query->orderByRaw("next_expiry is null, next_expiry {$direction}"))
+            ->when($sort === 'name', fn (Builder $query) => $query->orderBy('name', $direction))
+            ->paginate(20)
             ->withQueryString();
 
         $recentChanges = SubscriptionChange::query()
@@ -77,6 +117,12 @@ class SubscriptionController extends Controller
             'recentChanges' => $recentChanges,
             'pendingRequests' => $pendingRequests,
             'search' => $search,
+            'filters' => [
+                'role' => $roleFilter,
+                'plan_status' => $planStatusFilter,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
         ]);
     }
 

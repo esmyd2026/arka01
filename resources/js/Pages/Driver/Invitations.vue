@@ -15,7 +15,45 @@ const props = defineProps({
     maxClients: { type: Number, default: null },
     planName: { type: String, required: true },
     activeClientCount: { type: Number, required: true },
+    inviteCode: { type: String, default: null },
 });
+
+// Pedido explícito del usuario: que el conductor pueda invitar por WhatsApp
+// a un cliente a que lo sume a su flota — mismo link público que "Referí a
+// tu conductor" (Fleet/Show.vue, del lado cliente), solo que acá lo comparte
+// el propio conductor con su gente en vez de que un cliente lo recomiende.
+// Mismo criterio contra el link duplicado que ese otro botón: el texto NUNCA
+// lleva la URL adentro, se arma un solo string con el link al final.
+function inviteMessageText() {
+    return '¡Hola! Soy conductor en Arka01 y le invito a agregarme a su flota de confianza para pedirme sus viajes.';
+}
+
+function shareInviteByWhatsApp() {
+    const message = `${inviteMessageText()} Puede hacerlo acá: ${route('referrals.show', props.inviteCode)}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+const inviteLinkCopied = ref(false);
+async function shareInviteGeneric() {
+    const shareData = {
+        title: 'Súmeme a su flota en Arka01',
+        text: inviteMessageText(),
+        url: route('referrals.show', props.inviteCode),
+    };
+
+    if (navigator.share) {
+        try {
+            await navigator.share(shareData);
+        } catch {
+            // Cerró el panel de compartir sin elegir nada — no es un error.
+        }
+        return;
+    }
+
+    await navigator.clipboard.writeText(`${inviteMessageText()} Puede hacerlo acá: ${route('referrals.show', props.inviteCode)}`);
+    inviteLinkCopied.value = true;
+    setTimeout(() => (inviteLinkCopied.value = false), 2000);
+}
 
 // Copia local para poder sumar invitaciones nuevas en vivo (antes solo se
 // veían al refrescar la página) sin esperar una recarga completa.
@@ -91,6 +129,23 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
 
         <div class="py-12">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <!-- Invitar a un cliente (pedido explícito del usuario) — mismo
+                     link público de "Referí a tu conductor", ahora compartible
+                     directo por WhatsApp desde acá. -->
+                <div v-if="inviteCode" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <h3 class="text-lg font-medium text-arka-text">Invite a un cliente</h3>
+                    <p class="mt-1 text-sm text-arka-text-muted">
+                        Comparta su enlace — quien lo abra puede sumarlo a su flota de confianza con un toque, o crear
+                        su cuenta si todavía no tiene.
+                    </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <SecondaryButton @click="shareInviteByWhatsApp">📲 Invitar por WhatsApp</SecondaryButton>
+                        <SecondaryButton @click="shareInviteGeneric">
+                            {{ inviteLinkCopied ? 'Enlace copiado' : 'Compartir invitación' }}
+                        </SecondaryButton>
+                    </div>
+                </div>
+
                 <!-- Invitaciones pendientes de responder -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-2">Invitaciones recibidas</h3>
@@ -108,11 +163,21 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             :key="invitation.id"
                             class="py-3 flex items-center justify-between gap-4"
                         >
-                            <div>
-                                <p class="text-arka-text font-medium">{{ invitation.fleet.owner.name }}</p>
-                                <p v-if="invitation.message" class="text-sm text-arka-text-muted">
-                                    "{{ invitation.message }}"
-                                </p>
+                            <div class="flex items-center gap-3 min-w-0">
+                                <UserAvatar :user="invitation.fleet.owner" size-class="h-12 w-12 text-base shrink-0" />
+                                <div class="min-w-0">
+                                    <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
+                                        {{ invitation.fleet.owner.name }}
+                                        <span v-if="invitation.client_review_count > 0" class="text-xs text-arka-lime">
+                                            ★ {{ invitation.client_rating.toFixed(1) }}
+                                        </span>
+                                        <span v-else class="text-xs text-arka-text-muted">Sin calificaciones</span>
+                                        <span class="text-xs">{{ CATEGORY_LABELS[invitation.client_category] }}</span>
+                                    </p>
+                                    <p v-if="invitation.message" class="text-sm text-arka-text-muted">
+                                        "{{ invitation.message }}"
+                                    </p>
+                                </div>
                             </div>
 
                             <div class="flex gap-2 shrink-0">

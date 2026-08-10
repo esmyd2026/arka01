@@ -7,6 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { buildSessionRecoveryWhatsAppUrl } from '@/Utils/whatsapp';
 
 const props = defineProps({
     canResetPassword: {
@@ -24,7 +25,15 @@ const props = defineProps({
         type: String,
         default: null,
     },
+    // Pedido explícito del usuario: para armar el link de "escríbanos
+    // primero" (ver buildSessionRecoveryWhatsAppUrl más abajo).
+    whatsappBusinessNumber: {
+        type: String,
+        default: null,
+    },
 });
+
+const sessionRecoveryWhatsAppUrl = computed(() => buildSessionRecoveryWhatsAppUrl(props.whatsappBusinessNumber));
 
 const form = useForm({
     login: props.loginHint ?? '',
@@ -137,8 +146,24 @@ async function confirmTakeover() {
                         <p class="text-arka-text-muted">
                             ¿Es usted, desde otro dispositivo? Podemos enviarle un código para cerrar esa sesión.
                         </p>
+                        <!-- Pedido explícito del usuario: para que el código llegue por
+                             WhatsApp (más rápido que el correo), primero hay que
+                             escribirle al número oficial — abre la ventana de 24h, y el
+                             "bot" confirma que ya se puede pedir el código de una
+                             (ver WhatsAppWebhookController::receive()). Paso opcional:
+                             si ya tenía la ventana abierta, puede saltar directo a
+                             "Pedir código". -->
+                        <a
+                            v-if="sessionRecoveryWhatsAppUrl"
+                            :href="sessionRecoveryWhatsAppUrl"
+                            target="_blank"
+                            rel="noopener"
+                            class="mt-2 block text-xs text-arka-primary hover:text-arka-primary-bright underline"
+                        >
+                            1. Escríbanos por WhatsApp primero →
+                        </a>
                         <SecondaryButton class="mt-2" :disabled="takeoverSending" @click="requestTakeoverCode">
-                            {{ takeoverSending ? 'Enviando…' : 'Pedir código' }}
+                            {{ takeoverSending ? 'Enviando…' : (sessionRecoveryWhatsAppUrl ? '2. Pedir código' : 'Pedir código') }}
                         </SecondaryButton>
                     </template>
 

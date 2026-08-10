@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\AccountTypeController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
@@ -112,4 +113,10 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+
+    // Pedido explícito del usuario: una cuenta de Google recién creada
+    // (login o registro, da igual) todavía no eligió si es cliente o
+    // conductor — GoogleAuthController redirige acá antes de dejarla pasar
+    // al resto de la app.
+    Route::get('cuenta/tipo', [AccountTypeController::class, 'show'])->name('account-type.choose');
 });

@@ -37,6 +37,12 @@ const form = useForm({
 // termina (ver RegisteredUserController::store()).
 const STEPS = ['account_type', 'name', 'email', 'phone', 'password'];
 const currentStep = ref(0);
+
+// Mismo ícono de "ojito" que ya usa Auth/Login.vue (pedido explícito del
+// usuario) — un solo toggle para las dos contraseñas, no tiene sentido
+// mostrar una sí y la otra no cuando lo que se está comparando es que
+// coincidan.
+const showPassword = ref(false);
 const isLastStep = computed(() => currentStep.value === STEPS.length - 1);
 
 // Feedback en vivo de qué le falta a la contraseña (más intuitivo que
@@ -249,15 +255,32 @@ const submit = () => {
             <div v-else-if="STEPS[currentStep] === 'password'">
                 <InputLabel for="password" value="Elegí una contraseña" />
 
-                <TextInput
-                    id="password"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password"
-                    required
-                    autofocus
-                    autocomplete="new-password"
-                />
+                <div class="relative mt-1">
+                    <TextInput
+                        id="password"
+                        :type="showPassword ? 'text' : 'password'"
+                        class="block w-full pr-10"
+                        v-model="form.password"
+                        required
+                        autofocus
+                        autocomplete="new-password"
+                    />
+                    <button
+                        type="button"
+                        class="absolute inset-y-0 right-0 flex items-center px-3 text-arka-text-muted hover:text-arka-text focus:outline-none"
+                        :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                        tabindex="-1"
+                        @click="showPassword = !showPassword"
+                    >
+                        <svg v-if="showPassword" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.58 10.58a2 2 0 0 0 2.83 2.83M9.88 4.24A9.53 9.53 0 0 1 12 4c5 0 9 4 10 8-.32 1.13-.88 2.24-1.62 3.24M6.53 6.53C4.6 7.83 3.15 9.71 2 12c1 4 5 8 10 8 1.35 0 2.63-.28 3.78-.79" />
+                        </svg>
+                        <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8Z" />
+                            <circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                </div>
 
                 <!-- Feedback en vivo (más intuitivo que un solo mensaje de error
                      genérico recién al mandar el formulario). -->
@@ -279,7 +302,7 @@ const submit = () => {
                     <InputLabel for="password_confirmation" value="Confirmá la contraseña" />
                     <TextInput
                         id="password_confirmation"
-                        type="password"
+                        :type="showPassword ? 'text' : 'password'"
                         class="mt-1 block w-full"
                         v-model="form.password_confirmation"
                         required

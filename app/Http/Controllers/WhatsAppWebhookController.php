@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\SendWhatsAppNumberAlreadyRegisteredNotice;
 use App\Jobs\SendWhatsAppPhoneMismatchNotice;
+use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
 use App\Jobs\SendWhatsAppWindowConfirmation;
 use App\Models\User;
 use App\Models\WhatsAppSession;
@@ -24,6 +25,23 @@ use Illuminate\Support\Facades\Log;
  */
 class WhatsAppWebhookController extends Controller
 {
+    /**
+     * Pedido explícito del usuario: frase que dispara el "bot" de
+     * recuperación de sesión en vez de la confirmación genérica de
+     * "activarme" del conductor — tiene que coincidir con el texto que arma
+     * resources/js/Utils/whatsapp.js::buildSessionRecoveryWhatsAppUrl(). Se
+     * compara sin mayúsculas ni tilde (isSessionRecoveryMessage()) para no
+     * fallar si el navegador o WhatsApp normalizan el texto distinto.
+     */
+    private const SESSION_RECOVERY_TRIGGER_PHRASE = 'recuperar mi sesion';
+
+    private function isSessionRecoveryMessage(string $text): bool
+    {
+        $normalized = str_replace(['ó', 'Ó'], ['o', 'O'], $text);
+
+        return str_contains(mb_strtolower($normalized), self::SESSION_RECOVERY_TRIGGER_PHRASE);
+    }
+
     /**
      * Meta llama a esto UNA vez, al guardar la URL del webhook, para
      * confirmar que el servidor es de verdad nuestro.
@@ -116,7 +134,7 @@ class WhatsAppWebhookController extends Controller
                     continue;
                 }
 
-                $this->openWindowFor($phoneOwner);
+                $this->openWindowFor($phoneOwner, isRecoveryPrompt: $this->isSessionRecoveryMessage($text));
 
                 continue;
             }
@@ -168,7 +186,7 @@ class WhatsAppWebhookController extends Controller
         return response('', 200);
     }
 
-    private function openWindowFor(User $user): void
+    private function openWindowFor(User $user, bool $isRecoveryPrompt = false): void
     {
         WhatsAppSession::query()->create([
             'user_id' => $user->id,
@@ -176,10 +194,18 @@ class WhatsAppWebhookController extends Controller
             'expires_at' => now()->addHours(24),
         ]);
 
-        Log::info('WhatsApp: ventana de 24h abierta.', ['user_id' => $user->id]);
+        Log::info('WhatsApp: ventana de 24h abierta.', ['user_id' => $user->id, 'is_recovery_prompt' => $isRecoveryPrompt]);
 
-        // Pedido explícito del usuario: el "bot" confirma que ya quedó
-        // conectado — encolado para no demorar la respuesta 200 a Meta.
-        SendWhatsAppWindowConfirmation::dispatch($user->id);
+        // Pedido explícito del usuario: si escribió la frase de recuperar
+        // sesión, el "bot" lo manda de vuelta a la web en vez de la
+        // confirmación genérica de "activarme" del conductor (que no tiene
+        // sentido para un cliente, ni para un conductor que solo quería
+        // recuperar su sesión). Encolado en los dos casos para no demorar
+        // la respuesta 200 a Meta.
+        if ($isRecoveryPrompt) {
+            SendWhatsAppSessionRecoveryPrompt::dispatch($user->id);
+        } else {
+            SendWhatsAppWindowConfirmation::dispatch($user->id);
+        }
     }
 }

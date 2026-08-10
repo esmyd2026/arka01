@@ -26,12 +26,21 @@ class DriverInvitationController extends Controller
     {
         $userId = $request->user()->id;
 
+        // Pedido explícito del usuario: la tarjeta de una invitación pendiente
+        // se veía pelada (solo nombre) al lado de las fichas ricas de "Flotas
+        // a las que pertenecés" (foto, calificación, medalla) — mismo cálculo
+        // de acá abajo (clientReviewStats()), sin el historial de carreras
+        // juntos porque todavía no hicieron ninguna.
         $pendingInvitations = FleetInvitation::query()
             ->where('driver_user_id', $userId)
             ->where('status', 'pending')
             ->with(['fleet.owner'])
             ->latest()
-            ->get();
+            ->get()
+            ->map(fn (FleetInvitation $invitation) => array_merge(
+                $invitation->toArray(),
+                $this->clientReviewStats($invitation->fleet->owner_user_id)
+            ));
 
         // Ficha de cada cliente de confianza (pedido explícito del usuario:
         // foto, puntos, cuántas carreras le hizo, su último viaje y su
@@ -44,11 +53,6 @@ class DriverInvitationController extends Controller
             ->map(function (FleetMember $member) use ($userId) {
                 $clientId = $member->fleet->owner_user_id;
 
-                $clientStats = Review::query()
-                    ->where('reviewee_user_id', $clientId)
-                    ->selectRaw('avg(rating) as avg_rating, count(*) as review_count')
-                    ->first();
-
                 $rideStats = Ride::query()
                     ->where('driver_user_id', $userId)
                     ->where('client_user_id', $clientId)
@@ -56,12 +60,7 @@ class DriverInvitationController extends Controller
                     ->selectRaw('count(*) as rides_count, max(completed_at) as last_ride_at')
                     ->first();
 
-                $rating = $clientStats->review_count > 0 ? round((float) $clientStats->avg_rating, 1) : null;
-
-                return array_merge($member->toArray(), [
-                    'client_rating' => $rating,
-                    'client_review_count' => (int) $clientStats->review_count,
-                    'client_category' => DriverCategory::forRating($rating ?? 0, (int) $clientStats->review_count),
+                return array_merge($member->toArray(), $this->clientReviewStats($clientId), [
                     'rides_together_count' => (int) $rideStats->rides_count,
                     'last_ride_at' => $rideStats->last_ride_at,
                 ]);
@@ -77,7 +76,36 @@ class DriverInvitationController extends Controller
             'planCode' => $limits['plan_code'],
             'planName' => $limits['plan_name'],
             'activeClientCount' => $activeMemberships->count(),
+            // Pedido explícito del usuario: que el conductor pueda invitar por
+            // WhatsApp a un cliente a que lo sume a su flota — mismo
+            // `invite_code` que ya usa "Referí a tu conductor"
+            // (ReferralController), solo que ahora con un botón de compartir
+            // en vez de tener que copiar el código pelado a mano.
+            'inviteCode' => $request->user()->driverProfile?->invite_code,
         ]);
+    }
+
+    /**
+     * Calificación, cantidad de reseñas y categoría de un cliente — mismo
+     * cálculo para una invitación pendiente y para una flota activa, así las
+     * dos tarjetas de "Mis clientes de confianza" se ven consistentes.
+     *
+     * @return array{client_rating: float|null, client_review_count: int, client_category: string}
+     */
+    private function clientReviewStats(int $clientId): array
+    {
+        $stats = Review::query()
+            ->where('reviewee_user_id', $clientId)
+            ->selectRaw('avg(rating) as avg_rating, count(*) as review_count')
+            ->first();
+
+        $rating = $stats->review_count > 0 ? round((float) $stats->avg_rating, 1) : null;
+
+        return [
+            'client_rating' => $rating,
+            'client_review_count' => (int) $stats->review_count,
+            'client_category' => DriverCategory::forRating($rating ?? 0, (int) $stats->review_count),
+        ];
     }
 
     /**

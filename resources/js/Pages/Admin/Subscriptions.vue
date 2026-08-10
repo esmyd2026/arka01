@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -18,7 +18,17 @@ const props = defineProps({
     recentChanges: { type: Array, required: true },
     pendingRequests: { type: Array, required: true },
     search: { type: String, default: '' },
+    filters: { type: Object, required: true },
 });
+
+// Rol legible + color de insignia por rol (sección 3.1: cada cuenta es
+// cliente O conductor, nunca las dos — el admin no tiene plan).
+const ROLE_LABELS = { admin: 'Administrador', conductor: 'Conductor', cliente: 'Cliente' };
+const ROLE_BADGE_CLASS = {
+    admin: 'bg-arka-warning/10 text-arka-warning',
+    conductor: 'bg-arka-primary/10 text-arka-primary-bright',
+    cliente: 'bg-arka-lime/10 text-arka-lime',
+};
 
 // Comprobantes de pago esperando revisión (consideración agregada al alcance).
 const rejectingRequestId = ref(null);
@@ -56,15 +66,51 @@ function confirmReject(id) {
 // pago (a quién, qué plan, cuánto debía transferir, cuándo lo subió).
 const viewingRequest = ref(null);
 
+// Filtros + orden (pedido explícito del usuario: la lista no tenía forma de
+// acotar ni de ordenar). Cada cambio pega directo al servidor — el filtrado
+// por rol/plan y el orden por vencimiento dependen de datos que no vinieron
+// en esta página (otros usuarios, otras suscripciones), no se puede resolver
+// solo en el navegador.
 const searchTerm = ref(props.search);
+const roleFilter = ref(props.filters.role);
+const planStatusFilter = ref(props.filters.plan_status);
+const sortColumn = ref(props.filters.sort);
+const sortDirection = ref(props.filters.direction);
 
-function runSearch() {
-    router.get(route('admin.subscriptions.index'), { q: searchTerm.value }, { preserveState: true });
+const hasActiveFilters = computed(() => searchTerm.value !== '' || roleFilter.value !== '' || planStatusFilter.value !== '');
+
+function applyFilters() {
+    router.get(
+        route('admin.subscriptions.index'),
+        {
+            q: searchTerm.value,
+            role: roleFilter.value,
+            plan_status: planStatusFilter.value,
+            sort: sortColumn.value,
+            direction: sortDirection.value,
+        },
+        { preserveState: true, preserveScroll: true, replace: true }
+    );
 }
 
-// El formulario de activación se abre "anclado" a un usuario puntual (botón
-// "Activar plan" de su fila), así el admin no tiene que buscarlo dos veces.
-const activatingUserId = ref(null);
+function clearFilters() {
+    searchTerm.value = '';
+    roleFilter.value = '';
+    planStatusFilter.value = '';
+    applyFilters();
+}
+
+function toggleSort(column) {
+    sortDirection.value = sortColumn.value === column && sortDirection.value === 'asc' ? 'desc' : 'asc';
+    sortColumn.value = column;
+    applyFilters();
+}
+
+// El formulario de activación se abre en un modal "anclado" a un usuario
+// puntual (botón "Activar" de su fila), así el admin no tiene que buscarlo
+// dos veces. Antes se abría inline dentro de la fila y empujaba el resto de
+// la lista hacia abajo — no calza con una tabla de columnas fijas.
+const activatingUser = ref(null);
 
 const form = useForm({
     user_id: null,
@@ -74,18 +120,20 @@ const form = useForm({
 });
 
 function openActivation(user) {
-    activatingUserId.value = user.id;
+    activatingUser.value = user;
     form.reset();
     form.user_id = user.id;
+}
+
+function closeActivation() {
+    activatingUser.value = null;
+    form.reset();
 }
 
 function submitActivation() {
     form.post(route('admin.subscriptions.store'), {
         preserveScroll: true,
-        onSuccess: () => {
-            activatingUserId.value = null;
-            form.reset();
-        },
+        onSuccess: closeActivation,
     });
 }
 
@@ -242,122 +290,185 @@ function clientPlanOf(user) {
                     </div>
                 </Modal>
 
-                <div class="flex items-center justify-end">
-                    <TextInput
-                        v-model="searchTerm"
-                        type="text"
-                        placeholder="Buscar por nombre o correo"
-                        class="w-64"
-                        @keyup.enter="runSearch"
-                    />
-                </div>
+                <!-- Formulario de activación de plan, en modal (pedido explícito del
+                     usuario: la lista pasó a ser una tabla de columnas fijas, un
+                     formulario que se abría inline empujando la fila hacia abajo ya
+                     no calzaba con eso). -->
+                <Modal :show="activatingUser !== null" max-width="md" @close="closeActivation">
+                    <form v-if="activatingUser" @submit.prevent="submitActivation" class="p-6 space-y-4">
+                        <h3 class="text-lg font-medium text-arka-text">Activar plan a {{ activatingUser.name }}</h3>
 
-                <!-- Usuarios y su plan vigente por lado (conductor / cliente) -->
-                <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
-                    <div v-for="user in users.data" :key="user.id" class="p-4 sm:p-6">
-                        <!-- Bug reportado por el usuario (con captura): en pantallas angostas
-                             el avatar y el nombre quedaban superpuestos — la columna de
-                             nombre/correo no tenía `min-w-0` (los flex items no se achican
-                             por debajo de su ancho natural por defecto), así que un nombre o
-                             correo largo empujaba todo en vez de truncar o hacer wrap. Se
-                             suma el mismo patrón "apilar en mobile" que ya usa el resto del
-                             panel admin para filas con acciones al costado. -->
-                        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                            <div class="flex items-start gap-3 min-w-0">
-                                <UserAvatar :user="user" size-class="h-10 w-10 text-sm shrink-0" />
-                                <div class="min-w-0 flex-1">
-                                    <p class="text-arka-text font-medium truncate">{{ user.name }}</p>
-                                    <p class="text-sm text-arka-text-muted truncate">{{ user.email }}</p>
-                                    <!-- Pedido explícito del usuario: cada cuenta es cliente O
-                                         conductor, nunca las dos (sección 3.1) — mostrar los dos
-                                         renglones siempre ("Conductor: Gratis / Cliente: Gratis")
-                                         confundía, insinuando que alguien pudiera tener ambos.
-                                         Un solo renglón, el del rol real de esta cuenta. -->
-                                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                        <span
-                                            v-if="user.role === 'admin'"
-                                            class="px-2 py-1 rounded-arka bg-arka-warning/10 text-arka-warning"
-                                        >
-                                            Administrador (sin plan)
-                                        </span>
-                                        <span
-                                            v-else-if="user.role === 'conductor'"
-                                            class="px-2 py-1 rounded-arka bg-arka-primary/10 text-arka-primary-bright"
-                                        >
-                                            Conductor: {{ driverPlanOf(user)?.plan.name ?? 'Gratis' }}
-                                            <template v-if="expiryLabel(driverPlanOf(user))"> · {{ expiryLabel(driverPlanOf(user)) }}</template>
-                                        </span>
-                                        <span v-else class="px-2 py-1 rounded-arka bg-arka-primary/10 text-arka-primary-bright">
-                                            Cliente: {{ clientPlanOf(user)?.plan.name ?? 'Gratis' }}
-                                            <template v-if="expiryLabel(clientPlanOf(user))"> · {{ expiryLabel(clientPlanOf(user)) }}</template>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col items-end gap-2 shrink-0">
-                                <Link :href="route('admin.users.show', user.id)" class="text-xs text-arka-primary hover:text-arka-primary-bright">
-                                    Ver perfil completo &rarr;
-                                </Link>
-                                <PrimaryButton v-if="user.role !== 'admin'" @click="openActivation(user)">Activar plan</PrimaryButton>
-                                <DangerButton
-                                    v-if="driverPlanOf(user)"
-                                    @click="expireSubscription(driverPlanOf(user).id)"
+                        <div>
+                            <!-- Pedido explícito del usuario: cada cuenta es cliente O
+                                 conductor, nunca las dos — el select ya no ofrece planes
+                                 del lado que no le corresponde a esta cuenta puntual. -->
+                            <InputLabel :value="`Plan a activar (${activatingUser.role === 'conductor' ? 'conductor' : 'cliente'})`" />
+                            <select
+                                v-model="form.subscription_plan_id"
+                                class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                required
+                            >
+                                <option value="" disabled>Elegí un plan</option>
+                                <option
+                                    v-for="plan in plans.filter((p) => p.owner_type === (activatingUser.role === 'conductor' ? 'driver' : 'client'))"
+                                    :key="plan.id"
+                                    :value="plan.id"
                                 >
-                                    Dar de baja conductor
-                                </DangerButton>
-                                <DangerButton
-                                    v-if="clientPlanOf(user)"
-                                    @click="expireSubscription(clientPlanOf(user).id)"
-                                >
-                                    Dar de baja cliente
-                                </DangerButton>
-                            </div>
+                                    {{ plan.name }} · ${{ plan.monthly_price }}/mes
+                                </option>
+                            </select>
+                            <InputError class="mt-2" :message="form.errors.subscription_plan_id" />
                         </div>
 
-                        <!-- Formulario de activación, inline debajo de la fila del usuario -->
-                        <form
-                            v-if="activatingUserId === user.id"
-                            @submit.prevent="submitActivation"
-                            class="mt-4 p-4 rounded-arka border border-arka-text-muted/20 space-y-3"
+                        <div>
+                            <InputLabel value="Vence el (opcional, en blanco = sin vencimiento)" />
+                            <TextInput type="date" class="mt-1 block w-full" v-model="form.expires_at" />
+                        </div>
+
+                        <div>
+                            <InputLabel value="Nota (ej: número de comprobante de transferencia)" />
+                            <TextInput type="text" class="mt-1 block w-full" v-model="form.note" />
+                        </div>
+
+                        <div class="flex gap-2">
+                            <PrimaryButton :disabled="form.processing">Confirmar activación</PrimaryButton>
+                            <SecondaryButton type="button" @click="closeActivation">Cancelar</SecondaryButton>
+                        </div>
+                    </form>
+                </Modal>
+
+                <!-- Filtros + orden (pedido explícito del usuario: antes solo había
+                     un buscador de texto, sin forma de acotar por rol o por si tiene
+                     plan pago, ni de ordenar la lista). -->
+                <div class="bg-arka-card shadow rounded-arka p-4 sm:p-6">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <InputLabel value="Buscar" />
+                            <TextInput
+                                v-model="searchTerm"
+                                type="text"
+                                placeholder="Nombre o correo"
+                                class="mt-1 w-56"
+                                @keyup.enter="applyFilters"
+                            />
+                        </div>
+                        <div>
+                            <InputLabel value="Rol" />
+                            <select
+                                v-model="roleFilter"
+                                class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm"
+                                @change="applyFilters"
+                            >
+                                <option value="">Todos</option>
+                                <option value="cliente">Clientes</option>
+                                <option value="conductor">Conductores</option>
+                                <option value="admin">Administradores</option>
+                            </select>
+                        </div>
+                        <div>
+                            <InputLabel value="Plan" />
+                            <select
+                                v-model="planStatusFilter"
+                                class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm"
+                                @change="applyFilters"
+                            >
+                                <option value="">Todos</option>
+                                <option value="con_plan">Con plan pago</option>
+                                <option value="gratis">En el gratis</option>
+                            </select>
+                        </div>
+                        <SecondaryButton type="button" @click="applyFilters">Buscar</SecondaryButton>
+                        <button
+                            v-if="hasActiveFilters"
+                            type="button"
+                            class="text-xs text-arka-text-muted hover:text-arka-text"
+                            @click="clearFilters"
                         >
-                            <div>
-                                <!-- Pedido explícito del usuario: cada cuenta es cliente O
-                                     conductor, nunca las dos — el select ya no ofrece planes
-                                     del lado que no le corresponde a esta cuenta puntual. -->
-                                <InputLabel :value="`Plan a activar (${user.role === 'conductor' ? 'conductor' : 'cliente'})`" />
-                                <select
-                                    v-model="form.subscription_plan_id"
-                                    class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
-                                    required
-                                >
-                                    <option value="" disabled>Elegí un plan</option>
-                                    <option
-                                        v-for="plan in plans.filter((p) => p.owner_type === (user.role === 'conductor' ? 'driver' : 'client'))"
-                                        :key="plan.id"
-                                        :value="plan.id"
-                                    >
-                                        {{ plan.name }} · ${{ plan.monthly_price }}/mes
-                                    </option>
-                                </select>
-                                <InputError class="mt-2" :message="form.errors.subscription_plan_id" />
-                            </div>
+                            Limpiar filtros
+                        </button>
+                        <span class="ml-auto text-xs text-arka-text-muted self-center">{{ users.total }} usuario(s)</span>
+                    </div>
+                </div>
 
-                            <div>
-                                <InputLabel value="Vence el (opcional, en blanco = sin vencimiento)" />
-                                <TextInput type="date" class="mt-1 block w-full" v-model="form.expires_at" />
-                            </div>
-
-                            <div>
-                                <InputLabel value="Nota (ej: número de comprobante de transferencia)" />
-                                <TextInput type="text" class="mt-1 block w-full" v-model="form.note" />
-                            </div>
-
-                            <div class="flex gap-2">
-                                <PrimaryButton :disabled="form.processing">Confirmar activación</PrimaryButton>
-                                <SecondaryButton type="button" @click="activatingUserId = null">Cancelar</SecondaryButton>
-                            </div>
-                        </form>
+                <!-- Usuarios y su plan vigente por lado (conductor / cliente), en
+                     tabla — la lista en tarjetas apiladas ocupaba mucho espacio por
+                     cada suscriptor (pedido explícito del usuario). -->
+                <div class="bg-arka-card shadow rounded-arka overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-arka-text-muted/10 text-left text-xs text-arka-text-muted uppercase tracking-wide">
+                                    <th class="px-4 sm:px-6 py-3 font-medium">
+                                        <button type="button" class="flex items-center gap-1 hover:text-arka-text" @click="toggleSort('name')">
+                                            Usuario
+                                            <span v-if="sortColumn === 'name'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+                                        </button>
+                                    </th>
+                                    <th class="px-4 py-3 font-medium">Rol</th>
+                                    <th class="px-4 py-3 font-medium">
+                                        <button type="button" class="flex items-center gap-1 hover:text-arka-text" @click="toggleSort('expiry')">
+                                            Plan vigente
+                                            <span v-if="sortColumn === 'expiry'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+                                        </button>
+                                    </th>
+                                    <th class="px-4 sm:px-6 py-3 font-medium text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-arka-text-muted/10">
+                                <tr v-for="user in users.data" :key="user.id" class="hover:bg-arka-base/40 transition">
+                                    <td class="px-4 sm:px-6 py-3">
+                                        <div class="flex items-center gap-3 min-w-0">
+                                            <UserAvatar :user="user" size-class="h-9 w-9 text-xs shrink-0" />
+                                            <div class="min-w-0">
+                                                <p class="text-arka-text font-medium truncate">{{ user.name }}</p>
+                                                <p class="text-xs text-arka-text-muted truncate">{{ user.email }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <span class="px-2 py-1 rounded-arka text-xs" :class="ROLE_BADGE_CLASS[user.role]">
+                                            {{ ROLE_LABELS[user.role] }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <span v-if="user.role === 'admin'" class="text-xs text-arka-text-muted">Sin plan</span>
+                                        <template v-else>
+                                            <p class="text-arka-text">
+                                                {{ (user.role === 'conductor' ? driverPlanOf(user) : clientPlanOf(user))?.plan.name ?? 'Gratis' }}
+                                            </p>
+                                            <p
+                                                v-if="expiryLabel(user.role === 'conductor' ? driverPlanOf(user) : clientPlanOf(user))"
+                                                class="text-xs text-arka-text-muted"
+                                            >
+                                                {{ expiryLabel(user.role === 'conductor' ? driverPlanOf(user) : clientPlanOf(user)) }}
+                                            </p>
+                                        </template>
+                                    </td>
+                                    <td class="px-4 sm:px-6 py-3">
+                                        <div class="flex items-center justify-end gap-2 flex-wrap">
+                                            <Link
+                                                :href="route('admin.users.show', user.id)"
+                                                class="text-xs text-arka-primary hover:text-arka-primary-bright"
+                                            >
+                                                Ver perfil
+                                            </Link>
+                                            <PrimaryButton v-if="user.role !== 'admin'" @click="openActivation(user)">Activar</PrimaryButton>
+                                            <DangerButton v-if="driverPlanOf(user)" @click="expireSubscription(driverPlanOf(user).id)">
+                                                Baja
+                                            </DangerButton>
+                                            <DangerButton v-if="clientPlanOf(user)" @click="expireSubscription(clientPlanOf(user).id)">
+                                                Baja
+                                            </DangerButton>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-if="!users.data.length">
+                                    <td colspan="4" class="px-4 sm:px-6 py-8 text-center text-sm text-arka-text-muted">
+                                        No se encontraron usuarios con esos filtros.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
