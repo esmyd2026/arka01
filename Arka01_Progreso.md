@@ -1833,6 +1833,18 @@ El problema estaba solo del lado del cliente: `Ride/Show.vue` (la pantalla de se
 ### Tests
 No aplica — la suscripción a un canal de WebSocket (Laravel Echo) no se puede reproducir en un test de Feature de PHP. Verificación real queda para cuando esté desplegado.
 
+### Nuevos hitos de carrera: "ya llegué" y "ya recogí al cliente"
+Pedido explícito del usuario: que el conductor pueda marcar que llegó al punto de encuentro (avisando al cliente en vivo que lo está esperando) y, por separado, que marque cuándo recogió al cliente de verdad, guardando la fecha y hora para poder calcular esa información después (tiempo de espera, duración real del viaje).
+
+Investigado antes de construir: el único estado que ya existía era `in_progress`, de principio a fin del viaje (desde que el conductor arranca a buscar al cliente hasta que lo completa) — no había ningún hito intermedio, ni columna, ni evento para esto. Es dos funciones nuevas por completo, no una reetiquetada de algo existente.
+
+- **Migración** `add_arrived_and_picked_up_at_to_rides_table`: dos columnas nuevas en `rides`, `arrived_at` y `picked_up_at` (nullable — ninguna carrera vieja las tiene, y no son obligatorias para completar la carrera).
+- **`RideController::arrived()`** (`POST /carreras/{ride}/llegue`) y **`::pickedUp()`** (`POST /carreras/{ride}/recogido`): solo el conductor, solo mientras la carrera está `in_progress`, cada uno una sola vez. `arrived()` transmite `RideArrived` (`ride.arrived`) y manda `RideArrivedPushNotification` al cliente — mismo patrón de fan-out (flotas + canal personal de las dos partes) que `RideStarted`/`RideCompleted`. `pickedUp()` transmite `RidePickedUp` (`ride.picked_up`) para que la pantalla del cliente se refresque sola, sin push (no lo pidió el usuario para este paso).
+- **`Ride/Show.vue`**: dos botones nuevos para el conductor ("📍 Ya llegué" / "🧍 Ya recogí al cliente"), uno a la vez según cuál ya se marcó — ninguno bloquea "Marcar como completada" si el conductor se los saltea. Del lado del cliente, el banner de "en curso" ahora distingue tres momentos: "va en camino" (con ETA, como antes), "lo está esperando" (apenas el conductor marca "ya llegué") y "viaje en curso hacia el destino" (una vez recogido). Primer uso de los datos guardados: una fila de "Tiempo de espera" en el desglose del precio, calculada entre `arrived_at` y `picked_up_at`.
+
+### Tests
+`tests/Feature/Ride/RideRequestFlowTest.php` (+6: el conductor puede marcar llegada y el cliente recibe el push; el cliente no puede marcarla; no se puede marcar dos veces; el conductor puede marcar recogido con el evento correspondiente; tampoco se puede marcar dos veces). Suite completa: 515 tests OK, Pint limpio, build limpio.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

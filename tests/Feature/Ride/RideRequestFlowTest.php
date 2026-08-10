@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Ride;
 
+use App\Events\RideArrived;
 use App\Events\RideCancelled;
 use App\Events\RideCompleted;
+use App\Events\RidePickedUp;
 use App\Events\RideRequestDeclined;
 use App\Jobs\ExpireRideOffer;
 use App\Models\DriverProfile;
@@ -14,6 +16,7 @@ use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\Sector;
 use App\Models\User;
+use App\Notifications\RideArrivedPushNotification;
 use App\Notifications\RideCancelledPushNotification;
 use App\Notifications\RideRequestDeclinedPushNotification;
 use App\Services\PriceCalculator;
@@ -542,6 +545,107 @@ class RideRequestFlowTest extends TestCase
         ]);
 
         $this->actingAs($driver)->post(route('rides.start', $ride))->assertSessionHasErrors('ride');
+    }
+
+    /**
+     * Pedido explícito del usuario: el conductor marca "ya llegué" al punto
+     * de encuentro y el cliente se entera en vivo (push + WebSocket).
+     */
+    public function test_driver_can_mark_arrival_and_the_client_is_notified(): void
+    {
+        Event::fake([RideArrived::class]);
+        Notification::fake();
+
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => null,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.arrived', $ride))->assertRedirect();
+
+        $ride->refresh();
+        $this->assertNotNull($ride->arrived_at);
+
+        Event::assertDispatched(RideArrived::class);
+        Notification::assertSentTo($client, RideArrivedPushNotification::class);
+    }
+
+    public function test_the_client_cannot_mark_arrival(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)->post(route('rides.arrived', $ride))->assertForbidden();
+    }
+
+    public function test_arrival_cannot_be_marked_twice(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => now(),
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.arrived', $ride))->assertSessionHasErrors('ride');
+    }
+
+    /**
+     * Pedido explícito del usuario: guardar la fecha y hora de cuándo el
+     * conductor recogió al cliente de verdad, para calcular esa información
+     * después (ej. tiempo de espera).
+     */
+    public function test_driver_can_mark_the_client_as_picked_up(): void
+    {
+        Event::fake([RidePickedUp::class]);
+
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => now(),
+            'picked_up_at' => null,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.picked-up', $ride))->assertRedirect();
+
+        $ride->refresh();
+        $this->assertNotNull($ride->picked_up_at);
+
+        Event::assertDispatched(RidePickedUp::class);
+    }
+
+    public function test_pickup_cannot_be_marked_twice(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => now(),
+            'picked_up_at' => now(),
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.picked-up', $ride))->assertSessionHasErrors('ride');
     }
 
     public function test_accepting_a_ride_request_copies_the_sectors_into_the_ride(): void

@@ -83,6 +83,19 @@ onMounted(() => {
         if (e.ride_id !== props.ride.id) return;
         router.reload({ only: ['ride'] });
     });
+
+    // El conductor marcó "ya llegué" o "ya recogí al cliente" (pedido
+    // explícito del usuario) — refresca para que el que tiene la pantalla
+    // abierta vea el cambio de banner sin recargar a mano.
+    fleetChannel.listen('.ride.arrived', (e) => {
+        if (e.ride_id !== props.ride.id) return;
+        router.reload({ only: ['ride'] });
+    });
+
+    fleetChannel.listen('.ride.picked_up', (e) => {
+        if (e.ride_id !== props.ride.id) return;
+        router.reload({ only: ['ride'] });
+    });
 });
 
 onBeforeUnmount(() => {
@@ -118,7 +131,7 @@ const counterpart = computed(() => (props.isDriver ? props.ride.client : props.r
 // que es más precisa que esta estimación. Se recalcula solo cuando llega una
 // ubicación nueva por WebSocket (driverLat/driverLng son reactivos).
 const pickupEta = computed(() => {
-    if (props.isDriver || props.ride.status !== 'in_progress') return null;
+    if (props.isDriver || props.ride.status !== 'in_progress' || props.ride.arrived_at) return null;
     return etaBetween(driverLat.value, driverLng.value, Number(props.ride.origin_lat), Number(props.ride.origin_lng));
 });
 
@@ -135,6 +148,18 @@ const statusLabel = {
 
 function startRide() {
     router.post(route('rides.start', props.ride.id), {}, { preserveScroll: true });
+}
+
+// Hitos de "ya llegué" / "ya recogí al cliente" (pedido explícito del
+// usuario): el conductor los marca de a uno, en orden — cada botón
+// desaparece apenas se marca, sin bloquear "Marcar como completada" si se
+// los saltea.
+function markArrived() {
+    router.post(route('rides.arrived', props.ride.id), {}, { preserveScroll: true });
+}
+
+function markPickedUp() {
+    router.post(route('rides.picked-up', props.ride.id), {}, { preserveScroll: true });
 }
 
 // Cancelar una carrera ya aceptada (pedido explícito del usuario): solo el
@@ -156,6 +181,15 @@ const durationLabel = computed(() => {
     const minutes = Math.round((new Date(props.ride.completed_at) - new Date(props.ride.started_at)) / 60000);
     if (minutes < 60) return `${minutes} min`;
     return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+});
+
+// Cuánto esperó el conductor en el punto de encuentro antes de recoger al
+// cliente (pedido explícito del usuario: guardar arrived_at/picked_up_at
+// "para calcular esa info" — este es el primer uso directo de esos datos).
+const waitLabel = computed(() => {
+    if (!props.ride.arrived_at || !props.ride.picked_up_at) return null;
+    const minutes = Math.round((new Date(props.ride.picked_up_at) - new Date(props.ride.arrived_at)) / 60000);
+    return minutes <= 0 ? 'menos de 1 min' : `${minutes} min`;
 });
 
 // Seguimiento en vivo compartible (sección 8): enlace de solo lectura, sin
@@ -226,13 +260,27 @@ function submitReview() {
         <div class="py-12">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- "Ya van por vos" + ETA (pedido explícito del usuario) — solo para
-                     el cliente, mientras la carrera sigue en curso. -->
-                <div v-if="!isDriver && ride.status === 'in_progress'" class="p-4 bg-arka-primary/10 rounded-arka">
-                    <p class="font-semibold text-arka-primary-bright">🚗 Su conductor ya va en camino</p>
-                    <p v-if="pickupEta" class="text-sm text-arka-text-muted">
-                        Está a {{ pickupEta.km.toFixed(1) }} km, llega en unos {{ pickupEta.minutes }} min.
-                    </p>
-                    <p v-else class="text-sm text-arka-text-muted">Buscando su ubicación en vivo…</p>
+                     el cliente, mientras la carrera sigue en curso. Tres hitos
+                     dentro del mismo 'in_progress': en camino, esperando en el
+                     punto de encuentro (pedido explícito del usuario: que se
+                     entere apenas el conductor marque "ya llegué"), y viaje en
+                     curso una vez que lo recogió. -->
+                <div v-if="!isDriver && ride.status === 'in_progress' && !ride.picked_up_at" class="p-4 bg-arka-primary/10 rounded-arka">
+                    <template v-if="ride.arrived_at">
+                        <p class="font-semibold text-arka-primary-bright">📍 Su conductor lo está esperando</p>
+                        <p class="text-sm text-arka-text-muted">Llegó al punto de encuentro, acérquese cuando pueda.</p>
+                    </template>
+                    <template v-else>
+                        <p class="font-semibold text-arka-primary-bright">🚗 Su conductor ya va en camino</p>
+                        <p v-if="pickupEta" class="text-sm text-arka-text-muted">
+                            Está a {{ pickupEta.km.toFixed(1) }} km, llega en unos {{ pickupEta.minutes }} min.
+                        </p>
+                        <p v-else class="text-sm text-arka-text-muted">Buscando su ubicación en vivo…</p>
+                    </template>
+                </div>
+
+                <div v-if="!isDriver && ride.status === 'in_progress' && ride.picked_up_at" class="p-4 bg-arka-primary/10 rounded-arka">
+                    <p class="font-semibold text-arka-primary-bright">🚙 Viaje en curso hacia el destino</p>
                 </div>
 
                 <!-- Carrera PROGRAMADA todavía sin arrancar (consideración agregada al
@@ -308,6 +356,10 @@ function submitReview() {
                         <span class="text-arka-text-muted">Duración</span>
                         <span class="text-arka-text">{{ durationLabel }}</span>
                     </div>
+                    <div v-if="waitLabel" class="flex items-center justify-between">
+                        <span class="text-arka-text-muted">Tiempo de espera</span>
+                        <span class="text-arka-text">{{ waitLabel }}</span>
+                    </div>
                     <!-- Forma de pago (pedido explícito del usuario): la que el
                          cliente eligió al pedir la carrera. -->
                     <div class="flex items-center justify-between">
@@ -349,6 +401,17 @@ function submitReview() {
                     <PrimaryButton v-if="ride.status === 'scheduled' && isDriver" @click="startRide">
                         Iniciar viaje
                     </PrimaryButton>
+
+                    <!-- Hitos "ya llegué" / "ya recogí al cliente" (pedido
+                         explícito del usuario): uno a la vez, en orden — ninguno
+                         de los dos bloquea "Marcar como completada" si el
+                         conductor se los saltea. -->
+                    <SecondaryButton v-if="ride.status === 'in_progress' && isDriver && !ride.arrived_at" @click="markArrived">
+                        📍 Ya llegué
+                    </SecondaryButton>
+                    <SecondaryButton v-if="ride.status === 'in_progress' && isDriver && ride.arrived_at && !ride.picked_up_at" @click="markPickedUp">
+                        🧍 Ya recogí al cliente
+                    </SecondaryButton>
 
                     <!-- Pedido explícito del usuario: la carrera la finaliza
                          ÚNICAMENTE el conductor, ya no cualquiera de las dos partes. -->

@@ -31,6 +31,8 @@ class Ride extends Model
         'points_earned',
         'status',
         'started_at',
+        'arrived_at',
+        'picked_up_at',
         'completed_at',
         'cancelled_at',
     ];
@@ -46,6 +48,8 @@ class Ride extends Model
         'price' => 'decimal:2',
         'points_earned' => 'integer',
         'started_at' => 'datetime',
+        'arrived_at' => 'datetime',
+        'picked_up_at' => 'datetime',
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];

@@ -162,6 +162,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/carreras/indicadores', [DriverStatsController::class, 'index'])->name('rides.stats');
     Route::get('/carreras/{ride}', [RideController::class, 'show'])->name('rides.show');
     Route::post('/carreras/{ride}/arrancar', [RideController::class, 'start'])->name('rides.start');
+    Route::post('/carreras/{ride}/llegue', [RideController::class, 'arrived'])->name('rides.arrived');
+    Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');
     Route::post('/carreras/{ride}/completar', [RideController::class, 'complete'])->name('rides.complete');
     Route::post('/carreras/{ride}/calificar', [ReviewController::class, 'store'])->name('reviews.store');

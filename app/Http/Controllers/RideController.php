@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\RideArrived;
 use App\Events\RideCancelled;
 use App\Events\RideCompleted;
+use App\Events\RidePickedUp;
 use App\Events\RideStarted;
 use App\Models\DriverProfile;
 use App\Models\FleetMember;
@@ -11,6 +13,7 @@ use App\Models\RatingReason;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
+use App\Notifications\RideArrivedPushNotification;
 use App\Notifications\RideCancelledPushNotification;
 use App\Notifications\RideCompletedPushNotification;
 use App\Notifications\RideStartedPushNotification;
@@ -261,6 +264,72 @@ class RideController extends Controller
         broadcast(new RideStarted($ride))->toOthers();
 
         $ride->client->notify(new RideStartedPushNotification($ride));
+
+        return back();
+    }
+
+    /**
+     * El conductor llegó al punto de encuentro (pedido explícito del
+     * usuario) — todavía no recogió al cliente, solo avisa que ya está
+     * esperando. Solo tiene sentido una vez ('in_progress' y sin marcar
+     * antes); no bloquea nada más del flujo (el conductor igual puede
+     * completar la carrera sin haber pasado por acá, por si se olvida).
+     */
+    public function arrived(Request $request, Ride $ride): RedirectResponse
+    {
+        if ($ride->driver_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($ride->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta carrera no está en curso.',
+            ]);
+        }
+
+        if ($ride->arrived_at !== null) {
+            throw ValidationException::withMessages([
+                'ride' => 'Ya se había marcado como llegada.',
+            ]);
+        }
+
+        $ride->update(['arrived_at' => now()]);
+
+        broadcast(new RideArrived($ride))->toOthers();
+
+        $ride->client->notify(new RideArrivedPushNotification($ride));
+
+        return back();
+    }
+
+    /**
+     * El conductor recogió al cliente de verdad (pedido explícito del
+     * usuario: guardar la fecha y hora para poder calcular esa información
+     * después — tiempo de espera, duración real del viaje, etc.). Mismo
+     * criterio que arrived(): no bloquea completar() si el conductor se
+     * saltea este paso.
+     */
+    public function pickedUp(Request $request, Ride $ride): RedirectResponse
+    {
+        if ($ride->driver_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($ride->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta carrera no está en curso.',
+            ]);
+        }
+
+        if ($ride->picked_up_at !== null) {
+            throw ValidationException::withMessages([
+                'ride' => 'Ya se había marcado como recogido.',
+            ]);
+        }
+
+        $ride->update(['picked_up_at' => now()]);
+
+        broadcast(new RidePickedUp($ride))->toOthers();
 
         return back();
     }
