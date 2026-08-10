@@ -15,6 +15,7 @@ const props = defineProps({
     fleetDrivers: { type: Array, default: null },
     nearbyDrivers: { type: Array, default: null },
     targetFleetId: { type: Number, default: null },
+    clientPlanName: { type: String, default: null },
     upcomingTrips: { type: Array, default: null },
     inviteCode: { type: String, default: null },
     earningsSparkline: { type: Array, default: null },
@@ -50,11 +51,6 @@ const STATUS_RING = {
     busy: 'ring-2 ring-arka-warning',
     offline: 'ring-2 ring-arka-text-muted opacity-50 grayscale',
 };
-const STATUS_LABEL = {
-    available: 'Disponible',
-    busy: 'En carrera',
-    offline: 'Desconectado',
-};
 const TRIP_STATUS = {
     pending: { label: 'Pendiente', class: 'bg-arka-warning/15 text-arka-warning' },
     confirmed: { label: 'Confirmado', class: 'bg-arka-primary/15 text-arka-primary-bright' },
@@ -77,15 +73,6 @@ watch(
     () => props.fleetDrivers,
     (value) => (fleetDriversLocal.value = [...(value ?? [])])
 );
-
-// Buscador de "Mi flota" (consideración agregada al alcance, mockup del
-// cliente) — filtra en el navegador, ya está todo cargado de una.
-const fleetSearch = ref('');
-const filteredFleetDrivers = computed(() => {
-    const term = fleetSearch.value.trim().toLowerCase();
-    if (!term) return fleetDriversLocal.value;
-    return fleetDriversLocal.value.filter((driver) => driver.name.toLowerCase().includes(term));
-});
 
 let fleetChannel = null;
 
@@ -617,110 +604,91 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                      cliente provisto por el usuario) — saludo, mi flota, accesos
                      grandes, conductores cerca y próximos viajes. -->
                 <template v-else-if="fleetDrivers">
+                    <!-- Rediseño pedido explícito del usuario (mockup provisto): saludo +
+                         insignia de rol/plan, mismo criterio que ya usa el lado conductor
+                         ("Conductor ✓ · Disponible"). -->
                     <div>
-                        <h3 class="text-2xl font-semibold text-arka-text">¡Hola, {{ firstName }}! 👋</h3>
-                        <p class="text-arka-text-muted">
-                            Viaje <span class="text-arka-primary-bright">seguro</span> con quienes
-                            <span class="text-arka-primary-bright">confía</span>.
+                        <h3 class="text-2xl font-semibold text-arka-text">¡Hola, {{ firstName }}!</h3>
+                        <p class="text-arka-text-muted flex items-center gap-1.5">
+                            Cliente
+                            <span v-if="clientPlanName" class="ms-1 px-2 py-0.5 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
+                                Plan {{ clientPlanName }}
+                            </span>
                         </p>
                     </div>
 
                     <AdBannerSlider :banners="adBanners" />
 
-                    <!-- Buscador de "Mi flota" -->
-                    <div class="relative">
-                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="7" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m20 20-3.5-3.5" />
-                        </svg>
-                        <input
-                            v-model="fleetSearch"
-                            type="text"
-                            placeholder="Buscar conductor de su flota por nombre"
-                            class="w-full rounded-arka bg-arka-card border border-arka-text-muted/20 py-2.5 ps-10 pe-3 text-sm text-arka-text placeholder:text-arka-text-muted focus:outline-none focus:ring-2 focus:ring-arka-primary"
-                        />
-                    </div>
-
-                    <!-- Mi flota de confianza -->
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Mi flota de confianza</h4>
-                            <Link :href="route('fleet.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
-                                Ver todos
-                            </Link>
-                        </div>
-
-                        <p v-if="!fleetDriversLocal.length" class="text-sm text-arka-text-muted">
-                            Todavía no tiene conductores en su flota —
-                            <Link :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">arme la suya</Link>
-                            o agregue alguno de "Conductores cerca" acá abajo.
-                        </p>
-                        <p v-else-if="!filteredFleetDrivers.length" class="text-sm text-arka-text-muted">
-                            Ningún conductor de su flota coincide con "{{ fleetSearch }}".
-                        </p>
-                        <div v-else class="flex gap-3 overflow-x-auto pb-1">
-                            <div
-                                v-for="driver in filteredFleetDrivers"
-                                :key="driver.user_id"
-                                class="shrink-0 w-24 p-3 bg-arka-card shadow rounded-arka text-center"
-                            >
-                                <Link :href="route('profiles.show', driver.user_id)">
-                                    <div class="rounded-full inline-block" :class="STATUS_RING[driver.status]">
-                                        <UserAvatar :user="driver" size-class="h-14 w-14 text-sm" />
-                                    </div>
-                                    <p v-if="driver.review_count > 0" class="mt-1 text-xs text-arka-lime">★ {{ driver.average_rating.toFixed(1) }}</p>
-                                    <p class="mt-1 text-sm text-arka-text font-medium truncate">{{ driver.name.split(' ')[0] }}</p>
-                                    <p
-                                        class="text-xs"
-                                        :class="driver.status === 'available' ? 'text-arka-primary-bright' : 'text-arka-text-muted'"
-                                    >
-                                        {{ STATUS_LABEL[driver.status] }}
-                                    </p>
-                                    <p v-if="driver.distance_km != null" class="text-xs text-arka-text-muted">{{ driver.distance_km.toFixed(1) }} km</p>
-                                </Link>
-                                <!-- Pedido explícito del usuario: elegir un conductor te
-                                     tiene que ofrecer pedirle una carrera directo a él. -->
-                                <Link
-                                    v-if="driver.status !== 'offline'"
-                                    :href="route('ride-requests.create', { flota: targetFleetId, conductor: driver.user_id })"
-                                    class="mt-1 block text-xs text-arka-primary hover:text-arka-primary-bright font-medium"
-                                >
-                                    Pedir carrera
-                                </Link>
+                    <!-- "Tu flota": resumen glanceable, no la lista completa — el
+                         detalle por conductor (buscar, invitar, pedir carrera directo)
+                         ya vive en Fleet/Show.vue, no tiene sentido duplicarlo acá. -->
+                    <Link :href="route('fleet.show', targetFleetId)" class="block p-4 bg-arka-card shadow rounded-arka hover:bg-arka-card/70">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-arka-text font-medium">Tu flota</p>
+                                <p class="text-sm text-arka-text-muted">
+                                    {{ fleetDriversLocal.filter((d) => d.status === 'available').length }} disponible(s) ahora
+                                </p>
                             </div>
+                            <svg class="h-5 w-5 text-arka-text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
+                            </svg>
                         </div>
+
+                        <div v-if="fleetDriversLocal.length" class="mt-3 flex items-center gap-2">
+                            <div
+                                v-for="driver in fleetDriversLocal.slice(0, 4)"
+                                :key="driver.user_id"
+                                class="rounded-full"
+                                :class="STATUS_RING[driver.status]"
+                            >
+                                <UserAvatar :user="driver" size-class="h-10 w-10 text-sm" />
+                            </div>
+                            <span
+                                class="h-10 w-10 rounded-full border-2 border-dashed border-arka-text-muted/30 flex items-center justify-center text-arka-text-muted text-lg leading-none"
+                            >
+                                +
+                            </span>
+                        </div>
+                        <p v-else class="mt-2 text-sm text-arka-text-muted">
+                            Todavía no tiene conductores — toque para armar su flota.
+                        </p>
+                    </Link>
+
+                    <!-- Dos accesos grandes (pedido explícito del usuario: "Pedir
+                         carrera" para ahora mismo, "Programar carrera" para elegir
+                         fecha y hora) — antes eran dos ítems más del grid chico de
+                         "Solicitá un viaje", ahora son la acción principal del inicio. -->
+                    <div v-if="hasRoute('ride-requests.create')" class="grid grid-cols-2 gap-3">
+                        <Link
+                            :href="route('ride-requests.create')"
+                            class="p-4 bg-arka-primary/15 border border-arka-primary/30 rounded-arka hover:bg-arka-primary/20"
+                        >
+                            <svg class="h-7 w-7 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
+                            </svg>
+                            <p class="mt-2 font-medium text-arka-primary-bright">Pedir carrera</p>
+                            <p class="text-xs text-arka-text-muted">Viaje inmediato</p>
+                        </Link>
+                        <Link
+                            :href="route('ride-requests.create', { programar: 1 })"
+                            class="p-4 bg-arka-card border border-arka-text-muted/20 rounded-arka hover:bg-arka-card/70"
+                        >
+                            <svg class="h-7 w-7 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3.5" y="4.5" width="17" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 9.5h17M8 3v3M16 3v3" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 13.5h2M8 17h2M14 13.5h2M14 17h2" />
+                            </svg>
+                            <p class="mt-2 font-medium text-arka-text">Programar carrera</p>
+                            <p class="text-xs text-arka-text-muted">Elegí fecha y hora</p>
+                        </Link>
                     </div>
 
-                    <!-- Solicitá un viaje -->
+                    <!-- Más opciones -->
                     <div class="space-y-2">
-                        <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Solicitá un viaje</h4>
+                        <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Más opciones</h4>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            <Link
-                                v-if="hasRoute('ride-requests.create')"
-                                :href="route('ride-requests.create')"
-                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                            >
-                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                                </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Pedir viaje</p>
-                            </Link>
-                            <!-- Pedido explícito del usuario: acceso directo a "Programar
-                                 viaje" desde el inicio, sin tener que abrir "Pedir viaje" y
-                                 cambiar el toggle a mano. -->
-                            <Link
-                                v-if="hasRoute('ride-requests.create')"
-                                :href="route('ride-requests.create', { programar: 1 })"
-                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                            >
-                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="3.5" y="4.5" width="17" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 9.5h17M8 3v3M16 3v3" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 13.5h2M8 17h2M14 13.5h2M14 17h2" />
-                                </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Programar carrera</p>
-                            </Link>
                             <Link
                                 v-if="hasRoute('express-routes.index')"
                                 :href="route('express-routes.index')"
@@ -731,17 +699,41 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17M8 3v4M16 3v4" />
                                 </svg>
                                 <p class="mt-2 text-sm text-arka-text font-medium">Expresos</p>
+                                <p class="text-xs text-arka-text-muted">Rutas fijas</p>
                             </Link>
                             <Link
-                                v-if="hasRoute('directory.index')"
-                                :href="route('directory.index')"
+                                v-if="hasRoute('van-trips.index')"
+                                :href="route('van-trips.index')"
                                 class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
                             >
                                 <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.3 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.3-3.8-8.5S9.5 5.8 12 3.5Z" />
+                                    <rect x="2.5" y="8" width="19" height="9" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 12h19M6 17v2M18 17v2" />
                                 </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Públicos</p>
+                                <p class="mt-2 text-sm text-arka-text font-medium">Viajes en VAN</p>
+                            </Link>
+                            <Link
+                                v-if="hasRoute('ride-requests.create')"
+                                :href="route('ride-requests.create')"
+                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
+                            >
+                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7L12 3Z" />
+                                </svg>
+                                <p class="mt-2 text-sm text-arka-text font-medium">Mis rutas</p>
+                                <p class="text-xs text-arka-text-muted">favoritas</p>
+                            </Link>
+                            <Link
+                                v-if="hasRoute('coupons.index')"
+                                :href="route('coupons.index')"
+                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
+                            >
+                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v1a2 2 0 0 0 0 4v1A2.5 2.5 0 0 1 17.5 17h-11A2.5 2.5 0 0 1 4 14.5v-1a2 2 0 0 0 0-4v-1Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.5 6.5v11" stroke-dasharray="2 2" />
+                                </svg>
+                                <p class="mt-2 text-sm text-arka-text font-medium">Cupones</p>
+                                <p class="text-xs text-arka-text-muted">y beneficios</p>
                             </Link>
                         </div>
                     </div>
@@ -831,19 +823,29 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </Link>
                     </div>
 
-                    <!-- Viajá con confianza -->
-                    <div class="p-4 bg-arka-card shadow rounded-arka flex items-center gap-4">
+                    <!-- Seguridad siempre (pedido explícito del usuario, mockup provisto):
+                         el botón SOS de verdad depende de una carrera en curso puntual
+                         (SosAlertController::store() necesita el conductor/vehículo de
+                         ESA carrera) — acá, sin una carrera activa, lleva a administrar
+                         los contactos de confianza que reciben esa alerta cuando sí la
+                         hay, en vez de simular un botón que no podría hacer nada. -->
+                    <Link
+                        v-if="hasRoute('trusted-contacts.index')"
+                        :href="route('trusted-contacts.index')"
+                        class="p-4 bg-arka-card shadow rounded-arka flex items-center gap-4 hover:bg-arka-card/70"
+                    >
                         <div class="h-12 w-12 rounded-full bg-arka-primary/15 flex items-center justify-center shrink-0">
                             <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 12 2 2 4-4" />
                             </svg>
                         </div>
-                        <div>
-                            <p class="text-arka-text font-medium">Viaje con confianza</p>
-                            <p class="text-xs text-arka-text-muted">Perfiles verificados, calificaciones reales y conductores que ya conoce.</p>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-arka-text font-medium">Seguridad siempre</p>
+                            <p class="text-xs text-arka-text-muted">Su seguridad es primero — mantenga al día sus contactos de confianza.</p>
                         </div>
-                    </div>
+                        <span class="shrink-0 px-3 py-1.5 rounded-full bg-arka-primary text-arka-base text-xs font-bold">SOS</span>
+                    </Link>
                 </template>
             </div>
         </div>

@@ -59,6 +59,20 @@ class DashboardTest extends TestCase
     }
 
     /**
+     * Rediseño del inicio pedido explícito por el usuario (mockup provisto):
+     * insignia "Cliente · Plan X" junto al saludo, mismo criterio que ya
+     * usa la insignia de rol/disponibilidad del lado conductor.
+     */
+    public function test_a_client_receives_their_plan_name_for_the_role_badge(): void
+    {
+        $client = User::factory()->create();
+
+        $response = $this->actingAs($client)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page->where('clientPlanName', 'Gratis'));
+    }
+
+    /**
      * Sección 19 del mockup del cliente: las tarjetas de "Mi flota" ahora
      * traen calificación y distancia, mismo criterio que "Conductores cerca".
      */

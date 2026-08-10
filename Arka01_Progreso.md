@@ -1868,6 +1868,18 @@ El usuario reportó que el mensaje de error al subir una foto de perfil demasiad
 ### Tests
 `tests/Feature/ProfileTest.php` (+1: subir una foto de más de 4 MB devuelve el mensaje en español esperado). Suite completa incluida en el conteo de arriba (521 tests OK).
 
+### Rediseño del Inicio del cliente (mockup provisto por el usuario)
+El usuario compartió una captura de referencia y, tras confirmar que sí la quería construida (no solo opinión), se rearmó la pantalla de Inicio del lado cliente para que coincida:
+
+- **Saludo + insignia de rol/plan**: "Cliente · Plan {{X}}" junto al nombre, mismo criterio que ya usaba el lado conductor ("Conductor ✓ · Disponible"). Nuevo: `DashboardController` inyecta `PlanLimits` y expone `clientPlanName` (`PlanLimits::forClient()`, ya existía, no se tocó).
+- **"Tu flota"**: pasó de una lista rica (buscador + tarjetas por conductor con "Pedir carrera" directo) a una tarjeta resumen glanceable (cuántos disponibles ahora + avatares + flecha) que lleva a `Fleet/Show.vue` — investigado antes de sacar nada: esa pantalla ya tiene el buscador, invitar y "Pedir carrera" por conductor, así que no se perdió funcionalidad, solo se dejó de duplicarla en el Inicio.
+- **Dos accesos grandes**: "Pedir carrera" (viaje inmediato) y "Programar carrera" (elegir fecha y hora) pasaron de ser dos ítems chicos de una grilla de 4 a la acción principal de la pantalla.
+- **"Más opciones"**: grilla con Expresos, Viajes en VAN, Mis rutas favoritas y Cupones y beneficios — las cuatro ya existían como pantallas propias (`express-routes.index`, `van-trips.index`, `ride-requests.create` para rutas guardadas, `coupons.index`), no hizo falta backend nuevo.
+- **"Seguridad siempre"**: reemplazó la tarjeta genérica "Viaje con confianza". Investigado antes de simular un botón SOS que no hiciera nada: `SosAlertController::store()` necesita una carrera `in_progress` puntual (saca el conductor/vehículo de ESA carrera) — no existe un SOS "sin carrera". La tarjeta lleva a "Mis contactos de confianza" en vez de inventar un mecanismo de emergencia nuevo sin que el usuario lo haya pedido.
+
+### Tests
+`tests/Feature/DashboardTest.php` (+1: el cliente recibe `clientPlanName` para la insignia). Suite completa: 522 tests OK, Pint limpio, build limpio.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

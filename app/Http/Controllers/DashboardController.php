@@ -11,6 +11,7 @@ use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Services\Haversine;
+use App\Services\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -23,6 +24,8 @@ use Inertia\Response;
  */
 class DashboardController extends Controller
 {
+    public function __construct(private readonly PlanLimits $planLimits) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -113,8 +116,13 @@ class DashboardController extends Controller
         $fleetDrivers = null;
         $nearbyDrivers = null;
         $targetFleetId = null;
+        $clientPlanName = null;
 
         if ($user->isClient()) {
+            // Pedido explícito del usuario (diseño nuevo de Inicio): la
+            // insignia "Cliente · Plan X" junto al saludo, mismo criterio que
+            // ya usa la insignia "Conductor" del otro lado.
+            $clientPlanName = $this->planLimits->forClient($user)['plan_name'];
             // Mismo criterio que FleetController::index()/RideRequestController:
             // la primera flota se crea sola al primer uso, para no pedir un paso
             // extra de "crear flota" — acá hace falta un id de flota real para
@@ -133,6 +141,7 @@ class DashboardController extends Controller
             'fleetDrivers' => $fleetDrivers,
             'nearbyDrivers' => $nearbyDrivers,
             'targetFleetId' => $targetFleetId,
+            'clientPlanName' => $clientPlanName,
             'upcomingTrips' => $upcomingTrips,
             'inviteCode' => $inviteCode,
             'earningsSparkline' => $earningsSparkline,
