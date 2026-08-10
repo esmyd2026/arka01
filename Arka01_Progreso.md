@@ -1825,6 +1825,14 @@ El usuario mostró una captura: la lista de suscriptores era una pila de tarjeta
 ### Tests
 `tests/Feature/Admin/AdminSubscriptionTest.php` (+2: filtrar por rol y por estado de plan devuelve exactamente los usuarios esperados, incluido que un admin no cae en "gratis"; ordenar por vencimiento próximo trae primero al que vence antes). Suite completa: 510 tests OK, Pint limpio (reordenó imports y espaciado en `SubscriptionController.php`), build limpio.
 
+### Bug: al cliente no le llegaba en vivo que el conductor finalizó la carrera
+Reporte del usuario: "cuando el conductor finaliza la carrera no se le actualiza al cliente que se finalizó o se completó la carrera". Investigado antes de tocar nada (mismo criterio de siempre con reportes de "no llega en vivo": revisar si falta el evento o si falta el listener, no asumir que Reverb está roto): el backend sí transmitía todo bien — `RideController::complete()` dispara `RideCompleted` (`ride.completed`), que llega al canal de flota y al canal personal de las dos partes, exactamente igual que `RideStarted`/`RideCancelled`.
+
+El problema estaba solo del lado del cliente: `Ride/Show.vue` (la pantalla de seguimiento de una carrera puntual) tenía el listener de `.ride.started` y de `.ride.cancelled` en el canal de flota, pero nunca se agregó el de `.ride.completed` — por eso quien tenía esa pantalla abierta se quedaba viendo "en curso" aunque el conductor ya hubiera terminado (en la lista general `Ride/Index.vue` sí funcionaba, porque esa pantalla escucha por el canal personal, no por el de flota). Se agregó el mismo bloque que ya usan los otros dos eventos en ese archivo.
+
+### Tests
+No aplica — la suscripción a un canal de WebSocket (Laravel Echo) no se puede reproducir en un test de Feature de PHP. Verificación real queda para cuando esté desplegado.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

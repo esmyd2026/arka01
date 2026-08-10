@@ -74,6 +74,15 @@ onMounted(() => {
         if (e.ride_id !== props.ride.id) return;
         router.reload({ only: ['ride'] });
     });
+
+    // Bug reportado por el usuario: el conductor finalizaba la carrera y el
+    // cliente se quedaba viendo la pantalla como si siguiera en curso — no
+    // faltaba el evento (RideCompleted ya se transmite), faltaba este
+    // listener, que sí existe para "iniciada" y "cancelada".
+    fleetChannel.listen('.ride.completed', (e) => {
+        if (e.ride_id !== props.ride.id) return;
+        router.reload({ only: ['ride'] });
+    });
 });
 
 onBeforeUnmount(() => {
