@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -17,8 +17,11 @@ const props = defineProps({
 
 const AUDIENCE_LABEL = { client: 'Cliente', driver: 'Conductor' };
 
-const clientCoupons = props.coupons.filter((c) => c.audience === 'client');
-const driverCoupons = props.coupons.filter((c) => c.audience === 'driver');
+// computed (no const plano): props.coupons cambia tras guardar/crear/
+// eliminar sin recargar la página (Inertia actualiza los props), así que
+// estas listas se tienen que recalcular con los datos nuevos.
+const clientCoupons = computed(() => props.coupons.filter((c) => c.audience === 'client'));
+const driverCoupons = computed(() => props.coupons.filter((c) => c.audience === 'driver'));
 
 const editingId = ref(null);
 const creatingFor = ref(null); // 'client' | 'driver' | null

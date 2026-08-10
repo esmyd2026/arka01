@@ -61,7 +61,10 @@ class SubscriptionController extends Controller
         // alcance) — lo primero que un admin necesita ver al entrar acá.
         $pendingRequests = SubscriptionRequest::query()
             ->where('status', 'pending_review')
-            ->with(['user', 'plan'])
+            // planPromotion (pedido explícito del usuario): si el pedido
+            // viene de una promoción, el admin necesita saber qué monto
+            // correspondía revisar en el comprobante, no el precio de lista.
+            ->with(['user', 'plan', 'planPromotion'])
             ->latest()
             ->get();
 
@@ -138,12 +141,16 @@ class SubscriptionController extends Controller
             throw ValidationException::withMessages(['subscription_request' => $reason]);
         }
 
+        $note = $subscriptionRequest->planPromotion
+            ? "Aprobado desde comprobante de pago (promoción: {$subscriptionRequest->planPromotion->label})."
+            : 'Aprobado desde comprobante de pago subido por el usuario.';
+
         $this->activator->activate(
             $subscriptionRequest->user,
             $subscriptionRequest->plan,
             $request->user()->id,
             null,
-            'Aprobado desde comprobante de pago subido por el usuario.'
+            $note
         );
 
         $subscriptionRequest->update([

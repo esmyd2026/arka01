@@ -1426,9 +1426,145 @@ El usuario reportó una contradicción real en pantalla: la lista de candidatos 
 ### Tests
 `tests/Feature/Ride/StaleDriverAvailabilityTest.php` (+2: un conductor ocupado con ping viejo sigue contando como "conectado" en el diagnóstico; de punta a punta, la solicitud queda `waiting` en ese caso en vez de rechazarse). Suite completa: 443 tests OK, Pint limpio.
 
----
+### Panel admin: paginado y filtros en conductores, módulo de clientes, y borrar la demo
+Pedido explícito del usuario, mirando la tabla "Todos los conductores" (traía los ~90 de una sola vez, sin paginar ni filtrar): paginado + filtros ahí, una pantalla nueva para ver los clientes registrados con el mismo criterio, filtro por ciudad en ambas, fecha de registro y última actividad, y un botón para borrar toda la data de prueba y dejar el sistema reiniciado. Alcance del borrado confirmado con el usuario: **solo cuentas `@arka01.test`** (el dominio de toda cuenta demo, de siempre hasta las ~90 de `demo:seed-many-drivers`) — cualquier cuenta real con otro correo queda intacta.
 
-## Diseño e interfaz (transversal a todas las fases)
+- **`Admin\DriverController::index()`**: el roster completo ahora es `->paginate(20)`, con filtros `q` (nombre/correo), `city_id` y `status` (disponible/suspendido/desconectado), más ciudad, fecha de registro y última actividad por fila. "Disponibles ahora" (arriba, con el mapa) no cambió — sigue trayendo todos de una, son pocos por definición. "Última actividad" sale de `sessions.last_activity` (columna ya existente, sin migración nueva) agregada por lote, no una consulta por fila.
+- **`Admin\ClientController`** (nuevo) + **`Admin/Clients.vue`** (nuevo, `/admin/clientes`): mismo patrón del lado cliente — nombre, correo, ciudad, registro, última actividad, cuántos conductores tiene en su(s) flota(s) y cuántas carreras completó, filtrable por `q`/`city_id`, paginado. Filtra por `role = 'cliente'` (columna ya resuelta de antes), no llama `User::isClient()` por fila para no cargar el perfil de conductor de cada uno solo para descartarlo.
+- **`Admin\SystemController`** (nuevo) + **`Admin/System.vue`** (nuevo, `/admin/sistema`, pantalla propia de "zona de peligro"): un botón, con confirmación fuerte y el texto explícito de qué borra. Al confirmar: borra `User::where('email', 'like', '%@arka01.test')` dentro de una transacción (cascada ya definida en las FK se lleva flotas/carreras/suscripciones/reseñas de esas cuentas), vuelve a correr `DemoDataSeeder` para recrear el elenco base de 9 cuentas, y — como `admin@arka01.test` es casi con toda seguridad la cuenta con la que se está usando el panel — si el correo de quien lo ejecutó termina en `@arka01.test` cierra su sesión y lo manda al login; si es un admin con otro correo, se queda donde está.
+- Nav del panel admin: nuevas pestañas "Clientes" y "Sistema" en `AdminLayout.vue`.
+
+### Tests
+`tests/Feature/Admin/AdminDriverControllerTest.php` (+3: paginado a 20 por página, filtro por ciudad, búsqueda por nombre/correo), `tests/Feature/Admin/AdminClientControllerTest.php` (nuevo, 5 casos: solo lista clientes —no conductores ni admins—, filtros, paginado, conteo de conductores en flota), `tests/Feature/Admin/AdminSystemControllerTest.php` (nuevo, 6 casos: borra cuentas `@arka01.test` y recrea las 9 base, una cuenta real sobrevive intacta, cascada a flota de una cuenta demo, un admin demo queda deslogueado tras el reset, un admin no-demo se queda logueado, acceso restringido a admin). Suite completa: 457 tests OK, Pint limpio, build limpio.
+
+### Viajes en VAN: punto exacto de salida/llegada y costo aproximado antes del precio
+Pedido explícito del usuario, verificando que el autocompletado de Google (usado en "Pedir carrera" y en Expresos) también estuviera en Viajes en VAN: no estaba, y no era un olvido — ese módulo solo manejaba ciudad de origen/destino (`origin_city_id`/`destination_city_id`, sin ninguna coordenada), a diferencia de Expresos y Pedir carrera que ya trabajan con un punto exacto. El usuario pidió agregarlo: marcar las coordenadas en el mapa, calcular los km, y sugerir un costo aproximado **antes** de que el conductor ponga su precio por asiento.
+
+- **`van_trips`**: nuevas columnas `origin_lat/lng`, `origin_address`, `destination_lat/lng`, `destination_address` y `distance_km` — todas nullable, mismo criterio que `express_routes`. Un viaje se sigue pudiendo publicar solo con la ciudad, como hasta ahora; si se marca uno de los dos puntos, el otro pasa a ser obligatorio (`required_with`) para poder calcular la distancia.
+- **`VanTripController::store()`**: la distancia se recalcula siempre en el backend con `App\Services\Haversine` (nunca se confía en el número que mande el navegador — mismo criterio que el precio de una carrera). `index()` ahora manda `driverRatePerKm` (la tarifa/km del propio perfil de conductor, si ya la tiene configurada) para que el frontend pueda sugerir el costo.
+- **`VanTrips/Index.vue`**: nueva sección "Punto exacto de salida y llegada (opcional)" con el mismo mapa Leaflet + toggle "Marcar salida/llegada" que ya usa Expresos, y dos campos de referencia con autocompletado de Google Places (`AddressAutocomplete.vue`, mismo componente, sin nada nuevo que mantener). En cuanto los dos puntos quedan marcados, aparece un aviso con la distancia y — si el conductor ya tiene tarifa/km configurada — el costo aproximado del viaje completo y por asiento, justo antes del campo "Precio por asiento".
+
+### Tests
+`tests/Feature/VanTrips/VanTripFlowTest.php` (+4: guarda la distancia calculada al marcar los dos puntos, sigue funcionando sin coordenadas —queda `null`—, falla la validación si falta la mitad de un par, `driverRatePerKm` llega correcto a la pantalla). Suite completa: 461 tests OK, Pint limpio, build limpio.
+
+### Bug propio: el mapa no trazaba ni se centraba al elegir las referencias (Expresos y Viajes en VAN)
+Reportado por el usuario probando lo de arriba. Dos causas distintas, las dos en `Components/FleetMap.vue` y en las dos pantallas que recién empezaron a usar direcciones de referencia:
+
+- **No se centraba al marcar el segundo punto**: `FleetMap.vue` solo encuadraba los marcadores la primera vez que aparecía CUALQUIERA (`hasFitBoundsOnce`, pensado para no pelear con el pan/zoom manual cuando un conductor en vivo mueve su ping) — así que al marcar el origen se centraba bien, pero al marcar el destino ya no volvía a ajustar la vista para mostrar los dos juntos. Ahora se reencuadra cada vez que cambia la composición de la lista (cuántos marcadores hay y de qué id), no solo la primera vez — sigue sin reajustar si lo único que cambió es la posición de los mismos marcadores de siempre, que es el caso que el mecanismo original quería evitar.
+- **No se trazaba ninguna línea**: "Pedir carrera" sí pide el recorrido real a OSRM apenas hay origen y destino, pero Expresos y Viajes en VAN nunca lo hacían — ese trazado no se había portado a esas dos pantallas cuando se armaron. Se sacó a `Utils/osrmRoute.js` (compartido, `Ride/Request.vue` se cambió para usarlo también en vez de tener el mismo fetch pegado tres veces) y se conectó en las tres pantallas.
+
+### Tests
+Cambios de frontend puros (Vue + un componente compartido) — se corrió `php artisan test --filter="VanTrip|Express"` (43 tests OK) para confirmar que la validación/persistencia del backend sigue intacta. Pint limpio, build limpio.
+
+### Expresos: costo estimado y viajes de ida y vuelta
+Pedido explícito del usuario, mirando el formulario de Expresos ya con mapa y trazado: "falta el costo estimado y si es ida y vuelta... debería ver una hora del origen y otra del destino y el precio que coloque que no sea menor al estimado."
+
+- **Costo estimado**: mismo mecanismo que "Pedir carrera" — `ExpressRouteController::index()` manda `referenceRatePerKm` (promedio de tarifa/km de los conductores activos en CUALQUIERA de las flotas del cliente, ya que un Expreso no es de una flota puntual) y `minimumFare`. `Express/Index.vue` muestra la distancia × esa tarifa (con la tarifa mínima como piso) antes del campo "Precio por carrera".
+- **Piso de precio**: el precio que se fije no puede ser menor al estimado — validado en el propio backend (`ExpressRouteController::suggestedPrice()`, reutiliza `App\Services\PriceCalculator` igual que una carrera normal, pero solo la parte `base` — sin recargo nocturno, porque acá el precio se pacta una sola vez para todos los días que corresponda, no tiene sentido atarlo a la hora en que se publica el Expreso). Mismo criterio aplicado en `store()` y `update()`.
+- **Ida y vuelta**: nuevas columnas `is_round_trip` y `return_time` en `express_routes`. Con el checkbox marcado, "Hora de salida" pasa a ser explícitamente la del origen y aparece una segunda hora, la de vuelta desde el destino. `GenerateExpressRides` ahora genera DOS carreras por día para un Expreso de ida y vuelta (la de vuelta con origen y destino invertidos, a la hora de vuelta) — para el dueño y para cada acompañante aceptado si el Expreso está compartido.
+
+### Tests
+`tests/Feature/Express/ExpressRouteFlowTest.php` (+5: `referenceRatePerKm`/`minimumFare` llegan a la pantalla, publicar por debajo del estimado falla, ida y vuelta sin hora de vuelta falla, ida y vuelta guarda las dos horas, el motor de recurrencia genera las dos carreras del día —y no las duplica si corre dos veces—). De paso, un test existente (`AdminClientControllerTest`) resultó frágil por una fábrica (`FleetMemberFactory`) que arma un `User::factory()` nuevo para `added_by` si no se lo pasa explícito — quedó expuesto por el azar del nombre aleatorio de Faker, no por nada de esta tanda; se corrigió pasando `added_by` explícito. Suite completa: 466 tests OK, Pint limpio, build limpio.
+
+### Bug propio: el estimado de Expresos salía en $0
+Reportado por el usuario probando lo de arriba con un Expreso nuevo: "sale $0.00, deberías sacar un estimado". Causa real, no un problema de caché — `referenceRatePerKm()` promediaba solo los conductores YA en la(s) flota(s) del cliente, y un cliente publicando su primer Expreso (el caso más común: recién decide armar uno para que se postule alguien) todavía no tiene ninguno — promedio de una lista vacía, $0 siempre, para cualquier cliente nuevo. Ahora, si la propia flota no tiene con qué calcular un promedio, se usa como referencia el promedio de tarifa/km de TODA la plataforma (conductores con tarifa configurada, sin importar la flota) — deja de haber un estimado en blanco.
+
+### Tests
+`tests/Feature/Express/ExpressRouteFlowTest.php` (+1: sin conductores en la flota, el estimado cae al promedio de la plataforma). Suite completa: 467 tests OK, Pint limpio.
+
+### Bug propio: tocar el mapa para reubicar un punto no recalculaba nada, y desglose del precio en Expresos ida y vuelta
+Dos pedidos del usuario en el mismo mensaje, probando Expresos:
+
+- **"Si moví en el mapa no se recalculó el km"**: causa real en `Components/FleetMap.vue` — un marcador de Leaflet es interactivo por default y se queda con el clic para sí mismo (para abrir su propio popup) en vez de dejarlo pasar al mapa. Volver a tocar justo donde ya está el pin de origen/destino para reubicarlo (el gesto más natural para "moverlo") caía sobre el marcador, no sobre el mapa, así que `map-click` nunca se disparaba — solo la búsqueda de referencia (que no pasa por el mapa) sí actualizaba todo. Se desactivó la interactividad de los marcadores únicamente en las pantallas donde el mapa es clickeable (Pedir carrera, Expresos, Viajes en VAN) — ahí no hace falta el popup propio del pin, el label ya se ve en el formulario.
+- **"Si es ida y vuelta debería duplicar el valor... y el desglose"**: confirmado con el usuario (pregunta directa, por ser una decisión de precio real) que "Precio por carrera" sigue siendo por trayecto — se cobra ese monto en cada una de las dos carreras que se generan por día, sin cambiar nada del backend. Se agregó nomás el desglose informativo en `Express/Index.vue`: además del estimado por trayecto, con ida y vuelta marcada se ve una segunda línea "$estimado × 2 carreras/día = $total/día".
+
+### Tests
+Cambios de frontend puros (componente compartido + una pantalla) — se corrió la suite completa para confirmar que nada del backend se vio afectado. 467 tests OK, Pint limpio, build limpio.
+
+### El mapa no arrancaba en la ciudad del cliente, y el precio de Expresos ya no exige calzar con el estimado
+Dos pedidos más del usuario, mismo hilo:
+
+- **Mapa centrado en la ciudad**: "el mapa al inicio no se posiciona donde está el cliente, debería posicionarse por lo menos en la ciudad" — `Express/Index.vue` y `VanTrips/Index.vue` nunca pasaban un `:center` a `FleetMap.vue`, así que siempre arrancaban en el default fijo del componente (Quito). Ahora, al abrir la pantalla, se intenta la geolocalización real del navegador (mismo mecanismo que "Pedir carrera") y, si no responde a tiempo o no hay permiso, se cae a la ciudad que el cliente/conductor ya tiene registrada (`ExpressRouteController`/`VanTripController` mandan sus coordenadas).
+- **Piso de precio al 50%, no al 100%**: pedido explícito del usuario — "permite que sean menor al precio estimado pero que no pase menor el 50% del valor estimado". El precio de un Expreso ya no tiene que calzar con el estimado; alcanza con no bajar de la mitad. Nueva constante `ExpressRouteController::MINIMUM_PRICE_FACTOR` (0.5), única fuente de verdad para `store()`, `update()` y lo que ve el cliente en pantalla (mandada como prop `minimumPriceFactor`, en vez de tener el mismo número pisado en dos lugares).
+
+### Tests
+`tests/Feature/Express/ExpressRouteFlowTest.php` (+3: la pantalla manda la ciudad del cliente para el mapa —o `null` si no tiene—, un precio por debajo de la mitad del estimado sigue fallando, uno entre la mitad y el estimado completo ahora se acepta). Suite completa: 470 tests OK, Pint limpio, build limpio.
+
+### Bug propio: logo duplicado en el login (más notorio en móvil)
+Reportado por el usuario con una captura. `Layouts/GuestLayout.vue` ya pone el logo arriba de la tarjeta en toda pantalla sin sesión (chico en móvil, oculto en escritorio porque ahí lo lleva el panel de marca) — pero `Pages/Auth/Login.vue`, y solo esa pantalla (ninguna otra de Auth lo hacía), tenía además su propio `<ApplicationLogo>` metido adentro de la tarjeta, sin ninguna condición que lo ocultara en desktop. Se sacó el logo de más — se saca del layout compartido nomás.
+
+### Tests
+Cambio visual puro (una línea menos en una plantilla). Build limpio.
+
+### Correo de bienvenida al registrarse
+Pedido explícito del usuario ("¿existe alguna plantilla que se envía al registro?... debe ser una plantilla con un buen diseño"). Se investigó primero: no existía ninguno — `RegisteredUserController::store()` nunca mandaba correo al crear la cuenta, y el scaffolding de "verificación de email" de Laravel está inactivo a propósito (`MustVerifyEmail` comentado en `User.php`, el teléfono se verifica por WhatsApp en su lugar). Los únicos 3 correos que sí existían (login concurrente, código de sesión, alerta SOS) usan el tema markdown genérico de Laravel, sin nada de la marca — no había ninguna plantilla con diseño propio de la que partir.
+
+- **`App\Mail\WelcomeMail`** (nuevo) + **`resources/views/emails/layout.blade.php`** (nuevo, cascarón reutilizable con el logo tipográfico de dos colores y el fondo oscuro de la marca — pensado para que otro correo futuro pueda sumarse al mismo diseño sin repetirlo) + **`resources/views/emails/welcome.blade.php`** (nuevo, el contenido: saludo, su usuario y código de socio ya generados, botón "Ir a mi cuenta"). HTML de tabla con estilos en línea (no Tailwind — un cliente de correo no lo procesa) y `color-scheme: dark` explícito para que Gmail/Apple Mail no le apliquen su propio modo oscuro encima y rompan el contraste ya pensado a propósito.
+- Se manda desde `RegisteredUserController::store()`, envuelto en `try/catch` (mismo criterio que `SosAlertController`): si el correo falla, se registra en el log pero el registro de la cuenta sigue andando igual. Se manda sincrónico, no en cola — acá no corre ningún `queue:work` en local (ver el resto de los correos del proyecto, todos sincrónicos también), ponerlo en cola lo hubiera dejado sin mandar nunca en desarrollo.
+
+### Tests
+`tests/Feature/Auth/RegistrationTest.php` (+1: registrarse manda el correo de bienvenida al usuario correcto). Suite completa: 471 tests OK, Pint limpio.
+
+### Recorrido guiado (onboarding) por rol, una sola vez
+Pedido explícito del usuario: explicar los módulos importantes a cada usuario nuevo, distinto para cliente y para conductor, que se muestre una sola vez, con botón "Siguiente" y botón "Saltar guía de uso".
+
+Antes de escribir el contenido se investigó la navegación real: hoy existen **tres listas de accesos parcialmente distintas entre sí** (la grilla de accesos rápidos de escritorio, el bottom sheet de móvil escrito a mano, y las tarjetas de "Acciones rápidas" del Dashboard) — no son la misma fuente de verdad. Por eso el tour no señala (spotlight) ningún botón real en pantalla — habría quedado frágil entre móvil/escritorio y desalineado en cuanto cambiara cualquiera de esas tres listas — sino una serie de "ventanitas" (modal, un paso a la vez) que explican cada módulo por nombre, sin depender de la posición de ningún elemento del DOM. Sin librería nueva: reutiliza `Components/Modal.vue`, que ya usa el propio panel de Ayuda.
+
+- **`users.onboarding_completed_at`** (nueva columna, `datetime` nullable): mismo patrón ya establecido en el proyecto para "flags" de una sola vez (`phone_verified_at`, `locked_at`), no un booleano suelto. Viaja solo al frontend dentro de `auth.user` (`HandleInertiaRequests` ya comparte el modelo completo), sin tocar el middleware.
+- **`Utils/onboardingSteps.js`** (nuevo): contenido de 5 pasos por rol, basado en los módulos reales — **cliente**: Mi flota → Directorio de conductores → Pedir una carrera → Mis Expresos; **conductor**: Mi perfil de conductor → Mis clientes → Carreras → Expresos disponibles (más el paso de bienvenida en los dos). Separado del componente para poder ajustar el texto sin tocar lógica.
+- **`Components/OnboardingTour.vue`** (nuevo): un paso a la vez sobre `Modal.vue`, puntitos de progreso, "Saltar guía de uso" siempre visible y "Siguiente" (dice "Entendido" en el último paso).
+- **`AuthenticatedLayout.vue`**: se abre solo en `onMounted` si corresponde al rol activo y todavía no se vio (no aplica al admin, nav completamente distinta). Cualquier cierre —terminarlo, saltarlo, click afuera, Escape— manda `POST onboarding.complete` (`OnboardingController`, nuevo) y ya no se muestra solo de nuevo. Se agregó "Ver guía de nuevo" dentro del panel de Ayuda ya existente, para volver a verla a propósito sin que eso reinicie el flag.
+
+### Tests
+`tests/Feature/OnboardingTest.php` (nuevo, 3 casos: una cuenta nueva arranca sin completar, `POST onboarding.complete` marca el timestamp, un invitado no puede pegarle a esa ruta). El disparo automático y el contenido de los pasos son de frontend puro, verificados con el build. Suite completa: 474 tests OK, Pint limpio, build limpio.
+
+### "Mis indicadores" del conductor, y ayuda contextual "?" en accesos rápidos
+Dos pedidos del usuario, mirando la pantalla "Carreras" del lado conductor:
+
+- **"El reporte de conductor se siente pobre"**: el "Historial" de siempre (`Ride/Index.vue`, compartido con el cliente) era una lista plana de máximo 20 carreras, sin fecha, sin distancia, sin filtros ni nada agregado. Pidió trazabilidad completa, filtros, tarjetas de indicadores, segmentación con gráficos de barras/torta, totales, y gamificación — su meta de puntos y qué logra en la próxima medalla. Se armó una pantalla nueva, **"Mis indicadores"** (`Driver/Stats.vue`, `DriverStatsController`, ruta `rides.stats`, link desde "Carreras" solo para conductor) — `Ride/Index.vue` no se tocó, sigue igual para la gestión en vivo de ambos roles.
+  - Filtros por rango de fechas y estado; tarjetas (carreras, completadas, canceladas, ganado, distancia, calificación); una **dona** completadas-vs-canceladas (a propósito sin el filtro de estado, si no quedaría de una sola porción) y **barras** de ganancia por día — ninguna con librería (no hay ninguna instalada en el proyecto): dona con círculos SVG concéntricos y `stroke-dasharray`, barras con `<div>` de alto proporcional, mismo criterio que ya usaba `Admin/Operations.vue`. Nuevos `Components/charts/{DonutChart,BarChart}.vue`, reutilizables.
+  - Gamificación: medalla vigente + puntos + cuánto falta para la próxima (`DriverTier::nextAfter()`, nuevo, generaliza el cálculo que ya existía acoplado a "próxima medalla pública" en `Driver/Profile.vue`) con barra de progreso.
+  - Historial paginado de a 20, con los mismos filtros, ahora con fecha, origen→destino, distancia, forma de pago, estado y puntos ganados por carrera.
+- **"La guía de bienvenida siempre está en el mismo lugar"**: le gustó el recorrido guiado, pero quería que cada paso apareciera en la pantalla real de esa acción. Se evaluó y no conviene: hoy hay tres listas de accesos parcialmente distintas (grilla de escritorio, bottom sheet de móvil, tarjetas del Dashboard) e Inertia recarga la página completa en cada navegación — perdería el estado del tour. Se tomó la alternativa que el propio usuario ofreció: un ícono **"?"** en cada módulo de "Accesos rápidos" (grilla de escritorio y bottom sheet de móvil) que explica qué hace y con qué otro se relaciona, sin moverse de donde ya está. Nuevo `Components/HelpTip.vue` (mismo mecanismo de abrir/cerrar que `Dropdown.vue`, pero autocontenido — anidar un `Dropdown` dentro de otro, que es donde vive la grilla de escritorio, hubiera peleado por overlay y z-index). La guía automática de una sola vez queda intacta, tal como estaba.
+
+### Tests
+`tests/Feature/DriverStatsControllerTest.php` (nuevo, 8 casos: solo suma las carreras de ese conductor, filtro de fecha, la torta ignora el filtro de estado, medalla vigente/siguiente, sin siguiente en la medalla más alta, paginado de a 20, calificación promedio real). `tests/Unit/DriverTierTest.php` (+2: `nextAfter()` devuelve la siguiente medalla y `null` en la más alta). Suite completa: 484 tests OK, Pint limpio, build limpio.
+
+### Bug propio: las alertas de confirmación no quedaban centradas ni siempre por encima de todo
+Reportado por el usuario con una captura: la alerta ("¿Seguro que quiere sacar a este conductor de su flota?") aparecía pegada arriba de la pantalla en vez de centrada. Dos causas reales en `Components/Modal.vue` (de donde cuelgan `ConfirmDialogHost` —todas las alertas de confirmación de la app—, el panel de Ayuda y la guía de bienvenida, así que arreglarlo ahí lo arregla para todos a la vez):
+
+- **Sin centrado vertical real**: el contenido solo tenía `mb-6` (margen abajo) y centrado horizontal — nunca centrado vertical. Con la página scrolleada, la alerta quedaba donde el flujo del documento la dejara, no en el medio de lo que se ve. Ahora usa el patrón robusto de "`flex items-center` sobre un contenedor `min-h-full`" (evita el corte de contenido que da centrar así en un modal más alto que la pantalla).
+- **`z-50`, por debajo de los controles de Leaflet**: los controles propios de Leaflet llegan hasta z-index 1000 (mismo caso ya resuelto antes en `AddressAutocomplete.vue`, con un comentario explícito al respecto) — con una alerta abierta sobre una pantalla con mapa, el mapa le podía ganar. Subido a `z-[1600]`, por encima de cualquier otra capa conocida de la app.
+
+### Tests
+Cambio visual puro en un componente compartido, sin lógica de negocio de por medio — se corrió la suite completa para confirmar que nada más lo usa de una forma que dependiera de la estructura anterior. 484 tests OK, build limpio.
+
+### Bug propio: recuadro vacío en el detalle de una carrera completada
+Reportado por el usuario con una captura: un recuadro con fondo y sombra, sin nada adentro, entre el desglose de precio y "Calificar". Causa: `Ride/Show.vue` tiene una tarjeta de "acciones" (iniciar viaje, marcar completada, cancelar) cuyo contenido es todo condicional según `ride.status` — para una carrera ya **completada** ninguna de esas acciones aplica, así que la tarjeta se seguía dibujando pero sin ningún caso que le tocara mostrar algo. Ya existía un mensaje para "cancelada" ahí mismo; se agregó el que faltaba, "✅ Carrera completada [fecha]", con el mismo criterio.
+
+### Tests
+Cambio visual puro (un `<p v-if>` de más en una plantilla ya existente). Build limpio.
+
+### Bug propio: la lista de planes de conductor no decía cuál incluía Viajes VAN
+Reportado por el usuario: "Viajes VAN" avisa que hace falta "un plan superior", pero ningún plan de la lista (`/mi-plan` conductor) decía cuál lo incluye. Causa: `SubscriptionPlan.van_trips_enabled` (y `express_enabled`) ya viajaban al frontend desde siempre (`MyPlanController` manda el modelo completo) — la lista de características de cada plan en `Plan/Driver.vue` simplemente no los mostraba, a diferencia de `public_visibility`/`priority_listing`/`verified_badge`, que sí. Se agregaron los dos `<span v-if>` que faltaban, mismo criterio que los demás.
+
+### Tests
+Cambio visual puro (dato que ya llegaba del backend, solo faltaba mostrarlo). Build limpio.
+
+### Promociones de precio por tiempo limitado en los planes
+Pedido explícito del usuario: poder "regalar o promocionar" un plan por un tiempo determinado (ej. un mes gratis), que se vea "pagá tanto y ahorrá tanto — después de tal fecha pagarías el valor real", y que se oculte sola a quien ya la usó. Se confirmaron 3 puntos con el usuario antes de construir (`AskUserQuestion`): descuento como **precio fijo** (no %), un precio en **$0 se activa solo** (mismo criterio que ya existía para un plan gratis de catálogo), y la elegibilidad es **automática** (se oculta sola a quien ya la usó, sin elegir usuarios a mano).
+
+No existía nada de esto: los planes no tenían ningún campo de descuento, y una suscripción nunca guarda el precio pagado (siempre se asume el de catálogo). El precedente de "vigente entre tal fecha y tal fecha" más cercano era `AdBanner` (para publicidad externa) — se siguió el mismo patrón (`starts_at`/`ends_at` + `scopeVisible()`), sin reutilizar el modelo.
+
+- **`PlanPromotion`** (nuevo, tabla `plan_promotions`): plan, etiqueta libre, precio promocional, vigencia por fecha, activa/inactiva. `isEligibleFor($user)` se oculta sola si ese usuario ya tiene un pedido de esa promo en curso o aprobado (uno rechazado no cuenta, puede reintentar).
+- **`subscription_requests` ganó `plan_promotion_id`** (nullable): necesario para que la elegibilidad tenga algo que consultar — incluso el camino de activación gratis, que hoy no dejaba ningún registro, ahora deja uno igual (solo cuando hay promo de por medio, un plan gratis de catálogo de siempre sigue sin dejar rastro).
+- **`SubscriptionRequestController::store()`**: generaliza el atajo "$0 se activa sin comprobante" al precio EFECTIVO (de promo o de lista), revalidando siempre contra lo que hay en la base, nunca contra lo que mostró el navegador.
+- **`MyPlanController`**: cada plan del catálogo (conductor y cliente) trae `active_promotion` ya resuelta y validada.
+- **`Admin\PlanPromotionController`** + **`Admin/PlanPromotions.vue`** (nuevas, `/admin/promociones`): mismo esqueleto que el mantenimiento de banners, sin imagen. El precio promocional tiene que ser menor al de lista, si no se rechaza. El admin, al revisar un comprobante con promo de por medio, ve qué monto correspondía (`Admin/Subscriptions.vue`).
+- **`Plan/Driver.vue` y `Plan/Client.vue`**: recuadro destacado con la promo vigente ("pagá $X y ahorrá $Y... válido hasta tal fecha, después $Z/mes"), precio de lista tachado, y "Elegir" manda la promo junto con el plan.
+
+### Tests
+`tests/Feature/Plan/SubscriptionRequestFlowTest.php` (+7: promo gratis auto-activa y queda registrada, no se puede usar dos veces, promo paga crea el pedido esperando comprobante, una vencida se rechaza, una de otro plan se rechaza, el catálogo expone/oculta `active_promotion` según corresponda). `tests/Feature/Admin/AdminPlanPromotionMaintenanceTest.php` (nuevo, 5 casos: solo admin, CRUD completo, precio promocional no puede ser mayor o igual al de lista). Suite completa: 496 tests OK, Pint limpio, build limpio.
 
 - Paleta oscura + verde (sección 9.9), design tokens en `tailwind.config.js` (`bg-arka-*`, `text-arka-*`, `rounded-arka`).
 - Barra de navegación inferior en móvil con botón central flotante (FAB) que abre un **bottom sheet** (modal que sube desde abajo, no lateral ni centrado — preferencia de diseño confirmada con el usuario) con accesos rápidos — es el único lugar donde vive ese listado en móvil, no se repite en ningún otro menú.
@@ -1436,6 +1572,114 @@ El usuario reportó una contradicción real en pantalla: la lista de candidatos 
 - Logotipo tipográfico de dos colores (`Components/ApplicationLogo.vue`), sin ícono genérico.
 - Pantallas de sesión con panel de marca reutilizable (`Components/AuthBrandingPanel.vue`) en escritorio.
 - Componentes reutilizables entre las tres experiencias (cliente/conductor/futuro admin): `Components/{PrimaryButton,SecondaryButton,DangerButton,RatingStars,FleetMap,BottomSheet,Modal}.vue`.
+
+### Manuales de uso + refuerzo de Términos y Privacidad
+Pedido explícito del usuario: manuales de uso de cliente y de conductor como material base para hacer gráficos de promoción ("que no se te pase nada"), y de paso reforzar las políticas legales con la postura de que **Arka01 es únicamente un prestador de servicios de software** ("no quiero ser responsable de nadie"), más el detalle completo de privacidad de datos: dónde se alojan, por cuánto tiempo, qué se hace con ellos, si se comparten con empresas aliadas, y de qué manera se usan.
+
+- **`Manual_Cliente.md`** y **`Manual_Conductor.md`** (nuevos, raíz del proyecto): guías completas en Markdown, un capítulo por función real de la app (registro, login múltiple, onboarding, armar flota/pedir carrera/Expresos/Viajes en VAN según el rol, seguridad SOS, planes y promociones, perfil, notificaciones, PWA, sesión única) más preguntas frecuentes — recorridas contra el historial completo de este documento para no dejar ninguna función construida sin mencionar.
+- **`Legal/Terms.vue`**: sección 1 ampliada (Arka01 no es agencia de viajes ni operador turístico, no fija tarifas ni supervisa el viaje, "es un prestador de servicios de software, nada más"); sección 9 nueva "Servicios de terceros integrados" (WhatsApp/Meta, Google, OpenStreetMap/OSRM, correo — Arka01 no responde por sus fallas; las promociones de empresas aliadas son responsabilidad de cada aliado, Arka01 solo las exhibe); sección de limitación de responsabilidad (ahora 10) reforzada en el mismo sentido. Resto de secciones renumeradas (11 a 15).
+- **`Legal/Privacy.vue`**: reescrita con base legal explícita (Ley Orgánica de Protección de Datos Personales del Ecuador — LOPDP) y responsable del tratamiento identificado; sección "Con quién se comparte" ahora distingue con precisión tres grupos — la otra parte del viaje, los encargados de tratamiento reales (Meta/WhatsApp, Google, OSM/Nominatim, OSRM, proveedor de correo, cada uno con el dato mínimo que su función necesita) y las empresas aliadas de cupones/banners (que **no** reciben datos personales, solo se exhiben dentro de la app); sección nueva de transferencia internacional de datos; "Dónde se guardan" ahora incluye retención por tipo de dato (cuenta mientras esté activa, comprobantes de pago 7 años por obligación tributaria del SRI, sin rastreo histórico de ubicación fuera de un viaje en curso); sección nueva de seguridad de la información; sección de derechos ampliada a acceso/rectificación/cancelación/oposición/revocación (LOPDP) con mención de la Superintendencia de Protección de Datos Personales; sección nueva sobre menores de edad.
+- El proveedor y la región exactos de hospedaje quedan señalados en el propio texto como un dato a confirmar antes de un despliegue a producción real (todavía no hay hosting de producción decidido en el proyecto) — mismo criterio que credenciales externas: se avisa qué falta completar, no se inventa.
+- `routes/web.php`: `updatedAt` de ambas páginas legales actualizado a la fecha de esta revisión.
+
+### Tests
+Cambio de contenido/documentación, sin lógica de aplicación nueva — se verificó con `npm run build` (compila limpio, incluye `Terms-*.js` y `Privacy-*.js`). No aplica `php artisan test` ni Pint (no se tocó código PHP).
+
+### Bug propio: editar un plan (o cupón, o motivo de calificación) no se veía hasta recargar
+Reporte del usuario: en el catálogo de planes del panel admin, guardar una edición no reflejaba el cambio en la lista — había que recargar la página a mano para verlo.
+
+Causa: `Admin/Plans.vue` armaba `driverPlans`/`clientPlans` con `props.plans.filter(...)` como una **constante plana**, calculada una sola vez cuando el componente se monta. Inertia sí actualiza `props.plans` después de guardar (sin recargar la página), pero esas dos listas ya habían quedado fijadas con los datos viejos — solo una recarga completa volvía a ejecutar el `filter` con datos frescos. Se corrigió envolviendo ambas en `computed()`, para que se recalculen solos cada vez que `props.plans` cambia.
+
+Se encontró el mismo patrón (y se corrigió igual) en **`Admin/Coupons.vue`** (`clientCoupons`/`driverCoupons`) y **`Admin/RatingReasons.vue`** (`clientToDriver`/`driverToClient`) — mismo bug, mismo síntoma, no reportado todavía por el usuario en esas dos pantallas pero ya corregido de una vez. Se revisó el resto de pantallas admin en busca del mismo patrón (`props.x.filter/map/sort/slice/find` fuera de un `computed`) y no aparecieron más casos.
+
+### Tests
+`npm run build` compila limpio. No aplica `php artisan test` ni Pint (cambio de frontend, no de PHP). Verificación manual pendiente del lado del usuario: editar un plan/cupón/motivo y confirmar que el cambio se ve al instante, sin recargar.
+
+### Bug propio: el pedido de plan no reflejaba el precio de la promoción, y proyección de ganancia mensual por plan
+Reporte del usuario (con capturas): eligió el plan Plus con una promoción activa ("pague $7.00/mes y ahorre $8.00/mes"), pero la pantalla de "Pedido de plan" le pedía transferir $15.00 (el precio de lista) — sin ninguna mención de la promo, sin coherencia con lo que mostraba el catálogo un renglón más abajo.
+
+Causa: `MyPlanController::pendingRequestFor()` cargaba la relación `plan` pero nunca `planPromotion` — el pedido sí guardaba `plan_promotion_id` desde que se creó (ver la pasada de Promociones), pero el frontend no tenía cómo enterarse. `SubscriptionRequestPanel.vue` siempre mostraba `pendingRequest.plan.monthly_price`, ciego a la promo. Se corrigió el eager load y se agregó al panel el mismo recuadro visual (`🎁`, fondo lima) que ya usan `Plan/Driver.vue`/`Plan/Client.vue`, más un `effectivePrice()` que calcula el monto a transferir a partir de la promoción cuando corresponde.
+
+Segundo pedido, en el mismo mensaje: "indiquemos en cada plan las carreras estimadas y un estimado a ganar mensualmente... en el básico... 150 carreras mensuales... 450 por ser un ticket de 3 por carrera" — y que ese texto sea mantenible sin volver a tocar código.
+
+- **`subscription_plans` gana `estimated_monthly_rides`** (nullable, solo aplica a planes de conductor): editable desde `/admin/planes`. Valores iniciales sembrados en la propia migración, coherentes con la conversación sobre precios (Institucional ≈ 400 carreras/mes, comparable a un conductor de alto volumen tipo Uber) y con el ejemplo del usuario (Básico = 150): gratis 60, básico 150, plus 220, pro 300, institucional 400.
+- **`pricing_settings` gana `average_ticket_price`** (default $3.00, el mismo valor del ejemplo del usuario): editable desde `/admin/tarifas`, junto al resto de parámetros del cálculo de precio sugerido.
+- **`MyPlanController::attachEarningsProjection()`** (nuevo, solo en `driver()`): `carreras × ticket = ganancia estimada`, resuelto en el backend y adjuntado a cada plan como `earnings_projection` — igual patrón que `active_promotion`.
+- **`Plan/Driver.vue`**: nueva línea "📊 Proyección: ~150 carreras/mes ≈ $450.00/mes (ticket promedio $3.00/carrera)" bajo cada plan que tenga el dato cargado.
+- **`Admin/Plans.vue`**: campo "Carreras estimadas por mes" en los formularios de crear/editar (solo conductor), con vista previa en vivo de a cuánto se traduce en dólares mientras se escribe, y el mismo dato resumido en el renglón colapsado de cada plan.
+- **`Admin/Pricing.vue`**: campo "Ticket promedio por carrera (USD)" con la explicación de para qué se usa.
+
+### Tests
+`tests/Feature/Admin/AdminPlanMaintenanceTest.php` (+1: admin guarda `estimated_monthly_rides`). `tests/Feature/Admin/AdminPricingMaintenanceTest.php` (test existente ajustado: ahora manda y verifica también `average_ticket_price`, campo requerido nuevo). `tests/Feature/Plan/SubscriptionRequestFlowTest.php` (+2: el pedido pendiente expone la promo con la que se creó; el catálogo de conductor expone `earnings_projection` calculada). Suite completa: 499 tests OK, Pint limpio, build limpio.
+
+### Foto del cliente en la notificación de carrera entrante
+Pedido explícito del usuario (con una captura de referencia, tipo tarjeta de app de delivery): que la solicitud que le llega al conductor muestre la foto del cliente, no solo el nombre.
+
+`App\Events\RideRequested::broadcastWith()` no mandaba ningún dato de foto — se agregó `client_avatar_url` (mismo accesor `User::getAvatarUrlAttribute()` que ya usa `<UserAvatar>` en el resto de la app: login con Google trae la foto de la cuenta, y si no hay ninguna cae a `null`). `IncomingRideRequestModal.vue` ahora usa `<UserAvatar>` junto al nombre del cliente y su calificación — mismo componente reutilizable de siempre, con su respaldo automático a iniciales si no hay foto (nunca una imagen rota). No fue necesario tocar `Utils/incomingRideRequest.js`: reenvía el payload del broadcast tal cual llega.
+
+### Tests
+No aplica un test nuevo (cambio de un campo más en un payload de broadcast ya cubierto por `SequentialDispatchTest`/`DriverCoverageRangeTest`, que verifican el evento se despacha, no la forma exacta del array). Suite completa: 499 tests OK, Pint limpio, build limpio.
+
+### Ajuste: origen/destino más legibles en la notificación de carrera entrante
+Feedback del usuario sobre la pasada anterior (con captura): la foto quedó bien, pero origen y destino iban los dos pegados en una sola línea con "→" y se veían amontonados al hacer *wrap* con direcciones largas. También preguntó por qué ya no aparecía "el tiempo" — aclarado que no se tocó: el aviso de segundos para responder es condicional y solo aplica a una solicitud ofrecida a toda la flota (despacho secuencial), no a una dirigida a un conductor puntual como la de su captura — comportamiento de antes de esta pasada, no una regresión.
+
+`IncomingRideRequestModal.vue`: origen y destino ahora van cada uno en su propia fila (sector en negrita, dirección completa debajo en gris), conectados por una línea vertical con un punto verde (origen) y uno rojo (destino) — mismo lenguaje de color que ya usa el mapa para distinguir los dos puntos.
+
+### Tests
+`npm run build` compila limpio, Pint limpio (solo cambio visual de plantilla, sin lógica nueva).
+
+### Diagnóstico: un conductor con el switch prendido aparecía "Desconectado" para su cliente
+Reporte del usuario (con dos capturas: el Inicio de Luis mostrando "● Disponible", y el Inicio de Gabriela mostrando a Luis "Desconectado" en su flota). Se investigó con datos reales del entorno local (no se pudo reproducir a ciegas, así que se consultó la base): `driver_profiles` de Luis tenía `is_available = true` pero `location_updated_at` de hacía 12 minutos — más de los 2 minutos que exige `DriverProfile::isStale()`, y sin ventana de WhatsApp abierta como respaldo. No es un bug de sincronización: es el comportamiento ya existente de `DriverProfile::isReachable()` (agregado en una pasada anterior para que un conductor sin ping de ubicación reciente no siga recibiendo carreras como si estuviera activo) funcionando como se diseñó — pero el propio conductor no tenía forma de enterarse de que, aunque él se ve "Disponible", ya dejó de ser alcanzable para sus clientes.
+
+Causa de fondo: `is_available` (la intención — prendió el switch) y `is_reachable` (además, un ping de ubicación reciente o WhatsApp abierto) son dos cosas distintas en el modelo, pero el Inicio del conductor solo mostraba la primera.
+
+- **`DashboardController::index()`**: `driverStats` suma `is_reachable`, mismo cálculo (`DriverProfile::isReachable()`) que ya usa el roster de "Mi flota" del cliente.
+- **`Dashboard.vue`** (vista de conductor): si está disponible pero no alcanzable, un aviso amarillo bajo el badge "● Disponible": "Sin ubicación reciente — sus clientes pueden seguir viéndolo desconectado. Revise que el navegador tenga permiso de ubicación y que la app siga abierta."
+
+No se tocó el criterio de `isReachable()` en sí (sigue siendo la fuente de verdad para el despacho de carreras) — este ajuste es solo de visibilidad, para que el conductor entienda su propio estado real en vez de confiar ciegamente en un switch que no refleja si sigue mandando ubicación.
+
+### Tests
+`tests/Feature/DashboardTest.php` (+2: `driverStats.is_reachable` en `false` con ubicación vieja, en `true` con ubicación fresca). Suite completa: 501 tests OK, Pint limpio, build limpio.
+
+### El umbral de inactividad del conductor ahora se ajusta desde el panel admin
+Pregunta directa del usuario, en el mismo hilo del diagnóstico de Luis: "¿ese tiempo de inactividad lo puedo subir desde el panel de administrador?". No se podía — `DriverProfile::STALE_AFTER_MINUTES` era una constante fija en el código (2 minutos), usada tanto por `isStale()`/`isReachable()` (tiempo real, en toda la app) como por el barrido automático `drivers:sweep-stale-availability`.
+
+- **`pricing_settings` gana `driver_stale_after_minutes`** (default 2, mismo valor de siempre — no cambia nada para quien no lo toque), en la misma tabla singleton que ya aloja `minimum_fare`/`average_ticket_price`/recargo nocturno.
+- **`DriverProfile`**: la constante `STALE_AFTER_MINUTES` se reemplaza por `staleAfterMinutes(): int` (lee `PricingSetting::current()`), única fuente de verdad para `isStale()`.
+- **`SweepStaleDriverAvailability`**: usa el mismo `staleAfterMinutes()` en vez de la constante — el barrido en sí sigue corriendo cada 2 minutos (frecuencia del cron, no el umbral), eso no cambió.
+- **`Admin/Pricing.vue`**: campo nuevo "Minutos sin ubicación antes de marcar a un conductor desconectado", con la aclaración de que el barrido automático sigue corriendo cada 2 min sin importar el valor (si lo bajan por debajo de eso, ESE comando puntual puede tardar hasta 2 min en aplicarlo — el resto de la app lo aplica al instante).
+
+### Tests
+`tests/Feature/Admin/AdminPricingMaintenanceTest.php` (+1: un umbral de 10 min hace que un conductor con 7 min sin ping ya no cuente como stale). Suite completa: 502 tests OK, Pint limpio, build limpio.
+
+### Ajuste: el link a Google Maps no arrancaba la navegación
+Reporte del usuario (con captura): "Ir a buscar al cliente"/"Llevar al destino" (Ride/Show.vue, sección 8/9.3) abrían Google Maps, pero solo en la pantalla de elegir modo de viaje y previsualizar la ruta — el conductor tenía que buscar el botón para arrancar la navegación él mismo, en vez de arrancar manejando de una.
+
+El link armaba la URL a mano con un solo parámetro (`destination`). Se agregó `travelmode=driving` (para que no arranque en otro modo — a pie, transporte público, como se veía en la captura) y `dir_action=navigate`, parámetro documentado de la API de URLs de Google Maps que hace que la app (en el celular) arranque derecho en navegación turn-by-turn en vez de la pantalla de previsualización. El origen se sigue dejando sin especificar a propósito — Google Maps lo resuelve solo con el GPS del dispositivo, que es lo que se necesita (el conductor se está moviendo).
+
+### Tests
+Cambio de una URL armada en el frontend, sin lógica de backend — se verificó con `npm run build` (compila limpio). No aplica `php artisan test` ni Pint.
+
+### Primer despliegue a Google Cloud Platform (piloto económico)
+Pedido explícito del usuario: ya tiene cuenta, proyecto y facturación de GCP con $300 de crédito por 86 días, y pidió ayuda para el primer despliegue "económico y eficiente para comenzar". Se armó un plan (revisado con el usuario antes de tocar nada, con 3 decisiones confirmadas por `AskUserQuestion`: región `us-central1` — la más barata, priorizando costo sobre latencia a Ecuador —, VM `e2-small` de 2GB en vez de `e2-micro`, y despliegue por `git pull` porque el repo ya está en GitHub/GitLab).
+
+**Arquitectura elegida: una sola VM Compute Engine ("todo en una caja")**, no Cloud Run/serverless — la app usa discos de archivos LOCALES de Laravel (licencias de conductor, comprobantes de pago en el disco `local` privado; fotos de vehículo/avatares en `public`), no S3/GCS. Migrar eso a Cloud Storage habría exigido reescribir el filesystem de la app + sumar Cloud SQL + Memorystore — mucho más caro y complejo para arrancar un piloto. Una VM con disco persistente no exige tocar una sola línea de código de la app.
+
+Importante: yo (Claude Code) no tengo `gcloud` ni credenciales de la cuenta de GCP del usuario en este entorno — no aprovisioné nada yo mismo. Armé todos los archivos/scripts, y el usuario corre los comandos reales desde Google Cloud Shell (cero instalación) y por SSH en el servidor. Tampoco corrí ningún comando `git` — los `git clone`/`git pull` de los scripts los ejecuta él en el servidor.
+
+Archivos nuevos en `deploy/` (los 2 `.conf` de Supervisor ya existían de una pasada anterior y se reutilizan sin cambios):
+- **`gcloud-provision.sh`**: crea la VM (`e2-small`, Ubuntu 22.04 LTS, `us-central1`, disco `pd-balanced` 30GB), IP estática, firewall (80/443 al mundo; SSH restringido al rango de IAP en vez de abierto), bucket Nearline para backups, y snapshot diario automático del disco completo.
+- **`bootstrap-server.sh`**: instala Nginx, PHP 8.3-FPM + extensiones (Ubuntu 22.04 trae PHP 8.1 por defecto, Laravel 12 exige `^8.2` — se suma el PPA `ondrej/php`), MySQL (Ubuntu sí trae MySQL real; en Debian 12 el paquete `mysql-server` en realidad instala MariaDB, por eso se eligió Ubuntu), Composer, Node 20 (solo para compilar assets — `public/build` está en `.gitignore`), Supervisor, Certbot. Ajusta `php.ini`, hace tuning de MySQL (`innodb_buffer_pool_size=256M`, para no quedarse sin RAM junto a PHP-FPM+Reverb en 2GB) y crea un swapfile de 1GB de respaldo.
+- **`nginx-arka01.conf`**: server block para Laravel + un `location` que reversa-proxea Reverb (`/app/...` WebSocket del cliente, `/apps/...` API que el propio backend usa para publicar eventos) a `127.0.0.1:8080` — el puerto real de Reverb nunca queda expuesto directo, todo pasa por el 443 de Nginx/Certbot.
+- **`.env.production.example`**: plantilla lista con lo que cambia respecto a `.env.example` (`APP_ENV=production`, `APP_DEBUG=false`, `BROADCAST_CONNECTION=reverb`, `SESSION_SECURE_COOKIE=true`, dominio real, `REVERB_HOST/PORT/SCHEME` públicos vs. `REVERB_SERVER_HOST/PORT` internos), y comentarios `[COMPLETAR]` marcando cada secreto real que hace falta generar.
+- **`deploy.sh`**: script corto para actualizaciones futuras (`git pull` → `composer install` → `npm run build` → `migrate --force` → cachear → recargar PHP-FPM/Supervisor).
+- **`backup-mysql.sh`**: `mysqldump` diario comprimido a Cloud Storage, complementa el snapshot de disco (más rápido de restaurar solo-la-base).
+- **`README.md`**: reescrito como guía única, paso a paso y en orden, de "cuenta de GCP recién creada" a "app funcionando en `https://arka01.com`", con la sección de verificación y la checklist de variables opcionales vs. recomendables antes de invitar usuarios reales.
+
+Costo estimado: ~$18-22/mes (VM + disco + snapshots + backups + egress) — en los 86 días del crédito, ronda los $52-63 de los $300, dejando bastante margen.
+
+### Tests
+No aplica `php artisan test`/Pint/`npm run build` (son scripts de infraestructura, no código de la app) — se verificó la sintaxis de los 4 scripts `.sh` con `bash -n` (sin errores). La verificación real (que el servidor levante, que Reverb conecte, que una carrera de prueba funcione de punta a punta) queda documentada paso a paso en `deploy/README.md` para que la corra el usuario, ya que no hay una VM real disponible en este entorno para probarlo de antemano.
 
 ---
 

@@ -65,6 +65,15 @@ class DashboardController extends Controller
                 'rating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
                 'review_count' => $user->reviewsReceived()->count(),
                 'is_available' => (bool) $user->driverProfile?->is_available,
+                // Reporte del usuario ("Luis aparece desconectado si está en
+                // línea"): `is_available` es la intención del conductor
+                // (prendió el switch), pero el resto de la app (roster de
+                // "Mi flota" del cliente, candidatos al despacho) exige
+                // además un ping de ubicación reciente — ver
+                // DriverProfile::isReachable(). Sin este dato, el propio
+                // conductor no tenía forma de saber que, aunque él se ve
+                // "Disponible", sus clientes ya lo ven desconectado.
+                'is_reachable' => (bool) $user->driverProfile?->isReachable($user->hasActiveWhatsAppSession()),
                 // Se reportó que invitar a un conductor a la flota no le
                 // avisaba nada en su Inicio (solo se veía si por casualidad
                 // ya estaba parado en "Mis clientes de confianza") — con este

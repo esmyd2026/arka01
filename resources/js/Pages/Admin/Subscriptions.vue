@@ -155,6 +155,13 @@ function clientPlanOf(user) {
                             <p class="text-sm text-arka-text-muted mt-1">
                                 Plan {{ req.plan.name }} · ${{ req.plan.monthly_price }}/mes
                             </p>
+                            <!-- Promoción (pedido explícito del usuario): si el pedido viene
+                                 de una promo, el monto a revisar en el comprobante es el
+                                 promocional, no el de lista — sin esto no había forma de
+                                 saberlo desde acá. -->
+                            <p v-if="req.plan_promotion" class="text-sm text-arka-lime mt-0.5">
+                                🎁 Promoción "{{ req.plan_promotion.label }}" — correspondía ${{ req.plan_promotion.promo_price }}/mes
+                            </p>
                             <button
                                 v-if="req.payment_proof_url"
                                 type="button"

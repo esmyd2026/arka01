@@ -16,6 +16,10 @@ class SubscriptionPlan extends Model
         'name',
         'monthly_price',
         'max_clients',
+        // Proyección informativa de carreras mensuales (pedido explícito del
+        // usuario): junto con PricingSetting::average_ticket_price arma la
+        // ganancia estimada que se muestra en "Mi plan" de conductor.
+        'estimated_monthly_rides',
         'public_visibility',
         'priority_listing',
         'verified_badge',
@@ -34,6 +38,7 @@ class SubscriptionPlan extends Model
 
     protected $casts = [
         'monthly_price' => 'decimal:2',
+        'estimated_monthly_rides' => 'integer',
         'public_visibility' => 'boolean',
         'priority_listing' => 'boolean',
         'verified_badge' => 'boolean',

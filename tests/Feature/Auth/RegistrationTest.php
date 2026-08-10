@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Mail\WelcomeMail;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class RegistrationTest extends TestCase
@@ -83,5 +85,28 @@ class RegistrationTest extends TestCase
         $this->assertGreaterThanOrEqual(500, $user->member_code);
         $this->assertNotNull($user->phone_verified_at);
         $this->assertSame('+593991234567', $user->phone);
+    }
+
+    /**
+     * Pedido explícito del usuario ("existe alguna plantilla que se envía al
+     * registro"): no existía ninguna — ver App\Mail\WelcomeMail.
+     */
+    public function test_registering_sends_a_welcome_email(): void
+    {
+        Mail::fake();
+
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Juan Pérez',
+            'email' => 'juan@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $user = User::where('email', 'juan@example.com')->firstOrFail();
+
+        Mail::assertSent(WelcomeMail::class, fn ($mail) => $mail->hasTo($user->email) && $mail->user->is($user));
     }
 }

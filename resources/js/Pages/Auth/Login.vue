@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue';
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -90,10 +89,6 @@ async function confirmTakeover() {
 <template>
     <GuestLayout>
         <Head title="Iniciar sesión" />
-
-        <div class="flex justify-center mb-4">
-            <ApplicationLogo size="text-2xl" />
-        </div>
 
         <div v-if="status" class="mb-4 font-medium text-sm text-arka-primary-bright">
             {{ status }}

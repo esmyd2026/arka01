@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Events\DriverLocationUpdated;
 use App\Http\Controllers\Controller;
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Review;
 use App\Models\Ride;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,7 +23,7 @@ use Inertia\Response;
  */
 class DriverController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         // "Disponibles ahora" (pedido explícito del usuario: "que cuando no
         // estén disponibles desaparezcan") — el frontend vuelve a pedir esto
@@ -57,32 +60,70 @@ class DriverController extends Controller
         })->values();
 
         // Roster completo (pedido explícito del usuario: bloquear/deshabilitar
-        // también a uno que ya está desconectado) — con lo que hace falta
-        // para decidir: rechazos, carreras hechas, si está suspendido.
-        $allDrivers = DriverProfile::query()
-            ->with('user')
+        // también a uno que ya está desconectado, y ahora también paginado +
+        // filtrado por nombre/correo, ciudad y estado — antes traía los ~90
+        // conductores de una sola vez) — con lo que hace falta para decidir:
+        // rechazos, carreras hechas, si está suspendido, ciudad, fecha de
+        // registro y última actividad real.
+        $query = DriverProfile::query()
+            ->with(['user.city'])
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $term = $request->string('q');
+                $query->whereHas('user', fn ($query) => $query->where('name', 'like', "%{$term}%")
+                    ->orWhere('email', 'like', "%{$term}%"));
+            })
+            ->when($request->filled('city_id'), fn ($query) => $query->whereHas('user', fn ($query) => $query->where('city_id', $request->integer('city_id'))))
+            ->when($request->filled('status'), function ($query) use ($request) {
+                match ($request->string('status')->toString()) {
+                    'available' => $query->where('is_available', true)->whereNull('suspended_at'),
+                    'suspended' => $query->whereNotNull('suspended_at'),
+                    'offline' => $query->where('is_available', false)->whereNull('suspended_at'),
+                    default => null,
+                };
+            })
             ->orderByDesc('is_available')
-            ->orderBy('user_id')
-            ->get()
-            ->map(fn (DriverProfile $profile) => [
-                'id' => $profile->id,
-                'user_id' => $profile->user_id,
-                'name' => $profile->user->name,
-                'email' => $profile->user->email,
-                'is_available' => $profile->is_available,
-                'is_suspended' => $profile->isSuspended(),
-                'verification_status' => $profile->verification_status,
-                'rides_rejected_count' => $profile->rides_rejected_count,
-                'completed_rides_count' => Ride::query()
-                    ->where('driver_user_id', $profile->user_id)
-                    ->where('status', 'completed')
-                    ->count(),
-            ])
-            ->values();
+            ->orderBy('user_id');
+
+        $paginated = $query->paginate(20)->withQueryString();
+
+        // Carreras completadas y última actividad real (sesiones — pedido
+        // explícito del usuario: "fecha de registro y última actividad"), por
+        // lote en vez de una consulta por fila (acá son 20 por página, no ~90).
+        $driverIds = collect($paginated->items())->pluck('user_id');
+
+        $completedCounts = Ride::query()
+            ->whereIn('driver_user_id', $driverIds)
+            ->where('status', 'completed')
+            ->selectRaw('driver_user_id, count(*) as completed_count')
+            ->groupBy('driver_user_id')
+            ->pluck('completed_count', 'driver_user_id');
+
+        $lastActivity = DB::table('sessions')
+            ->whereIn('user_id', $driverIds)
+            ->selectRaw('user_id, max(last_activity) as last_activity')
+            ->groupBy('user_id')
+            ->pluck('last_activity', 'user_id');
+
+        $paginated->through(fn (DriverProfile $profile) => [
+            'id' => $profile->id,
+            'user_id' => $profile->user_id,
+            'name' => $profile->user->name,
+            'email' => $profile->user->email,
+            'city' => $profile->user->city?->name,
+            'registered_at' => $profile->user->created_at->toIso8601String(),
+            'last_active_at' => $lastActivity->has($profile->user_id) ? now()->setTimestamp($lastActivity[$profile->user_id])->toIso8601String() : null,
+            'is_available' => $profile->is_available,
+            'is_suspended' => $profile->isSuspended(),
+            'verification_status' => $profile->verification_status,
+            'rides_rejected_count' => $profile->rides_rejected_count,
+            'completed_rides_count' => $completedCounts->get($profile->user_id, 0),
+        ]);
 
         return Inertia::render('Admin/Drivers', [
             'availableDrivers' => $availableDrivers,
-            'allDrivers' => $allDrivers,
+            'allDrivers' => $paginated,
+            'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'filters' => $request->only(['q', 'city_id', 'status']),
         ]);
     }
 

@@ -31,6 +31,24 @@ const props = defineProps({
 const driverLat = ref(props.ride.driver.driver_profile?.current_lat ?? null);
 const driverLng = ref(props.ride.driver.driver_profile?.current_lng ?? null);
 
+// Pedido explícito del usuario: el link solo abría la pantalla de Google
+// Maps para elegir modo de viaje y ver la ruta, sin arrancar la navegación —
+// el conductor tenía que buscar el botón para iniciar él mismo. Con
+// `travelmode=driving` evita que arranque en otro modo (a pie, transporte
+// público), y `dir_action=navigate` hace que la app de Google Maps (en el
+// celular) arranque derecho en navegación turn-by-turn, con el origen
+// puesto solo en la ubicación actual del conductor (sin parámetro
+// `origin`, Google Maps la resuelve solo con el GPS del dispositivo).
+function googleNavigateUrl(lat, lng) {
+    const params = new URLSearchParams({
+        api: '1',
+        destination: `${lat},${lng}`,
+        travelmode: 'driving',
+        dir_action: 'navigate',
+    });
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 let fleetChannel = null;
 
 onMounted(() => {
@@ -244,7 +262,7 @@ function submitReview() {
                          mientras el viaje sigue en curso. -->
                     <div v-if="isDriver && ride.status === 'in_progress'" class="flex flex-wrap gap-2">
                         <a
-                            :href="`https://www.google.com/maps/dir/?api=1&destination=${ride.origin_lat},${ride.origin_lng}`"
+                            :href="googleNavigateUrl(ride.origin_lat, ride.origin_lng)"
                             target="_blank"
                             rel="noopener"
                             class="px-4 py-2 rounded-arka bg-arka-base text-arka-text text-sm font-medium hover:bg-arka-base/70 transition"
@@ -252,7 +270,7 @@ function submitReview() {
                             📍 Ir a buscar al cliente
                         </a>
                         <a
-                            :href="`https://www.google.com/maps/dir/?api=1&destination=${ride.destination_lat},${ride.destination_lng}`"
+                            :href="googleNavigateUrl(ride.destination_lat, ride.destination_lng)"
                             target="_blank"
                             rel="noopener"
                             class="px-4 py-2 rounded-arka bg-arka-base text-arka-text text-sm font-medium hover:bg-arka-base/70 transition"
@@ -340,6 +358,15 @@ function submitReview() {
 
                     <p v-if="ride.status === 'cancelled'" class="text-sm text-arka-danger">
                         Esta carrera fue cancelada{{ ride.cancelled_at ? ` el ${new Date(ride.cancelled_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}` : '' }}.
+                    </p>
+
+                    <!-- Bug reportado por el usuario (captura: recuadro vacío en el
+                         detalle): esta tarjeta de "acciones" no tenía ningún caso
+                         para una carrera ya completada — ninguna de las acciones de
+                         arriba aplica, así que quedaba con el fondo/sombra pero sin
+                         nada adentro. Mismo criterio que el mensaje de cancelada. -->
+                    <p v-if="ride.status === 'completed'" class="text-sm text-arka-primary-bright">
+                        ✅ Carrera completada{{ ride.completed_at ? ` el ${new Date(ride.completed_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}` : '' }}.
                     </p>
                 </div>
 

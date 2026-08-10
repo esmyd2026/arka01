@@ -21,10 +21,20 @@ defineProps({
                 Arka01 es <strong>únicamente una plataforma de tecnología</strong> que pone en contacto a clientes y
                 conductores independientes — presta un servicio de intermediación por software, no un servicio de
                 transporte. Arka01 <strong>no es una empresa de transporte, no es transportista, no es empleador de
-                ningún conductor, y no es parte del contrato de transporte</strong> que se pacta directamente entre
-                cliente y conductor en cada viaje. Cada conductor es un tercero independiente, responsable de contar
-                con licencia de conducir vigente, matrícula, SOAT u otro seguro vehicular vigente, y todos los
-                permisos que exige la normativa ecuatoriana de tránsito para transportar pasajeros.
+                ningún conductor, no es agencia de viajes ni operador turístico, y no es parte del contrato de
+                transporte</strong> que se pacta directamente entre cliente y conductor en cada viaje (incluidos los
+                Expresos y los Viajes en VAN). Cada conductor es un tercero independiente, responsable de contar con
+                licencia de conducir vigente, matrícula, SOAT u otro seguro vehicular vigente, y todos los permisos
+                que exige la normativa ecuatoriana de tránsito para transportar pasajeros.
+            </p>
+            <p>
+                Arka01 <strong>no fija tarifas obligatorias, no organiza ni ejecuta ningún viaje, no despacha
+                vehículos ni conductores, y no supervisa ni garantiza</strong> la disponibilidad, puntualidad,
+                calidad, seguridad o legalidad del transporte que un conductor le brinda a un cliente. El precio que
+                muestra la app es siempre un valor de referencia; el trayecto, el vehículo, el estado de este y la
+                forma de conducir dependen exclusivamente del conductor. En síntesis: Arka01 <strong>es un prestador
+                de servicios de software, nada más</strong> — no responde por lo que ocurra durante un viaje, ver
+                sección 9.
             </p>
         </section>
 
@@ -102,17 +112,35 @@ defineProps({
         </section>
 
         <section>
-            <h2>9. Limitación de responsabilidad</h2>
+            <h2>9. Servicios de terceros integrados</h2>
             <p>
-                Arka01 presta exclusivamente un servicio de software de intermediación. <strong>En la máxima medida
-                permitida por la ley ecuatoriana, Arka01 no es responsable por</strong>: accidentes de tránsito;
-                daños personales, materiales o morales; robos o pérdida de objetos; conducta indebida de cualquiera
-                de las partes (cliente o conductor); incumplimientos del contrato de transporte pactado entre
-                ambos; retrasos, cancelaciones o la calidad del servicio de transporte brindado; ni por disputas de
-                pago entre cliente y conductor sobre el precio del viaje. El uso de la plataforma para contratar o
-                brindar transporte se hace bajo el propio riesgo de cada usuario. Recomendamos siempre revisar la
-                calificación e insignia de verificación antes de viajar, y usar el botón SOS y los contactos de
-                confianza (sección 8 de la app) ante cualquier emergencia.
+                Para funcionar, Arka01 se apoya en servicios de terceros ajenos a nuestro control: la API de
+                WhatsApp Business de Meta (verificación y avisos), servicios de mapas y ubicación de Google y de
+                OpenStreetMap (buscar direcciones, trazar rutas), y proveedores de correo e infraestructura en la
+                nube. Estos servicios tienen sus propios términos y pueden tener interrupciones, demoras o cambios
+                fuera de nuestro control. Arka01 <strong>no es responsable por fallas, indisponibilidad o cambios en
+                estos servicios de terceros</strong>, aunque hará lo razonable para avisar y mitigar el impacto. Las
+                promociones o beneficios de empresas aliadas que se muestran dentro de la app (sección de cupones y
+                banners) son responsabilidad exclusiva de cada empresa aliada — Arka01 solo las exhibe, no las
+                administra, garantiza ni participa en la relación comercial que resulte de ellas.
+            </p>
+        </section>
+
+        <section>
+            <h2>10. Limitación de responsabilidad</h2>
+            <p>
+                Arka01 presta exclusivamente un servicio de software de intermediación —
+                <strong>es un prestador de servicios de software y nada más</strong>: no es responsable por
+                terceros, ni por sus actos ni por sus omisiones. <strong>En la máxima medida permitida por la ley
+                ecuatoriana, Arka01 no es responsable por</strong>: accidentes de tránsito; daños personales,
+                materiales o morales; robos o pérdida de objetos; conducta indebida de cualquiera de las partes
+                (cliente o conductor); incumplimientos del contrato de transporte pactado entre ambos; retrasos,
+                cancelaciones o la calidad del servicio de transporte brindado (incluidos Expresos y Viajes en VAN);
+                disputas de pago entre cliente y conductor sobre el precio del viaje; ni por el contenido, la
+                veracidad o el resultado de promociones de empresas aliadas mostradas en la app. El uso de la
+                plataforma para contratar o brindar transporte se hace bajo el propio riesgo de cada usuario.
+                Recomendamos siempre revisar la calificación e insignia de verificación antes de viajar, y usar el
+                botón SOS y los contactos de confianza (sección 8 de la app) ante cualquier emergencia.
             </p>
             <p>
                 En los casos donde, pese a lo anterior, corresponda alguna responsabilidad de Arka01 conforme a la
@@ -123,7 +151,7 @@ defineProps({
         </section>
 
         <section>
-            <h2>10. Indemnidad</h2>
+            <h2>11. Indemnidad</h2>
             <p>
                 Se compromete a mantener indemne a Arka01, sus administradores y colaboradores frente a cualquier
                 reclamo, multa o gasto (incluyendo honorarios legales razonables) que surja de: su incumplimiento de
@@ -133,7 +161,7 @@ defineProps({
         </section>
 
         <section>
-            <h2>11. Uso aceptable y suspensión de cuentas</h2>
+            <h2>12. Uso aceptable y suspensión de cuentas</h2>
             <ul>
                 <li>No está permitido usar Arka01 para actividades ilegales, acoso, fraude, o para poner en riesgo a otros usuarios.</li>
                 <li>Nos reservamos el derecho de suspender o eliminar una cuenta que incumpla estos términos, que reciba reportes fundados de mal comportamiento, o cuya documentación resulte falsa.</li>
@@ -142,7 +170,7 @@ defineProps({
         </section>
 
         <section>
-            <h2>12. Ley aplicable</h2>
+            <h2>13. Ley aplicable</h2>
             <p>
                 Estos términos se rigen por las leyes de la República del Ecuador. Cualquier controversia derivada
                 del uso de la plataforma se someterá a los jueces y tribunales competentes del Ecuador, sin
@@ -152,7 +180,7 @@ defineProps({
         </section>
 
         <section>
-            <h2>13. Cambios a estos términos</h2>
+            <h2>14. Cambios a estos términos</h2>
             <p>
                 Podemos actualizar estos términos a medida que la app crece. Si el cambio es significativo, se lo
                 vamos a avisar dentro de la app.
@@ -160,7 +188,7 @@ defineProps({
         </section>
 
         <section>
-            <h2>14. Contacto</h2>
+            <h2>15. Contacto</h2>
             <p>
                 ¿Dudas sobre estos términos?
                 <a v-if="contactEmail" :href="`mailto:${contactEmail}`">Escríbanos a {{ contactEmail }}</a>

@@ -15,6 +15,8 @@ const form = useForm({
     night_starts_at: props.settings.night_starts_at,
     night_ends_at: props.settings.night_ends_at,
     minimum_fare: props.settings.minimum_fare,
+    average_ticket_price: props.settings.average_ticket_price,
+    driver_stale_after_minutes: props.settings.driver_stale_after_minutes,
 });
 
 const submit = () => {
@@ -54,6 +56,23 @@ const submit = () => {
                         </div>
 
                         <div>
+                            <InputLabel value="Ticket promedio por carrera (USD)" />
+                            <TextInput
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1000"
+                                class="mt-1 block w-full"
+                                v-model="form.average_ticket_price"
+                            />
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                Junto con las carreras estimadas de cada plan (editable en /admin/planes), arma la
+                                proyección de ganancia mensual que ve el conductor al elegir su plan.
+                            </p>
+                            <InputError class="mt-1" :message="form.errors.average_ticket_price" />
+                        </div>
+
+                        <div>
                             <InputLabel value="Recargo nocturno (%)" />
                             <TextInput
                                 type="number"
@@ -80,6 +99,24 @@ const submit = () => {
                         <p class="text-xs text-arka-text-muted">
                             Puede cruzar la medianoche: por ejemplo, empieza 20 y termina 6 cubre de 8pm a 6am.
                         </p>
+
+                        <div class="pt-2 border-t border-arka-text-muted/10">
+                            <InputLabel value="Minutos sin ubicación antes de marcar a un conductor desconectado" />
+                            <TextInput
+                                type="number"
+                                min="1"
+                                max="60"
+                                class="mt-1 block w-full"
+                                v-model="form.driver_stale_after_minutes"
+                            />
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                Un conductor "disponible" sin un ping de ubicación más reciente que esto se muestra
+                                desconectado (roster de sus clientes, despacho de carreras) — salvo que siga
+                                alcanzable por WhatsApp. El barrido automático que lo desconecta de verdad en la base
+                                sigue corriendo cada 2 min sin importar este valor.
+                            </p>
+                            <InputError class="mt-1" :message="form.errors.driver_stale_after_minutes" />
+                        </div>
 
                         <div class="flex items-center gap-4">
                             <PrimaryButton :disabled="form.processing">Guardar</PrimaryButton>

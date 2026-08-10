@@ -87,6 +87,7 @@ class User extends Authenticatable
         'phone_verification_expires_at' => 'datetime',
         'session_takeover_expires_at' => 'datetime',
         'locked_at' => 'datetime',
+        'onboarding_completed_at' => 'datetime',
         'password' => 'hashed',
         'is_admin' => 'boolean',
     ];

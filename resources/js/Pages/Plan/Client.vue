@@ -16,7 +16,14 @@ const props = defineProps({
 });
 
 function selectPlan(plan) {
-    router.post(route('subscription-requests.store'), { subscription_plan_id: plan.id });
+    router.post(route('subscription-requests.store'), {
+        subscription_plan_id: plan.id,
+        plan_promotion_id: plan.active_promotion?.id ?? null,
+    });
+}
+
+function formatDate(value) {
+    return new Date(value).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // Mismo criterio que App\Services\SubscriptionPlanEligibility (backend): no
@@ -69,7 +76,7 @@ function fitsCurrentUsage(plan) {
                     <div
                         v-for="plan in plans"
                         :key="plan.code"
-                        class="p-4 sm:p-6 flex items-center justify-between gap-4"
+                        class="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                         :class="{ 'bg-arka-primary/5': plan.code === currentPlan.plan_code }"
                     >
                         <div>
@@ -81,9 +88,27 @@ function fitsCurrentUsage(plan) {
                                 Hasta {{ plan.max_fleets }} flota{{ plan.max_fleets === 1 ? '' : 's' }} ·
                                 {{ plan.max_drivers_per_fleet }} conductores por flota
                             </p>
+
+                            <!-- Promoción vigente (pedido explícito del usuario: "pagá tanto
+                                 y ahorrá tanto... después de tal fecha pagarías el valor
+                                 real") — ya viene resuelta y validada desde el backend. -->
+                            <div v-if="plan.active_promotion" class="mt-2 p-2 rounded-arka bg-arka-lime/10 border border-arka-lime/30 max-w-sm">
+                                <p class="text-xs text-arka-lime font-medium">
+                                    🎁 {{ plan.active_promotion.label }}: pague ${{ plan.active_promotion.promo_price.toFixed(2) }}/mes y ahorre
+                                    ${{ plan.active_promotion.savings.toFixed(2) }}/mes.
+                                </p>
+                                <p v-if="plan.active_promotion.ends_at" class="text-xs text-arka-text-muted mt-0.5">
+                                    Válido hasta {{ formatDate(plan.active_promotion.ends_at) }} — después pagaría ${{ plan.monthly_price }}/mes.
+                                </p>
+                            </div>
                         </div>
                         <div class="text-right shrink-0">
-                            <p class="text-arka-text font-semibold">${{ plan.monthly_price }}/mes</p>
+                            <p class="text-arka-text font-semibold">
+                                <span v-if="plan.active_promotion" class="text-xs text-arka-text-muted line-through mr-1">
+                                    ${{ plan.monthly_price }}
+                                </span>
+                                ${{ plan.active_promotion ? plan.active_promotion.promo_price.toFixed(2) : plan.monthly_price }}/mes
+                            </p>
                             <PrimaryButton
                                 v-if="plan.code !== currentPlan.plan_code && !pendingRequest && fitsCurrentUsage(plan)"
                                 class="mt-1"

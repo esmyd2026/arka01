@@ -169,27 +169,32 @@ class DriverProfile extends Model
 
     /**
      * Minutos sin ping de ubicación antes de considerar que un conductor
-     * "disponible" ya no está de verdad — mismo valor que usa
-     * App\Console\Commands\SweepStaleDriverAvailability para desconectarlo
-     * del todo; acá vive como única fuente de verdad para que ese comando Y
-     * el filtrado de candidatos al pedir una carrera (App\Services\RideDispatchCandidates,
-     * RideRequestController) usen siempre el mismo número.
+     * "disponible" ya no está de verdad — editable desde /admin/tarifas
+     * (pedido explícito del usuario, antes era una constante fija en el
+     * código). Mismo valor que usa App\Console\Commands\SweepStaleDriverAvailability
+     * para desconectarlo del todo; acá vive como única fuente de verdad para
+     * que ese comando Y el filtrado de candidatos al pedir una carrera
+     * (App\Services\RideDispatchCandidates, RideRequestController) usen
+     * siempre el mismo número.
      */
-    public const STALE_AFTER_MINUTES = 2;
+    public static function staleAfterMinutes(): int
+    {
+        return (int) PricingSetting::current()->driver_stale_after_minutes;
+    }
 
     /**
      * Bug reportado por el usuario: si el conductor pasa la app a segundo
      * plano, cierra el navegador o pierde señal, `is_available` se queda en
-     * `true` hasta que corre el barrido cada 2 minutos — mientras tanto,
-     * seguía pudiendo recibir/aceptar solicitudes como si estuviera activo.
-     * Este método deja que cualquier punto que arme la lista de candidatos
-     * (o que muestre "disponible" en pantalla) descarte a un conductor sin
-     * ping reciente de inmediato, sin esperar a ese barrido.
+     * `true` hasta que corre el barrido periódico — mientras tanto, seguía
+     * pudiendo recibir/aceptar solicitudes como si estuviera activo. Este
+     * método deja que cualquier punto que arme la lista de candidatos (o que
+     * muestre "disponible" en pantalla) descarte a un conductor sin ping
+     * reciente de inmediato, sin esperar a ese barrido.
      */
     public function isStale(): bool
     {
         return $this->location_updated_at === null
-            || $this->location_updated_at->lt(now()->subMinutes(self::STALE_AFTER_MINUTES));
+            || $this->location_updated_at->lt(now()->subMinutes(self::staleAfterMinutes()));
     }
 
     /**

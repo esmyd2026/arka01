@@ -4,6 +4,8 @@ namespace Tests\Feature\Plan;
 
 use App\Models\Fleet;
 use App\Models\FleetMember;
+use App\Models\PlanPromotion;
+use App\Models\PricingSetting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
@@ -240,6 +242,238 @@ class SubscriptionRequestFlowTest extends TestCase
                 && collect($plans)->contains('code', 'plus')
                 && collect($plans)->contains('code', 'pro')
             )
+        );
+    }
+
+    // Promociones de precio por tiempo limitado (pedido explícito del
+    // usuario: "regalar o promocionar los planes por un tiempo determinado").
+
+    public function test_selecting_a_free_promotion_activates_immediately_and_records_it_as_used(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => '1 mes gratis',
+            'promo_price' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'plan_promotion_id' => $promotion->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscriptions', [
+            'user_id' => $user->id,
+            'subscription_plan_id' => $plan->id,
+            'status' => 'active',
+        ]);
+
+        // Sin este registro, la promo se le seguiría ofreciendo para siempre.
+        $this->assertDatabaseHas('subscription_requests', [
+            'user_id' => $user->id,
+            'plan_promotion_id' => $promotion->id,
+            'status' => 'approved',
+        ]);
+    }
+
+    public function test_the_same_promotion_cannot_be_used_twice_by_the_same_user(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => '1 mes gratis',
+            'promo_price' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)->post(route('subscription-requests.store'), [
+            'subscription_plan_id' => $plan->id,
+            'plan_promotion_id' => $promotion->id,
+        ]);
+
+        // Elegir el mismo plan ya activo está permitido (ver
+        // test_can_select_the_same_plan_already_active_again) — lo único que
+        // debería bloquear este segundo intento es la promoción ya usada.
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'plan_promotion_id' => $promotion->id,
+            ])
+            ->assertSessionHasErrors('plan_promotion_id');
+    }
+
+    public function test_selecting_a_paid_promotion_creates_an_awaiting_proof_request_linked_to_it(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => 'Medio precio',
+            'promo_price' => $plan->monthly_price / 2,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'plan_promotion_id' => $promotion->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscription_requests', [
+            'user_id' => $user->id,
+            'plan_promotion_id' => $promotion->id,
+            'status' => 'awaiting_proof',
+        ]);
+        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+    }
+
+    public function test_an_expired_promotion_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => 'Vencida',
+            'promo_price' => 0,
+            'ends_at' => now()->subDay()->toDateString(),
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'plan_promotion_id' => $promotion->id,
+            ])
+            ->assertSessionHasErrors('plan_promotion_id');
+
+        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+    }
+
+    public function test_a_promotion_for_a_different_plan_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $otherPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'pro')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $otherPlan->id,
+            'label' => 'De otro plan',
+            'promo_price' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'plan_promotion_id' => $promotion->id,
+            ])
+            ->assertSessionHasErrors('plan_promotion_id');
+    }
+
+    public function test_the_plan_catalog_exposes_the_active_promotion(): void
+    {
+        $driver = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => '1 mes gratis',
+            'promo_price' => 0,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('plans', fn ($plans) => collect($plans)
+                ->firstWhere('code', 'plus')['active_promotion']['label'] === '1 mes gratis'
+            )
+        );
+    }
+
+    public function test_the_plan_catalog_hides_a_promotion_the_user_already_used(): void
+    {
+        $driver = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => '1 mes gratis',
+            'promo_price' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($driver)->post(route('subscription-requests.store'), [
+            'subscription_plan_id' => $plan->id,
+            'plan_promotion_id' => $promotion->id,
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('plans', fn ($plans) => collect($plans)->firstWhere('code', 'plus')['active_promotion'] === null)
+        );
+    }
+
+    /**
+     * Bug real reportado por el usuario: el pedido en curso mostraba el
+     * precio de LISTA del plan (ej. $15) aunque se haya elegido con una
+     * promoción vigente (ej. $7) — no había coherencia con lo que mostraba
+     * el catálogo. `pendingRequest` tiene que traer la promoción usada.
+     */
+    public function test_the_pending_request_exposes_the_promotion_it_was_created_with(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $promotion = PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => 'Medio precio',
+            'promo_price' => $plan->monthly_price / 2,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)->post(route('subscription-requests.store'), [
+            'subscription_plan_id' => $plan->id,
+            'plan_promotion_id' => $promotion->id,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('driver.plan.edit'));
+
+        // `decimal:2` en el modelo serializa promo_price como string ("7.50")
+        // — se compara como número para no depender de ese detalle de cast.
+        $response->assertInertia(fn ($page) => $page
+            ->where('pendingRequest.plan_promotion.id', $promotion->id)
+            ->where('pendingRequest.plan_promotion.promo_price', fn ($value) => (float) $value === 7.5)
+        );
+    }
+
+    /**
+     * Proyección de ganancia (pedido explícito del usuario: "indiquemos en
+     * cada plan las carreras estimadas y un estimado a ganar mensualmente,
+     * ejemplo en el básico... 150 carreras mensuales... 450 por ser un
+     * ticket de 3 por carrera").
+     */
+    public function test_the_driver_plan_catalog_exposes_the_earnings_projection(): void
+    {
+        PricingSetting::current()->update(['average_ticket_price' => 3]);
+        $driver = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'basico')->firstOrFail();
+        $plan->update(['estimated_monthly_rides' => 150]);
+
+        $response = $this->actingAs($driver)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('plans', function ($plans) {
+                $projection = collect($plans)->firstWhere('code', 'basico')['earnings_projection'];
+
+                return $projection
+                    && (int) $projection['monthly_rides'] === 150
+                    && (float) $projection['monthly_earnings'] === 450.0
+                    && (float) $projection['ticket'] === 3.0;
+            })
         );
     }
 

@@ -18,6 +18,7 @@ class SubscriptionRequest extends Model
     protected $fillable = [
         'user_id',
         'subscription_plan_id',
+        'plan_promotion_id',
         'payment_proof_path',
         'status',
         'admin_note',
@@ -39,6 +40,11 @@ class SubscriptionRequest extends Model
     public function plan(): BelongsTo
     {
         return $this->belongsTo(SubscriptionPlan::class, 'subscription_plan_id');
+    }
+
+    public function planPromotion(): BelongsTo
+    {
+        return $this->belongsTo(PlanPromotion::class);
     }
 
     public function reviewedBy(): BelongsTo

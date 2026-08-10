@@ -66,6 +66,89 @@ class VanTripFlowTest extends TestCase
         ]);
     }
 
+    // Punto exacto de salida/llegada (pedido explícito del usuario): opcional,
+    // sirve para calcular la distancia real y sugerir un costo aproximado.
+
+    public function test_publishing_with_exact_coordinates_stores_the_calculated_distance(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $driver = $this->driverWithPlan('pro');
+
+        $response = $this->actingAs($driver)->post(route('van-trips.store'), [
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'origin_address' => 'Quito centro',
+            'destination_lat' => -2.1894,
+            'destination_lng' => -79.8890,
+            'destination_address' => 'Guayaquil centro',
+            'travel_date' => now()->addDays(3)->toDateString(),
+            'departure_time' => '06:30',
+            'total_seats' => 15,
+            'price_per_seat' => 12.5,
+        ]);
+
+        $response->assertRedirect();
+
+        $trip = VanTrip::query()->where('driver_user_id', $driver->id)->firstOrFail();
+        $this->assertNotNull($trip->distance_km);
+        // Quito-Guayaquil en línea recta ronda los 250 km — alcanza con
+        // confirmar que se calculó algo razonable, no el número exacto.
+        $this->assertGreaterThan(200, $trip->distance_km);
+        $this->assertLessThan(300, $trip->distance_km);
+        $this->assertSame('Quito centro', $trip->origin_address);
+    }
+
+    public function test_publishing_without_coordinates_still_works_and_leaves_distance_null(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $driver = $this->driverWithPlan('pro');
+
+        $this->actingAs($driver)->post(route('van-trips.store'), [
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'travel_date' => now()->addDays(3)->toDateString(),
+            'departure_time' => '06:30',
+            'total_seats' => 15,
+            'price_per_seat' => 12.5,
+        ])->assertRedirect();
+
+        $trip = VanTrip::query()->where('driver_user_id', $driver->id)->firstOrFail();
+        $this->assertNull($trip->distance_km);
+    }
+
+    public function test_publishing_with_only_half_a_coordinate_pair_fails_validation(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $driver = $this->driverWithPlan('pro');
+
+        $this->actingAs($driver)->post(route('van-trips.store'), [
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'origin_lat' => -0.1807,
+            // Falta origin_lng a propósito.
+            'travel_date' => now()->addDays(3)->toDateString(),
+            'departure_time' => '06:30',
+            'total_seats' => 15,
+            'price_per_seat' => 12.5,
+        ])->assertSessionHasErrors('origin_lng');
+
+        $this->assertDatabaseCount('van_trips', 0);
+    }
+
+    public function test_the_index_screen_exposes_the_drivers_rate_per_km_for_the_estimate(): void
+    {
+        $driver = $this->driverWithPlan('pro');
+        $driver->driverProfile()->update(['rate_per_km' => 0.42]);
+
+        $response = $this->actingAs($driver)->get(route('van-trips.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('driverRatePerKm', '0.42')
+        );
+    }
+
     public function test_a_driver_without_the_plan_feature_cannot_publish(): void
     {
         [$origin, $destination] = $this->citiesPair();

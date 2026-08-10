@@ -59,11 +59,34 @@ class GenerateExpressRides extends Command
                 (float) $route->destination_lng,
                 $route->destination_address,
                 $today,
+                $route->departure_time,
             );
 
             broadcast(new RideRequested($rideRequest));
 
             $generated++;
+
+            // Ida y vuelta (pedido explícito del usuario): una segunda
+            // carrera ese día, a la hora de vuelta, con origen y destino
+            // invertidos — mismo conductor, mismo precio pactado.
+            if ($route->is_round_trip && $route->return_time) {
+                $returnRideRequest = $this->generateFor(
+                    $route,
+                    $route->client_user_id,
+                    (float) $route->destination_lat,
+                    (float) $route->destination_lng,
+                    $route->destination_address,
+                    (float) $route->origin_lat,
+                    (float) $route->origin_lng,
+                    $route->origin_address,
+                    $today,
+                    $route->return_time,
+                );
+
+                broadcast(new RideRequested($returnRideRequest));
+
+                $generated++;
+            }
 
             // Pedido explícito del usuario: si el Expreso está compartido, cada
             // acompañante aceptado también necesita su propia carrera con el
@@ -71,19 +94,44 @@ class GenerateExpressRides extends Command
             // (ExpressRoute::pricePerPerson()), el precio pactado con el
             // conductor no cambia, solo se reparte entre más gente.
             foreach ($route->companions()->where('status', 'accepted')->get() as $companion) {
+                $companionOriginLat = (float) ($companion->origin_lat ?? $route->origin_lat);
+                $companionOriginLng = (float) ($companion->origin_lng ?? $route->origin_lng);
+                $companionOriginAddress = $companion->origin_address ?? $route->origin_address;
+                $companionDestinationLat = (float) ($companion->destination_lat ?? $route->destination_lat);
+                $companionDestinationLng = (float) ($companion->destination_lng ?? $route->destination_lng);
+                $companionDestinationAddress = $companion->destination_address ?? $route->destination_address;
+
                 $companionRideRequest = $this->generateFor(
                     $route,
                     $companion->passenger_user_id,
-                    (float) ($companion->origin_lat ?? $route->origin_lat),
-                    (float) ($companion->origin_lng ?? $route->origin_lng),
-                    $companion->origin_address ?? $route->origin_address,
-                    (float) ($companion->destination_lat ?? $route->destination_lat),
-                    (float) ($companion->destination_lng ?? $route->destination_lng),
-                    $companion->destination_address ?? $route->destination_address,
+                    $companionOriginLat,
+                    $companionOriginLng,
+                    $companionOriginAddress,
+                    $companionDestinationLat,
+                    $companionDestinationLng,
+                    $companionDestinationAddress,
                     $today,
+                    $route->departure_time,
                 );
 
                 broadcast(new RideRequested($companionRideRequest));
+
+                if ($route->is_round_trip && $route->return_time) {
+                    $companionReturnRideRequest = $this->generateFor(
+                        $route,
+                        $companion->passenger_user_id,
+                        $companionDestinationLat,
+                        $companionDestinationLng,
+                        $companionDestinationAddress,
+                        $companionOriginLat,
+                        $companionOriginLng,
+                        $companionOriginAddress,
+                        $today,
+                        $route->return_time,
+                    );
+
+                    broadcast(new RideRequested($companionReturnRideRequest));
+                }
             }
         }
 
@@ -108,6 +156,7 @@ class GenerateExpressRides extends Command
         float $destinationLng,
         ?string $destinationAddress,
         Carbon $today,
+        string $atTime,
     ): RideRequest {
         $fleet = Fleet::query()
             ->where('owner_user_id', $clientUserId)
@@ -118,10 +167,12 @@ class GenerateExpressRides extends Command
         $distanceKm = round(Haversine::distanceKm($originLat, $originLng, $destinationLat, $destinationLng), 2);
 
         // Compartido = el total pactado se reparte entre el dueño y sus
-        // acompañantes aceptados; sin compartir, es el precio de siempre.
+        // acompañantes aceptados; sin compartir, es el precio de siempre. Ida
+        // y vuelta (pedido explícito del usuario): las dos carreras del día
+        // pactan el mismo precio, cada una es una "carrera" completa aparte.
         $price = $route->share_enabled ? $route->pricePerPerson() : (float) $route->offered_price;
 
-        return DB::transaction(function () use ($route, $fleet, $clientUserId, $originLat, $originLng, $originAddress, $destinationLat, $destinationLng, $destinationAddress, $distanceKm, $price, $today) {
+        return DB::transaction(function () use ($route, $fleet, $clientUserId, $originLat, $originLng, $originAddress, $destinationLat, $destinationLng, $destinationAddress, $distanceKm, $price, $today, $atTime) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
                 'express_route_id' => $route->id,
@@ -138,7 +189,7 @@ class GenerateExpressRides extends Command
                 'current_offered_price' => $price,
                 'negotiation_round' => 0,
                 'last_offer_made_by' => 'client',
-                'requested_at' => $today->copy()->setTimeFromTimeString($route->departure_time),
+                'requested_at' => $today->copy()->setTimeFromTimeString($atTime),
             ]);
 
             RidePriceOffer::query()->create([

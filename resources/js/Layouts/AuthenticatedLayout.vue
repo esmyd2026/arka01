@@ -7,10 +7,13 @@ import BottomSheet from '@/Components/BottomSheet.vue';
 import Modal from '@/Components/Modal.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import IncomingRideRequestModal from '@/Components/IncomingRideRequestModal.vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import OnboardingTour from '@/Components/OnboardingTour.vue';
+import HelpTip from '@/Components/HelpTip.vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
 import { playIncomingRideAlert } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
+import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 
 // Menú de accesos rápidos que abre el botón central flotante de la barra
 // inferior (preferencia de diseño: bottom sheet, no modal lateral).
@@ -19,6 +22,24 @@ const showingQuickActions = ref(false);
 // Panel de ayuda (referencia de diseño: el ícono "?" de Google), visible en
 // el header tanto en escritorio como en móvil.
 const showingHelp = ref(false);
+
+// Recorrido guiado por rol, una sola vez (pedido explícito del usuario) — ver
+// Components/OnboardingTour.vue y Utils/onboardingSteps.js.
+const showingOnboarding = ref(false);
+const onboardingSteps = computed(() => (showDriverNav.value ? driverOnboardingSteps : clientOnboardingSteps));
+
+// Cualquier cierre (terminarlo, "Saltar guía de uso", click afuera, Escape)
+// cuenta como "ya lo vio" — no distinguimos el motivo. Volver a abrirlo a
+// propósito desde Ayuda (openOnboardingAgain) no pasa por acá.
+function completeOnboarding() {
+    showingOnboarding.value = false;
+    router.post(route('onboarding.complete'), {}, { preserveScroll: true, preserveState: true });
+}
+
+function openOnboardingAgain() {
+    showingHelp.value = false;
+    showingOnboarding.value = true;
+}
 
 // route().has(...) evita que la navegación se rompa si algún módulo
 // (por ejemplo Flota) todavía no tiene sus rutas registradas.
@@ -59,20 +80,83 @@ async function activatePushNotifications() {
 // El admin tiene su propio acceso directo y prominente (pastilla de escritorio,
 // tab de móvil) así que no repetimos "Panel admin" acá también.
 const canBecomeOrIsDriver = computed(() => showDriverNav.value || !usePage().props.auth.hasFleet);
+// `help` (pedido explícito del usuario: ícono "?" contextual en cada módulo,
+// alternativa que él mismo ofreció al ver que la guía de bienvenida siempre
+// aparece en el mismo lugar) — qué hace cada uno y con qué otro se relaciona,
+// en una frase. Mismo texto se repite a mano en el bottom sheet de abajo,
+// que ya no reutiliza este array (divergencia que ya existía antes de esto).
 const quickLinks = computed(() =>
     [
-        { route: 'ride-requests.create', label: 'Pedir una carrera', clientOnly: true },
-        { route: 'driver.profile.edit', label: 'Mi perfil de conductor', hideIfCommittedClient: true },
-        { route: 'driver.invitations.index', label: 'Mis clientes de confianza', driverOnly: true },
-        { route: 'directory.index', label: 'Directorio de conductores', clientOnly: true },
-        { route: 'express-routes.index', label: 'Mis Expresos', clientOnly: true },
-        { route: 'express-routes.available', label: 'Expresos disponibles', driverOnly: true },
-        { route: 'driver.plan.edit', label: 'Mi plan de conductor', driverOnly: true },
-        { route: 'client.plan.edit', label: 'Mi plan de cliente', clientOnly: true },
-        { route: 'trusted-contacts.index', label: 'Contactos de confianza' },
-        { route: 'coupons.index', label: 'Cupones y beneficios' },
-        { route: 'van-trips.index', label: 'Mis viajes VAN', driverOnly: true },
-        { route: 'van-trips.browse', label: 'Viajes VAN / turismo', clientOnly: true },
+        {
+            route: 'ride-requests.create',
+            label: 'Pedir una carrera',
+            clientOnly: true,
+            help: 'Pida un viaje ahora o programado, a toda su flota o a un conductor puntual. Arme primero Mis Flotas para tener a quién pedirle.',
+        },
+        {
+            route: 'driver.profile.edit',
+            label: 'Mi perfil de conductor',
+            hideIfCommittedClient: true,
+            help: 'Complete los datos de su vehículo para activar el perfil y empezar a recibir carreras.',
+        },
+        {
+            route: 'driver.invitations.index',
+            label: 'Mis clientes de confianza',
+            driverOnly: true,
+            help: 'Acepte invitaciones de flota y administre a sus clientes. De ahí le llegan las solicitudes que ve en Carreras.',
+        },
+        {
+            route: 'directory.index',
+            label: 'Directorio de conductores',
+            clientOnly: true,
+            help: 'Conductores públicos verificados, para cuando nadie de su flota está disponible. Desde acá también puede invitarlos a Mis Flotas.',
+        },
+        {
+            route: 'express-routes.index',
+            label: 'Mis Expresos',
+            clientOnly: true,
+            help: 'Ruta fija y recurrente (ej. su viaje diario al trabajo) en vez de pedir Pedir una carrera cada vez.',
+        },
+        {
+            route: 'express-routes.available',
+            label: 'Expresos disponibles',
+            driverOnly: true,
+            help: 'Postúlese a rutas fijas que publican sus clientes — solo ve las de las flotas de Mis clientes de confianza.',
+        },
+        {
+            route: 'driver.plan.edit',
+            label: 'Mi plan de conductor',
+            driverOnly: true,
+            help: 'Su plan vigente y sus beneficios — algunos, como el directorio público, también dependen de su medalla por puntos.',
+        },
+        {
+            route: 'client.plan.edit',
+            label: 'Mi plan de cliente',
+            clientOnly: true,
+            help: 'Su plan vigente y sus beneficios como cliente.',
+        },
+        {
+            route: 'trusted-contacts.index',
+            label: 'Contactos de confianza',
+            help: 'A quién avisa el botón SOS si lo activa durante un viaje.',
+        },
+        {
+            route: 'coupons.index',
+            label: 'Cupones y beneficios',
+            help: 'Promos de comercios aliados, separadas para clientes y para conductores.',
+        },
+        {
+            route: 'van-trips.index',
+            label: 'Mis viajes VAN',
+            driverOnly: true,
+            help: 'Publique salidas programadas tipo VAN/turismo, que los clientes reservan por asiento.',
+        },
+        {
+            route: 'van-trips.browse',
+            label: 'Viajes VAN / turismo',
+            clientOnly: true,
+            help: 'Explore y reserve un asiento en las salidas programadas que publican los conductores.',
+        },
     ].filter(
         (item) =>
             hasRoute(item.route) &&
@@ -81,6 +165,16 @@ const quickLinks = computed(() =>
             (!item.hideIfCommittedClient || canBecomeOrIsDriver.value)
     )
 );
+
+// Se abre solo la primera vez que corresponde (pedido explícito del usuario)
+// — no para el admin, cuya nav es otra por completo. `onboarding_completed_at`
+// viaja ya en `auth.user` sin nada extra (HandleInertiaRequests comparte el
+// modelo completo).
+onMounted(() => {
+    if ((showClientNav.value || showDriverNav.value) && !usePage().props.auth.user.onboarding_completed_at) {
+        showingOnboarding.value = true;
+    }
+});
 
 // Carrera entrante (pedido explícito del usuario): tiene que llegarle al
 // conductor sin importar en qué pantalla esté, con un aviso más fuerte que
@@ -278,19 +372,25 @@ onBeforeUnmount(() => {
                                     <div class="p-4">
                                         <p class="text-xs text-arka-text-muted mb-3">Accesos rápidos</p>
                                         <div class="grid grid-cols-3 gap-3">
-                                            <Link
-                                                v-for="item in quickLinks"
-                                                :key="item.route"
-                                                :href="route(item.route)"
-                                                class="flex flex-col items-center gap-1.5 p-2 rounded-arka hover:bg-arka-base text-center"
-                                            >
-                                                <span
-                                                    class="h-9 w-9 rounded-full bg-arka-primary/15 text-arka-primary-bright flex items-center justify-center text-sm font-semibold"
+                                            <div v-for="item in quickLinks" :key="item.route" class="relative">
+                                                <Link
+                                                    :href="route(item.route)"
+                                                    class="flex flex-col items-center gap-1.5 p-2 rounded-arka hover:bg-arka-base text-center"
                                                 >
-                                                    {{ item.label[0] }}
-                                                </span>
-                                                <span class="text-[11px] leading-tight text-arka-text">{{ item.label }}</span>
-                                            </Link>
+                                                    <span
+                                                        class="h-9 w-9 rounded-full bg-arka-primary/15 text-arka-primary-bright flex items-center justify-center text-sm font-semibold"
+                                                    >
+                                                        {{ item.label[0] }}
+                                                    </span>
+                                                    <span class="text-[11px] leading-tight text-arka-text">{{ item.label }}</span>
+                                                </Link>
+                                                <!-- Ícono "?" contextual (pedido explícito del usuario) —
+                                                     posición absoluta arriba a la derecha, afuera del <Link>
+                                                     para que tocarlo no navegue. -->
+                                                <div class="absolute -top-1 -right-1">
+                                                    <HelpTip :text="item.help" />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </template>
@@ -549,128 +649,146 @@ onBeforeUnmount(() => {
                 <h3 class="text-center text-arka-text font-medium mb-4">Accesos rápidos</h3>
 
                 <div class="space-y-1">
-                    <Link
-                        v-if="hasRoute('ride-requests.create') && showClientNav"
-                        :href="route('ride-requests.create')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                        </svg>
-                        <span class="text-arka-text">Pedir una carrera</span>
-                    </Link>
+                    <div v-if="hasRoute('ride-requests.create') && showClientNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('ride-requests.create')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
+                            </svg>
+                            <span class="text-arka-text">Pedir una carrera</span>
+                        </Link>
+                        <HelpTip text="Pida un viaje ahora o programado, a toda su flota o a un conductor puntual. Arme primero Mis Flotas para tener a quién pedirle." />
+                    </div>
 
-                    <Link
-                        v-if="canBecomeOrIsDriver"
-                        :href="route('driver.profile.edit')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3.5" y="6" width="17" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <circle cx="9" cy="12" r="1.75" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M14 10.5h3M14 13.5h3" />
-                        </svg>
-                        <span class="text-arka-text">Mi perfil de conductor</span>
-                    </Link>
+                    <div v-if="canBecomeOrIsDriver" class="flex items-center gap-1">
+                        <Link
+                            :href="route('driver.profile.edit')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3.5" y="6" width="17" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                <circle cx="9" cy="12" r="1.75" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M14 10.5h3M14 13.5h3" />
+                            </svg>
+                            <span class="text-arka-text">Mi perfil de conductor</span>
+                        </Link>
+                        <HelpTip text="Complete los datos de su vehículo para activar el perfil y empezar a recibir carreras." />
+                    </div>
 
-                    <Link
-                        v-if="hasRoute('driver.invitations.index') && showDriverNav"
-                        :href="route('driver.invitations.index')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="9" cy="9" r="3" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-                            <circle cx="17" cy="9" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 13.5c2.4 0 4.5 1.9 5 5" />
-                        </svg>
-                        <span class="text-arka-text">Mis clientes de confianza</span>
-                    </Link>
+                    <div v-if="hasRoute('driver.invitations.index') && showDriverNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('driver.invitations.index')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9" cy="9" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                                <circle cx="17" cy="9" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 13.5c2.4 0 4.5 1.9 5 5" />
+                            </svg>
+                            <span class="text-arka-text">Mis clientes de confianza</span>
+                        </Link>
+                        <HelpTip text="Acepte invitaciones de flota y administre a sus clientes. De ahí le llegan las solicitudes que ve en Carreras." />
+                    </div>
 
-                    <Link
-                        v-if="hasRoute('directory.index') && showClientNav"
-                        :href="route('directory.index')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.3 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.3-3.8-8.5S9.5 5.8 12 3.5Z" />
-                        </svg>
-                        <span class="text-arka-text">Directorio de conductores</span>
-                    </Link>
+                    <div v-if="hasRoute('directory.index') && showClientNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('directory.index')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.3 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.3-3.8-8.5S9.5 5.8 12 3.5Z" />
+                            </svg>
+                            <span class="text-arka-text">Directorio de conductores</span>
+                        </Link>
+                        <HelpTip text="Conductores públicos verificados, para cuando nadie de su flota está disponible. Desde acá también puede invitarlos a Mis Flotas." />
+                    </div>
 
                     <!-- Expresos (sección 4): rutas fijas y recurrentes. -->
-                    <Link
-                        v-if="hasRoute('express-routes.index') && showClientNav"
-                        :href="route('express-routes.index')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3.5" y="5" width="17" height="15" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17M8 3v4M16 3v4" />
-                        </svg>
-                        <span class="text-arka-text">Mis Expresos</span>
-                    </Link>
+                    <div v-if="hasRoute('express-routes.index') && showClientNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('express-routes.index')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3.5" y="5" width="17" height="15" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17M8 3v4M16 3v4" />
+                            </svg>
+                            <span class="text-arka-text">Mis Expresos</span>
+                        </Link>
+                        <HelpTip text="Ruta fija y recurrente (ej. su viaje diario al trabajo) en vez de pedir Pedir una carrera cada vez." />
+                    </div>
 
-                    <Link
-                        v-if="hasRoute('express-routes.available') && showDriverNav"
-                        :href="route('express-routes.available')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3.5" y="5" width="17" height="15" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17M8 3v4M16 3v4" />
-                        </svg>
-                        <span class="text-arka-text">Expresos disponibles</span>
-                    </Link>
+                    <div v-if="hasRoute('express-routes.available') && showDriverNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('express-routes.available')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3.5" y="5" width="17" height="15" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17M8 3v4M16 3v4" />
+                            </svg>
+                            <span class="text-arka-text">Expresos disponibles</span>
+                        </Link>
+                        <HelpTip text="Postúlese a rutas fijas que publican sus clientes — solo ve las de las flotas de Mis clientes de confianza." />
+                    </div>
 
                     <!-- Mi plan (secciones 7, 7.2 y 7.3): un usuario puede tener un plan
                          de conductor y otro de cliente al mismo tiempo (sección 3.1). -->
-                    <Link
-                        v-if="hasRoute('driver.plan.edit') && showDriverNav"
-                        :href="route('driver.plan.edit')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 8.5 12 4l7 4.5v7L12 20l-7-4.5v-7Z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v8M5 8.5 12 12l7-3.5" />
-                        </svg>
-                        <span class="text-arka-text">Mi plan de conductor</span>
-                    </Link>
+                    <div v-if="hasRoute('driver.plan.edit') && showDriverNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('driver.plan.edit')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 8.5 12 4l7 4.5v7L12 20l-7-4.5v-7Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v8M5 8.5 12 12l7-3.5" />
+                            </svg>
+                            <span class="text-arka-text">Mi plan de conductor</span>
+                        </Link>
+                        <HelpTip text="Su plan vigente y sus beneficios — algunos, como el directorio público, también dependen de su medalla por puntos." />
+                    </div>
 
-                    <Link
-                        v-if="hasRoute('client.plan.edit') && showClientNav"
-                        :href="route('client.plan.edit')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 8.5 12 4l7 4.5v7L12 20l-7-4.5v-7Z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v8M5 8.5 12 12l7-3.5" />
-                        </svg>
-                        <span class="text-arka-text">Mi plan de cliente</span>
-                    </Link>
+                    <div v-if="hasRoute('client.plan.edit') && showClientNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('client.plan.edit')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 8.5 12 4l7 4.5v7L12 20l-7-4.5v-7Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12v8M5 8.5 12 12l7-3.5" />
+                            </svg>
+                            <span class="text-arka-text">Mi plan de cliente</span>
+                        </Link>
+                        <HelpTip text="Su plan vigente y sus beneficios como cliente." />
+                    </div>
 
                     <!-- Contactos de confianza (sección 8): a quién avisa el botón SOS. -->
-                    <Link
-                        v-if="hasRoute('trusted-contacts.index')"
-                        :href="route('trusted-contacts.index')"
-                        @click="showingQuickActions = false"
-                        class="flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
-                    >
-                        <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9Z" />
-                        </svg>
-                        <span class="text-arka-text">Contactos de confianza</span>
-                    </Link>
+                    <div v-if="hasRoute('trusted-contacts.index')" class="flex items-center gap-1">
+                        <Link
+                            :href="route('trusted-contacts.index')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9Z" />
+                            </svg>
+                            <span class="text-arka-text">Contactos de confianza</span>
+                        </Link>
+                        <HelpTip text="A quién avisa el botón SOS si lo activa durante un viaje." />
+                    </div>
                 </div>
             </div>
         </BottomSheet>
@@ -685,7 +803,17 @@ onBeforeUnmount(() => {
                     <li>El precio de cada carrera se calcula y se muestra siempre desglosado, nunca oculto.</li>
                     <li>Durante un viaje en curso puede compartir el seguimiento en vivo o usar el botón SOS desde la carrera.</li>
                 </ul>
-                <div class="flex justify-end">
+                <div class="flex items-center justify-between">
+                    <!-- Volver a ver el recorrido guiado a propósito (pedido
+                         explícito del usuario): no toca `onboarding_completed_at`,
+                         solo lo vuelve a mostrar. -->
+                    <button
+                        type="button"
+                        class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        @click="openOnboardingAgain"
+                    >
+                        Ver guía de nuevo
+                    </button>
                     <button
                         type="button"
                         class="px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-sm font-medium"
@@ -696,6 +824,8 @@ onBeforeUnmount(() => {
                 </div>
             </div>
         </Modal>
+
+        <OnboardingTour :show="showingOnboarding" :steps="onboardingSteps" @close="completeOnboarding" />
 
         <IncomingRideRequestModal v-if="showDriverNav" />
     </div>

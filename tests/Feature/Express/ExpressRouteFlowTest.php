@@ -3,6 +3,7 @@
 namespace Tests\Feature\Express;
 
 use App\Console\Commands\GenerateExpressRides;
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\ExpressApplication;
 use App\Models\ExpressRoute;
@@ -64,6 +65,198 @@ class ExpressRouteFlowTest extends TestCase
 
         $route = ExpressRoute::firstOrFail();
         $this->assertSame(2, $route->conditions()->count());
+    }
+
+    // Costo estimado y piso de precio (pedido explícito del usuario: "el
+    // precio que coloque que no sea menor al estimado").
+
+    public function test_the_index_screen_exposes_the_reference_rate_and_minimum_fare(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        DriverProfile::factory()->for($driver)->create(['rate_per_km' => 0.5]);
+
+        $response = $this->actingAs($client)->get(route('express-routes.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('referenceRatePerKm', 0.5)
+            ->has('minimumFare')
+        );
+    }
+
+    /**
+     * Bug reportado por el usuario ("el mapa al inicio no se posiciona donde
+     * está el cliente... por lo menos en la ciudad"): respaldo si el
+     * navegador no da geolocalización a tiempo.
+     */
+    public function test_the_index_screen_exposes_the_clients_city_for_the_map(): void
+    {
+        $quito = City::query()->where('name', 'Quito')->firstOrFail();
+        $client = User::factory()->create(['city_id' => $quito->id]);
+
+        $response = $this->actingAs($client)->get(route('express-routes.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('clientCity.lat', (float) $quito->lat)
+            ->where('clientCity.lng', (float) $quito->lng)
+        );
+    }
+
+    public function test_the_index_screen_has_no_client_city_without_one_set(): void
+    {
+        $client = User::factory()->create(['city_id' => null]);
+
+        $response = $this->actingAs($client)->get(route('express-routes.index'));
+
+        $response->assertInertia(fn ($page) => $page->where('clientCity', null));
+    }
+
+    /**
+     * Bug reportado por el usuario ("sale $0, deberías sacar un estimado"):
+     * un cliente recién empezando, sin ningún conductor todavía en su
+     * flota, no puede quedarse sin estimado — se usa el promedio de tarifa
+     * de TODA la plataforma en ese caso.
+     */
+    public function test_the_reference_rate_falls_back_to_the_platform_average_without_fleet_drivers(): void
+    {
+        $client = User::factory()->create(); // sin flota ni conductores todavía
+
+        $someoneElsesDriver = User::factory()->create();
+        DriverProfile::factory()->for($someoneElsesDriver)->create(['rate_per_km' => 0.8]);
+
+        $response = $this->actingAs($client)->get(route('express-routes.index'));
+
+        $response->assertInertia(fn ($page) => $page->where('referenceRatePerKm', 0.8));
+    }
+
+    public function test_publishing_below_half_the_estimated_price_fails_validation(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        DriverProfile::factory()->for($driver)->create(['rate_per_km' => 1]);
+
+        // origen/destino separados ~2.4km — a $1/km, el estimado ronda los $2.40,
+        // el piso real (50%) ronda el $1.20 — bien por debajo de los dos.
+        $response = $this->actingAs($client)->post(route('express-routes.store'), [
+            'name' => 'Turno mañana',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.4800,
+            'days_of_week' => [1],
+            'departure_time' => '07:30',
+            'offered_price' => 0.5,
+        ]);
+
+        $response->assertSessionHasErrors('offered_price');
+        $this->assertDatabaseCount('express_routes', 0);
+    }
+
+    /**
+     * Pedido explícito del usuario: no tiene que calzar con el estimado —
+     * alcanza con no irse por debajo de la mitad.
+     */
+    public function test_publishing_between_half_and_the_full_estimated_price_succeeds(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        DriverProfile::factory()->for($driver)->create(['rate_per_km' => 1]);
+
+        // origen/destino separados ~2.4km — a $1/km, el estimado ronda los $2.40,
+        // el piso real (50%) ronda el $1.20 — $1.50 cae en el medio.
+        $response = $this->actingAs($client)->post(route('express-routes.store'), [
+            'name' => 'Turno mañana',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.4800,
+            'days_of_week' => [1],
+            'departure_time' => '07:30',
+            'offered_price' => 1.5,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('express_routes', ['client_user_id' => $client->id, 'offered_price' => 1.5]);
+    }
+
+    // Ida y vuelta (pedido explícito del usuario): una segunda hora, de vuelta.
+
+    public function test_publishing_a_round_trip_requires_a_return_time(): void
+    {
+        $client = User::factory()->create();
+
+        $response = $this->actingAs($client)->post(route('express-routes.store'), [
+            'name' => 'Turno mañana',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'days_of_week' => [1],
+            'departure_time' => '07:30',
+            'is_round_trip' => true,
+            // Sin return_time a propósito.
+            'offered_price' => 5,
+        ]);
+
+        $response->assertSessionHasErrors('return_time');
+        $this->assertDatabaseCount('express_routes', 0);
+    }
+
+    public function test_publishing_a_round_trip_stores_both_times(): void
+    {
+        $client = User::factory()->create();
+
+        $this->actingAs($client)->post(route('express-routes.store'), [
+            'name' => 'Turno mañana',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'days_of_week' => [1],
+            'departure_time' => '07:30',
+            'is_round_trip' => true,
+            'return_time' => '17:00',
+            'offered_price' => 5,
+        ])->assertRedirect();
+
+        $route = ExpressRoute::query()->where('client_user_id', $client->id)->firstOrFail();
+        $this->assertTrue($route->is_round_trip);
+        $this->assertSame('17:00', substr($route->return_time, 0, 5));
+    }
+
+    public function test_generate_express_rides_creates_both_legs_for_a_round_trip_route(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 00:00:00')); // lunes
+
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $route = ExpressRoute::query()->create([
+            'client_user_id' => $client->id,
+            'name' => 'Turno ida y vuelta',
+            'origin_lat' => -0.1807, 'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000, 'destination_lng' => -78.5000,
+            'days_of_week' => [1],
+            'departure_time' => '07:30',
+            'is_round_trip' => true,
+            'return_time' => '17:00',
+            'offered_price' => 5,
+            'status' => 'active',
+            'assigned_driver_user_id' => $driver->id,
+            'assigned_at' => now(),
+        ]);
+
+        $this->artisan(GenerateExpressRides::class)->assertSuccessful();
+
+        $this->assertSame(2, RideRequest::where('express_route_id', $route->id)->count());
+
+        $outbound = RideRequest::where('express_route_id', $route->id)->whereTime('requested_at', '07:30:00')->firstOrFail();
+        $this->assertEquals(-0.1807, (float) $outbound->origin_lat);
+        $this->assertEquals(-0.2000, (float) $outbound->destination_lat);
+
+        $return = RideRequest::where('express_route_id', $route->id)->whereTime('requested_at', '17:00:00')->firstOrFail();
+        $this->assertEquals(-0.2000, (float) $return->origin_lat);
+        $this->assertEquals(-0.1807, (float) $return->destination_lat);
+
+        // Correrlo de nuevo el mismo día no debería duplicar ninguna de las dos.
+        $this->artisan(GenerateExpressRides::class)->assertSuccessful();
+        $this->assertSame(2, RideRequest::where('express_route_id', $route->id)->count());
     }
 
     /**

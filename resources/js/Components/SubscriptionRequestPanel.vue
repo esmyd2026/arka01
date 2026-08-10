@@ -14,6 +14,14 @@ const props = defineProps({
 
 const uploadForm = useForm({ payment_proof: null });
 
+// Bug real reportado por el usuario: este panel siempre mostraba el precio
+// de LISTA del plan, aunque el pedido se haya hecho con una promoción
+// vigente — el monto a transferir tiene que ser el que realmente se
+// prometió al elegir el plan (Plan/Driver.vue y Plan/Client.vue).
+function effectivePrice(request) {
+    return request.plan_promotion ? request.plan_promotion.promo_price : request.plan.monthly_price;
+}
+
 function submitProof() {
     uploadForm.post(route('subscription-requests.upload-proof', props.pendingRequest.id), {
         forceFormData: true,
@@ -53,6 +61,17 @@ async function cancelRequest() {
             Motivo: {{ pendingRequest.admin_note }}
         </p>
 
+        <!-- Coherencia con la promo mostrada en el catálogo (Plan/Driver.vue,
+             Plan/Client.vue): si este pedido usó una promoción, se ve acá
+             también, con el mismo lenguaje visual. -->
+        <div v-if="pendingRequest.plan_promotion" class="p-2 rounded-arka bg-arka-lime/10 border border-arka-lime/30">
+            <p class="text-xs text-arka-lime font-medium">
+                🎁 Promoción aplicada: {{ pendingRequest.plan_promotion.label }} — pague
+                ${{ Number(pendingRequest.plan_promotion.promo_price).toFixed(2) }}/mes en vez de
+                ${{ Number(pendingRequest.plan.monthly_price).toFixed(2) }}/mes.
+            </p>
+        </div>
+
         <!-- Todavía no subió nada, o se lo rechazaron: puede subir/reintentar. -->
         <form
             v-if="pendingRequest.status === 'awaiting_proof' || pendingRequest.status === 'rejected'"
@@ -60,8 +79,8 @@ async function cancelRequest() {
             class="space-y-2"
         >
             <p class="text-sm text-arka-text-muted">
-                Haga la transferencia por ${{ pendingRequest.plan.monthly_price }} y suba una captura del comprobante.
-                Un administrador la revisa y activa su plan.
+                Haga la transferencia por ${{ Number(effectivePrice(pendingRequest)).toFixed(2) }} y suba una captura
+                del comprobante. Un administrador la revisa y activa su plan.
             </p>
             <input
                 type="file"

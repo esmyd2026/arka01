@@ -74,6 +74,11 @@ class RideRequested implements ShouldBroadcast
         return [
             'id' => $this->rideRequest->id,
             'client_name' => $client->name,
+            // Pedido explícito del usuario ("que aparezca la imagen del
+            // cliente"): mismo accesor que ya usa <UserAvatar> en el resto
+            // de la app (ver User::getAvatarUrlAttribute()) — null si no
+            // tiene foto, y el componente cae solo a las iniciales.
+            'client_avatar_url' => $client->avatar_url,
             // Perfil de confianza del cliente (sección 3.6 y 8: "app segura",
             // el conductor tiene que poder ver quién le está pidiendo la
             // carrera antes de aceptar, no solo el nombre).

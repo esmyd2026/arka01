@@ -45,6 +45,22 @@ class DriverTier extends Model
     }
 
     /**
+     * La siguiente medalla por puntos (sin importar si habilita el directorio
+     * público o no) — `null` si ya está en la más alta. Antes este mismo
+     * cálculo estaba repetido a mano en DriverProfileController::edit(), ahí
+     * filtrado además por is_public_eligible (esa variante se queda tal cual,
+     * es una pregunta distinta: "la próxima que lo hace público", no "la
+     * próxima que sea").
+     */
+    public static function nextAfter(int $points): ?self
+    {
+        return static::query()
+            ->where('min_points', '>', $points)
+            ->orderBy('min_points')
+            ->first();
+    }
+
+    /**
      * Lo mínimo que el frontend necesita para pintar la insignia (ver
      * resources/js/Utils/tierBadge.js) — nunca el modelo completo, evita
      * repetir este array a mano en cada controlador que lo manda.

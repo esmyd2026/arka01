@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\PricingSetting;
 use App\Models\SubscriptionPlan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,10 @@ class PlanController extends Controller
                 ->orderBy('owner_type')
                 ->orderBy('sort_order')
                 ->get(),
+            // Para que el admin vea, junto al cupo de carreras estimadas de
+            // cada plan, a cuánto se traduce eso en dólares (mismo cálculo
+            // que ve el conductor en "Mi plan").
+            'averageTicketPrice' => (float) PricingSetting::current()->average_ticket_price,
         ]);
     }
 
@@ -90,6 +95,7 @@ class PlanController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'max_clients' => ['nullable', 'integer', 'min:0'],
+            'estimated_monthly_rides' => ['nullable', 'integer', 'min:0'],
             'public_visibility' => ['boolean'],
             'priority_listing' => ['boolean'],
             'verified_badge' => ['boolean'],

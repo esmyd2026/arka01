@@ -14,9 +14,11 @@ defineProps({
 const sections = [
     { route: 'admin.subscriptions.index', match: 'admin.subscriptions.*', label: 'Suscripciones' },
     { route: 'admin.plans.index', match: 'admin.plans.*', label: 'Planes' },
+    { route: 'admin.plan-promotions.index', match: 'admin.plan-promotions.*', label: 'Promociones' },
     { route: 'admin.pricing.edit', match: 'admin.pricing.*', label: 'Tarifas' },
     { route: 'admin.metrics.index', match: 'admin.metrics.*', label: 'Indicadores' },
     { route: 'admin.drivers.index', match: 'admin.drivers.*', label: 'Conductores' },
+    { route: 'admin.clients.index', match: 'admin.clients.*', label: 'Clientes' },
     { route: 'admin.driver-tiers.index', match: 'admin.driver-tiers.*', label: 'Medallas' },
     { route: 'admin.operations.index', match: 'admin.operations.*', label: 'Operaciones' },
     { route: 'admin.driver-verifications.index', match: 'admin.driver-verifications.*', label: 'Verificaciones' },
@@ -25,6 +27,7 @@ const sections = [
     { route: 'admin.coupons.index', match: 'admin.coupons.*', label: 'Cupones' },
     { route: 'admin.sos-alerts.index', match: 'admin.sos-alerts.*', label: 'Alertas SOS' },
     { route: 'admin.locations.index', match: 'admin.locations.*', label: 'Zonas' },
+    { route: 'admin.system.index', match: 'admin.system.*', label: 'Sistema' },
 ];
 </script>
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -15,8 +15,11 @@ const props = defineProps({
 
 const DIRECTION_LABEL = { client_to_driver: 'Cliente → Conductor', driver_to_client: 'Conductor → Cliente' };
 
-const clientToDriver = props.reasons.filter((r) => r.direction === 'client_to_driver');
-const driverToClient = props.reasons.filter((r) => r.direction === 'driver_to_client');
+// computed (no const plano): props.reasons cambia tras guardar/crear/
+// eliminar sin recargar la página (Inertia actualiza los props), así que
+// estas listas se tienen que recalcular con los datos nuevos.
+const clientToDriver = computed(() => props.reasons.filter((r) => r.direction === 'client_to_driver'));
+const driverToClient = computed(() => props.reasons.filter((r) => r.direction === 'driver_to_client'));
 
 const editingId = ref(null);
 const creatingFor = ref(null); // 'client_to_driver' | 'driver_to_client' | null

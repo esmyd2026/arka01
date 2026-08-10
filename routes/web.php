@@ -1,42 +1,47 @@
 <?php
 
 use App\Http\Controllers\Admin\AdBannerController;
+use App\Http\Controllers\Admin\ClientController as AdminClientController;
 use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\DriverController as AdminDriverController;
+use App\Http\Controllers\Admin\DriverTierController;
 use App\Http\Controllers\Admin\DriverVerificationController;
-use App\Http\Controllers\Admin\OperationsController as AdminOperationsController;
 use App\Http\Controllers\Admin\LocationController;
 use App\Http\Controllers\Admin\MetricsController;
-use App\Http\Controllers\Admin\DriverTierController;
+use App\Http\Controllers\Admin\OperationsController as AdminOperationsController;
 use App\Http\Controllers\Admin\PlanController;
+use App\Http\Controllers\Admin\PlanPromotionController;
 use App\Http\Controllers\Admin\PricingSettingController;
 use App\Http\Controllers\Admin\RatingReasonController;
 use App\Http\Controllers\Admin\SosAlertController as AdminSosAlertController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
+use App\Http\Controllers\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
+use App\Http\Controllers\CouponController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DriverDirectoryController;
 use App\Http\Controllers\DriverInvitationController;
 use App\Http\Controllers\DriverLocationController;
 use App\Http\Controllers\DriverProfileController;
+use App\Http\Controllers\DriverStatsController;
 use App\Http\Controllers\ExpressApplicationController;
 use App\Http\Controllers\ExpressIncidentController;
-use App\Http\Controllers\CouponController;
 use App\Http\Controllers\ExpressRouteCompanionController;
 use App\Http\Controllers\ExpressRouteController;
 use App\Http\Controllers\FleetController;
 use App\Http\Controllers\FleetInvitationController;
 use App\Http\Controllers\FleetMemberController;
 use App\Http\Controllers\MyPlanController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\PublicRideTrackingController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\ReviewController;
-use App\Http\Controllers\SavedRouteController;
 use App\Http\Controllers\RideController;
 use App\Http\Controllers\RideRequestController;
+use App\Http\Controllers\SavedRouteController;
 use App\Http\Controllers\SosAlertController;
 use App\Http\Controllers\SubscriptionRequestController;
 use App\Http\Controllers\TrustedContactController;
@@ -69,14 +74,14 @@ Route::get('/', function () {
 Route::get('/terminos', function () {
     return Inertia::render('Legal/Terms', [
         'contactEmail' => config('mail.from.address'),
-        'updatedAt' => '2026-08-06',
+        'updatedAt' => '2026-08-09',
     ]);
 })->name('legal.terms');
 
 Route::get('/privacidad', function () {
     return Inertia::render('Legal/Privacy', [
         'contactEmail' => config('mail.from.address'),
-        'updatedAt' => '2026-08-06',
+        'updatedAt' => '2026-08-09',
     ]);
 })->name('legal.privacy');
 
@@ -85,6 +90,9 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
     ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
+    // Recorrido guiado por rol, una sola vez (pedido explícito del usuario).
+    Route::post('/onboarding/completar', [OnboardingController::class, 'complete'])->name('onboarding.complete');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -148,6 +156,10 @@ Route::middleware('auth')->group(function () {
 
     // Carreras (sección 3.5, 8 y 9.5).
     Route::get('/carreras', [RideController::class, 'index'])->name('rides.index');
+    // OJO con el orden (mismo caso que "/flota/solicitar"): "/carreras/{ride}"
+    // es comodín, así que el tramo literal "indicadores" tiene que ir antes,
+    // si no Laravel lo toma como {ride}="indicadores" y tira 404.
+    Route::get('/carreras/indicadores', [DriverStatsController::class, 'index'])->name('rides.stats');
     Route::get('/carreras/{ride}', [RideController::class, 'show'])->name('rides.show');
     Route::post('/carreras/{ride}/arrancar', [RideController::class, 'start'])->name('rides.start');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');
@@ -276,6 +288,14 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::patch('/planes/{plan}', [PlanController::class, 'update'])->name('plans.update');
     Route::delete('/planes/{plan}', [PlanController::class, 'destroy'])->name('plans.destroy');
 
+    // Promociones de precio por tiempo limitado en los planes (pedido
+    // explícito del usuario): "regalar o promocionar" un plan entre tal
+    // fecha y tal fecha — ver Admin\PlanPromotionController.
+    Route::get('/promociones', [PlanPromotionController::class, 'index'])->name('plan-promotions.index');
+    Route::post('/promociones', [PlanPromotionController::class, 'store'])->name('plan-promotions.store');
+    Route::patch('/promociones/{planPromotion}', [PlanPromotionController::class, 'update'])->name('plan-promotions.update');
+    Route::delete('/promociones/{planPromotion}', [PlanPromotionController::class, 'destroy'])->name('plan-promotions.destroy');
+
     // Mantenimiento de las medallas del conductor (pedido explícito del
     // usuario): a partir de cuántos puntos aplica cada una, y si aparece en
     // el directorio público — ver App\Models\DriverTier.
@@ -318,6 +338,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/conductores/{driverProfile}/suspender', [AdminDriverController::class, 'suspend'])->name('drivers.suspend');
     Route::post('/conductores/{driverProfile}/reactivar', [AdminDriverController::class, 'reactivate'])->name('drivers.reactivate');
 
+    // Panel de clientes registrados (pedido explícito del usuario): mismo
+    // criterio que el de conductores, del otro lado — ver Admin\ClientController.
+    Route::get('/clientes', [AdminClientController::class, 'index'])->name('clients.index');
+
     // Centro de operaciones (pedido explícito del usuario): concentración de
     // solicitudes activas, conectados, demanda por horario/zona, y avisar a
     // los conductores cercanos dónde conviene estar.
@@ -339,6 +363,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/zonas/ciudades/{city}/sectores', [LocationController::class, 'storeSector'])->name('sectors.store');
     Route::patch('/zonas/sectores/{sector}', [LocationController::class, 'updateSector'])->name('sectors.update');
     Route::delete('/zonas/sectores/{sector}', [LocationController::class, 'destroySector'])->name('sectors.destroy');
+
+    // "Zona de peligro" (pedido explícito del usuario): borrar toda la data
+    // de prueba (@arka01.test) y dejar el sistema reiniciado — ver Admin\SystemController.
+    Route::get('/sistema', [AdminSystemController::class, 'index'])->name('system.index');
+    Route::post('/sistema/borrar-demo', [AdminSystemController::class, 'resetDemo'])->name('system.reset-demo');
 });
 
 // Seguimiento en vivo compartible (sección 8): páginas públicas, sin login,

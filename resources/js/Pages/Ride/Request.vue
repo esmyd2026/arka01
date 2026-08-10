@@ -11,6 +11,7 @@ import SearchableSelect from '@/Components/SearchableSelect.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { distanceKm } from '@/Utils/haversine';
+import { fetchOsrmRoute } from '@/Utils/osrmRoute';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
@@ -401,9 +402,9 @@ function pickDestinationFromAddress({ lat, lng, sectorId }) {
 }
 
 // --- Trazado real del recorrido (consideración agregada al alcance: "que
-// trace el recorrido"), con OSRM — gratis, sin API key (sección 9.3, se
-// mantiene Leaflet/OpenStreetMap en vez de Google Maps para no generar
-// costos). Se pide en cuanto hay origen y destino marcados. ---
+// trace el recorrido"), con OSRM — gratis, sin API key (sección 9.3). Se pide
+// en cuanto hay origen y destino marcados — ver Utils/osrmRoute.js, mismo
+// mecanismo que usan Expresos y Viajes en VAN. ---
 const routeCoords = ref([]);
 
 watch([originLat, originLng, destinationLat, destinationLng], async () => {
@@ -412,24 +413,7 @@ watch([originLat, originLng, destinationLat, destinationLng], async () => {
         return;
     }
 
-    try {
-        // fetch() nativo, NO window.axios (bug real reportado, veía errores de
-        // CORS en la consola al elegir destino): apenas Echo se conecta, mete
-        // un header "X-Socket-Id" en TODAS las peticiones de window.axios —
-        // necesario para que ->toOthers() funcione contra nuestro propio
-        // backend, pero un servidor externo como OSRM no lo tiene permitido
-        // en su Access-Control-Allow-Headers, así que el preflight fallaba y
-        // el trazado nunca llegaba a pedirse de verdad.
-        const url = `https://router.project-osrm.org/route/v1/driving/${originLng.value},${originLat.value};${destinationLng.value},${destinationLat.value}?overview=full&geometries=geojson`;
-        const response = await fetch(url);
-        const data = await response.json();
-        const coords = data?.routes?.[0]?.geometry?.coordinates ?? [];
-        routeCoords.value = coords.map(([lng, lat]) => ({ lat, lng }));
-    } catch {
-        // Si el servicio gratuito de ruteo no responde, no rompemos el flujo
-        // de pedir la carrera — simplemente no se ve la línea del recorrido.
-        routeCoords.value = [];
-    }
+    routeCoords.value = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
 });
 
 // --- Precio sugerido (sección 5): distancia × tarifa de referencia. Es una

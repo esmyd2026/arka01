@@ -306,7 +306,18 @@ function confirmRaiseOffer(id) {
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="font-semibold text-xl text-arka-text leading-tight">Carreras</h2>
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <h2 class="font-semibold text-xl text-arka-text leading-tight">Carreras</h2>
+                <!-- Pedido explícito del usuario: reporte completo con
+                     filtros, indicadores y medallas — ver Driver/Stats.vue. -->
+                <Link
+                    v-if="usePage().props.auth.isDriver"
+                    :href="route('rides.stats')"
+                    class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                >
+                    Ver mis indicadores &rarr;
+                </Link>
+            </div>
         </template>
 
         <div class="py-12">

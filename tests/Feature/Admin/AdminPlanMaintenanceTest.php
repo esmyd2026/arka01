@@ -106,6 +106,28 @@ class AdminPlanMaintenanceTest extends TestCase
         ]);
     }
 
+    /**
+     * Proyección de ganancia (pedido explícito del usuario: "indiquemos en
+     * cada plan las carreras estimadas y un estimado a ganar mensualmente")
+     * — referencia editable desde acá, sin tocar código.
+     */
+    public function test_an_admin_can_set_the_estimated_monthly_rides_for_a_plan(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'basico')->firstOrFail();
+
+        $this->actingAs($admin)->patch(route('admin.plans.update', $plan), [
+            'owner_type' => 'driver',
+            'code' => 'basico',
+            'name' => 'Básico',
+            'monthly_price' => $plan->monthly_price,
+            'max_clients' => $plan->max_clients,
+            'estimated_monthly_rides' => 175,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('subscription_plans', ['id' => $plan->id, 'estimated_monthly_rides' => 175]);
+    }
+
     public function test_the_free_plan_cannot_be_deleted(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

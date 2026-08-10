@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DriverProfile;
 use App\Models\ExpressRoute;
 use App\Models\Fleet;
+use App\Models\FleetMember;
+use App\Models\PricingSetting;
+use App\Services\Haversine;
 use App\Services\PlanLimits;
+use App\Services\PriceCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +27,13 @@ class ExpressRouteController extends Controller
 {
     /** Pedido explícito del usuario: "publicar un Expreso" es del lado cliente, el conductor no solicita servicios. */
     private const SINGLE_ROLE_MESSAGE = 'Los conductores no pueden publicar Expresos — cada cuenta es cliente o conductor, no ambas.';
+
+    /**
+     * Pedido explícito del usuario: el precio NO tiene que calzar con el
+     * estimado, pero tampoco puede irse tan bajo que deje de convenirle a
+     * cualquier conductor — 50% del estimado como piso real.
+     */
+    private const MINIMUM_PRICE_FACTOR = 0.5;
 
     public function __construct(private readonly PlanLimits $planLimits) {}
 
@@ -44,9 +56,73 @@ class ExpressRouteController extends Controller
             ->latest()
             ->get();
 
+        $clientCity = $request->user()->city;
+
         return Inertia::render('Express/Index', [
             'routes' => $routes,
+            // Pedido explícito del usuario: sugerir un costo aproximado antes
+            // de fijar el precio por carrera — misma tarifa de referencia que
+            // ya usa "Pedir carrera" para toda la flota (promedio de los
+            // conductores activos), acá sobre TODAS sus flotas porque un
+            // Expreso no se publica para una en particular.
+            'referenceRatePerKm' => $this->referenceRatePerKm($request->user()->id),
+            'minimumFare' => (float) PricingSetting::current()->minimum_fare,
+            // Pedido explícito del usuario: no tiene que calzar con el
+            // estimado, pero tampoco puede irse por debajo de esta fracción —
+            // una sola fuente de verdad con lo que valida store()/update().
+            'minimumPriceFactor' => self::MINIMUM_PRICE_FACTOR,
+            // Pedido explícito del usuario: el mapa arrancaba siempre en Quito
+            // por defecto — con esto, si el navegador no da geolocalización
+            // (o el cliente no responde el permiso a tiempo), al menos centra
+            // en la ciudad que ya tiene registrada.
+            'clientCity' => $clientCity ? ['lat' => (float) $clientCity->lat, 'lng' => (float) $clientCity->lng] : null,
         ]);
+    }
+
+    /**
+     * Promedio de tarifa/km de los conductores activos en cualquiera de las
+     * flotas del cliente (un Expreso lo ven todos, no una flota puntual —
+     * ver ExpressRouteController::available()). Bug reportado por el usuario
+     * ("sale $0, deberías sacar un estimado"): recién publicando su primer
+     * Expreso, todavía no tiene NINGÚN conductor en su flota — sin fallback,
+     * el estimado quedaba siempre en $0 para cualquier cliente nuevo, que es
+     * justo el caso más común. Si su propia flota no tiene con qué calcular
+     * un promedio, se usa el promedio de TODA la plataforma como referencia.
+     */
+    private function referenceRatePerKm(int $clientUserId): float
+    {
+        $fleetIds = Fleet::query()->where('owner_user_id', $clientUserId)->pluck('id');
+
+        $rates = FleetMember::query()
+            ->whereIn('fleet_id', $fleetIds)
+            ->whereNull('left_at')
+            ->with('driver.driverProfile')
+            ->get()
+            ->map(fn ($member) => (float) ($member->driver->driverProfile?->rate_per_km ?? 0))
+            ->filter();
+
+        if ($rates->isNotEmpty()) {
+            return round($rates->avg(), 2);
+        }
+
+        $platformAverage = DriverProfile::query()->where('rate_per_km', '>', 0)->avg('rate_per_km');
+
+        return $platformAverage ? round((float) $platformAverage, 2) : 0.0;
+    }
+
+    /**
+     * Piso de precio (pedido explícito del usuario: "el precio que coloque
+     * que no sea menor al estimado") — mismo motor que "Pedir carrera"
+     * (PriceCalculator, con la tarifa mínima ya aplicada), pero sin el
+     * recargo nocturno: acá el precio se pacta una sola vez para TODOS los
+     * días que corresponda, no tiene sentido atarlo al horario de cuando se
+     * publica el Expreso.
+     */
+    private function suggestedPrice(float $originLat, float $originLng, float $destinationLat, float $destinationLng, float $ratePerKm): float
+    {
+        $distanceKm = Haversine::distanceKm($originLat, $originLng, $destinationLat, $destinationLng);
+
+        return PriceCalculator::suggestedPrice($distanceKm, $ratePerKm)['base'];
     }
 
     /**
@@ -72,6 +148,11 @@ class ExpressRouteController extends Controller
             'days_of_week' => ['required', 'array', 'min:1'],
             'days_of_week.*' => ['integer', 'between:0,6'],
             'departure_time' => ['required', 'date_format:H:i'],
+            // Ida y vuelta (pedido explícito del usuario): además de la hora
+            // de salida DEL origen, hace falta la hora de salida DEL destino
+            // — GenerateExpressRides genera una segunda carrera ese horario.
+            'is_round_trip' => ['boolean'],
+            'return_time' => ['nullable', 'required_if:is_round_trip,true', 'date_format:H:i'],
             'offered_price' => ['required', 'numeric', 'min:0.01'],
             'conditions' => ['nullable', 'array'],
             'conditions.*' => ['string', 'max:150'],
@@ -81,6 +162,25 @@ class ExpressRouteController extends Controller
             'share_enabled' => ['boolean'],
             'max_companions' => ['nullable', 'integer', 'min:1', 'max:6'],
         ]);
+
+        // Pedido explícito del usuario: no tiene que calzar con el estimado,
+        // pero tampoco puede irse por debajo del 50% de ese estimado — se
+        // valida acá, con lo que calcula el propio servidor, nunca contra lo
+        // que haya mostrado el navegador.
+        $suggestedPrice = $this->suggestedPrice(
+            $validated['origin_lat'],
+            $validated['origin_lng'],
+            $validated['destination_lat'],
+            $validated['destination_lng'],
+            $this->referenceRatePerKm($request->user()->id),
+        );
+        $minimumPrice = round($suggestedPrice * self::MINIMUM_PRICE_FACTOR, 2);
+
+        if ($validated['offered_price'] < $minimumPrice) {
+            throw ValidationException::withMessages([
+                'offered_price' => 'El precio no puede ser menor a $'.number_format($minimumPrice, 2).' (mitad del estimado de $'.number_format($suggestedPrice, 2).').',
+            ]);
+        }
 
         $route = ExpressRoute::query()->create([
             'client_user_id' => $request->user()->id,
@@ -93,6 +193,8 @@ class ExpressRouteController extends Controller
             'destination_address' => $validated['destination_address'] ?? null,
             'days_of_week' => array_values(array_unique($validated['days_of_week'])),
             'departure_time' => $validated['departure_time'],
+            'is_round_trip' => $validated['is_round_trip'] ?? false,
+            'return_time' => ($validated['is_round_trip'] ?? false) ? $validated['return_time'] : null,
             'offered_price' => $validated['offered_price'],
             'status' => 'open',
             'share_enabled' => $validated['share_enabled'] ?? false,
@@ -155,6 +257,8 @@ class ExpressRouteController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'departure_time' => ['required', 'date_format:H:i'],
+            'is_round_trip' => ['boolean'],
+            'return_time' => ['nullable', 'required_if:is_round_trip,true', 'date_format:H:i'],
             'days_of_week' => ['required', 'array', 'min:1'],
             'days_of_week.*' => ['integer', 'between:0,6'],
             'offered_price' => ['required', 'numeric', 'min:0.01'],
@@ -162,9 +266,29 @@ class ExpressRouteController extends Controller
             'max_companions' => ['nullable', 'integer', 'min:1', 'max:6'],
         ]);
 
+        // Origen y destino no se editan acá (sin mapa en esta pantalla) — se
+        // usan los que ya tiene guardados el Expreso para el mismo piso de
+        // precio que rige al publicarlo.
+        $suggestedPrice = $this->suggestedPrice(
+            (float) $route->origin_lat,
+            (float) $route->origin_lng,
+            (float) $route->destination_lat,
+            (float) $route->destination_lng,
+            $this->referenceRatePerKm($route->client_user_id),
+        );
+        $minimumPrice = round($suggestedPrice * self::MINIMUM_PRICE_FACTOR, 2);
+
+        if ($validated['offered_price'] < $minimumPrice) {
+            throw ValidationException::withMessages([
+                'offered_price' => 'El precio no puede ser menor a $'.number_format($minimumPrice, 2).' (mitad del estimado de $'.number_format($suggestedPrice, 2).').',
+            ]);
+        }
+
         $route->update([
             'name' => $validated['name'],
             'departure_time' => $validated['departure_time'],
+            'is_round_trip' => $validated['is_round_trip'] ?? false,
+            'return_time' => ($validated['is_round_trip'] ?? false) ? $validated['return_time'] : null,
             'days_of_week' => array_values(array_unique($validated['days_of_week'])),
             'offered_price' => $validated['offered_price'],
             'share_enabled' => $validated['share_enabled'] ?? false,

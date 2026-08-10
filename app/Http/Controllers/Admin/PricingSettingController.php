@@ -34,6 +34,18 @@ class PricingSettingController extends Controller
             // opcional propio del conductor en su perfil, para tarifas MÁS
             // altas — este es el piso general que aplica a todos).
             'minimum_fare' => ['required', 'numeric', 'min:0', 'max:100'],
+            // Ticket promedio por carrera (pedido explícito del usuario):
+            // alimenta la proyección de ganancia mensual del catálogo de
+            // planes de conductor (ver SubscriptionPlan).
+            'average_ticket_price' => ['required', 'numeric', 'min:0', 'max:1000'],
+            // Antes fija en código (pedido explícito del usuario: poder
+            // ajustarla sin desplegar) — ver DriverProfile::staleAfterMinutes().
+            // El barrido automático (drivers:sweep-stale-availability) sigue
+            // corriendo cada 2 min sin importar este valor, así que bajarlo
+            // por debajo de eso puede tardar hasta 2 min en aplicarse del
+            // lado de ESE comando puntual (el resto de la app lo aplica al
+            // instante).
+            'driver_stale_after_minutes' => ['required', 'integer', 'min:1', 'max:60'],
         ]);
 
         PricingSetting::current()->update($validated);

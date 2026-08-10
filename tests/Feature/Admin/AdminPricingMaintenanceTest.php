@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\DriverProfile;
 use App\Models\PricingSetting;
 use App\Models\User;
 use App\Services\PriceCalculator;
@@ -35,6 +36,8 @@ class AdminPricingMaintenanceTest extends TestCase
             'night_starts_at' => 21,
             'night_ends_at' => 5,
             'minimum_fare' => 2.5,
+            'average_ticket_price' => 3.5,
+            'driver_stale_after_minutes' => 5,
         ])->assertRedirect();
 
         $this->assertDatabaseHas('pricing_settings', [
@@ -42,7 +45,35 @@ class AdminPricingMaintenanceTest extends TestCase
             'night_starts_at' => 21,
             'night_ends_at' => 5,
             'minimum_fare' => 2.5,
+            'average_ticket_price' => 3.5,
+            'driver_stale_after_minutes' => 5,
         ]);
+    }
+
+    /**
+     * Pedido explícito del usuario: "ese tiempo de inactividad, ¿lo puedo
+     * subir desde el panel de administrador?" — antes era la constante
+     * DriverProfile::STALE_AFTER_MINUTES, fija en el código.
+     */
+    public function test_an_admin_can_change_how_long_a_driver_can_go_without_a_location_ping(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.pricing.update'), [
+            'night_surcharge_percent' => 20,
+            'night_starts_at' => 20,
+            'night_ends_at' => 6,
+            'minimum_fare' => 2,
+            'average_ticket_price' => 3,
+            'driver_stale_after_minutes' => 10,
+        ])->assertRedirect();
+
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create(['location_updated_at' => now()->subMinutes(7)]);
+
+        // Con el umbral por defecto (2 min) esto sería stale; con el nuevo
+        // umbral de 10 min, todavía cuenta como reciente.
+        $this->assertFalse($profile->isStale());
     }
 
     /**

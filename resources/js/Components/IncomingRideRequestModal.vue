@@ -4,6 +4,7 @@ import { router } from '@inertiajs/vue3';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 import { dismissIncomingRideRequest, incomingRideRequestState } from '@/Utils/incomingRideRequest';
 
 // Pedido explícito del usuario: la carrera entrante tiene que ocupar media
@@ -102,26 +103,54 @@ function discard() {
             </p>
 
             <div class="mt-4 space-y-2">
-                <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
-                    {{ current.client_name }}
-                    <span
-                        v-if="current.client_review_count > 0"
-                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-arka-lime/15 text-arka-lime"
-                    >
-                        <span class="leading-none">★</span> {{ Number(current.client_rating).toFixed(1) }}
-                    </span>
-                    <span v-else class="text-xs text-arka-text-muted">Sin calificaciones todavía</span>
-                    <span v-if="current.client_member_code" class="text-xs text-arka-text-muted">#{{ current.client_member_code }}</span>
-                </p>
+                <!-- Pedido explícito del usuario: que aparezca la foto del
+                     cliente, no solo el nombre — mismo <UserAvatar> con
+                     respaldo a iniciales que usa el resto de la app. -->
+                <div class="flex items-center gap-3">
+                    <UserAvatar
+                        :user="{ name: current.client_name, avatar_url: current.client_avatar_url }"
+                        size-class="h-14 w-14 text-lg shrink-0"
+                    />
+                    <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
+                        {{ current.client_name }}
+                        <span
+                            v-if="current.client_review_count > 0"
+                            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-arka-lime/15 text-arka-lime"
+                        >
+                            <span class="leading-none">★</span> {{ Number(current.client_rating).toFixed(1) }}
+                        </span>
+                        <span v-else class="text-xs text-arka-text-muted">Sin calificaciones todavía</span>
+                        <span v-if="current.client_member_code" class="text-xs text-arka-text-muted">#{{ current.client_member_code }}</span>
+                    </p>
+                </div>
 
-                <p v-if="current.origin_sector?.name || current.destination_sector?.name" class="text-arka-text font-medium">
-                    {{ current.origin_sector?.name ?? 'origen sin sector' }} &rarr; {{ current.destination_sector?.name ?? 'destino sin sector' }}
-                </p>
-                <p class="text-sm text-arka-text-muted">
-                    {{ current.origin_address ?? 'Origen sin referencia' }} &rarr;
-                    {{ current.destination_address ?? 'Destino sin referencia' }}
-                    · {{ Number(current.distance_km).toFixed(1) }} km
-                </p>
+                <!-- Origen/destino (pedido explícito del usuario: "mejorar para que
+                     se visualice bien") — antes iban los dos en una sola línea
+                     corrida con "→", ilegible cuando la dirección es larga y hace
+                     wrap. Mismo lenguaje visual de "punto de origen (verde) → punto
+                     de destino (rojo)" que ya usa el mapa (FleetMap.vue). -->
+                <div class="flex gap-3">
+                    <div class="flex flex-col items-center pt-1.5 shrink-0">
+                        <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
+                        <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
+                        <span class="h-2.5 w-2.5 rounded-full bg-arka-danger"></span>
+                    </div>
+                    <div class="flex-1 space-y-2.5 min-w-0">
+                        <div>
+                            <p class="text-arka-text font-medium truncate">
+                                {{ current.origin_sector?.name ?? 'Origen sin sector' }}
+                            </p>
+                            <p class="text-xs text-arka-text-muted">{{ current.origin_address ?? 'Sin referencia' }}</p>
+                        </div>
+                        <div>
+                            <p class="text-arka-text font-medium truncate">
+                                {{ current.destination_sector?.name ?? 'Destino sin sector' }}
+                            </p>
+                            <p class="text-xs text-arka-text-muted">{{ current.destination_address ?? 'Sin referencia' }}</p>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-xs text-arka-text-muted">{{ Number(current.distance_km).toFixed(1) }} km</p>
 
                 <p class="text-2xl font-semibold text-arka-primary-bright mt-2">
                     ${{ Number(current.current_offered_price).toFixed(2) }}

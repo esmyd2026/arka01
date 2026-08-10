@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\FleetMember;
+use App\Models\PlanPromotion;
+use App\Models\PricingSetting;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
+use App\Models\User;
 use App\Services\PlanLimits;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -28,7 +31,12 @@ class MyPlanController extends Controller
             ->where('user_id', $userId)
             ->whereIn('status', ['awaiting_proof', 'pending_review', 'rejected'])
             ->whereHas('plan', fn ($query) => $query->where('owner_type', $ownerType))
-            ->with('plan')
+            // Bug real reportado por el usuario: sin cargar `planPromotion`,
+            // el panel de "Pedido de plan" no tenía cómo saber que este
+            // pedido usaba una promoción, y siempre mostraba el precio de
+            // LISTA del plan en vez del precio promocional que el usuario
+            // efectivamente eligió.
+            ->with(['plan', 'planPromotion'])
             ->latest()
             ->first();
     }
@@ -48,6 +56,60 @@ class MyPlanController extends Controller
             ->get();
     }
 
+    /**
+     * Promoción vigente y elegible por plan (pedido explícito del usuario:
+     * "que aparezca pagá tanto y ahorrá tanto") — la más barata si hubiera
+     * más de una vigente a la vez para el mismo plan. `null` si no hay
+     * ninguna, o si el usuario ya usó todas las que había.
+     */
+    private function attachActivePromotions(Collection $plans, User $user): Collection
+    {
+        $promotionsByPlan = PlanPromotion::visible()
+            ->whereIn('subscription_plan_id', $plans->pluck('id'))
+            ->orderBy('promo_price')
+            ->get()
+            ->groupBy('subscription_plan_id');
+
+        $plans->each(function (SubscriptionPlan $plan) use ($promotionsByPlan, $user) {
+            $eligible = ($promotionsByPlan->get($plan->id) ?? collect())
+                ->first(fn (PlanPromotion $promotion) => $promotion->isEligibleFor($user));
+
+            $plan->active_promotion = $eligible ? [
+                'id' => $eligible->id,
+                'label' => $eligible->label,
+                'promo_price' => (float) $eligible->promo_price,
+                'savings' => round((float) $plan->monthly_price - (float) $eligible->promo_price, 2),
+                'ends_at' => $eligible->ends_at?->toDateString(),
+            ] : null;
+        });
+
+        return $plans;
+    }
+
+    /**
+     * Proyección de ganancia mensual por plan (pedido explícito del
+     * usuario): "indiquemos en cada plan las carreras estimadas y un
+     * estimado a ganar mensualmente" — carreras estimadas × ticket promedio,
+     * ambos editables sin tocar código (SubscriptionPlan::estimated_monthly_rides
+     * desde /admin/planes, PricingSetting::average_ticket_price desde
+     * /admin/tarifas). Solo aplica a planes de conductor: un cliente no
+     * "gana" nada por su plan.
+     */
+    private function attachEarningsProjection(Collection $plans): Collection
+    {
+        $ticket = (float) PricingSetting::current()->average_ticket_price;
+
+        $plans->each(function (SubscriptionPlan $plan) use ($ticket) {
+            $plan->earnings_projection = $plan->estimated_monthly_rides ? [
+                'monthly_rides' => $plan->estimated_monthly_rides,
+                'monthly_earnings' => round($plan->estimated_monthly_rides * $ticket, 2),
+                'ticket' => $ticket,
+            ] : null;
+        });
+
+        return $plans;
+    }
+
     public function driver(Request $request): Response
     {
         $user = $request->user();
@@ -58,19 +120,21 @@ class MyPlanController extends Controller
             ->whereNull('left_at')
             ->count();
 
+        // Solo planes activos, salvo que sea justo el que el usuario ya
+        // tiene contratado (un plan discontinuado no debería desaparecer
+        // de la vista de quien ya lo paga). Los de nivel inferior al
+        // actual ni siquiera se mandan (sección 19: "no deberá visualizar
+        // nuevamente los planes inferiores" — se filtra acá, no solo se
+        // atenúa el botón en el frontend).
+        $plans = SubscriptionPlan::query()
+            ->where('owner_type', 'driver')
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('code', $limits['plan_code']))
+            ->where('sort_order', '>=', $limits['plan_sort_order'])
+            ->orderBy('sort_order')
+            ->get();
+
         return Inertia::render('Plan/Driver', [
-            // Solo planes activos, salvo que sea justo el que el usuario ya
-            // tiene contratado (un plan discontinuado no debería desaparecer
-            // de la vista de quien ya lo paga). Los de nivel inferior al
-            // actual ni siquiera se mandan (sección 19: "no deberá visualizar
-            // nuevamente los planes inferiores" — se filtra acá, no solo se
-            // atenúa el botón en el frontend).
-            'plans' => SubscriptionPlan::query()
-                ->where('owner_type', 'driver')
-                ->where(fn ($query) => $query->where('is_active', true)->orWhere('code', $limits['plan_code']))
-                ->where('sort_order', '>=', $limits['plan_sort_order'])
-                ->orderBy('sort_order')
-                ->get(),
+            'plans' => $this->attachEarningsProjection($this->attachActivePromotions($plans, $user)),
             'currentPlan' => $limits,
             'usedClients' => $activeClientCount,
             'changes' => $user->subscriptionChanges()
@@ -99,15 +163,17 @@ class MyPlanController extends Controller
             ->get()
             ->max('total') ?? 0;
 
+        // Mismo criterio que el catálogo de conductor: nunca se manda un
+        // plan de nivel inferior al vigente (sección 19).
+        $plans = SubscriptionPlan::query()
+            ->where('owner_type', 'client')
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('code', $limits['plan_code']))
+            ->where('sort_order', '>=', $limits['plan_sort_order'])
+            ->orderBy('sort_order')
+            ->get();
+
         return Inertia::render('Plan/Client', [
-            // Mismo criterio que el catálogo de conductor: nunca se manda un
-            // plan de nivel inferior al vigente (sección 19).
-            'plans' => SubscriptionPlan::query()
-                ->where('owner_type', 'client')
-                ->where(fn ($query) => $query->where('is_active', true)->orWhere('code', $limits['plan_code']))
-                ->where('sort_order', '>=', $limits['plan_sort_order'])
-                ->orderBy('sort_order')
-                ->get(),
+            'plans' => $this->attachActivePromotions($plans, $user),
             'currentPlan' => $limits,
             'usedFleets' => $user->fleets()->count(),
             'maxDriversInAnyFleet' => $maxDriversInAnyFleet,

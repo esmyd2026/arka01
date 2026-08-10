@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PlanPromotion;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Services\SubscriptionActivator;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * "Elegir este plan" desde Mi plan (consideración agregada al alcance): no
@@ -37,6 +39,7 @@ class SubscriptionRequestController extends Controller
     {
         $validated = $request->validate([
             'subscription_plan_id' => ['required', 'integer', 'exists:subscription_plans,id'],
+            'plan_promotion_id' => ['nullable', 'integer', 'exists:plan_promotions,id'],
         ]);
 
         $plan = SubscriptionPlan::query()->findOrFail($validated['subscription_plan_id']);
@@ -58,14 +61,57 @@ class SubscriptionRequestController extends Controller
             throw ValidationException::withMessages(['subscription_plan_id' => $reason]);
         }
 
-        // Un plan de $0 no tiene nada que transferir — pedirle un comprobante
-        // no tiene sentido, así que se activa directo sin pasar por revisión.
-        if ($plan->monthly_price <= 0) {
-            $this->activator->activate($user, $plan, $user->id, null, 'Auto-activado: plan sin costo, no necesita comprobante.');
+        // Promoción de precio por tiempo limitado (pedido explícito del
+        // usuario) — nunca se confía en el precio que haya mostrado el
+        // navegador, se revalida acá: tiene que existir, seguir vigente,
+        // ser de ESTE plan, y el usuario todavía no haberla usado.
+        $promotion = null;
+        if (! empty($validated['plan_promotion_id'])) {
+            $promotion = PlanPromotion::visible()
+                ->where('subscription_plan_id', $plan->id)
+                ->find($validated['plan_promotion_id']);
 
-            Log::info('Plan gratis auto-activado sin comprobante.', [
+            if (! $promotion || ! $promotion->isEligibleFor($user)) {
+                throw ValidationException::withMessages([
+                    'plan_promotion_id' => 'Esa promoción ya no está disponible para su cuenta.',
+                ]);
+            }
+        }
+
+        $effectivePrice = $promotion ? (float) $promotion->promo_price : (float) $plan->monthly_price;
+
+        // Un precio en $0 no tiene nada que transferir — pedirle un
+        // comprobante no tiene sentido, así que se activa directo sin pasar
+        // por revisión (mismo criterio de siempre para un plan gratis de
+        // catálogo, generalizado acá al precio EFECTIVO, de promo o de lista).
+        if ($effectivePrice <= 0) {
+            $note = $promotion
+                ? "Auto-activado por promoción: {$promotion->label}."
+                : 'Auto-activado: plan sin costo, no necesita comprobante.';
+
+            $this->activator->activate($user, $plan, $user->id, null, $note);
+
+            // Solo si hubo promoción de por medio: sin este registro,
+            // PlanPromotion::isEligibleFor() no tendría cómo enterarse de que
+            // este usuario ya la usó, y se la seguiría ofreciendo para
+            // siempre — un plan gratis de catálogo de toda la vida no
+            // necesita este rastro, no cambia nada de su comportamiento.
+            if ($promotion) {
+                SubscriptionRequest::query()->create([
+                    'user_id' => $user->id,
+                    'subscription_plan_id' => $plan->id,
+                    'plan_promotion_id' => $promotion->id,
+                    'status' => 'approved',
+                    'reviewed_by' => $user->id,
+                    'reviewed_at' => now(),
+                    'admin_note' => "Auto-aprobado por promoción: {$promotion->label}.",
+                ]);
+            }
+
+            Log::info('Plan sin costo auto-activado sin comprobante.', [
                 'user_id' => $user->id,
                 'plan_id' => $plan->id,
+                'plan_promotion_id' => $promotion?->id,
             ]);
 
             return back()->with('status', 'Plan activado. Como no tiene costo, no hace falta comprobante de pago.');
@@ -74,6 +120,7 @@ class SubscriptionRequestController extends Controller
         $subscriptionRequest = SubscriptionRequest::query()->create([
             'user_id' => $user->id,
             'subscription_plan_id' => $plan->id,
+            'plan_promotion_id' => $promotion?->id,
             'status' => 'awaiting_proof',
         ]);
 
@@ -81,6 +128,7 @@ class SubscriptionRequestController extends Controller
             'subscription_request_id' => $subscriptionRequest->id,
             'user_id' => $user->id,
             'plan_id' => $plan->id,
+            'plan_promotion_id' => $promotion?->id,
         ]);
 
         return back()->with('status', 'Plan elegido. Ahora suba el comprobante de su transferencia para que lo revisemos.');
@@ -154,7 +202,7 @@ class SubscriptionRequestController extends Controller
      * seguridad, pedido explícito del usuario): es un documento financiero,
      * solo lo puede ver quien lo subió o un admin.
      */
-    public function paymentProof(Request $request, SubscriptionRequest $subscriptionRequest): \Symfony\Component\HttpFoundation\Response
+    public function paymentProof(Request $request, SubscriptionRequest $subscriptionRequest): Response
     {
         abort_unless($subscriptionRequest->user_id === $request->user()->id || $request->user()->isAdmin(), 403);
         abort_if(blank($subscriptionRequest->payment_proof_path), 404);

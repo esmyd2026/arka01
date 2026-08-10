@@ -34,4 +34,24 @@ class DriverTierTest extends TestCase
         $this->assertTrue(DriverTier::forPoints(500)->is_public_eligible);
         $this->assertTrue(DriverTier::forPoints(1000)->is_public_eligible);
     }
+
+    /**
+     * Pedido explícito del usuario ("qué va a lograr en la próxima meta"):
+     * la siguiente medalla por puntos, sin importar si habilita el
+     * directorio público o no (a diferencia de `nextPublicTier` en
+     * DriverProfileController::edit(), que sí filtra por eso).
+     */
+    public function test_next_after_returns_the_next_tier_by_points(): void
+    {
+        $this->assertSame('Plata', DriverTier::nextAfter(0)->name);
+        $this->assertSame('Plata', DriverTier::nextAfter(149)->name);
+        $this->assertSame('Oro', DriverTier::nextAfter(150)->name);
+        $this->assertSame('Diamante', DriverTier::nextAfter(999)->name);
+    }
+
+    public function test_next_after_is_null_at_the_highest_tier(): void
+    {
+        $this->assertNull(DriverTier::nextAfter(1000));
+        $this->assertNull(DriverTier::nextAfter(50000));
+    }
 }

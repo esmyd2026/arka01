@@ -17,6 +17,15 @@ class PricingSetting extends Model
         'night_starts_at',
         'night_ends_at',
         'minimum_fare',
+        // Ticket promedio por carrera (pedido explícito del usuario): valor
+        // global que alimenta la proyección de ganancia mensual mostrada en
+        // el catálogo de planes de conductor (ver SubscriptionPlan y
+        // MyPlanController::attachEarningsProjection()).
+        'average_ticket_price',
+        // Antes era DriverProfile::STALE_AFTER_MINUTES, fija en el código
+        // (pedido explícito del usuario: poder ajustarla sin desplegar) —
+        // ver DriverProfile::staleAfterMinutes().
+        'driver_stale_after_minutes',
     ];
 
     public static function current(): self

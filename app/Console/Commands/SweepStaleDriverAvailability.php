@@ -39,14 +39,17 @@ class SweepStaleDriverAvailability extends Command
     public function handle(): int
     {
         // Mismo umbral que DriverProfile::isStale() (única fuente de
-        // verdad) — este comando es el respaldo que apaga `is_available` de
-        // verdad en la base; isStale() es lo que ya descarta a estos
-        // conductores de la lista de candidatos ANTES de que corra esto.
+        // verdad, editable desde /admin/tarifas) — este comando es el
+        // respaldo que apaga `is_available` de verdad en la base; isStale()
+        // es lo que ya descarta a estos conductores de la lista de
+        // candidatos ANTES de que corra esto.
+        $staleAfterMinutes = DriverProfile::staleAfterMinutes();
+
         $stale = DriverProfile::query()
             ->where('is_available', true)
-            ->where(function (Builder $query) {
+            ->where(function (Builder $query) use ($staleAfterMinutes) {
                 $query->whereNull('location_updated_at')
-                    ->orWhere('location_updated_at', '<', now()->subMinutes(DriverProfile::STALE_AFTER_MINUTES));
+                    ->orWhere('location_updated_at', '<', now()->subMinutes($staleAfterMinutes));
             })
             ->with('user')
             ->get()

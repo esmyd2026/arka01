@@ -421,6 +421,17 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 {{ isAvailableNow ? '● Disponible' : '○ No disponible' }}
                             </span>
                         </p>
+                        <!-- Bug reportado por el usuario: un conductor con el switch
+                             prendido podía seguir viéndose "Desconectado" en el
+                             roster de sus clientes, sin ningún aviso de por qué —
+                             pasaba sin ping de ubicación reciente (más de 2 min,
+                             ver DriverProfile::isReachable()) y sin la ventana de
+                             WhatsApp abierta como respaldo. Antes esto era invisible
+                             para el propio conductor. -->
+                        <p v-if="driverStats.is_available && !driverStats.is_reachable" class="text-xs text-arka-warning mt-1 max-w-sm">
+                            ⚠️ Sin ubicación reciente — sus clientes pueden seguir viéndolo desconectado. Revise que el
+                            navegador tenga permiso de ubicación y que la app siga abierta.
+                        </p>
                     </div>
 
                     <AdBannerSlider :banners="adBanners" />

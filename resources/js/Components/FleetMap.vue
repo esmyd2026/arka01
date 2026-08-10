@@ -36,12 +36,17 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
-    // Encuadra los marcadores solos la primera vez que aparecen (fix real
-    // reportado: el mapa quedaba en Quito por defecto sin importar la
-    // carrera). Se puede desactivar en pantallas que YA manejan su propio
-    // centrado con lógica más específica (ej. Ride/Request.vue sigue la
-    // geolocalización del cliente vía la prop `center`) para que las dos
-    // cosas no se peleen entre sí.
+    // Encuadra los marcadores cuando cambia DE QUÉ se compone la lista (fix
+    // real reportado: se marcaba el origen y el mapa se centraba bien, pero
+    // al marcar el destino ya no se movía ni se veían los dos puntos juntos —
+    // antes se dejaba de ajustar apenas se había encuadrado UNA vez, sin
+    // importar que después apareciera un segundo punto). No se reajusta si lo
+    // único que cambió fue la posición de los mismos marcadores de siempre
+    // (ej. el ping en vivo de un conductor moviéndose) — si no, pelearía
+    // contra un zoom/pan manual que ya hizo quien mira el mapa. Se puede
+    // desactivar del todo en pantallas que manejan su propio centrado con
+    // lógica más específica (ej. Ride/Request.vue sigue la geolocalización
+    // del cliente vía la prop `center`).
     autoFit: {
         type: Boolean,
         default: true,
@@ -58,10 +63,11 @@ let routeLine = null;
 // que está sucediendo"): el mapa arrancaba siempre centrado en Quito por
 // defecto si la pantalla no pasaba un :center explícito (ej.
 // Ride/Show.vue) — nunca se ajustaba solo a dónde están de verdad los
-// marcadores. Se ajusta una sola vez (al aparecer los primeros marcadores),
-// no en cada actualización — si no, cada ping de ubicación en vivo del
-// conductor pelearía contra un zoom/pan manual que ya hizo quien mira el mapa.
-let hasFitBoundsOnce = false;
+// marcadores. Se ajusta cada vez que cambia la composición de la lista
+// (cuántos marcadores hay y de qué tipo), no en cada actualización de
+// posición — si no, cada ping de ubicación en vivo del conductor pelearía
+// contra un zoom/pan manual que ya hizo quien mira el mapa.
+let lastFitSignature = null;
 
 onMounted(() => {
     fixLeafletIcons();
@@ -164,18 +170,40 @@ function drawMarkers() {
     validMarkers.forEach((marker) => {
         const options = ICONS[marker.id] ? { icon: ICONS[marker.id] } : {};
 
-        L.marker([marker.lat, marker.lng], options)
-            .addTo(markerLayer)
-            .bindPopup(marker.label ?? '');
+        // Bug reportado por el usuario ("si moví en el mapa no se
+        // recalculó"): un marcador de Leaflet es interactivo por
+        // default y se queda con el clic (para su propio popup) en vez
+        // de dejarlo pasar al mapa — en una pantalla clickeable (elegir
+        // origen/destino), volver a tocar justo donde ya está el pin
+        // para reubicarlo nunca llegaba a `map-click`. Sin popup propio
+        // que perder acá (el label ya se ve en el propio formulario), se
+        // desactiva la interactividad del pin para que el clic siempre
+        // le llegue al mapa.
+        if (props.clickable) {
+            options.interactive = false;
+        }
+
+        const leafletMarker = L.marker([marker.lat, marker.lng], options).addTo(markerLayer);
+
+        if (!props.clickable) {
+            leafletMarker.bindPopup(marker.label ?? '');
+        }
     });
 
-    if (props.autoFit && !hasFitBoundsOnce && validMarkers.length && map) {
-        hasFitBoundsOnce = true;
+    if (props.autoFit && validMarkers.length && map) {
+        // Firma de composición: cuántos marcadores hay y de qué id (no la
+        // posición) — un ping en vivo que solo mueve al mismo conductor no
+        // cambia esto, pero marcar el destino después del origen sí.
+        const signature = `${validMarkers.length}:${validMarkers.map((m) => m.id ?? '').sort().join(',')}`;
 
-        if (validMarkers.length === 1) {
-            map.setView([validMarkers[0].lat, validMarkers[0].lng], props.zoom);
-        } else {
-            map.fitBounds(L.latLngBounds(validMarkers.map((m) => [m.lat, m.lng])), { padding: [40, 40] });
+        if (signature !== lastFitSignature) {
+            lastFitSignature = signature;
+
+            if (validMarkers.length === 1) {
+                map.setView([validMarkers[0].lat, validMarkers[0].lng], props.zoom);
+            } else {
+                map.fitBounds(L.latLngBounds(validMarkers.map((m) => [m.lat, m.lng])), { padding: [40, 40] });
+            }
         }
     }
 }

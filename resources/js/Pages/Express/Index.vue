@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -10,9 +10,24 @@ import FleetMap from '@/Components/FleetMap.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import Checkbox from '@/Components/Checkbox.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { fetchOsrmRoute } from '@/Utils/osrmRoute';
+import { distanceKm } from '@/Utils/haversine';
 
 const props = defineProps({
     routes: { type: Array, required: true },
+    // Tarifa de referencia (promedio de sus conductores) y tarifa mínima de
+    // la plataforma — de acá sale el costo aproximado que se sugiere antes
+    // de fijar el precio por carrera (pedido explícito del usuario).
+    referenceRatePerKm: { type: [Number, String], default: 0 },
+    minimumFare: { type: [Number, String], default: 0 },
+    // Pedido explícito del usuario: el precio no tiene que calzar con el
+    // estimado, pero tampoco puede irse por debajo de esta fracción — mismo
+    // número que ya aplica el backend en store()/update().
+    minimumPriceFactor: { type: [Number, String], default: 0.5 },
+    // Ciudad ya registrada del cliente (pedido explícito del usuario: el mapa
+    // arrancaba siempre en Quito) — respaldo si el navegador no da
+    // geolocalización a tiempo.
+    clientCity: { type: Object, default: null },
 });
 
 const DAYS = [
@@ -44,6 +59,10 @@ const form = useForm({
     destination_address: '',
     days_of_week: [],
     departure_time: '07:00',
+    // Ida y vuelta (pedido explícito del usuario): además de la hora de
+    // salida DEL origen, la hora de salida DEL destino para la vuelta.
+    is_round_trip: false,
+    return_time: '17:00',
     offered_price: null,
     conditions: [],
     // Pedido explícito del usuario: que otras personas con ruta parecida se
@@ -51,6 +70,30 @@ const form = useForm({
     share_enabled: false,
     max_companions: 1,
 });
+
+// Centro inicial del mapa (pedido explícito del usuario: "no se posiciona
+// donde está el cliente... por lo menos en la ciudad que se encuentra"):
+// arranca en la ubicación real si el navegador la da, si no en la ciudad que
+// ya tiene registrada — sin esto, FleetMap.vue cae en su propio default fijo
+// (Quito), sin importar dónde esté el cliente de verdad.
+const mapCenter = ref(null);
+
+function fallbackToClientCity() {
+    if (props.clientCity) {
+        mapCenter.value = { lat: props.clientCity.lat, lng: props.clientCity.lng };
+    }
+}
+
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            mapCenter.value = { lat: position.coords.latitude, lng: position.coords.longitude };
+        },
+        fallbackToClientCity
+    );
+} else {
+    fallbackToClientCity();
+}
 
 // Toggle simple: "marcando origen" o "marcando destino" en el mismo mapa,
 // para no necesitar dos mapas separados.
@@ -86,6 +129,23 @@ const mapMarkers = computed(() => {
     return markers;
 });
 
+// Trazado real del recorrido entre los dos puntos marcados (bug reportado
+// por el usuario: no se trazaba nada acá) — mismo mecanismo que "Pedir
+// carrera", ver Utils/osrmRoute.js.
+const routeCoords = ref([]);
+
+watch(
+    () => [form.origin_lat, form.origin_lng, form.destination_lat, form.destination_lng],
+    async ([originLat, originLng, destLat, destLng]) => {
+        if (originLat == null || destLat == null) {
+            routeCoords.value = [];
+            return;
+        }
+
+        routeCoords.value = await fetchOsrmRoute(originLat, originLng, destLat, destLng);
+    }
+);
+
 function addCondition() {
     form.conditions.push('');
 }
@@ -94,8 +154,52 @@ function removeCondition(index) {
     form.conditions.splice(index, 1);
 }
 
+// Costo estimado (pedido explícito del usuario: "falta el costo estimado...
+// y el precio que coloque que no sea menor al estimado") — mismo cálculo que
+// "Pedir carrera": distancia × tarifa de referencia, con la tarifa mínima de
+// la plataforma como piso. Lo que realmente se termina exigiendo lo valida
+// el backend con este mismo cálculo (PriceCalculator), esto es solo para
+// orientar antes de mandar el formulario.
+const estimatedDistanceKm = computed(() => {
+    if (form.origin_lat == null || form.destination_lat == null) return null;
+    return distanceKm(form.origin_lat, form.origin_lng, form.destination_lat, form.destination_lng);
+});
+
+const rawEstimatedPrice = computed(() => {
+    if (estimatedDistanceKm.value == null) return null;
+    return estimatedDistanceKm.value * Number(props.referenceRatePerKm || 0);
+});
+
+const isMinimumFareApplied = computed(() => rawEstimatedPrice.value != null && rawEstimatedPrice.value < Number(props.minimumFare));
+
+const estimatedPrice = computed(() => {
+    if (rawEstimatedPrice.value == null) return null;
+    return Math.max(rawEstimatedPrice.value, Number(props.minimumFare));
+});
+
+// Pedido explícito del usuario: no tiene que calzar con el estimado, pero
+// tampoco puede irse por debajo de esta fracción de ese estimado.
+const minimumAllowedPrice = computed(() => {
+    if (estimatedPrice.value == null) return null;
+    return Math.round(estimatedPrice.value * Number(props.minimumPriceFactor) * 100) / 100;
+});
+
+// Ida y vuelta (pedido explícito del usuario: "debería duplicar el valor... y
+// debemos indicarle el desglose"): "Precio por carrera" sigue siendo por
+// trayecto — se cobra ese monto en cada una de las dos carreras que se
+// generan por día (confirmado con el usuario) — esto es solo para que quede
+// claro cuánto suma el día completo antes de fijar el precio.
+const roundTripTotalEstimate = computed(() => {
+    if (!form.is_round_trip || estimatedPrice.value == null) return null;
+    return estimatedPrice.value * 2;
+});
+
 const canSubmit = computed(() =>
-    form.origin_lat != null && form.destination_lat != null && form.days_of_week.length > 0
+    form.origin_lat != null
+    && form.destination_lat != null
+    && form.days_of_week.length > 0
+    && (!form.is_round_trip || form.return_time)
+    && (minimumAllowedPrice.value == null || !form.offered_price || Number(form.offered_price) >= minimumAllowedPrice.value)
 );
 
 function submit() {
@@ -197,7 +301,13 @@ function submit() {
                                     </button>
                                 </div>
                             </div>
-                            <FleetMap :markers="mapMarkers" :clickable="true" @map-click="pickPoint" />
+                            <FleetMap
+                                :markers="mapMarkers"
+                                :center="mapCenter ?? undefined"
+                                :route="routeCoords"
+                                :clickable="true"
+                                @map-click="pickPoint"
+                            />
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -235,16 +345,70 @@ function submit() {
                             <InputError class="mt-1" :message="form.errors.days_of_week" />
                         </div>
 
+                        <!-- Ida y vuelta (pedido explícito del usuario): con esto
+                             marcado, "Hora de salida" pasa a ser la del origen y
+                             aparece una segunda hora para la vuelta desde el
+                             destino — se genera una carrera para cada una. -->
+                        <label class="flex items-center">
+                            <Checkbox v-model:checked="form.is_round_trip" />
+                            <span class="ms-2 text-sm text-arka-text">Es de ida y vuelta (vuelve el mismo día)</span>
+                        </label>
+
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <InputLabel value="Hora de salida" />
+                                <InputLabel :value="form.is_round_trip ? 'Hora de salida (desde el origen)' : 'Hora de salida'" />
                                 <TextInput type="time" class="mt-1 block w-full" v-model="form.departure_time" required />
                             </div>
-                            <div>
-                                <InputLabel value="Precio por carrera (USD)" />
-                                <TextInput type="number" step="0.01" min="0.01" class="mt-1 block w-full" v-model="form.offered_price" required />
-                                <InputError class="mt-1" :message="form.errors.offered_price" />
+                            <div v-if="form.is_round_trip">
+                                <InputLabel value="Hora de vuelta (desde el destino)" />
+                                <TextInput type="time" class="mt-1 block w-full" v-model="form.return_time" required />
+                                <InputError class="mt-1" :message="form.errors.return_time" />
                             </div>
+                        </div>
+
+                        <!-- Costo estimado (pedido explícito del usuario), antes de
+                             fijar el precio: distancia × su tarifa de referencia. Con
+                             ida y vuelta, desglose de cuánto suma el día completo
+                             (pedido explícito del usuario: "debemos indicarle el
+                             desglose del precio") — "Precio por carrera" sigue siendo
+                             por trayecto, se cobra en cada una de las dos carreras. El
+                             precio no tiene que calzar con el estimado (pedido
+                             explícito del usuario), pero no puede irse por debajo de
+                             la mitad — ver `minimumAllowedPrice`. -->
+                        <div v-if="estimatedPrice != null" class="p-4 rounded-arka border border-arka-text-muted/20 space-y-1">
+                            <div class="flex items-center justify-between text-sm text-arka-text-muted">
+                                <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
+                                <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ Number(referenceRatePerKm).toFixed(2) }}/km</span>
+                                <span class="text-arka-text font-medium">${{ estimatedPrice.toFixed(2) }} (estimado por trayecto)</span>
+                            </div>
+                            <div v-if="roundTripTotalEstimate != null" class="flex items-center justify-between text-sm text-arka-text-muted border-t border-arka-text-muted/10 pt-1">
+                                <span>Ida y vuelta: ${{ estimatedPrice.toFixed(2) }} × 2 carreras/día</span>
+                                <span class="text-arka-text font-medium">${{ roundTripTotalEstimate.toFixed(2) }}/día</span>
+                            </div>
+                            <p class="text-xs text-arka-text-muted">
+                                El precio por carrera que fije puede ser menor al estimado por trayecto, pero no menos de
+                                ${{ minimumAllowedPrice.toFixed(2) }} (mitad del estimado) — se cobra ese monto en cada
+                                carrera<span v-if="form.is_round_trip">, ida y vuelta por separado</span>.
+                            </p>
+                        </div>
+
+                        <div>
+                            <InputLabel value="Precio por carrera (USD)" />
+                            <TextInput
+                                type="number"
+                                step="0.01"
+                                :min="minimumAllowedPrice ?? 0.01"
+                                class="mt-1 block w-full sm:w-64"
+                                v-model="form.offered_price"
+                                required
+                            />
+                            <p
+                                v-if="minimumAllowedPrice != null && form.offered_price && Number(form.offered_price) < minimumAllowedPrice"
+                                class="mt-1 text-xs text-arka-danger"
+                            >
+                                No puede ser menor a ${{ minimumAllowedPrice.toFixed(2) }} (mitad del precio estimado).
+                            </p>
+                            <InputError class="mt-1" :message="form.errors.offered_price" />
                         </div>
 
                         <!-- Pedido explícito del usuario: hoy un conductor no le

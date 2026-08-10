@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -13,10 +13,14 @@ import { confirmDialog } from '@/Utils/confirmDialog';
 
 const props = defineProps({
     plans: { type: Array, required: true },
+    averageTicketPrice: { type: Number, required: true },
 });
 
-const driverPlans = props.plans.filter((p) => p.owner_type === 'driver');
-const clientPlans = props.plans.filter((p) => p.owner_type === 'client');
+// computed (no const plano): props.plans cambia después de guardar/crear/
+// eliminar un plan (Inertia actualiza los props sin recargar la página), y
+// estas listas tienen que recalcularse con los datos nuevos en ese momento.
+const driverPlans = computed(() => props.plans.filter((p) => p.owner_type === 'driver'));
+const clientPlans = computed(() => props.plans.filter((p) => p.owner_type === 'client'));
 
 const editingId = ref(null);
 const creatingFor = ref(null); // 'driver' | 'client' | null
@@ -27,6 +31,7 @@ const blankForm = (ownerType) => ({
     name: '',
     monthly_price: 0,
     max_clients: '',
+    estimated_monthly_rides: '',
     public_visibility: false,
     priority_listing: false,
     verified_badge: false,
@@ -52,6 +57,7 @@ function startEdit(plan) {
     form.name = plan.name;
     form.monthly_price = plan.monthly_price;
     form.max_clients = plan.max_clients ?? '';
+    form.estimated_monthly_rides = plan.estimated_monthly_rides ?? '';
     form.public_visibility = plan.public_visibility;
     form.priority_listing = plan.priority_listing;
     form.verified_badge = plan.verified_badge;
@@ -81,6 +87,13 @@ function submit() {
     } else {
         form.post(route('admin.plans.store'), { onSuccess: cancel });
     }
+}
+
+// Vista previa para el admin mientras carga/edita el número de carreras
+// estimadas (mismo cálculo que MyPlanController::attachEarningsProjection()
+// hace en el backend para mostrárselo al conductor).
+function projectedEarnings(rides) {
+    return (Number(rides) * props.averageTicketPrice).toFixed(2);
 }
 
 async function destroyPlan(plan) {
@@ -122,6 +135,9 @@ async function destroyPlan(plan) {
                                                 <span v-if="plan.verified_badge"> · insignia</span>
                                                 <span v-if="plan.van_trips_enabled"> · VAN</span>
                                                 <span v-if="!plan.express_enabled" class="text-arka-warning"> · sin Expresos</span>
+                                                <span v-if="plan.estimated_monthly_rides" class="text-arka-lime">
+                                                    · ~{{ plan.estimated_monthly_rides }} carreras/mes (~${{ projectedEarnings(plan.estimated_monthly_rides) }})
+                                                </span>
                                             </template>
                                             <template v-else>
                                                 {{ plan.max_fleets }} flota(s) · {{ plan.max_drivers_per_fleet }} conductores/flota
@@ -161,6 +177,13 @@ async function destroyPlan(plan) {
                                             <div>
                                                 <InputLabel value="Máx. clientes de confianza (vacío = sin límite)" />
                                                 <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_clients" />
+                                            </div>
+                                            <div>
+                                                <InputLabel value="Carreras estimadas por mes (referencia)" />
+                                                <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.estimated_monthly_rides" />
+                                                <p v-if="form.estimated_monthly_rides" class="mt-1 text-xs text-arka-lime">
+                                                    ≈ ${{ projectedEarnings(form.estimated_monthly_rides) }}/mes estimados para el conductor
+                                                </p>
                                             </div>
                                         </template>
                                         <template v-else>
@@ -230,6 +253,13 @@ async function destroyPlan(plan) {
                                         <div>
                                             <InputLabel value="Máx. clientes de confianza (vacío = sin límite)" />
                                             <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_clients" />
+                                        </div>
+                                        <div>
+                                            <InputLabel value="Carreras estimadas por mes (referencia)" />
+                                            <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.estimated_monthly_rides" />
+                                            <p v-if="form.estimated_monthly_rides" class="mt-1 text-xs text-arka-lime">
+                                                ≈ ${{ projectedEarnings(form.estimated_monthly_rides) }}/mes estimados para el conductor
+                                            </p>
                                         </div>
                                     </template>
                                     <template v-else>

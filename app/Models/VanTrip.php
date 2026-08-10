@@ -20,7 +20,14 @@ class VanTrip extends Model
     protected $fillable = [
         'driver_user_id',
         'origin_city_id',
+        'origin_lat',
+        'origin_lng',
+        'origin_address',
         'destination_city_id',
+        'destination_lat',
+        'destination_lng',
+        'destination_address',
+        'distance_km',
         'travel_date',
         'departure_time',
         'total_seats',
@@ -35,6 +42,11 @@ class VanTrip extends Model
         'travel_date' => 'date',
         'total_seats' => 'integer',
         'price_per_seat' => 'decimal:2',
+        'origin_lat' => 'decimal:7',
+        'origin_lng' => 'decimal:7',
+        'destination_lat' => 'decimal:7',
+        'destination_lng' => 'decimal:7',
+        'distance_km' => 'decimal:2',
         'included_services' => 'array',
     ];
 

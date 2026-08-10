@@ -122,6 +122,46 @@ class DashboardTest extends TestCase
     }
 
     /**
+     * Bug reportado por el usuario ("Luis aparece desconectado si está en
+     * línea"): `is_available` (prendió el switch) e "is_reachable" (además,
+     * tiene un ping de ubicación reciente o WhatsApp abierto — mismo criterio
+     * que ve el roster de sus clientes, DriverProfile::isReachable()) pueden
+     * divergir. El propio Inicio del conductor necesita el segundo dato para
+     * poder avisarle cuando está prendido pero invisible para sus clientes.
+     */
+    public function test_driver_stats_expose_whether_the_driver_is_actually_reachable(): void
+    {
+        $stale = User::factory()->create();
+        DriverProfile::factory()->for($stale)->create([
+            'is_available' => true,
+            'location_updated_at' => now()->subMinutes(5),
+        ]);
+
+        $response = $this->actingAs($stale)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('driverStats.is_available', true)
+            ->where('driverStats.is_reachable', false)
+        );
+    }
+
+    public function test_driver_stats_report_reachable_with_a_recent_location_ping(): void
+    {
+        $fresh = User::factory()->create();
+        DriverProfile::factory()->for($fresh)->create([
+            'is_available' => true,
+            'location_updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($fresh)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('driverStats.is_available', true)
+            ->where('driverStats.is_reachable', true)
+        );
+    }
+
+    /**
      * Se reportó: invitar a un conductor a la flota no le avisaba nada en su
      * Inicio (Dashboard.vue nunca escuchaba `.fleet-invitation.created`, solo
      * "Mis clientes de confianza" lo hacía, y solo si estaba parado ahí en

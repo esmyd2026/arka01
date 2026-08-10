@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\City;
 use App\Models\VanTrip;
+use App\Services\Haversine;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,6 +40,15 @@ class VanTripController extends Controller
                 ->get(),
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'canPublish' => $user->isDriver() && $this->planLimits->forDriver($user)['van_trips_enabled'],
+            // Pedido explícito del usuario: sugerir un costo aproximado antes
+            // de que ponga su precio por asiento — se calcula del lado del
+            // navegador (distancia entre los puntos que marque × esta tarifa),
+            // mismo criterio que ya usa "Pedir carrera".
+            'driverRatePerKm' => $user->driverProfile?->rate_per_km,
+            // Pedido explícito del usuario: el mapa arrancaba siempre en Quito
+            // por defecto — con esto, si el navegador no da geolocalización,
+            // al menos centra en la ciudad que ya tiene registrada.
+            'driverCity' => $user->city ? ['lat' => (float) $user->city->lat, 'lng' => (float) $user->city->lng] : null,
         ]);
     }
 
@@ -65,6 +75,16 @@ class VanTripController extends Controller
         $validated = $request->validate([
             'origin_city_id' => ['required', 'integer', 'different:destination_city_id', 'exists:cities,id'],
             'destination_city_id' => ['required', 'integer', 'exists:cities,id'],
+            // Punto exacto de salida/llegada (pedido explícito del usuario):
+            // opcional, un viaje se puede seguir publicando solo con la
+            // ciudad — pero si se marca uno de los dos, hace falta el par
+            // completo para poder calcular la distancia.
+            'origin_lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:origin_lng'],
+            'origin_lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:origin_lat'],
+            'origin_address' => ['nullable', 'string', 'max:255'],
+            'destination_lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:destination_lng'],
+            'destination_lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:destination_lat'],
+            'destination_address' => ['nullable', 'string', 'max:255'],
             'travel_date' => ['required', 'date', 'after_or_equal:today'],
             'departure_time' => ['required', 'date_format:H:i'],
             'total_seats' => ['required', 'integer', 'min:1', 'max:60'],
@@ -77,10 +97,24 @@ class VanTripController extends Controller
             'photos.*' => ['image', 'max:4096'],
         ]);
 
+        // Se recalcula acá, no se confía en el número que mande el navegador
+        // (mismo criterio que el precio de una carrera normal: lo que se
+        // guarda siempre lo calcula el backend).
+        $distanceKm = isset($validated['origin_lat'], $validated['destination_lat'])
+            ? Haversine::distanceKm($validated['origin_lat'], $validated['origin_lng'], $validated['destination_lat'], $validated['destination_lng'])
+            : null;
+
         $trip = VanTrip::query()->create([
             'driver_user_id' => $user->id,
             'origin_city_id' => $validated['origin_city_id'],
+            'origin_lat' => $validated['origin_lat'] ?? null,
+            'origin_lng' => $validated['origin_lng'] ?? null,
+            'origin_address' => $validated['origin_address'] ?? null,
             'destination_city_id' => $validated['destination_city_id'],
+            'destination_lat' => $validated['destination_lat'] ?? null,
+            'destination_lng' => $validated['destination_lng'] ?? null,
+            'destination_address' => $validated['destination_address'] ?? null,
+            'distance_km' => $distanceKm,
             'travel_date' => $validated['travel_date'],
             'departure_time' => $validated['departure_time'],
             'total_seats' => $validated['total_seats'],
