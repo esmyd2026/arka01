@@ -10,8 +10,10 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
+use App\Notifications\PlanActivatedPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -56,6 +58,8 @@ class SubscriptionRequestFlowTest extends TestCase
      */
     public function test_selecting_a_free_plan_activates_it_immediately_without_a_payment_proof(): void
     {
+        Notification::fake();
+
         $user = User::factory()->create();
         $freePlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'gratis')->firstOrFail();
 
@@ -69,6 +73,12 @@ class SubscriptionRequestFlowTest extends TestCase
             'subscription_plan_id' => $freePlan->id,
             'status' => 'active',
         ]);
+
+        // Reporte del usuario: "activé un plan y no le llegó la
+        // notificación" — este es el camino de auto-activación, el otro caso
+        // real que reportó (además de la aprobación manual del admin, ya
+        // cubierta en AdminSubscriptionTest).
+        Notification::assertSentTo($user, PlanActivatedPushNotification::class);
     }
 
     public function test_cannot_select_a_second_plan_of_the_same_side_while_one_is_pending(): void

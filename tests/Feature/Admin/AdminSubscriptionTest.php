@@ -7,7 +7,9 @@ use App\Models\Subscription;
 use App\Models\SubscriptionChange;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Notifications\PlanActivatedPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -57,6 +59,28 @@ class AdminSubscriptionTest extends TestCase
             'new_subscription_plan_id' => $plusPlan->id,
             'changed_by' => $admin->id,
         ]);
+    }
+
+    /**
+     * Reporte del usuario: "activé un plan a un cliente y no le llegó la
+     * notificación" — no existía ningún aviso, en ninguna de las formas de
+     * activar un plan (todas pasan por SubscriptionActivator::activate()).
+     */
+    public function test_activating_a_plan_notifies_the_user(): void
+    {
+        Notification::fake();
+
+        $admin = User::factory()->create(['is_admin' => true]);
+        $user = User::factory()->create();
+        DriverProfile::factory()->for($user)->create();
+        $plusPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+
+        $this->actingAs($admin)->post(route('admin.subscriptions.store'), [
+            'user_id' => $user->id,
+            'subscription_plan_id' => $plusPlan->id,
+        ])->assertRedirect();
+
+        Notification::assertSentTo($user, PlanActivatedPushNotification::class);
     }
 
     public function test_activating_a_new_plan_cancels_the_users_previous_active_plan_of_the_same_side(): void

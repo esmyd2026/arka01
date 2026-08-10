@@ -1715,6 +1715,24 @@ Se agregó la secuencia correcta a `deploy/README.md` para que no se repita: **c
 ### Tests
 No aplica — mismo motivo que la pasada anterior. Verificado en vivo: `googleLoginEnabled":true` en el HTML servido de `/login`, `config('services.whatsapp.business_number')` resuelto en `tinker` después del reload, y la clave de Google Maps confirmada dentro del build con `grep`.
 
+### Fix: el CSP bloqueaba el autocompletado de Google Places en producción
+Reportado por el usuario con la consola del navegador: `AddressAutocomplete` cargaba el script bien, pero las sugerencias nunca volvían — `RpcError: Rpc failed due to xhr error`, con el CSP marcando explícitamente que bloqueó la conexión a `https://places.googleapis.com/$rpc/google.maps.places.v1.Places/AutocompletePlaces`.
+
+Causa: la API "nueva" de Places (`Utils/googleMaps.js`) manda el autocompletado por gRPC-Web a `places.googleapis.com` — un origen DISTINTO al que usa el resto de Maps (`maps.googleapis.com`, el único permitido en `connect-src`). `App\Http\Middleware\SecurityHeaders` solo contemplaba el segundo. Se agregó `https://places.googleapis.com` a `connect-src`.
+
+### Tests
+`php artisan test` (502 tests OK, sin tests que dependan del string exacto del CSP), Pint limpio. Verificado en vivo con `curl -sI https://arka01.com` mostrando el header actualizado, después de `git pull` + `sudo systemctl reload php8.4-fpm` (código nuevo, mismo problema de opcache que las demás pasadas — un simple `git pull` no alcanza sin reiniciar PHP-FPM).
+
+### Tanda de 3 pedidos post-despliegue: notificación de plan activado, logs visibles, y reconexión automática de ubicación
+Mensaje del usuario con tres pedidos concretos, ya con el piloto en vivo:
+
+- **"Activé un plan a un cliente y no le llegó la notificación"**: no era un fallo — la notificación directamente no existía. `SubscriptionActivator::activate()` (único lugar donde se activa un plan, sea por el admin a mano, por aprobar un comprobante, o por auto-activación de un plan/promo en $0 — los 3 casos confirmados con `grep`) nunca avisaba a nadie. **`App\Notifications\PlanActivatedPushNotification`** (nueva, mismo patrón que el resto de las push — `RideCancelledPushNotification`, etc.) se dispara ahí, fuera de la transacción de base de datos a propósito (un push que fallara no tiene por qué revertir la activación real).
+- **"Quiero que se activen los logs en producción para ver qué está pasando"**: `LOG_LEVEL=error` (puesto en la pasada de preparación para el despliegue) silenciaba todos los `Log::info()`/`Log::warning()` que la app ya usa a propósito para diagnóstico de negocio (activaciones, avisos de WhatsApp, etc.). Se subió a `LOG_LEVEL=info` en `deploy/.env.production.example` — el canal `stack` ya rota solo por día con 14 días de retención (`config/logging.php`), así que no acumula sin límite.
+- **"Un conductor que se va a segundo plano y recarga la página no aparece conectado — debería ser automático o al menos un botón"**: bug real de raíz, no un problema de umbral. `DriverAvailabilityToggle.vue` solo llamaba a `startWatching()` (el `navigator.geolocation.watchPosition()` que manda el ping cada ~15s) desde el manejador del click del switch — **nunca al montar el componente**. Un conductor que recargaba la página con `is_available=true` se quedaba con el switch prendido en pantalla, pero sin ningún ping nuevo saliendo del navegador, hasta que lo apagaba y prendía de nuevo a mano. Se agregó un `onMounted()` que retoma `startWatching()` solo si ya estaba disponible. Además, pedido explícito de un respaldo manual: botón "Actualizar ubicación ahora" en el aviso de "Sin ubicación reciente" del Inicio del conductor (`Dashboard.vue`), que fuerza un ping ya mismo vía una función nueva expuesta con `defineExpose({ refreshNow })`.
+
+### Tests
+`tests/Feature/Admin/AdminSubscriptionTest.php` (+1: activar un plan a mano notifica al usuario). `tests/Feature/Plan/SubscriptionRequestFlowTest.php` (+1 aserción sobre un test existente: el auto-activado de un plan gratis también notifica). Suite completa: 503 tests OK, Pint limpio, build limpio. El fix de `DriverAvailabilityToggle.vue`/`Dashboard.vue` es frontend puro, sin test automatizado (no hay suite de JS en este proyecto) — verificar a mano recargando el Inicio de un conductor "disponible" y confirmando que el ping de ubicación se retoma solo.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

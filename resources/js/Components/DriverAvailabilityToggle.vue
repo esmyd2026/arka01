@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 // Prende/apaga la disponibilidad del conductor y, mientras está disponible,
 // manda su ubicación al backend cada tanto usando la geolocalización del
@@ -98,6 +98,28 @@ function startWatching() {
     );
 }
 
+// Botón de respaldo (pedido explícito del usuario, además del auto-resume
+// de arriba): fuerza un ping ya mismo, sin esperar al próximo
+// watchPosition() ni al límite de 15s entre envíos — para cuando el
+// conductor quiere confirmar de una que sus clientes ya lo ven conectado,
+// en vez de esperar a que el navegador decida mandar la próxima posición.
+function refreshNow() {
+    if (!navigator.geolocation || !available.value) return;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            lastSentAt = Date.now() / 1000;
+            sendLocation(position.coords.latitude, position.coords.longitude, true);
+        },
+        () => {
+            error.value = 'No pudimos acceder a su ubicación. Revise los permisos del navegador.';
+        },
+        { enableHighAccuracy: true, maximumAge: 0 }
+    );
+}
+
+defineExpose({ refreshNow });
+
 function stopWatching(lastPosition) {
     if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
@@ -127,6 +149,19 @@ function toggle() {
         );
     }
 }
+
+// Bug reportado por el usuario: un conductor "disponible" que recarga la
+// página (o vuelve de segundo plano) se quedaba con el switch prendido en
+// pantalla, pero el watchPosition() del navegador se había perdido —
+// startWatching() solo se llamaba desde toggle(), nunca al montar. Sin
+// ningún ping nuevo, location_updated_at se iba quedando vieja hasta pasar
+// los minutos de DriverProfile::isReachable() y sus clientes lo veían
+// desconectado, sin que él pudiera notarlo sin tocar el switch dos veces.
+onMounted(() => {
+    if (props.initialAvailable) {
+        startWatching();
+    }
+});
 
 onBeforeUnmount(() => {
     if (watchId !== null) {

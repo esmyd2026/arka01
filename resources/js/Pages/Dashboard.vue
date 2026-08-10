@@ -158,6 +158,7 @@ function onCarouselScroll() {
 // que el título y el ícono del banner reflejen el estado real, en vez de un
 // texto fijo que no dice si tocarlo prende o apaga.
 const isAvailableNow = ref(props.driverStats?.is_available ?? false);
+const availabilityToggleRef = ref(null);
 
 // Pedido explícito del usuario: apenas se activa, mandarlo derecho a
 // WhatsApp a mandar el mensaje (no solo mostrar un aviso para tocar aparte)
@@ -316,6 +317,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </p>
                     </div>
                     <DriverAvailabilityToggle
+                        ref="availabilityToggleRef"
                         :initial-available="driverStats.is_available"
                         @update:available="handleAvailabilityChange"
                     />
@@ -431,6 +433,17 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <p v-if="driverStats.is_available && !driverStats.is_reachable" class="text-xs text-arka-warning mt-1 max-w-sm">
                             ⚠️ Sin ubicación reciente — sus clientes pueden seguir viéndolo desconectado. Revise que el
                             navegador tenga permiso de ubicación y que la app siga abierta.
+                            <!-- Pedido explícito del usuario ("debería ser automático o por lo
+                                 menos un botón que refresque"): además del auto-resume al cargar
+                                 la página (DriverAvailabilityToggle.vue, onMounted), este botón
+                                 fuerza un ping ya mismo sin esperar al próximo de forma automática. -->
+                            <button
+                                type="button"
+                                class="ms-1 underline hover:no-underline font-medium"
+                                @click="availabilityToggleRef?.refreshNow()"
+                            >
+                                Actualizar ubicación ahora
+                            </button>
                         </p>
                     </div>
 

@@ -6,6 +6,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionChange;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Notifications\PlanActivatedPushNotification;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -19,7 +20,7 @@ class SubscriptionActivator
 {
     public function activate(User $user, SubscriptionPlan $plan, ?int $activatedBy, ?string $expiresAt = null, ?string $note = null): Subscription
     {
-        return DB::transaction(function () use ($user, $plan, $activatedBy, $expiresAt, $note) {
+        $subscription = DB::transaction(function () use ($user, $plan, $activatedBy, $expiresAt, $note) {
             $previousSubscription = $user->activeSubscription($plan->owner_type);
 
             if ($previousSubscription) {
@@ -49,5 +50,13 @@ class SubscriptionActivator
 
             return $subscription;
         });
+
+        // Fuera de la transacción a propósito (reporte del usuario: "activé
+        // un plan y no le llegó la notificación" — no existía este aviso
+        // todavía): un aviso push que fallara no tiene por qué revertir la
+        // activación real del plan.
+        $user->notify(new PlanActivatedPushNotification($subscription));
+
+        return $subscription;
     }
 }
