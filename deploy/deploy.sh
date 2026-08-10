@@ -31,7 +31,7 @@ php artisan view:cache
 echo "== Reiniciando procesos =="
 # Recarga PHP-FPM (invalida opcache.validate_timestamps=0, si no seguiría
 # sirviendo el código viejo desde memoria) y los procesos de fondo.
-sudo systemctl reload php8.3-fpm
+sudo systemctl reload php8.4-fpm
 sudo supervisorctl restart arka01-queue-worker:* arka01-reverb:*
 
 echo "== Saliendo de mantenimiento =="

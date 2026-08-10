@@ -42,8 +42,10 @@ gcloud compute ssh arka01-vm --zone=us-central1-a --tunnel-through-iap
 sudo bash deploy/bootstrap-server.sh
 ```
 
-Instala Nginx, PHP 8.3-FPM + extensiones, MySQL, Composer, Node.js (solo
-para compilar assets durante el deploy), Git, Supervisor y Certbot. También
+Instala Nginx, PHP 8.4-FPM + extensiones, MySQL, Composer, Node.js (solo
+para compilar assets durante el deploy), Git, Supervisor y Certbot — 8.4 y
+no 8.3 porque `composer.lock` quedó resuelto con paquetes de Symfony que
+piden PHP >=8.4 (se generó en una máquina con PHP más nuevo). También
 ajusta `php.ini`, hace tuning de MySQL para los 2GB de RAM del `e2-small`, y
 crea un swapfile de 1GB de respaldo.
 
