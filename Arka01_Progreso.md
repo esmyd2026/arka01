@@ -1749,6 +1749,12 @@ Reportado por el usuario con captura: `/auth/google/callback` tiraba "500 Error 
 ### Tests
 `tests/Feature/Auth/SingleActiveSessionTest.php` (+1, reutilizando el helper `fakeOtherDeviceSession()` ya existente — la técnica correcta para simular "otra sesión activa" en tests, insertando la fila directo en `sessions`; un primer intento con dos llamadas `get()` seguidas resultó frágil por la regeneración de sesión que hace `Auth::login()`, y se descartó). Suite completa: 504 tests OK, Pint limpio (reordenó imports en `AuthenticatedSessionController.php` solo), build limpio.
 
+### Fix: avatar y nombre superpuestos en /admin/suscripciones
+Reportado por el usuario con captura, en pantalla angosta: el avatar y el nombre del usuario se pisaban en la lista de "Usuarios y su plan vigente". Causa: la columna de nombre/correo (`Admin/Subscriptions.vue`) no tenía `min-w-0` — por defecto un hijo flex no se achica por debajo del ancho natural de su contenido, así que un nombre o correo largo empujaba todo el layout en vez de truncar. Se agregó `min-w-0` a los contenedores relevantes, `truncate` a nombre/correo, y el mismo patrón "apilar en mobile" (`flex-col sm:flex-row`) que ya usa el resto del panel admin para filas con acciones al costado.
+
+### Tests
+`npm run build` compila limpio. Cambio de clases de Tailwind únicamente, sin lógica — no aplica `php artisan test` ni Pint.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

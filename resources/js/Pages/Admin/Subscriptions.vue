@@ -255,12 +255,19 @@ function clientPlanOf(user) {
                 <!-- Usuarios y su plan vigente por lado (conductor / cliente) -->
                 <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
                     <div v-for="user in users.data" :key="user.id" class="p-4 sm:p-6">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex items-start gap-3">
+                        <!-- Bug reportado por el usuario (con captura): en pantallas angostas
+                             el avatar y el nombre quedaban superpuestos — la columna de
+                             nombre/correo no tenía `min-w-0` (los flex items no se achican
+                             por debajo de su ancho natural por defecto), así que un nombre o
+                             correo largo empujaba todo en vez de truncar o hacer wrap. Se
+                             suma el mismo patrón "apilar en mobile" que ya usa el resto del
+                             panel admin para filas con acciones al costado. -->
+                        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                            <div class="flex items-start gap-3 min-w-0">
                                 <UserAvatar :user="user" size-class="h-10 w-10 text-sm shrink-0" />
-                                <div>
-                                    <p class="text-arka-text font-medium">{{ user.name }}</p>
-                                    <p class="text-sm text-arka-text-muted">{{ user.email }}</p>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-arka-text font-medium truncate">{{ user.name }}</p>
+                                    <p class="text-sm text-arka-text-muted truncate">{{ user.email }}</p>
                                     <!-- Pedido explícito del usuario: cada cuenta es cliente O
                                          conductor, nunca las dos (sección 3.1) — mostrar los dos
                                          renglones siempre ("Conductor: Gratis / Cliente: Gratis")
