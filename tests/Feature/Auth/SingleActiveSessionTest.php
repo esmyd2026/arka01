@@ -106,4 +106,35 @@ class SingleActiveSessionTest extends TestCase
         $response->assertRedirect(route('login'));
         $this->assertGuest();
     }
+
+    /**
+     * Bug reportado por el usuario: al volver de un login con Google
+     * bloqueado por sesión única, el widget de "pedir código por WhatsApp"
+     * (Auth/Login.vue) no reaccionaba — solo miraba el error de formulario
+     * del login con contraseña, y este camino no tiene formulario. Necesita
+     * 'status' (el mensaje, que ya se mostraba) Y 'login_hint' (el correo,
+     * para saber a qué cuenta pedirle el código sin que el usuario lo
+     * reescriba — a diferencia del camino de contraseña, acá nunca lo tipeó).
+     */
+    public function test_google_login_blocked_by_active_session_hints_the_login_widget(): void
+    {
+        $user = User::factory()->create(['google_id' => 'google-999']);
+        $this->fakeOtherDeviceSession($user);
+
+        $socialiteUser = Mockery::mock(SocialiteUser::class);
+        $socialiteUser->shouldReceive('getId')->andReturn('google-999');
+        $socialiteUser->shouldReceive('getEmail')->andReturn($user->email);
+        $socialiteUser->shouldReceive('getName')->andReturn($user->name);
+        $socialiteUser->shouldReceive('getAvatar')->andReturn(null);
+
+        $provider = Mockery::mock(Provider::class);
+        $provider->shouldReceive('user')->andReturn($socialiteUser);
+
+        Socialite::shouldReceive('driver')->with('google')->andReturn($provider);
+
+        $response = $this->get(route('auth.google.callback'));
+
+        $response->assertSessionHas('status', 'Ya tiene una sesión activa en otro dispositivo. Cierre sesión ahí para poder entrar acá.');
+        $response->assertSessionHas('login_hint', $user->email);
+    }
 }

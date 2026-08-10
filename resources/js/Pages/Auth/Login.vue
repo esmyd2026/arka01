@@ -8,17 +8,26 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
-defineProps({
+const props = defineProps({
     canResetPassword: {
         type: Boolean,
     },
     status: {
         type: String,
     },
+    // Bug reportado por el usuario: al volver de un login con Google
+    // bloqueado por sesión única, no había forma de saber a qué cuenta
+    // pedirle el código (el campo "login" del formulario nunca se llegó a
+    // escribir, a diferencia del camino de contraseña) — ver
+    // AuthenticatedSessionController::create() y GoogleAuthController.
+    loginHint: {
+        type: String,
+        default: null,
+    },
 });
 
 const form = useForm({
-    login: '',
+    login: props.loginHint ?? '',
     password: '',
 });
 
@@ -34,7 +43,14 @@ const submit = () => {
 // aparece ese, se ofrece este atajo en vez de que la única salida sea
 // esperar a que esa sesión venza sola (hasta 2 horas, y ni eso si la pestaña
 // vieja sigue "viva" en segundo plano haciendo pings).
-const showsSessionBlockedError = computed(() => (form.errors.login ?? '').startsWith('Ya tiene una sesión activa'));
+// Cubre los dos caminos que pueden traer este mismo error: el formulario de
+// contraseña (form.errors.login) y la vuelta del login con Google, que no
+// tiene formulario — llega como 'status' (ver GoogleAuthController).
+const showsSessionBlockedError = computed(
+    () =>
+        (form.errors.login ?? '').startsWith('Ya tiene una sesión activa') ||
+        (props.status ?? '').startsWith('Ya tiene una sesión activa')
+);
 
 const takeoverStep = ref('idle'); // 'idle' | 'code-sent'
 const takeoverCode = ref('');

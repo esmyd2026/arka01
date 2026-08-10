@@ -1733,6 +1733,22 @@ Mensaje del usuario con tres pedidos concretos, ya con el piloto en vivo:
 ### Tests
 `tests/Feature/Admin/AdminSubscriptionTest.php` (+1: activar un plan a mano notifica al usuario). `tests/Feature/Plan/SubscriptionRequestFlowTest.php` (+1 aserción sobre un test existente: el auto-activado de un plan gratis también notifica). Suite completa: 503 tests OK, Pint limpio, build limpio. El fix de `DriverAvailabilityToggle.vue`/`Dashboard.vue` es frontend puro, sin test automatizado (no hay suite de JS en este proyecto) — verificar a mano recargando el Inicio de un conductor "disponible" y confirmando que el ping de ubicación se retoma solo.
 
+### Incidente en producción: login con Google devolvía 500 (y el fix real destapó un segundo bug)
+Reportado por el usuario con captura: `/auth/google/callback` tiraba "500 Error del servidor" al intentar entrar con una cuenta que ya tenía sesión activa en otro dispositivo/navegador.
+
+**Causa raíz, en dos capas:**
+1. **El log de errores de hoy tenía el dueño/grupo mal** (`laravel-2026-08-10.log` había quedado `User:User` en vez de con grupo `www-data`, porque lo creó sin querer una sesión de `tinker` corrida por SSH antes que cualquier request de PHP-FPM). PHP-FPM (que corre como `www-data`) no podía escribir ahí — `Permission denied` — y esa falla de logging TAPABA el error real, dejando un 500 sin ningún rastro en ningún log. Se activó `APP_DEBUG=true` **momentáneamente** (el usuario marcó, con razón, que no había que dejarlo así en producción — se apagó apenas se vio el error real) para ver el error de verdad en pantalla, que resultó ser justamente `UnexpectedValueException` de Monolog por el permiso.
+2. **Fix del permiso**: `chown` del log del día al dueño correcto, y — para que esto no vuelva a pasar con ningún archivo nuevo — se le puso el bit **setgid** (`chmod g+s`) a `storage/logs`, `storage/framework/*`, `storage/app`, `bootstrap/cache`: de ahora en más, cualquier archivo nuevo que se cree ahí (lo cree PHP-FPM o un comando corrido a mano por SSH) hereda el grupo `www-data` del directorio, sin importar qué usuario del sistema lo haya creado.
+
+**Con el logging arreglado, apareció el bug real** (el que efectivamente causaba el 500 original, aunque ya estaba parcialmente resuelto por el propio `try/catch` de `GoogleAuthController` — el mensaje de "sesión activa" sí llegaba a mostrarse): el usuario recordó que el login con contraseña ofrece pedir un código por WhatsApp para cerrar la otra sesión, y ese atajo no aparecía viniendo de Google.
+
+- Causa: `Auth/Login.vue` solo activaba el widget de "pedir código" mirando `form.errors.login` (el error de validación del formulario de contraseña) — el camino de Google nunca pasa por ahí, llega por un simple `session('status')` flasheado, un mecanismo distinto que el widget no revisaba.
+- Aunque se hubiera revisado `status`, el widget tampoco iba a poder mandar nada: necesita saber A QUÉ CUENTA pedirle el código (`form.login`), y ese campo nunca se llegó a escribir viniendo de Google (a diferencia del camino de contraseña, donde el usuario ya lo tipeó).
+- Fix: `GoogleAuthController` ahora flashea también `login_hint` (el correo) junto con `status`; `AuthenticatedSessionController::create()` lo pasa como prop nueva `loginHint`; `Login.vue` lo usa para pre-llenar `form.login`, y `showsSessionBlockedError` ahora revisa `status` además de `form.errors.login` — el widget aparece y funciona igual sin importar por cuál de los dos caminos se llegó al bloqueo.
+
+### Tests
+`tests/Feature/Auth/SingleActiveSessionTest.php` (+1, reutilizando el helper `fakeOtherDeviceSession()` ya existente — la técnica correcta para simular "otra sesión activa" en tests, insertando la fila directo en `sessions`; un primer intento con dos llamadas `get()` seguidas resultó frágil por la regeneración de sesión que hace `Auth::login()`, y se descartó). Suite completa: 504 tests OK, Pint limpio (reordenó imports en `AuthenticatedSessionController.php` solo), build limpio.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

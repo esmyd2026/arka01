@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Events\DriverLocationUpdated;
 use App\Http\Controllers\Controller;
-use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +24,11 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
+            // Bug reportado por el usuario: al volver de un login con Google
+            // bloqueado por sesión única, el widget de "pedir código" no
+            // tenía forma de saber a qué cuenta mandárselo — GoogleAuthController
+            // lo deja acá (ver Auth/Login.vue).
+            'loginHint' => session('login_hint'),
         ]);
     }
 

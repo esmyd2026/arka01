@@ -77,7 +77,17 @@ class GoogleAuthController extends Controller
         try {
             Auth::login($user);
         } catch (ActiveSessionExistsException $e) {
-            return redirect()->route('login')->with('status', $e->getMessage());
+            // Bug reportado por el usuario: el widget de "pedir código por
+            // WhatsApp para cerrar la otra sesión" (Auth/Login.vue) solo
+            // reaccionaba al error de formulario del login con contraseña
+            // (form.errors.login) — acá no hay ningún formulario, así que el
+            // mensaje aparecía pero el botón de pedir código no. Se manda el
+            // mismo mensaje por 'status' (que Login.vue ya sabía mostrar) más
+            // el correo en 'login_hint', para que el widget sepa a qué cuenta
+            // pedirle el código sin que el usuario tenga que volver a escribirlo.
+            return redirect()->route('login')
+                ->with('status', $e->getMessage())
+                ->with('login_hint', $user->email);
         }
 
         return redirect()->intended(route('dashboard', absolute: false));
