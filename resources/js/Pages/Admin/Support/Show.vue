@@ -1,10 +1,11 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { playUpdateChime } from '@/Utils/liveAlert';
 
@@ -19,6 +20,9 @@ const STATUS_LABEL = {
     resuelto: 'Resuelto',
     cerrado: 'Cerrado',
 };
+// Bug real reportado por el usuario (con captura): el <select> nativo se
+// pinta con el tema del sistema operativo, no con el oscuro de la app.
+const STATUS_OPTIONS = computed(() => Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })));
 
 const messages = ref([...props.ticket.messages]);
 const status = ref(props.ticket.status);
@@ -91,9 +95,7 @@ function changeStatus() {
                         <p class="text-arka-text font-medium">{{ ticket.user.name }}</p>
                         <p class="text-sm text-arka-text-muted">{{ ticket.user.email }}</p>
                     </div>
-                    <select v-model="status" class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="changeStatus">
-                        <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
-                    </select>
+                    <SearchableSelect v-model="status" :options="STATUS_OPTIONS" class="w-48" @update:model-value="changeStatus" />
                 </div>
 
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">

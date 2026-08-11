@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -18,6 +19,9 @@ const STATUS_LABEL = {
     resuelto: 'Resuelto',
     cerrado: 'Cerrado',
 };
+// Bug real reportado por el usuario (con captura): el <select> nativo se
+// pinta con el tema del sistema operativo, no con el oscuro de la app.
+const STATUS_OPTIONS = computed(() => Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })));
 const STATUS_CLASS = {
     nuevo: 'bg-arka-primary/15 text-arka-primary-bright',
     en_atencion: 'bg-arka-warning/15 text-arka-warning',
@@ -38,10 +42,13 @@ function applyFilter() {
         <div class="py-12">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <div class="bg-arka-card shadow rounded-arka p-4 sm:p-6 flex items-center gap-3">
-                    <select v-model="statusFilter" class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="applyFilter">
-                        <option value="">Todos los estados</option>
-                        <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
-                    </select>
+                    <SearchableSelect
+                        v-model="statusFilter"
+                        :options="STATUS_OPTIONS"
+                        empty-label="Todos los estados"
+                        class="w-48"
+                        @update:model-value="applyFilter"
+                    />
                     <span class="ml-auto text-xs text-arka-text-muted">{{ tickets.total }} ticket(s)</span>
                 </div>
 

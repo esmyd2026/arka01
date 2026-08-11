@@ -301,11 +301,10 @@ const atLimit = props.maxDriversPerFleet !== null && memberCount >= props.maxDri
                                             {{ tierLabel(memberStats[member.driver.id].tier) }}
                                         </span>
                                     </Link>
-                                    <p class="text-sm text-arka-text-muted">
-                                        {{ member.driver.phone }}
-                                        <span v-if="member.driver.driver_profile">
-                                            · ${{ member.driver.driver_profile.rate_per_km }}/km
-                                        </span>
+                                    <!-- Pedido explícito del usuario: no mostrar el teléfono acá
+                                         (privacidad) — solo la tarifa. -->
+                                    <p v-if="member.driver.driver_profile" class="text-sm text-arka-text-muted">
+                                        ${{ member.driver.driver_profile.rate_per_km }}/km
                                     </p>
                                     <p v-if="memberStats[member.driver.id]" class="text-xs text-arka-text-muted">
                                         <span v-if="memberStats[member.driver.id].review_count > 0" class="text-arka-lime">

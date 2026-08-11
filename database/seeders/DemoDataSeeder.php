@@ -23,13 +23,20 @@ class DemoDataSeeder extends Seeder
         $password = Hash::make('password');
         $quitoId = City::query()->where('name', 'Quito')->value('id');
 
-        User::factory()->create([
-            'name' => 'Admin Arka',
-            'email' => 'admin@arka01.test',
-            'phone' => '0990000000',
-            'password' => $password,
-            'is_admin' => true,
-        ]);
+        // Pedido explícito del usuario: "reiniciar demo" (Admin\SystemController)
+        // ya no borra ninguna cuenta admin — si esta ya existe (de una corrida
+        // anterior, o porque el usuario la usa de verdad), no se vuelve a
+        // crear. `firstOrCreate` evita el error de correo/teléfono duplicado
+        // que tiraría un `create()` sin este chequeo.
+        User::query()->firstOrCreate(
+            ['email' => 'admin@arka01.test'],
+            [
+                'name' => 'Admin Arka',
+                'phone' => '0990000000',
+                'password' => $password,
+                'is_admin' => true,
+            ]
+        );
 
         // --- Clientes: cuentas puras, sin flota armada todavía (se crea sola
         //     la primera vez que entran a "Mi flota" o al directorio). ---

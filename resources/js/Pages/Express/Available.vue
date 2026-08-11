@@ -16,7 +16,7 @@ const props = defineProps({
     myFleetCount: { type: Number, required: true },
     // Módulo de Expresos habilitable por plan de conductor (pedido explícito
     // del usuario) — si el plan no lo incluye, se ve la lista igual pero no
-    // se puede postular (mismo criterio que "Viajes tipo VAN").
+    // se puede postular (mismo criterio que "Rutas y Turismo").
     canApply: { type: Boolean, required: true },
 });
 

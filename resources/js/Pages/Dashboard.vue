@@ -15,7 +15,6 @@ const props = defineProps({
     fleetDrivers: { type: Array, default: null },
     nearbyDrivers: { type: Array, default: null },
     targetFleetId: { type: Number, default: null },
-    clientPlanName: { type: String, default: null },
     upcomingTrips: { type: Array, default: null },
     inviteCode: { type: String, default: null },
     earningsSparkline: { type: Array, default: null },
@@ -38,6 +37,15 @@ const hasRoute = (name) => route().has(name);
 // de "armá tu flota"/"convertite en conductor" no le sirve de nada — su
 // puerta de entrada real es el panel admin.
 const isAdmin = usePage().props.auth.user.is_admin;
+
+// Saludo de la cabecera (pedido explícito del usuario: bajarlo de la barra
+// superior a acá, a la izquierda, en el lugar donde antes decía "Inicio").
+const firstName = (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] ?? '';
+
+// Cuántos conductores se muestran de un vistazo en "Tu flota" antes de
+// juntar el resto en el círculo "+N" (pedido explícito del usuario: más
+// apretado que antes para que quepan más).
+const FLEET_PREVIEW_LIMIT = 5;
 
 // Mismos colores de estado que Ride/Request.vue (STATUS_STYLE): disponible en
 // verde, en carrera en naranja, desconectado "quemado" (opacidad + gris).
@@ -276,7 +284,9 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                  chicas el título/subtítulo se ocultan (queda ícono + switch)
                  para no romper el layout de la cabecera junto con "Inicio". -->
             <div class="flex items-center justify-between gap-3 flex-wrap">
-                <h2 class="font-semibold text-xl text-arka-text leading-tight">Inicio</h2>
+                <!-- Pedido explícito del usuario: el saludo baja de la barra
+                     superior a acá (donde antes decía "Inicio"), a la izquierda. -->
+                <h2 class="font-semibold text-xl text-arka-text leading-tight">¡Hola, {{ firstName }}! 👋</h2>
 
                 <div
                     v-if="driverStats"
@@ -603,17 +613,10 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <!-- Rediseño pedido explícito del usuario (mockup provisto): saludo +
                          insignia de rol/plan, mismo criterio que ya usa el lado conductor
                          ("Conductor ✓ · Disponible"). -->
-                    <div>
-                        <!-- Pedido explícito del usuario (roadmap de mejoras, sección 1): el
-                             saludo se mudó al navbar — acá queda la insignia de rol/plan. -->
-                        <p class="text-arka-text-muted flex items-center gap-1.5">
-                            Cliente
-                            <span v-if="clientPlanName" class="ms-1 px-2 py-0.5 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
-                                Plan {{ clientPlanName }}
-                            </span>
-                        </p>
-                    </div>
-
+                    <!-- Pedido explícito del usuario: el saludo ya vive en el navbar
+                         (roadmap de mejoras, sección 1) y la insignia "Cliente · Plan
+                         X" se sacó de acá — esa info ya se ve en Mi perfil, mostrarla
+                         también en el Inicio quedaba redundante. -->
                     <AdBannerSlider :banners="adBanners" />
 
                     <!-- "Tu flota": resumen glanceable, no la lista completa — el
@@ -632,20 +635,57 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </svg>
                         </div>
 
-                        <div v-if="fleetDriversLocal.length" class="mt-3 flex items-center gap-2">
+                        <!-- Pedido explícito del usuario (roadmap de mejoras, sección 2):
+                             foto, nombre, calificación y distancia — en fila horizontal,
+                             con los datos debajo de cada foto y el nombre truncado si es
+                             muy largo. Ajuste posterior (también pedido): más apretada
+                             para que quepan más de un vistazo, y en vez de una línea de
+                             texto aparte para "los que faltan" se usa un círculo "+N" al
+                             final de la propia fila (como el resto de los avatares) —
+                             flex en vez de grid fijo, así una flota chica no deja
+                             columnas vacías y se ve prolija igual. -->
+                        <div v-if="fleetDriversLocal.length" class="mt-3 flex flex-wrap gap-x-2.5 gap-y-3">
                             <div
-                                v-for="driver in fleetDriversLocal.slice(0, 4)"
+                                v-for="driver in fleetDriversLocal.slice(0, FLEET_PREVIEW_LIMIT)"
                                 :key="driver.user_id"
-                                class="rounded-full"
-                                :class="STATUS_RING[driver.status]"
+                                class="flex flex-col items-center text-center w-12"
                             >
-                                <UserAvatar :user="driver" size-class="h-10 w-10 text-sm" />
+                                <div class="rounded-full" :class="STATUS_RING[driver.status]">
+                                    <UserAvatar :user="driver" size-class="h-10 w-10 text-xs" />
+                                </div>
+                                <p class="mt-1 w-full text-[11px] text-arka-text font-medium truncate">
+                                    {{ driver.name.split(' ')[0] }}
+                                </p>
+                                <p class="w-full text-[10px] text-arka-text-muted truncate">
+                                    <span v-if="driver.review_count > 0" class="text-arka-lime">★{{ driver.average_rating.toFixed(1) }}</span>
+                                    <span v-else>Sin calif.</span>
+                                    <span v-if="driver.distance_km != null">· {{ driver.distance_km.toFixed(1) }}km</span>
+                                </p>
                             </div>
-                            <span
-                                class="h-10 w-10 rounded-full border-2 border-dashed border-arka-text-muted/30 flex items-center justify-center text-arka-text-muted text-lg leading-none"
-                            >
-                                +
-                            </span>
+
+                            <!-- Círculo punteado con "+" (pedido explícito del usuario, con
+                                 captura de referencia): mismo lugar que antes, pero ahora
+                                 siempre visible como llamado a la acción — si sobran
+                                 conductores muestra cuántos faltan por ver, y si la flota
+                                 todavía tiene lugar invita directamente a agregar más. -->
+                            <div class="flex flex-col items-center text-center w-12">
+                                <div
+                                    class="h-10 w-10 rounded-full border-2 border-dashed flex items-center justify-center text-xs font-semibold"
+                                    :class="fleetDriversLocal.length > FLEET_PREVIEW_LIMIT
+                                        ? 'border-arka-text-muted/40 text-arka-text-muted'
+                                        : 'border-arka-primary/60 text-arka-primary-bright'"
+                                >
+                                    <span v-if="fleetDriversLocal.length > FLEET_PREVIEW_LIMIT">
+                                        +{{ fleetDriversLocal.length - FLEET_PREVIEW_LIMIT }}
+                                    </span>
+                                    <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path stroke-linecap="round" d="M12 5v14M5 12h14" />
+                                    </svg>
+                                </div>
+                                <p class="mt-1 w-full text-[11px] text-arka-text-muted truncate">
+                                    {{ fleetDriversLocal.length > FLEET_PREVIEW_LIMIT ? 'Ver todos' : 'Agregar' }}
+                                </p>
+                            </div>
                         </div>
                         <p v-else class="mt-2 text-sm text-arka-text-muted">
                             Todavía no tiene conductores — toque para armar su flota.
@@ -701,7 +741,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             <!-- Bug propio de esta sesión (roadmap de mejoras, sección 3: "el
                                  cliente no debe ver opciones para publicar, debe ver el
                                  catálogo"): esta tarjeta apuntaba a `van-trips.index`, la
-                                 pantalla de gestión del CONDUCTOR ("Mis viajes VAN") — un
+                                 pantalla de gestión del CONDUCTOR ("Mis rutas y turismo") — un
                                  cliente la veía siempre vacía. Acá va `van-trips.browse`, el
                                  catálogo de viajes publicados, que es lo que corresponde. -->
                             <Link
@@ -713,7 +753,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                     <rect x="2.5" y="8" width="19" height="9" rx="2" stroke-linecap="round" stroke-linejoin="round" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 12h19M6 17v2M18 17v2" />
                                 </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Viajes en VAN</p>
+                                <p class="mt-2 text-sm text-arka-text font-medium">Rutas y Turismo</p>
                             </Link>
                             <Link
                                 v-if="hasRoute('ride-requests.create')"

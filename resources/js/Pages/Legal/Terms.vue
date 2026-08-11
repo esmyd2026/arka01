@@ -23,7 +23,7 @@ defineProps({
                 transporte. Arka01 <strong>no es una empresa de transporte, no es transportista, no es empleador de
                 ningún conductor, no es agencia de viajes ni operador turístico, y no es parte del contrato de
                 transporte</strong> que se pacta directamente entre cliente y conductor en cada viaje (incluidos los
-                Expresos y los Viajes en VAN). Cada conductor es un tercero independiente, responsable de contar con
+                Expresos y las Rutas y Turismo). Cada conductor es un tercero independiente, responsable de contar con
                 licencia de conducir vigente, matrícula, SOAT u otro seguro vehicular vigente, y todos los permisos
                 que exige la normativa ecuatoriana de tránsito para transportar pasajeros.
             </p>
@@ -135,7 +135,7 @@ defineProps({
                 ecuatoriana, Arka01 no es responsable por</strong>: accidentes de tránsito; daños personales,
                 materiales o morales; robos o pérdida de objetos; conducta indebida de cualquiera de las partes
                 (cliente o conductor); incumplimientos del contrato de transporte pactado entre ambos; retrasos,
-                cancelaciones o la calidad del servicio de transporte brindado (incluidos Expresos y Viajes en VAN);
+                cancelaciones o la calidad del servicio de transporte brindado (incluidos Expresos y Rutas y Turismo);
                 disputas de pago entre cliente y conductor sobre el precio del viaje; ni por el contenido, la
                 veracidad o el resultado de promociones de empresas aliadas mostradas en la app. El uso de la
                 plataforma para contratar o brindar transporte se hace bajo el propio riesgo de cada usuario.

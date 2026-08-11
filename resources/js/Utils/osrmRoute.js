@@ -1,7 +1,7 @@
 // Trazado real del recorrido entre dos puntos (sección 9.3): OSRM, gratis,
 // sin API key — se mantiene Leaflet/OpenStreetMap en vez de Google Maps para
 // no generar costos. Compartido entre las pantallas que muestran un mapa con
-// origen y destino (Pedir carrera, Expresos, Viajes en VAN).
+// origen y destino (Pedir carrera, Expresos, Rutas y Turismo).
 export async function fetchOsrmRoute(originLat, originLng, destinationLat, destinationLng) {
     try {
         // fetch() nativo, NO window.axios (bug real reportado, veía errores de

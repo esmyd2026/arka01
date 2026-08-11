@@ -103,12 +103,34 @@ function startWatching() {
 // watchPosition() ni al límite de 15s entre envíos — para cuando el
 // conductor quiere confirmar de una que sus clientes ya lo ven conectado,
 // en vez de esperar a que el navegador decida mandar la próxima posición.
+//
+// Bug real reportado por el usuario ("no hace nada cuando lo oprimo"): este
+// botón aparece justo cuando la ubicación está desactualizada, y la causa
+// más común de eso es que un intento anterior de geolocalización falló
+// (permiso denegado, GPS momentáneamente sin señal) — eso ya había puesto
+// `available` en false acá adentro (ver el catch de startWatching()), aunque
+// el conductor siga marcado disponible del lado del servidor. Antes, el
+// guardia `!available.value` cortaba la función ahí mismo sin avisar nada.
+// Ahora se intenta igual, y si la ubicación sí se puede obtener, se
+// recupera el estado (reprende el switch y retoma watchPosition()) en vez
+// de quedarse en silencio.
 function refreshNow() {
-    if (!navigator.geolocation || !available.value) return;
+    if (!navigator.geolocation) {
+        error.value = 'Su navegador no soporta geolocalización.';
+        return;
+    }
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
+            error.value = '';
             lastSentAt = Date.now() / 1000;
+
+            if (!available.value) {
+                available.value = true;
+                emit('update:available', true);
+                startWatching();
+            }
+
             sendLocation(position.coords.latitude, position.coords.longitude, true);
         },
         () => {

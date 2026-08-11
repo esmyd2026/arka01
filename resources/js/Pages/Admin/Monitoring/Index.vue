@@ -1,9 +1,10 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -11,6 +12,20 @@ const props = defineProps({
     filters: { type: Object, required: true },
     modules: { type: Array, required: true },
 });
+
+// Bug real reportado por el usuario (con captura): el <select> nativo se
+// pinta con el tema del sistema operativo, no con el oscuro de la app.
+const moduleOptions = computed(() => props.modules.map((m) => ({ value: m, label: m })));
+const SEVERITY_OPTIONS = [
+    { value: 'info', label: 'Info' },
+    { value: 'warning', label: 'Warning' },
+    { value: 'error', label: 'Error' },
+    { value: 'critical', label: 'Critical' },
+];
+const STATUS_OPTIONS = [
+    { value: 'failed', label: 'Sin revisar' },
+    { value: 'resolved', label: 'Resuelto' },
+];
 
 const search = ref(props.filters.q ?? '');
 const moduleFilter = ref(props.filters.module ?? '');
@@ -66,28 +81,33 @@ const SEVERITY_CLASS = {
                         </div>
                         <div>
                             <InputLabel value="Módulo" />
-                            <select v-model="moduleFilter" class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="applyFilters">
-                                <option value="">Todos</option>
-                                <option v-for="m in modules" :key="m" :value="m">{{ m }}</option>
-                            </select>
+                            <SearchableSelect
+                                v-model="moduleFilter"
+                                :options="moduleOptions"
+                                empty-label="Todos"
+                                class="mt-1 w-40"
+                                @update:model-value="applyFilters"
+                            />
                         </div>
                         <div>
                             <InputLabel value="Severidad" />
-                            <select v-model="severityFilter" class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="applyFilters">
-                                <option value="">Todas</option>
-                                <option value="info">Info</option>
-                                <option value="warning">Warning</option>
-                                <option value="error">Error</option>
-                                <option value="critical">Critical</option>
-                            </select>
+                            <SearchableSelect
+                                v-model="severityFilter"
+                                :options="SEVERITY_OPTIONS"
+                                empty-label="Todas"
+                                class="mt-1 w-40"
+                                @update:model-value="applyFilters"
+                            />
                         </div>
                         <div>
                             <InputLabel value="Estado" />
-                            <select v-model="statusFilter" class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="applyFilters">
-                                <option value="">Todos</option>
-                                <option value="failed">Sin revisar</option>
-                                <option value="resolved">Resuelto</option>
-                            </select>
+                            <SearchableSelect
+                                v-model="statusFilter"
+                                :options="STATUS_OPTIONS"
+                                empty-label="Todos"
+                                class="mt-1 w-40"
+                                @update:model-value="applyFilters"
+                            />
                         </div>
                         <div>
                             <InputLabel value="Desde" />

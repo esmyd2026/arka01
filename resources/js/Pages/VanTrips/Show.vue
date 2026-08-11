@@ -45,7 +45,7 @@ async function cancelTrip() {
             <div class="flex items-center justify-between">
                 <div>
                     <Link :href="isOwner ? route('van-trips.index') : route('van-trips.browse')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
-                        &larr; Viajes VAN
+                        &larr; Rutas y Turismo
                     </Link>
                     <h2 class="font-semibold text-xl text-arka-text leading-tight">
                         {{ trip.origin_city.name }} &rarr; {{ trip.destination_city.name }}

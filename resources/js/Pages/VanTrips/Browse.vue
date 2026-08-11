@@ -9,6 +9,11 @@ import { Head, Link, router } from '@inertiajs/vue3';
 
 const props = defineProps({
     trips: { type: Array, required: true },
+    // Pedido explícito del usuario: si la búsqueda no encontró nada, se
+    // guarda para proponérsela a los conductores (ver VanTripController::
+    // browse()) y se muestran estos viajes de respaldo en su lugar.
+    fallbackTrips: { type: Array, default: () => [] },
+    searchSaved: { type: Boolean, default: false },
     cities: { type: Array, required: true },
     filters: { type: Object, required: true },
 });
@@ -29,11 +34,11 @@ function search() {
 </script>
 
 <template>
-    <Head title="Viajes VAN / turismo" />
+    <Head title="Rutas y Turismo" />
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="font-semibold text-xl text-arka-text leading-tight">Viajes VAN / turismo</h2>
+            <h2 class="font-semibold text-xl text-arka-text leading-tight">Rutas y Turismo</h2>
         </template>
 
         <div class="py-12">
@@ -61,9 +66,47 @@ function search() {
                     <PrimaryButton @click="search">Buscar</PrimaryButton>
                 </div>
 
-                <p v-if="!trips.length" class="text-sm text-arka-text-muted">
-                    No hay viajes disponibles con esos filtros por ahora.
-                </p>
+                <div v-if="!trips.length" class="space-y-4">
+                    <p class="text-sm text-arka-text-muted">
+                        No hay viajes disponibles con esos filtros por ahora.
+                    </p>
+                    <!-- Pedido explícito del usuario: avisarle que su búsqueda quedó
+                         guardada para proponérsela a los conductores (ver
+                         VanTripController::browse() y VanTrips/Index.vue). -->
+                    <p v-if="searchSaved" class="text-sm text-arka-primary-bright">
+                        📋 Guardamos su búsqueda — se la vamos a mostrar a los conductores que publican viajes, por
+                        si arman uno para esa ruta.
+                    </p>
+
+                    <div v-if="fallbackTrips.length">
+                        <p class="text-sm text-arka-text-muted font-medium mb-2">Mientras tanto, estos viajes ya están disponibles:</p>
+                        <ul class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                            <li v-for="trip in fallbackTrips" :key="trip.id" class="p-4 sm:p-6">
+                                <Link :href="route('van-trips.show', trip.id)" class="flex items-center gap-4">
+                                    <img
+                                        v-if="trip.photos.length"
+                                        :src="trip.photos[0].photo_url"
+                                        alt=""
+                                        class="h-16 w-24 object-cover rounded-arka shrink-0"
+                                    />
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-arka-text font-medium hover:text-arka-primary-bright flex items-center gap-2 flex-wrap">
+                                            {{ trip.origin_city.name }} &rarr; {{ trip.destination_city.name }}
+                                            <span v-if="trip.is_own_fleet" class="px-1.5 py-0.5 rounded-full text-[10px] bg-arka-primary/15 text-arka-primary-bright">
+                                                De su flota
+                                            </span>
+                                        </p>
+                                        <p class="text-sm text-arka-text-muted">
+                                            {{ trip.travel_date }} · {{ trip.departure_time }} · {{ trip.driver.name }} ·
+                                            {{ trip.total_seats - (trip.reserved_seats_count ?? 0) }} asiento(s) libre(s)
+                                        </p>
+                                    </div>
+                                    <span class="text-sm text-arka-text-muted shrink-0">${{ trip.price_per_seat }}/asiento</span>
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
 
                 <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
                     <li v-for="trip in trips" :key="trip.id" class="p-4 sm:p-6">

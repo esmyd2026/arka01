@@ -143,22 +143,26 @@ onMounted(() => {
     // Se completó una carrera propia (la haya completado yo u la otra
     // parte): "En curso" y "Historial" tienen que moverse solos, no
     // quedarse pegados hasta que alguien recargue la página a mano.
+    // Pedido explícito del usuario ("sigue el problema que no llega las
+    // notificaciones... debe existir un sonido fuerte... si es posible que
+    // vibre"): estos 3 son cambios de estado de una carrera real, no
+    // negociación previa — pasan de chime suave a alerta fuerte + vibración.
     personal.listen('.ride.completed', () => {
-        playUpdateChime();
+        playAttentionAlert();
         router.reload({ only: ['activeRides', 'rideHistory'] });
     });
     // El cliente canceló una carrera ya aceptada (pedido explícito del
     // usuario) — mismo criterio que ".ride.completed": que "En curso"/
     // "Programados" se actualicen solos para quien no la canceló.
     personal.listen('.ride.cancelled', () => {
-        playUpdateChime();
+        playAttentionAlert();
         router.reload({ only: ['activeRides', 'scheduledRides', 'rideHistory'] });
     });
     // El conductor arrancó una carrera que venía PROGRAMADA (consideración
     // agregada al alcance) — pasa de "Programados" a "En curso" solo, sin
     // esperar a que alguien recargue la página.
     personal.listen('.ride.started', () => {
-        playUpdateChime();
+        playAttentionAlert();
         router.reload({ only: ['scheduledRides', 'activeRides'] });
     });
     channels.push(personal);

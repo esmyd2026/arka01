@@ -8,8 +8,17 @@ import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import Checkbox from '@/Components/Checkbox.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
+
+// Bug real reportado por el usuario (con captura): el <select> nativo se
+// pinta con el tema del sistema operativo, no con el oscuro de la app.
+const AUDIENCE_OPTIONS = [
+    { value: 'ambos', label: 'Ambos' },
+    { value: 'cliente', label: 'Cliente' },
+    { value: 'conductor', label: 'Conductor' },
+];
 
 defineProps({
     faqs: { type: Array, required: true },
@@ -108,11 +117,7 @@ async function destroy(faq) {
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <InputLabel value="Para quién" />
-                                        <select v-model="form.audience" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text">
-                                            <option value="ambos">Ambos</option>
-                                            <option value="cliente">Cliente</option>
-                                            <option value="conductor">Conductor</option>
-                                        </select>
+                                        <SearchableSelect v-model="form.audience" :options="AUDIENCE_OPTIONS" class="mt-1" />
                                     </div>
                                     <div>
                                         <InputLabel value="Categoría" />
@@ -144,11 +149,7 @@ async function destroy(faq) {
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <InputLabel value="Para quién" />
-                                    <select v-model="form.audience" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text">
-                                        <option value="ambos">Ambos</option>
-                                        <option value="cliente">Cliente</option>
-                                        <option value="conductor">Conductor</option>
-                                    </select>
+                                    <SearchableSelect v-model="form.audience" :options="AUDIENCE_OPTIONS" class="mt-1" />
                                 </div>
                                 <div>
                                     <InputLabel value="Categoría" />

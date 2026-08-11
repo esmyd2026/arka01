@@ -46,7 +46,7 @@ defineProps({
             <h2>3. Para qué los usamos</h2>
             <ul>
                 <li>Conectarlo con conductores/clientes de su flota y del directorio público.</li>
-                <li>Mostrar viajes, Expresos y Viajes en VAN disponibles, y calcular distancias/tarifas de referencia.</li>
+                <li>Mostrar viajes, Expresos y Rutas y Turismo disponibles, y calcular distancias/tarifas de referencia.</li>
                 <li>Mandarle avisos importantes (carrera nueva, cambio de estado, vencimiento de su ventana de WhatsApp, novedades de su plan) por notificación push o WhatsApp.</li>
                 <li>Revisar manualmente verificaciones de conductor y comprobantes de pago.</li>
                 <li>Calcular su progreso de puntos y nivel (gamificación) en el panel de indicadores.</li>

@@ -4,10 +4,13 @@ namespace Tests\Feature\VanTrips;
 
 use App\Models\City;
 use App\Models\DriverProfile;
+use App\Models\Fleet;
+use App\Models\FleetMember;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Models\VanTrip;
+use App\Models\VanTripSearchRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -314,5 +317,142 @@ class VanTripFlowTest extends TestCase
         ]);
 
         $this->actingAs($stranger)->post(route('van-trips.cancel', $trip))->assertForbidden();
+    }
+
+    // Pedido explícito del usuario: si la búsqueda no encuentra nada, se
+    // guarda para proponérsela a los conductores, y se muestran viajes de
+    // respaldo (público y de la propia flota) en su lugar.
+
+    public function test_an_empty_search_with_a_route_saves_a_demand_request(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $seeker = User::factory()->create();
+
+        $response = $this->actingAs($seeker)->get(route('van-trips.browse', [
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'travel_date' => now()->addDays(5)->toDateString(),
+        ]));
+
+        $response->assertInertia(fn ($page) => $page->where('searchSaved', true));
+
+        $this->assertDatabaseHas('van_trip_search_requests', [
+            'user_id' => $seeker->id,
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+        ]);
+    }
+
+    public function test_a_repeated_identical_empty_search_does_not_duplicate_the_demand_request(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $seeker = User::factory()->create();
+
+        $params = [
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'travel_date' => now()->addDays(5)->toDateString(),
+        ];
+
+        $this->actingAs($seeker)->get(route('van-trips.browse', $params));
+        $this->actingAs($seeker)->get(route('van-trips.browse', $params));
+
+        $this->assertDatabaseCount('van_trip_search_requests', 1);
+    }
+
+    public function test_an_empty_search_without_a_route_does_not_save_demand(): void
+    {
+        $seeker = User::factory()->create();
+
+        $this->actingAs($seeker)->get(route('van-trips.browse'))
+            ->assertInertia(fn ($page) => $page->where('searchSaved', false));
+
+        $this->assertDatabaseCount('van_trip_search_requests', 0);
+    }
+
+    public function test_an_empty_search_lists_fallback_trips_with_own_fleet_flagged_first(): void
+    {
+        [$searchedOrigin, $searchedDestination] = $this->citiesPair();
+        $otherOrigin = City::query()->create(['name' => 'Cuenca', 'is_active' => true]);
+        $otherDestination = City::query()->create(['name' => 'Loja', 'is_active' => true]);
+
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+
+        $fleetDriver = $this->driverWithPlan();
+        FleetMember::factory()->for($fleet)->for($fleetDriver, 'driver')->create(['added_by' => $client->id]);
+
+        $publicDriver = $this->driverWithPlan();
+
+        $fleetTrip = VanTrip::query()->create([
+            'driver_user_id' => $fleetDriver->id, 'origin_city_id' => $otherOrigin->id, 'destination_city_id' => $otherDestination->id,
+            'travel_date' => now()->addDay(), 'departure_time' => '07:00', 'total_seats' => 10, 'price_per_seat' => 10, 'status' => 'open',
+        ]);
+        $publicTrip = VanTrip::query()->create([
+            'driver_user_id' => $publicDriver->id, 'origin_city_id' => $otherOrigin->id, 'destination_city_id' => $otherDestination->id,
+            'travel_date' => now()->addDays(2), 'departure_time' => '07:00', 'total_seats' => 10, 'price_per_seat' => 10, 'status' => 'open',
+        ]);
+
+        // Busca una ruta que ningún viaje cubre — los dos de arriba quedan
+        // como respaldo.
+        $response = $this->actingAs($client)->get(route('van-trips.browse', [
+            'origin_city_id' => $searchedOrigin->id,
+            'destination_city_id' => $searchedDestination->id,
+        ]));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('fallbackTrips', 2)
+            ->where('fallbackTrips.0.id', $fleetTrip->id)
+            ->where('fallbackTrips.0.is_own_fleet', true)
+            ->where('fallbackTrips.1.id', $publicTrip->id)
+            ->where('fallbackTrips.1.is_own_fleet', false)
+        );
+    }
+
+    public function test_recent_demand_is_grouped_by_route_on_the_drivers_index(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $driver = $this->driverWithPlan();
+
+        VanTripSearchRequest::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'travel_date' => now()->addDays(3),
+        ]);
+        VanTripSearchRequest::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'travel_date' => now()->addDays(7),
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('van-trips.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('recentDemand', 1)
+            ->where('recentDemand.0.origin_city', $origin->name)
+            ->where('recentDemand.0.destination_city', $destination->name)
+            ->where('recentDemand.0.count', 2)
+            ->where('recentDemand.0.soonest_date', now()->addDays(3)->toDateString())
+        );
+    }
+
+    public function test_old_demand_requests_do_not_show_up_on_the_drivers_index(): void
+    {
+        [$origin, $destination] = $this->citiesPair();
+        $driver = $this->driverWithPlan();
+
+        $old = VanTripSearchRequest::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'origin_city_id' => $origin->id,
+            'destination_city_id' => $destination->id,
+            'travel_date' => now()->addDays(3),
+        ]);
+        $old->forceFill(['created_at' => now()->subDays(45)])->save();
+
+        $response = $this->actingAs($driver)->get(route('van-trips.index'));
+
+        $response->assertInertia(fn ($page) => $page->has('recentDemand', 0));
     }
 }

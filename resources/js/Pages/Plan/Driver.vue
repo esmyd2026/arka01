@@ -110,7 +110,7 @@ function fitsCurrentUsage(plan) {
                                      App\Models\SubscriptionPlan), solo faltaba mostrarlo acá
                                      — mismo criterio que el resto de la lista. -->
                                 <span v-if="plan.express_enabled"> · Expresos</span>
-                                <span v-if="plan.van_trips_enabled"> · Viajes VAN</span>
+                                <span v-if="plan.van_trips_enabled"> · Rutas y Turismo</span>
                             </p>
 
                             <!-- Proyección de ganancia (pedido explícito del usuario: "que

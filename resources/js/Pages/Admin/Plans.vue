@@ -133,7 +133,7 @@ async function destroyPlan(plan) {
                                                 <span v-if="plan.public_visibility"> · directorio</span>
                                                 <span v-if="plan.priority_listing"> · prioridad</span>
                                                 <span v-if="plan.verified_badge"> · insignia</span>
-                                                <span v-if="plan.van_trips_enabled"> · VAN</span>
+                                                <span v-if="plan.van_trips_enabled"> · Rutas y Turismo</span>
                                                 <span v-if="!plan.express_enabled" class="text-arka-warning"> · sin Expresos</span>
                                                 <span v-if="plan.estimated_monthly_rides" class="text-arka-lime">
                                                     · ~{{ plan.estimated_monthly_rides }} carreras/mes (~${{ projectedEarnings(plan.estimated_monthly_rides) }})
@@ -209,7 +209,7 @@ async function destroyPlan(plan) {
                                             <Checkbox v-model:checked="form.verified_badge" /> Insignia de verificado
                                         </label>
                                         <label class="flex items-center gap-2 text-sm text-arka-text">
-                                            <Checkbox v-model:checked="form.van_trips_enabled" /> Viajes tipo VAN/turismo
+                                            <Checkbox v-model:checked="form.van_trips_enabled" /> Rutas y Turismo
                                         </label>
                                         <label class="flex items-center gap-2 text-sm text-arka-text">
                                             <Checkbox v-model:checked="form.express_enabled" /> Expresos (rutas fijas y recurrentes)
@@ -285,7 +285,7 @@ async function destroyPlan(plan) {
                                         <Checkbox v-model:checked="form.verified_badge" /> Insignia de verificado
                                     </label>
                                     <label class="flex items-center gap-2 text-sm text-arka-text">
-                                        <Checkbox v-model:checked="form.van_trips_enabled" /> Viajes tipo VAN/turismo
+                                        <Checkbox v-model:checked="form.van_trips_enabled" /> Rutas y Turismo
                                     </label>
                                     <label class="flex items-center gap-2 text-sm text-arka-text">
                                         <Checkbox v-model:checked="form.express_enabled" /> Expresos (rutas fijas y recurrentes)

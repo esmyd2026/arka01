@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\City;
+use App\Models\Fleet;
+use App\Models\FleetMember;
 use App\Models\VanTrip;
+use App\Models\VanTripSearchRequest;
 use App\Services\Haversine;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
@@ -49,7 +52,39 @@ class VanTripController extends Controller
             // por defecto — con esto, si el navegador no da geolocalización,
             // al menos centra en la ciudad que ya tiene registrada.
             'driverCity' => $user->city ? ['lat' => (float) $user->city->lat, 'lng' => (float) $user->city->lng] : null,
+            // Pedido explícito del usuario: cuando un cliente busca una ruta
+            // acá y no hay ningún viaje que la cubra, se guarda esa búsqueda
+            // (ver browse()) — se le muestra al conductor agrupada por ruta,
+            // para que sepa qué le están pidiendo antes de publicar.
+            'recentDemand' => $this->recentDemand(),
         ]);
+    }
+
+    /**
+     * Rutas que los clientes buscaron sin encontrar viaje abierto en los
+     * últimos 30 días, agrupadas por origen/destino — de un vistazo, sin
+     * necesidad de que un admin dispare nada (a diferencia del aviso de
+     * demanda de carreras, que sí requiere un botón de admin).
+     */
+    private function recentDemand()
+    {
+        return VanTripSearchRequest::query()
+            ->where('created_at', '>=', now()->subDays(30))
+            ->where(function ($query) {
+                $query->whereNull('travel_date')->orWhere('travel_date', '>=', Carbon::today());
+            })
+            ->with(['originCity', 'destinationCity'])
+            ->get()
+            ->groupBy(fn (VanTripSearchRequest $r) => "{$r->origin_city_id}-{$r->destination_city_id}")
+            ->map(fn ($group) => [
+                'origin_city' => $group->first()->originCity->name,
+                'destination_city' => $group->first()->destinationCity->name,
+                'count' => $group->count(),
+                'soonest_date' => $group->pluck('travel_date')->filter()->sort()->first()?->toDateString(),
+            ])
+            ->sortByDesc('count')
+            ->take(5)
+            ->values();
     }
 
     /**
@@ -178,8 +213,76 @@ class VanTripController extends Controller
             ->filter(fn (VanTrip $trip) => $trip->total_seats > (int) $trip->reserved_seats_count)
             ->values();
 
+        // Pedido explícito del usuario: si la búsqueda no encontró nada,
+        // guardarla para poder proponerle esa ruta a los conductores (ver
+        // recentDemand(), mostrada en VanTrips/Index.vue) — solo tiene
+        // sentido si buscó una ruta concreta, no con los filtros vacíos
+        // (eso solo significaría que hoy no hay ningún viaje publicado).
+        $searchSaved = false;
+        $fallbackTrips = collect();
+
+        if ($trips->isEmpty() && $request->filled('origin_city_id') && $request->filled('destination_city_id')) {
+            $originId = $request->integer('origin_city_id');
+            $destinationId = $request->integer('destination_city_id');
+            $travelDate = $request->filled('travel_date') ? $request->date('travel_date')->toDateString() : null;
+
+            // No se usa firstOrCreate() con el arreglo tal cual: el WHERE
+            // ahí compara el string de fecha "pelado" contra lo que haya
+            // quedado guardado, y no todos los motores truncan la hora al
+            // guardar una columna `date` de la misma forma — whereDate()/
+            // whereNull() sí comparan bien en cualquiera, evitando duplicar
+            // la misma búsqueda repetida.
+            $alreadySaved = VanTripSearchRequest::query()
+                ->where('user_id', $request->user()->id)
+                ->where('origin_city_id', $originId)
+                ->where('destination_city_id', $destinationId)
+                ->when(
+                    $travelDate,
+                    fn ($q) => $q->whereDate('travel_date', $travelDate),
+                    fn ($q) => $q->whereNull('travel_date')
+                )
+                ->exists();
+
+            if (! $alreadySaved) {
+                VanTripSearchRequest::query()->create([
+                    'user_id' => $request->user()->id,
+                    'origin_city_id' => $originId,
+                    'destination_city_id' => $destinationId,
+                    'travel_date' => $travelDate,
+                ]);
+            }
+
+            $searchSaved = true;
+        }
+
+        if ($trips->isEmpty()) {
+            // Pedido explícito del usuario: en vez de dejar la pantalla
+            // vacía, mostrar abajo los viajes que sí existen ahora mismo
+            // (sin los filtros que no dieron resultado), marcando cuáles son
+            // de conductores de su propia flota para que destaquen primero.
+            $myFleetDriverIds = FleetMember::query()
+                ->whereIn('fleet_id', Fleet::query()->where('owner_user_id', $request->user()->id)->pluck('id'))
+                ->whereNull('left_at')
+                ->pluck('driver_user_id');
+
+            $fallbackTrips = VanTrip::query()
+                ->where('status', 'open')
+                ->where('travel_date', '>=', Carbon::today())
+                ->with(['driver', 'originCity', 'destinationCity', 'photos'])
+                ->withSum(['reservations as reserved_seats_count' => fn ($q) => $q->where('status', 'confirmed')], 'seats_reserved')
+                ->orderBy('travel_date')->orderBy('departure_time')
+                ->get()
+                ->filter(fn (VanTrip $trip) => $trip->total_seats > (int) $trip->reserved_seats_count)
+                ->each(fn (VanTrip $trip) => $trip->is_own_fleet = $myFleetDriverIds->contains($trip->driver_user_id))
+                ->sortByDesc('is_own_fleet')
+                ->take(10)
+                ->values();
+        }
+
         return Inertia::render('VanTrips/Browse', [
             'trips' => $trips,
+            'fallbackTrips' => $fallbackTrips,
+            'searchSaved' => $searchSaved,
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['origin_city_id', 'destination_city_id', 'travel_date']),
         ]);

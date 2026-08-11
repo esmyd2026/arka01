@@ -2012,9 +2012,111 @@ Reporte del usuario, con casos reales en producción: gente que se registró y n
 
 ---
 
+### Rediseño del Home público (mockup provisto por el usuario)
+El usuario compartió un mockup completo del Home público y pidió que quedara así, más un ajuste puntual en el Inicio del cliente (con captura anotada a mano). Confirmado antes de tocar nada (`AskUserQuestion`): la línea "Cliente · Plan Gratis" tachada se elimina del todo, no se hace más chica — esa info ya está en Mi perfil.
+
+- **`Welcome.vue`**: reemplaza el flujo de pasos que se había armado en la Fase 6 por el diseño del mockup — encabezado con logo + "Tu círculo. Tus viajes. Tu decisión." + botones, dos fichas "Para Clientes"/"Para Conductores" con su lista de beneficios, el diagrama del medio (Clientes · A01 · Conductores conectados, con los tres puntos de "Red privada y segura/Control total/Sin intermediarios"), la franja "¿Por qué elegir Arka01?" (Seguridad/Privacidad/Precios justos/Califica y mejora/Soporte real), y "Ayúdanos a mejorar Arka01" — que pasó de formulario siempre visible a una barra angosta que abre el mismo formulario en un modal, sin ocupar la página de entrada. Sin librerías nuevas: todo con SVG propios en el mismo estilo que ya usa el resto de la app.
+- **`Dashboard.vue`**: se sacó la insignia "Cliente · Plan X" del Inicio del cliente (confirmado con el usuario) — junto con el `clientPlanName` que ya no se usaba en ningún lado (prop, controlador, inyección de `PlanLimits` en `DashboardController`, y el test que lo cubría).
+
+### Tests
+Se quitó el test que cubría `clientPlanName` (prop eliminado). Sin tests nuevos — cambios de layout público, sin lógica de backend nueva. Suite completa: 562 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Roadmap grande — resumen final
 
 Las 7 fases del "PROMPT — MEJORAS INTEGRALES PLATAFORMA ARKA01" quedaron completas: bugs críticos (documentos, precio, limpieza de campos), notificaciones push + chat de carrera, separación de roles en Viajes VAN, WhatsApp configurable + Monitoreo + Auditoría, Centro de Ayuda + Soporte, Home público (cómo funciona + opiniones), y optimización de UI. Todo verificado por bloques (tests + Pint + build después de cada fase), sin romper funcionalidad existente. Como el resto de lo construido en esta sesión, queda pendiente del mismo `git push` + despliegue pendiente de confirmación del usuario.
+
+---
+
+### "Reiniciar demo" ya no borra el admin ni las configuraciones
+Pedido explícito del usuario, ajuste a una función ya existente: antes, "Borrar demo y reiniciar" (`/admin/sistema`) borraba TODAS las cuentas `@arka01.test` — incluida la cuenta admin de prueba, que se volvía a crear de cero — y si esa era la cuenta con la que se estaba usando el panel, cerraba la sesión. El usuario pidió que en vez de eso solo se toquen los suscriptores de prueba (clientes y conductores), nunca ninguna cuenta admin ni ninguna configuración ya hecha.
+
+- **`Admin\SystemController::resetDemo()`**: el filtro de borrado ahora es `email LIKE '%@arka01.test' AND is_admin = false` — ninguna cuenta admin se toca nunca, sea cual sea su correo. Como consecuencia, ya no hace falta la lógica de "cerrar sesión si te borraste a vos mismo" (no puede pasar: quien usa este botón es admin, y los admin ya no se borran) — se sacó esa rama entera.
+- **Limpieza de archivos en disco** (pedido explícito: "imágenes de esos usuarios... y transacciones"): el cascade de las FKs ya borraba las filas de la base (carreras, reseñas, suscripciones, flotas), pero nunca tocaba los archivos — quedaban huérfanos en el disco. Ahora, antes de borrar cada suscriptor demo, se borra también su foto de perfil (si no es una URL externa de Google), la foto de licencia y de vehículo de su perfil de conductor, las fotos de sus Viajes en VAN publicados, y el comprobante de pago de sus pedidos de plan — los cuatro tipos de archivo que un suscriptor de prueba puede haber subido.
+- **`DemoDataSeeder`**: la creación del admin pasó de `create()` a `firstOrCreate()` — necesario porque ahora, al no borrarse nunca, `admin@arka01.test` ya existe cuando el seeder se vuelve a correr después de un reinicio, y un `create()` sin este chequeo hubiera tirado un error de correo/teléfono duplicado y roto el reinicio entero.
+- **`Admin/System.vue`**: texto actualizado para reflejar el alcance real — deja explícito qué se borra y, en negrita, qué NUNCA se toca (cuentas admin y configuraciones).
+
+Confirmado con el usuario antes de implementar (no se tocó ninguna tabla de configuración en ningún momento — planes, tarifas, cupones, banners, etc. — esas tablas nunca estuvieron en el alcance de este botón, solo cuentas de usuario).
+
+### Tests
+`tests/Feature/Admin/AdminSystemControllerTest.php` (reescrito: +2 confirmando que una cuenta admin, incluso con correo `@arka01.test`, nunca se borra y sigue siendo la misma fila después del reinicio; +2 verificando que las fotos de un conductor demo y el comprobante de pago de un cliente demo se borran del disco; +1 confirmando que el catálogo de planes no se toca; se quitó el test que esperaba el logout del admin de prueba, ya no aplica). Suite completa: 565 tests OK, Pint limpio, build limpio.
+
+---
+
+### Ajustes puntuales: desplegables blancos, teléfono expuesto, tarjeta "Tu flota" sin datos
+Reportes del usuario con capturas, varios de una sola vez:
+
+- **`<select>` nativo con el tema del sistema operativo** (captura: panel del "Tipo" en el formulario de opiniones, blanco sobre blanco): mismo bug ya conocido y ya resuelto antes en el formulario de carrera (el navegador pinta el desplegable de un `<select>` con su propio estilo, sin que ningún CSS lo alcance). Se reemplazaron por `SearchableSelect` (el mismo componente ya usado en el resto de la app) en el modal de opiniones de `Welcome.vue` y, de paso, en las cuatro pantallas nuevas de esta sesión que tenían el mismo problema sin que nadie lo hubiera reportado todavía: `Admin/Faqs.vue` (los dos formularios), `Admin/Monitoring/Index.vue` (módulo/severidad/estado), `Admin/Support/Index.vue` y `Admin/Support/Show.vue` (estado del ticket).
+- **Teléfono del conductor expuesto en "Conductores en su flota"** (`Fleet/Show.vue`, captura): pedido explícito del usuario, se sacó de esa tarjeta por privacidad — se mantiene la tarifa por km, que sí tiene sentido ver ahí. La búsqueda para invitar a alguien nuevo (una pantalla distinta, donde el teléfono sirve para confirmar identidad) no se tocó.
+- **Tarjeta "Tu flota" del Inicio del cliente solo mostraba fotos**: el usuario recordó su pedido original (sección 2 del roadmap de mejoras: "no quiero que se muestre únicamente la fotografía — foto, nombre, calificación, distancia e indicador de disponibilidad"), que esta tarjeta puntual no cumplía (se había priorizado que fuera un resumen bien compacto). Pasó de una tira de avatares sueltos a una lista corta (hasta 3) con avatar + nombre + calificación + distancia, todos datos que `DashboardController::fleetDriversFor()` ya calculaba y mandaba sin usarse en esta tarjeta.
+- **Correo `hello@example.com` en Términos/Privacidad**: no es un bug de código — `config('mail.from.address')` ya estaba bien conectado, pero el `.env` local todavía tiene el placeholder de Laravel sin completar (`.env.example` ya documenta correctamente `soporte@arka01.com`). Le señalé al usuario cuál variable completar en su `.env` local en vez de tocar el código (las credenciales/config van en `.env`, no se hardcodean) — en producción esto ya estaba resuelto de una pasada anterior (`wpgo@siglotecnologico.com`, mientras no exista el buzón real).
+
+### Tests
+No aplica — todos cambios puramente visuales/de layout en Vue (sin lógica de backend nueva) y una aclaración de configuración local. Suite completa sin cambios: 565 tests OK, Pint limpio, build limpio.
+
+---
+
+### Segunda vuelta: "Tu flota" simétrica y el saludo a otro lugar
+El usuario probó los cambios anteriores y pidió dos ajustes puntuales sobre lo recién hecho:
+
+- **"Tu flota" volvió a ser horizontal**, pero ya no una tira de solo avatares: ahora es una grilla simétrica de 4 columnas iguales, con los datos (nombre truncado, calificación, distancia) debajo de cada foto en vez de al lado en una lista vertical — mismo criterio de "no solo la fotografía" que antes, con el layout que sí le gustaba.
+- **El saludo bajó de la barra superior** (donde había quedado tras la Fase 7 del roadmap grande) **a la cabecera de "Inicio"**, a la izquierda — reemplaza el título "Inicio" en `Dashboard.vue` por "¡Hola, {{nombre}}! 👋" en ese mismo lugar, en vez de vivir arriba junto a los íconos de cuenta. Se sacó por completo de `AuthenticatedLayout.vue` (ya no aparece en ninguna otra pantalla, solo en Inicio, que es donde tiene sentido un saludo).
+
+### Tests
+No aplica — cambios de layout en Vue. Suite completa sin cambios: 565 tests OK, Pint limpio, build limpio.
+
+---
+
+### Botón "Actualizar ubicación ahora" que no hacía nada + aviso de ubicación/notificaciones
+
+El usuario reportó (con captura) que el botón "Actualizar ubicación ahora" del aviso "Sin ubicación reciente" del conductor no hacía nada al tocarlo, y pidió además un aviso para que tanto cliente como conductor activen ubicación y notificaciones si no las tienen prendidas — explícitamente **no** en `Welcome.vue`, solo dentro de la app logueada.
+
+- **Causa real del botón mudo** (`DriverAvailabilityToggle.vue`): `refreshNow()` cortaba de una si `available.value` (el estado interno del switch) era `false` — y ese es justo el estado en el que queda casi siempre que aparece este aviso: `startWatching()` ya lo había puesto en `false` en su callback de error apenas falló la geolocalización una vez (permiso denegado, GPS sin señal un instante), aunque el conductor siga marcado disponible en el servidor. El botón entraba al guardia y no pasaba nada, sin ningún mensaje. Ahora `refreshNow()` intenta igual pedir la ubicación sin importar ese estado interno, y si el navegador la entrega, recupera el switch (lo vuelve a prender y retoma `watchPosition()`) en vez de quedarse callado.
+- **`Components/PermissionsPrompt.vue`** (nuevo): tarjeta discreta y descartable (se recuerda 7 días en `localStorage`) que revisa el estado real de los permisos de ubicación (`navigator.permissions.query`) y notificaciones (`Notification.permission`) — solo se muestra si falta alguno de los dos, con un botón que dispara el pedido nativo del navegador (nunca automático al cargar la página, mismo criterio ya usado para las notificaciones push) o, si el navegador ya lo bloqueó permanentemente, un texto indicando que hay que revisarlo en los ajustes del sitio en vez de un botón que tampoco haría nada (mismo tipo de bug que se acaba de corregir arriba). Montada en `AuthenticatedLayout.vue` (cliente, conductor y admin por igual), a propósito fuera de `Welcome.vue`.
+
+### Tests
+No aplica — ambos cambios son de comportamiento del navegador (geolocalización/notificaciones), sin lógica de backend nueva. Suite completa sin cambios: 565 tests OK, Pint limpio, build limpio.
+
+---
+
+### "Tu flota" más apretada, con círculo "+N" en vez de texto aparte
+
+El usuario mandó una captura pidiendo que la tarjeta "Tu flota" quedara más compacta para que quepan más conductores de un vistazo, pero sin perder prolijidad — y, si la flota es chica, evitar la sensación de grilla con columnas vacías.
+
+- **`Dashboard.vue`**: la fila pasó de `grid grid-cols-4` (siempre 4 columnas, aunque haya menos conductores) a `flex flex-wrap` con columnas de ancho fijo más angosto (avatar de `h-10` en vez de `h-11`, texto más chico) — con una flota chica no quedan huecos, y con una grande caben más antes de necesitar el "+N".
+- El texto suelto "+N más — vea todos" debajo de la fila se reemplazó por un círculo al final de la misma fila, con el mismo tamaño y layout que cualquier otro avatar (más una etiqueta debajo, igual que el nombre de cada conductor).
+- Límite de vista previa configurable en `FLEET_PREVIEW_LIMIT = 5` (antes eran 4 fijos por la grilla).
+- **Ajuste posterior** (captura de referencia: círculo punteado con "+"): ese círculo final ahora es siempre punteado, y funciona como llamado a la acción — si sobran conductores muestra "+N · Ver todos" (gris), y si la flota todavía tiene lugar muestra un "+" en color de acento con la etiqueta "Agregar", invitando directamente a sumar más conductores en vez de solo indicar cuántos faltan por ver.
+
+### Tests
+No aplica — cambio puramente visual/de layout en Vue. Suite completa sin cambios: 565 tests OK, Pint limpio, build limpio.
+
+---
+
+### "Viajes VAN" pasó a llamarse "Rutas y Turismo" + demanda insatisfecha
+
+El usuario, viendo la pantalla de búsqueda vacía, pidió dos cosas: (1) que el nombre "VAN" dejara de usarse porque no calzaba con el servicio real (buseta, microbús, turismo — no solo van), y (2) que cuando una búsqueda no encuentra ningún viaje, esa ruta quede guardada para proponérsela a los conductores, y que mientras tanto se le muestren igual los viajes ya publicados (del público y de su propia flota) en vez de dejar la pantalla vacía.
+
+- **Renombre**: se cambió el texto visible de "Viajes VAN" / "Viajes VAN / turismo" a **"Rutas y Turismo"** en todas las pantallas, menú de accesos rápidos, tarjeta del Inicio, plan del conductor, panel admin de planes y textos legales (Términos/Privacidad). Confirmado el nombre con el usuario antes de aplicarlo. Los nombres internos (`VanTrip`, tabla `van_trips`, rutas `van-trips.*`, el flag de plan `van_trips_enabled`) se dejaron como están — es una decisión de branding hacia el usuario, no de arquitectura, y renombrar clases/tablas no aporta nada y sí arriesga romper algo sin necesidad.
+- **`van_trip_search_requests`** (tabla nueva) + `App\Models\VanTripSearchRequest`: cuando `VanTripController::browse()` no encuentra ningún viaje Y la búsqueda sí especificó una ruta concreta (origen + destino), se guarda esa búsqueda — sin duplicar si el mismo cliente repite la misma búsqueda (comparación con `whereDate()`/`whereNull()`, no con igualdad de string, porque no todos los motores de base de datos truncan la hora de una columna `date` de la misma forma — se encontró justamente ese problema entre MySQL y SQLite al escribir los tests).
+- **`VanTrips/Index.vue`** (lado conductor): nueva sección "📋 Rutas que están pidiendo los clientes" — agrupa por ruta las búsquedas sin resultado de los últimos 30 días, con la cantidad de personas y la fecha más próxima pedida.
+- **`VanTrips/Browse.vue`** (lado cliente): cuando no hay resultados, además del aviso "guardamos su búsqueda", se listan hasta 10 viajes ya publicados (sin los filtros que no dieron resultado) como alternativa — los de conductores de la propia flota del cliente aparecen primero con la etiqueta "De su flota", el resto sin etiqueta (viajes VAN no tienen flota propia como concepto, así que "público" es simplemente el resto).
+
+### Tests
+`tests/Feature/VanTrips/VanTripFlowTest.php` (+6): guarda la demanda solo con ruta concreta, no duplica una búsqueda repetida, no guarda nada si la búsqueda vino sin filtros, el listado de respaldo aparece con la flota propia primero, la demanda se agrupa correctamente para el conductor, y la demanda de más de 30 días ya no aparece. Suite completa: 571 tests OK, Pint limpio, build limpio.
+
+---
+
+### Cambios del conductor sin sonido ni vibración en la carrera del cliente
+
+El usuario insistió: "sigue el problema que no llega las notificaciones de los cambios al cliente cuando existe un cambio por parte del conductor" y pidió un sonido fuerte y, si se podía, vibración.
+
+- **Causa real** (`Ride/Show.vue`): los 5 listeners de cambios de una carrera activa (`ride.started`, `ride.cancelled`, `ride.completed`, `ride.arrived`, `ride.picked_up`) solo hacían `router.reload()` en silencio — ningún sonido, ninguna vibración. Si quien tenía la pantalla abierta no estaba mirándola en ese instante exacto, el cambio pasaba desapercibido del todo (la notificación push del sistema operativo tampoco suena si la pestaña ya está enfocada — ver el comentario ya existente en `Utils/liveAlert.js`). Se agregó `playAttentionAlert()` (sonido más fuerte + vibración, ya existía en el proyecto para "carrera nueva") a los 5 listeners. Como el backend ya manda estos eventos con `->toOthers()`, la alerta solo le suena a quien NO hizo la acción — nunca a quien la disparó.
+- **`Ride/Index.vue`** (lista de "Carreras"): los mismos 3 eventos de carrera activa (`ride.completed`, `ride.cancelled`, `ride.started`, canal personal) usaban el chime suave sin vibración — se subieron también a `playAttentionAlert()` para que suenen igual en cualquiera de las dos pantallas. Los eventos de negociación previa (oferta aceptada/contraoferta/expiró/rechazada) se dejaron con el chime suave — son una categoría distinta, antes de que exista una carrera real en curso.
+
+### Tests
+No aplica — cambio puramente de audio/vibración en el navegador, sin lógica de backend nueva (no hay forma de probar Web Audio API/`navigator.vibrate` desde PHPUnit). Suite completa sin cambios: 571 tests OK, Pint limpio, build limpio.
 
 ---
 

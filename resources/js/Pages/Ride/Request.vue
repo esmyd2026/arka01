@@ -430,7 +430,7 @@ function clearDestination() {
 // --- Trazado real del recorrido (consideración agregada al alcance: "que
 // trace el recorrido"), con OSRM — gratis, sin API key (sección 9.3). Se pide
 // en cuanto hay origen y destino marcados — ver Utils/osrmRoute.js, mismo
-// mecanismo que usan Expresos y Viajes en VAN. ---
+// mecanismo que usan Expresos y Rutas y Turismo. ---
 const routeCoords = ref([]);
 
 watch([originLat, originLng, destinationLat, destinationLng], async () => {

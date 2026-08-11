@@ -8,6 +8,7 @@ import Modal from '@/Components/Modal.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import IncomingRideRequestModal from '@/Components/IncomingRideRequestModal.vue';
 import OnboardingTour from '@/Components/OnboardingTour.vue';
+import PermissionsPrompt from '@/Components/PermissionsPrompt.vue';
 import HelpTip from '@/Components/HelpTip.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
@@ -40,12 +41,6 @@ function openOnboardingAgain() {
     showingHelp.value = false;
     showingOnboarding.value = true;
 }
-
-// Saludo del navbar (pedido explícito del usuario, roadmap de mejoras
-// sección 1): antes era un título grande dentro del contenido de Inicio —
-// se mueve acá, discreto, para recuperar ese espacio vertical. Visible en
-// cualquier pantalla (no solo Inicio), igual que el resto de esta barra.
-const firstName = computed(() => (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] ?? '');
 
 // route().has(...) evita que la navegación se rompa si algún módulo
 // (por ejemplo Flota) todavía no tiene sus rutas registradas.
@@ -158,13 +153,13 @@ const quickLinks = computed(() =>
         },
         {
             route: 'van-trips.index',
-            label: 'Mis viajes VAN',
+            label: 'Mis rutas y turismo',
             driverOnly: true,
-            help: 'Publique salidas programadas tipo VAN/turismo, que los clientes reservan por asiento.',
+            help: 'Publique salidas programadas de ruta fija, que los clientes reservan por asiento.',
         },
         {
             route: 'van-trips.browse',
-            label: 'Viajes VAN / turismo',
+            label: 'Rutas y Turismo',
             clientOnly: true,
             help: 'Explore y reserve un asiento en las salidas programadas que publican los conductores.',
         },
@@ -242,13 +237,9 @@ onBeforeUnmount(() => {
 
                     <!-- Navegación de escritorio: agrupada en una sola "pastilla" con
                          ícono + texto (coherente con el lenguaje visual del resto de la
-                         app), centrada para aprovechar el ancho del header. En móvil, esta
-                         misma columna del grid queda libre (la pastilla es "hidden
-                         sm:flex") — ahí entra el saludo (pedido explícito del usuario,
-                         roadmap de mejoras sección 1), sin sumar una fila nueva al header. -->
-                    <div class="flex justify-center">
-                        <p class="sm:hidden text-sm text-arka-text-muted truncate">¡Hola, {{ firstName }}! 👋</p>
-                        <div class="hidden sm:flex items-center gap-1 bg-arka-base/60 rounded-full p-1">
+                         app), centrada para aprovechar el ancho del header. -->
+                    <div class="hidden sm:flex justify-center">
+                        <div class="flex items-center gap-1 bg-arka-base/60 rounded-full p-1">
                             <Link
                                 v-if="hasRoute('fleet.index') && showClientNav"
                                 :href="route('fleet.index')"
@@ -326,9 +317,6 @@ onBeforeUnmount(() => {
                          en escritorio Y en móvil, donde reemplazan al viejo menú de
                          hamburguesa: búsqueda, ayuda, accesos rápidos y avatar de cuenta. -->
                     <div class="flex items-center justify-end gap-0.5">
-                        <!-- En escritorio la columna del medio ya la ocupa la nav — el
-                             saludo va acá, discreto, antes del avatar. -->
-                        <span class="hidden sm:inline text-sm text-arka-text-muted mr-1">¡Hola, {{ firstName }}! 👋</span>
                         <!-- Buscar: acceso directo al directorio de conductores (herramienta
                              de cliente — buscar a quién invitar a la flota). -->
                         <Link
@@ -530,6 +518,13 @@ onBeforeUnmount(() => {
             <div class="p-3 rounded-arka bg-arka-primary/10 text-arka-primary-bright text-sm">
                 {{ $page.props.flash.status }}
             </div>
+        </div>
+
+        <!-- Pedido explícito del usuario: recordatorio de ubicación +
+             notificaciones para cliente y conductor por igual, dentro de la
+             app logueada — a propósito no vive en Welcome.vue. -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+            <PermissionsPrompt />
         </div>
 
         <!-- Page Heading -->

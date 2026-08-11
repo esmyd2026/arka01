@@ -13,7 +13,7 @@ import TextInput from '@/Components/TextInput.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
-import { playUpdateChime } from '@/Utils/liveAlert';
+import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
 
 const props = defineProps({
     ride: { type: Object, required: true },
@@ -106,11 +106,20 @@ onMounted(() => {
         driverLng.value = e.lng;
     });
 
+    // Bug reportado por el usuario ("sigue el problema que no llega las
+    // notificaciones de los cambios"): estos 5 listeners recargaban la
+    // pantalla en silencio, sin sonido ni vibración — si la otra parte no
+    // tenía la vista fija en la pantalla en ese instante, se perdía el
+    // cambio. toOthers() en el backend (RideController) ya asegura que esto
+    // solo le suena a quien NO hizo la acción (nunca a quien la disparó),
+    // así que agregar la alerta acá es seguro para ambos lados.
+
     // El conductor arrancó esta carrera PROGRAMADA desde otra pestaña/sesión
     // (consideración agregada al alcance) — refresca el estado si esta
     // pantalla ya estaba abierta desde antes.
     fleetChannel.listen('.ride.started', (e) => {
         if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
         router.reload({ only: ['ride'] });
     });
 
@@ -119,6 +128,7 @@ onMounted(() => {
     // toque en vez de seguir manejando hacia algo que ya no existe.
     fleetChannel.listen('.ride.cancelled', (e) => {
         if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
         router.reload({ only: ['ride'] });
     });
 
@@ -128,6 +138,7 @@ onMounted(() => {
     // listener, que sí existe para "iniciada" y "cancelada".
     fleetChannel.listen('.ride.completed', (e) => {
         if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
         router.reload({ only: ['ride'] });
     });
 
@@ -136,11 +147,13 @@ onMounted(() => {
     // abierta vea el cambio de banner sin recargar a mano.
     fleetChannel.listen('.ride.arrived', (e) => {
         if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
         router.reload({ only: ['ride'] });
     });
 
     fleetChannel.listen('.ride.picked_up', (e) => {
         if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
         router.reload({ only: ['ride'] });
     });
 

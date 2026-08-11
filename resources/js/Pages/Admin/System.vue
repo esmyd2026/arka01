@@ -10,10 +10,13 @@ defineProps({
 
 // Zona de peligro (pedido explícito del usuario): confirmación fuerte antes
 // de borrar, con el texto explícito de qué se pierde — ver Admin\SystemController.
+// Ajuste explícito del usuario a la versión anterior: ya no toca NINGUNA
+// cuenta admin ni ninguna configuración (planes, tarifas, cupones, etc.) —
+// solo los conductores y clientes de prueba.
 async function resetDemo() {
     const confirmed = await confirmDialog(
-        'Esto borra TODAS las cuentas @arka01.test (admin, clientes y conductores de prueba) junto con sus flotas, carreras, suscripciones y reseñas, y vuelve a crear el elenco base de 9 cuentas. Cualquier cuenta con otro correo queda intacta. Esta acción no se puede deshacer.',
-        { danger: true, confirmLabel: 'Borrar demo y reiniciar' }
+        'Esto borra las cuentas @arka01.test de CLIENTES y CONDUCTORES de prueba, junto con sus carreras, reseñas, suscripciones/comprobantes y fotos, y vuelve a crear los 4 clientes + 4 conductores demo. Ninguna cuenta admin ni ninguna configuración (planes, tarifas, cupones, etc.) se toca. Esta acción no se puede deshacer.',
+        { danger: true, confirmLabel: 'Borrar suscriptores demo' }
     );
     if (!confirmed) return;
 
@@ -31,15 +34,23 @@ async function resetDemo() {
                     <h3 class="text-lg font-medium text-arka-danger">Zona de peligro</h3>
 
                     <p class="text-sm text-arka-text">
-                        Hay <strong>{{ demoAccountsCount }}</strong> cuentas de prueba (correo terminado en
-                        <code class="text-xs bg-arka-base px-1 py-0.5 rounded">@arka01.test</code>) en la base.
+                        Hay <strong>{{ demoAccountsCount }}</strong> cuentas de prueba (clientes y conductores con
+                        correo terminado en <code class="text-xs bg-arka-base px-1 py-0.5 rounded">@arka01.test</code>)
+                        en la base.
                     </p>
 
                     <p class="text-sm text-arka-text-muted">
-                        Este botón borra todas esas cuentas y todo lo que les pertenece (flotas, carreras,
-                        suscripciones, reseñas, perfiles de conductor), y vuelve a crear el elenco base: un admin y
-                        4 clientes + 4 conductores, todos con la contraseña "password". Cualquier cuenta con otro
-                        correo no se toca.
+                        Este botón borra esos clientes y conductores de prueba con todo lo que les pertenece
+                        (flotas, carreras, reseñas, suscripciones y comprobantes de pago, fotos de perfil/licencia/
+                        vehículo), y vuelve a crear los 4 clientes + 4 conductores demo, todos con la contraseña
+                        "password".
+                    </p>
+
+                    <p class="text-sm text-arka-text-muted">
+                        <strong class="text-arka-text">Nunca toca:</strong> ninguna cuenta administradora (ni la
+                        suya ni ninguna otra) ni las configuraciones ya hechas — planes, tarifas, cupones, banners,
+                        preguntas frecuentes, medallas, zonas, integración de WhatsApp, etc. Cualquier cuenta con
+                        otro correo tampoco se toca.
                     </p>
 
                     <p class="text-sm text-arka-text-muted">
@@ -48,12 +59,7 @@ async function resetDemo() {
                         junto con la cuenta demo — la cuenta real en sí no se borra.
                     </p>
 
-                    <p class="text-sm text-arka-text-muted">
-                        Si la cuenta con la que inició sesión ahora mismo es una cuenta de prueba, se va a cerrar su
-                        sesión y se lo va a mandar al login después de reiniciar.
-                    </p>
-
-                    <DangerButton @click="resetDemo">Borrar demo y reiniciar</DangerButton>
+                    <DangerButton @click="resetDemo">Borrar suscriptores demo</DangerButton>
                 </div>
             </div>
         </div>

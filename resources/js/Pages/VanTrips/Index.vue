@@ -25,6 +25,10 @@ const props = defineProps({
     // mapa arrancaba siempre en Quito) — respaldo si el navegador no da
     // geolocalización a tiempo.
     driverCity: { type: Object, default: null },
+    // Pedido explícito del usuario: rutas que clientes buscaron sin
+    // encontrar viaje abierto, agrupadas — para que el conductor sepa qué
+    // le están pidiendo antes de publicar (ver VanTripController::browse()).
+    recentDemand: { type: Array, default: () => [] },
 });
 
 const cityOptions = computed(() => props.cities.map((c) => ({ value: c.id, label: c.name })));
@@ -172,12 +176,12 @@ function submit() {
 </script>
 
 <template>
-    <Head title="Mis viajes VAN" />
+    <Head title="Mis rutas y turismo" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
-                <h2 class="font-semibold text-xl text-arka-text leading-tight">Mis viajes VAN / turismo</h2>
+                <h2 class="font-semibold text-xl text-arka-text leading-tight">Mis rutas y turismo</h2>
                 <Link :href="route('van-trips.browse')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
                     Ver como cliente &rarr;
                 </Link>
@@ -196,6 +200,20 @@ function submit() {
                     poder publicar viajes.
                     <Link :href="route('driver.plan.edit')" class="underline hover:text-arka-warning/80">Ver planes</Link>
                 </p>
+
+                <!-- Pedido explícito del usuario: mostrarle al conductor las rutas
+                     que clientes buscaron sin encontrar nada, para que sepa qué le
+                     están pidiendo antes de publicar. -->
+                <div v-if="recentDemand.length" class="p-4 sm:p-6 bg-arka-primary/10 rounded-arka space-y-2">
+                    <p class="text-sm font-medium text-arka-text">📋 Rutas que están pidiendo los clientes</p>
+                    <ul class="space-y-1">
+                        <li v-for="(demand, i) in recentDemand" :key="i" class="text-sm text-arka-text-muted">
+                            {{ demand.origin_city }} &rarr; {{ demand.destination_city }}
+                            <span v-if="demand.soonest_date">· desde {{ demand.soonest_date }}</span>
+                            · {{ demand.count }} persona(s) buscando
+                        </li>
+                    </ul>
+                </div>
 
                 <ul v-if="trips.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
                     <li v-for="trip in trips" :key="trip.id" class="p-4 sm:p-6">
