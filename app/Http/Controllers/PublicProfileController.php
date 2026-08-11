@@ -3,20 +3,55 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PublicProfileController extends Controller
 {
     /**
+     * User-agents conocidos de rastreadores que arman una tarjeta de vista
+     * previa al compartir un enlace (pedido explícito del usuario: "que el
+     * mensaje a compartir por WhatsApp vaya el logo o perfil... algo
+     * profesional"). Ninguno ejecuta JavaScript, así que las etiquetas
+     * <meta og:*> que Profile/Show.vue agrega con Inertia<Head> nunca les
+     * llegarían — esta app es una SPA sin SSR configurado.
+     */
+    private const LINK_PREVIEW_BOTS = '/WhatsApp|facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot/i';
+
+    /**
      * Perfil público (sección 3.6): visible para cualquier usuario logueado,
      * no hace falta compartir flota — es justamente lo que permite evaluar a
      * alguien que todavía no conocés (un conductor público, o un cliente que
      * te invitó de la nada) antes de aceptar o invitar.
      */
-    public function show(User $user): Response
+    public function show(Request $request, User $user): Response|View
     {
         $user->load('driverProfile');
+
+        $profileUrl = route('profiles.show', $user->id);
+
+        // Para el puñado de rastreadores de vista previa, se sirve una
+        // página mínima aparte con las etiquetas correctas (sin pasar por
+        // Inertia, que no las mostraría a tiempo) — cualquier persona real
+        // sigue viendo la app normal de siempre, esto nunca la reemplaza.
+        if (preg_match(self::LINK_PREVIEW_BOTS, $request->userAgent() ?? '')) {
+            $isDriver = $user->driverProfile !== null;
+            $reviewCount = $user->reviewsReceived()->count();
+            $averageRating = round((float) $user->reviewsReceived()->avg('rating'), 1);
+
+            return view('profile-preview', [
+                'title' => "{$user->name} — Arka01",
+                'description' => ($isDriver ? 'Conductor' : 'Cliente').' en Arka01'
+                    .($reviewCount > 0 ? " · ★ {$averageRating}" : '')
+                    .' — movilidad de confianza en Ecuador.',
+                'image' => $user->avatar_url && ! str_starts_with($user->avatar_url, 'http')
+                    ? url($user->avatar_url)
+                    : ($user->avatar_url ?? asset('icons/icon.svg')),
+                'url' => $profileUrl,
+            ]);
+        }
 
         $reviews = $user->reviewsReceived()
             ->with('reviewer')
@@ -50,6 +85,10 @@ class PublicProfileController extends Controller
                     'verification_status' => $user->driverProfile->verification_status,
                 ] : null,
             ],
+            // Pedido explícito del usuario: para el código QR/enlace de
+            // "compartir mi perfil" (Profile/Edit.vue) — absoluto, con
+            // dominio, porque va a WhatsApp y a un lector de QR ajeno a la app.
+            'profileUrl' => $profileUrl,
             'averageRating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
             'reviewCount' => $user->reviewsReceived()->count(),
             'reviews' => $reviews,

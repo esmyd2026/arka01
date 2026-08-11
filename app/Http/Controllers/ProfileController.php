@@ -37,6 +37,10 @@ class ProfileController extends Controller
             // del plan vigente + llamado a la acción para cambiar, con la
             // sugerencia del próximo plan hacia arriba.
             'subscriptionSummary' => $this->subscriptionSummary($user),
+            // "Compartir mi perfil" (pedido explícito del usuario: QR +
+            // WhatsApp) — absoluto, con dominio, porque termina en un lector
+            // de QR o un mensaje de WhatsApp, fuera de la app.
+            'profileUrl' => route('profiles.show', $user->id),
         ]);
     }
 

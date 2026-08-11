@@ -133,39 +133,50 @@ function submitFeedback() {
                         necesite un viaje, solicítelo dentro de su círculo.
                     </p>
 
-                    <ul class="mt-6 space-y-4 max-w-md mx-auto lg:mx-0">
+                    <!-- Pedido explícito del usuario (con captura): una línea verde que
+                         una los 3 íconos, mismo criterio que las listas de "Para
+                         Clientes"/"Para Conductores" más abajo. -->
+                    <ul class="mt-6 space-y-1 max-w-md mx-auto lg:mx-0">
                         <li class="flex items-start gap-3 text-start">
-                            <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
-                                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="9" cy="8" r="3" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19a6.5 6.5 0 0 1 13 0" />
-                                    <circle cx="17" cy="8" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 12.5c2.4 0 4.5 1.9 5 6.5" />
-                                </svg>
-                            </span>
-                            <div>
+                            <div class="flex flex-col items-center self-stretch shrink-0">
+                                <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
+                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="9" cy="8" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19a6.5 6.5 0 0 1 13 0" />
+                                        <circle cx="17" cy="8" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 12.5c2.4 0 4.5 1.9 5 6.5" />
+                                    </svg>
+                                </span>
+                                <div class="w-0.5 flex-1 min-h-[1.25rem] bg-arka-primary/50 my-1"></div>
+                            </div>
+                            <div class="pb-3">
                                 <p class="text-sm font-medium text-arka-text">Usted decide quién forma parte de su flota</p>
                                 <p class="text-xs text-arka-text-muted">Invite solo a quienes usted conoce y confía.</p>
                             </div>
                         </li>
                         <li class="flex items-start gap-3 text-start">
-                            <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
-                                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v10M14.5 9.5a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.9-2.5 2s1.1 1.7 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2a2.5 2.5 0 0 1-2.5-1.5" />
-                                </svg>
-                            </span>
-                            <div>
+                            <div class="flex flex-col items-center self-stretch shrink-0">
+                                <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
+                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v10M14.5 9.5a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.9-2.5 2s1.1 1.7 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2a2.5 2.5 0 0 1-2.5-1.5" />
+                                    </svg>
+                                </span>
+                                <div class="w-0.5 flex-1 min-h-[1.25rem] bg-arka-primary/50 my-1"></div>
+                            </div>
+                            <div class="pb-3">
                                 <p class="text-sm font-medium text-arka-text">Conozca el precio antes de aceptar el viaje</p>
                                 <p class="text-xs text-arka-text-muted">Transparencia total, sin costos ocultos.</p>
                             </div>
                         </li>
                         <li class="flex items-start gap-3 text-start">
-                            <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
-                                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
-                                </svg>
-                            </span>
+                            <div class="flex flex-col items-center self-stretch shrink-0">
+                                <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
+                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                                    </svg>
+                                </span>
+                            </div>
                             <div>
                                 <p class="text-sm font-medium text-arka-text">Seguimiento en vivo y funciones de seguridad</p>
                                 <p class="text-xs text-arka-text-muted">Comparta su viaje y use el botón SOS si lo necesita.</p>
@@ -232,11 +243,26 @@ function submitFeedback() {
                         <p class="text-xs font-medium text-arka-text-muted">Viaje solicitado</p>
                         <p class="text-sm font-semibold text-arka-primary-bright">En camino…</p>
 
-                        <div class="mt-4 h-28 rounded-arka bg-arka-base border border-arka-text-muted/10 flex items-center justify-center overflow-hidden">
+                        <!-- Bug real reportado por el usuario (captura: "no se nota bien") —
+                             el trazo quedaba muy fino y sin fondo de referencia. Ahora tiene
+                             un fondo tipo mapa (puntos), un trazo sólido más grueso con brillo,
+                             y los dos extremos bien marcados. -->
+                        <div
+                            class="mt-4 h-28 rounded-arka border border-arka-text-muted/10 flex items-center justify-center overflow-hidden"
+                            style="background-color: #0d1611; background-image: radial-gradient(rgba(52,211,153,0.18) 1px, transparent 1px); background-size: 14px 14px;"
+                        >
                             <svg class="h-full w-full" viewBox="0 0 200 100" fill="none">
-                                <path d="M15 80 C 60 80, 60 30, 100 30 S 150 75, 185 20" stroke="#34D399" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 8" />
-                                <circle cx="15" cy="80" r="4" fill="#34D399" />
-                                <circle cx="185" cy="20" r="4" fill="#34D399" />
+                                <path
+                                    d="M18 78 C 60 78, 55 32, 100 32 S 150 70, 182 22"
+                                    stroke="#34D399"
+                                    stroke-width="4"
+                                    stroke-linecap="round"
+                                    opacity="0.35"
+                                    filter="blur(2px)"
+                                />
+                                <path d="M18 78 C 60 78, 55 32, 100 32 S 150 70, 182 22" stroke="#34D399" stroke-width="3" stroke-linecap="round" />
+                                <circle cx="18" cy="78" r="6" fill="#0d1611" stroke="#34D399" stroke-width="2.5" />
+                                <circle cx="182" cy="22" r="5" fill="#34D399" stroke="#EAFBF3" stroke-width="2" />
                             </svg>
                         </div>
 

@@ -196,8 +196,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:5,1')
         ->name('sos.store');
 
-    // Perfil público y directorio de conductores (sección 3.4 y 3.6).
-    Route::get('/perfil/{user}', [PublicProfileController::class, 'show'])->name('profiles.show');
+    // Directorio de conductores (sección 3.4) — a diferencia del perfil
+    // público puntual, este sí se deja atrás del login (listar a TODOS los
+    // conductores públicos de un saque es una superficie de scraping mucho
+    // mayor que compartir un perfil concreto).
     Route::get('/conductores', [DriverDirectoryController::class, 'index'])->name('directory.index');
 
     // "Mi plan" (sección 7 y 7.5): catálogo, plan vigente y cupo usado, para
@@ -454,5 +456,13 @@ Route::middleware('signed')->group(function () {
 // decidir crear una cuenta. El `invite_code` ya es un identificador propio
 // (aleatorio, de 8 caracteres) que cumple el mismo papel que una firma.
 Route::get('/referir/{driverProfile:invite_code}', [ReferralController::class, 'show'])->name('referrals.show');
+
+// Perfil público (sección 3.6 + pedido explícito del usuario: "compartir mi
+// perfil" con QR/WhatsApp) — sin login, mismo criterio que /referir de
+// arriba: quien escanea el código o abre el link puede no tener cuenta
+// todavía, y es justo a esa persona a la que se lo quiere mostrar. El
+// controlador ya manda solo los campos pensados para verse en público (ver
+// PublicProfileController::show()), nunca datos sensibles.
+Route::get('/perfil/{user}', [PublicProfileController::class, 'show'])->name('profiles.show');
 
 require __DIR__.'/auth.php';

@@ -98,4 +98,69 @@ class PublicProfileTest extends TestCase
             ->missing('profileUser.phone_verification_code')
         );
     }
+
+    // Compartir mi perfil (pedido explícito del usuario): QR/enlace absoluto
+    // + vista previa profesional al compartirlo por WhatsApp.
+
+    public function test_the_response_includes_an_absolute_profile_url(): void
+    {
+        $viewer = User::factory()->create();
+        $target = User::factory()->create();
+
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $target));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('profileUrl', route('profiles.show', $target->id))
+        );
+    }
+
+    /**
+     * WhatsApp (y Facebook/Twitter/etc.) arman la tarjeta de vista previa
+     * leyendo <meta og:*> de la respuesta cruda, sin ejecutar JavaScript —
+     * como esta app es una SPA de Inertia sin SSR, esas etiquetas nunca les
+     * llegarían por la vía normal. Ver PublicProfileController::show().
+     */
+    public function test_a_known_link_preview_bot_gets_a_static_page_with_og_tags(): void
+    {
+        $target = User::factory()->create(['name' => 'Juan Pérez']);
+
+        $response = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23.20 A'])
+            ->get(route('profiles.show', $target));
+
+        $response->assertOk();
+        $response->assertViewIs('profile-preview');
+        $response->assertSee('og:title', false);
+        $response->assertSee('Juan Pérez — Arka01', false);
+        $response->assertSee(route('profiles.show', $target->id), false);
+    }
+
+    /**
+     * Pedido explícito del usuario: quien escanea el QR o abre el enlace
+     * compartido puede no tener cuenta todavía en Arka01 — antes esta
+     * pantalla vivía atrás del login y lo hubiera mandado a /login en vez
+     * de mostrarle el perfil.
+     */
+    public function test_a_guest_without_an_account_can_view_the_profile(): void
+    {
+        $target = User::factory()->create();
+
+        $response = $this->get(route('profiles.show', $target));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Profile/Show')
+            ->where('profileUser.id', $target->id)
+        );
+    }
+
+    public function test_a_regular_browser_still_gets_the_real_inertia_page(): void
+    {
+        $viewer = User::factory()->create();
+        $target = User::factory()->create();
+
+        $response = $this->withHeaders(['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'])
+            ->actingAs($viewer)->get(route('profiles.show', $target));
+
+        $response->assertInertia(fn ($page) => $page->component('Profile/Show'));
+    }
 }

@@ -2225,6 +2225,33 @@ Batería de pedidos puntuales del usuario, varios de una sola vez.
 
 ---
 
+### Retoques a la portada nueva: línea entre los 3 puntos, mapa poco visible
+
+El usuario mandó una captura marcando a mano dónde quería la línea que une los 3 puntos del hero, y otra señalando que el mini-mapa del mockup de teléfono "no se nota bien".
+
+- **Línea entre los 3 beneficios**: cada ícono del hero quedó suelto, sin la línea que ya usan las listas de "Para Clientes"/"Para Conductores" más abajo en la misma página. Se envolvió cada ícono en el mismo contenedor vertical con una línea que lo conecta con el siguiente (en verde, `bg-arka-primary/50`, no el azul que usó el usuario solo para señalar en la captura).
+- **Mini-mapa del mockup de teléfono**: el trazo era una línea punteada muy fina sobre fondo liso, difícil de distinguir. Se le agregó un fondo tipo mapa (puntos sutiles), el trazo pasó a sólido y más grueso con un brillo detrás (una segunda línea borrosa del mismo color), y los dos extremos quedaron mejor marcados (el de salida con anillo, el de llegada más grande y con borde claro).
+
+### Tests
+No aplica — cambio puramente visual en Vue/CSS, sin lógica de backend. Build limpio, Pint limpio (sin cambios en PHP).
+
+---
+
+### "Compartir mi perfil": QR con logo + enlace profesional por WhatsApp
+
+El usuario mandó una captura de referencia (tarjeta negra con QR y el logo de Arka01 en el centro) y pidió: un QR así, que apunte al dominio real de arka01.com (de la plataforma o de un conductor), y que el mensaje compartido por WhatsApp se vea "profesional" con el logo o el perfil.
+
+- **`Components/ShareProfileQr.vue`** (nuevo): genera el QR con el paquete `qrcode` ya usado para el código de invitación de flota, con nivel de corrección de errores alto (`H`, tolera hasta ~30% tapado) y el ícono real de la app (`/icons/icon.svg`) dibujado encima en el centro con un marco blanco — mismo criterio visual que la captura, sin inventar un logo nuevo.
+- **Sección "Compartir mi perfil"** en `Profile/Edit.vue`: el QR (apunta a `profileUrl`, el link absoluto a `/perfil/{id}` de la propia cuenta), un botón "Compartir por WhatsApp" (abre `wa.me` con un mensaje prearmado) y "Copiar enlace".
+- **Vista previa profesional al compartir** (pedido explícito: "que vaya el logo o perfil... algo profesional"): WhatsApp arma la tarjeta de vista previa leyendo etiquetas `og:*` de la propia página — pero como Arka01 es una SPA de Inertia sin SSR, el rastreador de WhatsApp nunca llega a ejecutar el JavaScript que las agrega. Se detectó esto a tiempo (no solo se agregaron las etiquetas y se dio por sentado que funcionaban): para el puñado de user-agents conocidos de estos rastreadores (WhatsApp, Facebook, Twitter, LinkedIn, Slack, Telegram, Discord), `PublicProfileController::show()` ahora sirve una página mínima aparte (`resources/views/profile-preview.blade.php`) con las etiquetas correctas — cualquier persona real sigue viendo la app normal.
+- **La ruta del perfil público pasó a ser accesible sin sesión** (`/perfil/{user}`, antes atrás del login): quien escanea el QR o abre el enlace compartido puede no tener cuenta todavía en Arka01 — dejarla atrás del login la hubiera mandado a `/login` en vez de mostrarle el perfil, y el propio rastreador de WhatsApp tampoco puede loguearse. Mismo criterio ya usado para "Referí a tu conductor" (`/referir/{código}`), que también es pública a propósito. El controlador ya mandaba solo los campos pensados para verse en público (auditoría de seguridad de una pasada anterior), así que no se expone nada nuevo.
+- Como `Profile/Show.vue` usa `AuthenticatedLayout` (que asume sesión iniciada en todos lados), se extrajo el cuerpo del perfil a `Components/PublicProfileContent.vue` y la página ahora elige entre `AuthenticatedLayout` (con sesión, sin cambios) o una presentación mínima propia sin barra de navegación con una invitación a crear cuenta (sin sesión) — en vez de arriesgar romper el layout compartido para un visitante anónimo.
+
+### Tests
+`tests/Feature/PublicProfileTest.php` (+4): el enlace absoluto viaja en la respuesta, un rastreador conocido de WhatsApp recibe la página estática con las etiquetas correctas, un visitante sin cuenta puede ver el perfil (ya no lo manda a `/login`), un navegador normal sigue viendo la app de Inertia de siempre. Suite completa: 614 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

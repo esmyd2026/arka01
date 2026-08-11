@@ -1,11 +1,14 @@
 <script setup>
+import { computed } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import RatingStars from '@/Components/RatingStars.vue';
+import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import PublicProfileContent from '@/Components/PublicProfileContent.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 
-defineProps({
+const props = defineProps({
     profileUser: { type: Object, required: true },
+    profileUrl: { type: String, required: true },
     averageRating: { type: Number, required: true },
     reviewCount: { type: Number, required: true },
     reviews: { type: Object, required: true },
@@ -14,12 +17,38 @@ defineProps({
     isClient: { type: Boolean, required: true },
     isDriver: { type: Boolean, required: true },
 });
+
+// Vista previa profesional al compartir el enlace (pedido explícito del
+// usuario: "que el mensaje a compartir por WhatsApp vaya el logo o perfil
+// del conductor") — WhatsApp arma la tarjeta de vista previa solo, leyendo
+// estas etiquetas de la propia página, no hay forma de "adjuntar" una
+// imagen al texto del mensaje en sí. Para el rastreador de WhatsApp en sí
+// (que nunca tiene sesión) esto no alcanza igual — ver la vista aparte
+// `profile-preview.blade.php` que sirve PublicProfileController::show().
+const ogDescription = `${props.isDriver ? 'Conductor' : 'Cliente'} en Arka01${props.reviewCount > 0 ? ` · ★ ${props.averageRating.toFixed(1)}` : ''} — movilidad de confianza en Ecuador.`;
+const ogImage = props.profileUser.avatar_url && !props.profileUser.avatar_url.startsWith('http')
+    ? window.location.origin + props.profileUser.avatar_url
+    : (props.profileUser.avatar_url ?? `${window.location.origin}/icons/icon.svg`);
+
+// Pedido explícito del usuario: el perfil público ahora es visible sin
+// sesión (para quien escanea el QR o abre el link sin cuenta todavía) — acá
+// se decide qué armazón usar, sin tocar AuthenticatedLayout.vue (esa
+// asume una sesión iniciada en todos lados, no es seguro reutilizarla para
+// un visitante anónimo).
+const authUser = computed(() => usePage().props.auth?.user ?? null);
+const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
 </script>
 
 <template>
-    <Head :title="profileUser.name" />
+    <Head :title="profileUser.name">
+        <meta property="og:type" content="profile" />
+        <meta property="og:title" :content="`${profileUser.name} — Arka01`" />
+        <meta property="og:description" :content="ogDescription" />
+        <meta property="og:image" :content="ogImage" />
+        <meta property="og:url" :content="profileUrl" />
+    </Head>
 
-    <AuthenticatedLayout>
+    <AuthenticatedLayout v-if="authUser">
         <template #header>
             <div class="flex items-center gap-3">
                 <UserAvatar :user="profileUser" size-class="h-12 w-12 text-base" />
@@ -38,111 +67,66 @@ defineProps({
         </template>
 
         <div class="py-12">
-            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <!-- Marca de rol(es) + calificación compacta (sección 3.1 y 3.6):
-                         de un vistazo, qué es esta persona y qué tan bien la calificaron. -->
-                    <div class="flex flex-wrap items-center gap-2 mb-3">
-                        <span v-if="isClient" class="px-3 py-1 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
-                            Cliente
-                        </span>
-                        <span v-if="isDriver" class="px-3 py-1 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
-                            Conductor
-                        </span>
-                        <span
-                            v-if="reviewCount > 0"
-                            class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-arka-lime/15 text-arka-lime"
-                        >
-                            <span class="text-sm leading-none">★</span> {{ averageRating.toFixed(1) }}
-                        </span>
-                    </div>
-
-                    <RatingStars :rating="averageRating" :count="reviewCount" readonly />
-
-                    <div v-if="profileUser.driver_profile" class="mt-4 text-sm text-arka-text-muted space-y-1">
-                        <!-- Verificación visible antes de subir (sección 8): foto del
-                             vehículo, para reforzar confianza con un conductor que
-                             todavía no se conoce. -->
-                        <img
-                            v-if="profileUser.driver_profile.vehicle_photo_url"
-                            :src="profileUser.driver_profile.vehicle_photo_url"
-                            alt="Foto del vehículo"
-                            class="w-full max-h-48 object-cover rounded-arka mb-3"
-                        />
-                        <p>
-                            {{ profileUser.driver_profile.vehicle_make }} {{ profileUser.driver_profile.vehicle_model }}
-                            <span v-if="profileUser.driver_profile.vehicle_plate">
-                                · {{ profileUser.driver_profile.vehicle_plate }}
-                            </span>
-                        </p>
-                        <p>${{ profileUser.driver_profile.rate_per_km }}/km</p>
-                        <p>
-                            Acepta:
-                            <span v-if="profileUser.driver_profile.accepts_cash">efectivo</span>
-                            <span v-if="profileUser.driver_profile.accepts_cash && profileUser.driver_profile.accepts_transfer">
-                                y
-                            </span>
-                            <span v-if="profileUser.driver_profile.accepts_transfer">transferencia</span>
-                        </p>
-                        <p v-if="profileUser.driver_profile.verification_status === 'approved'" class="text-arka-primary-bright">
-                            ✓ Conductor verificado
-                        </p>
-
-                        <!-- Pedido explícito del usuario: elegir un conductor (acá,
-                             abriendo su perfil) tiene que ofrecer pedirle una carrera
-                             directo a él. Solo tiene sentido si quien mira es cliente. -->
-                        <Link
-                            v-if="$page.props.auth.isClient"
-                            :href="route('ride-requests.create', { conductor: profileUser.id })"
-                            class="inline-block mt-2 px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-xs font-semibold uppercase tracking-widest hover:opacity-90"
-                        >
-                            Pedir carrera
-                        </Link>
-                    </div>
-                </div>
-
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <h3 class="text-lg font-medium text-arka-text mb-4">Comentarios</h3>
-
-                    <p v-if="!reviews.data.length" class="text-sm text-arka-text-muted">
-                        Todavía no tiene comentarios.
-                    </p>
-
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
-                        <li v-for="review in reviews.data" :key="review.id" class="py-3">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-2">
-                                    <UserAvatar :user="review.reviewer" size-class="h-7 w-7 text-xs shrink-0" />
-                                    <span class="text-arka-text font-medium">{{ review.reviewer.name }}</span>
-                                </div>
-                                <RatingStars :rating="review.rating" readonly />
-                            </div>
-                            <p v-if="review.comment" class="mt-1 text-sm text-arka-text-muted italic">
-                                "{{ review.comment }}"
-                            </p>
-                        </li>
-                    </ul>
-
-                    <div v-if="reviews.prev_page_url || reviews.next_page_url" class="flex justify-between mt-4">
-                        <Link
-                            v-if="reviews.prev_page_url"
-                            :href="reviews.prev_page_url"
-                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
-                        >
-                            &larr; Anterior
-                        </Link>
-                        <span v-else></span>
-
-                        <Link
-                            v-if="reviews.next_page_url"
-                            :href="reviews.next_page_url"
-                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
-                        >
-                            Siguiente &rarr;
-                        </Link>
-                    </div>
-                </div>
+            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+                <PublicProfileContent
+                    :profile-user="profileUser"
+                    :average-rating="averageRating"
+                    :review-count="reviewCount"
+                    :reviews="reviews"
+                    :is-client="isClient"
+                    :is-driver="isDriver"
+                    :can-request-ride="canRequestRide"
+                />
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <!-- Visitante sin sesión (pedido explícito del usuario: quien escanea el
+         QR o abre el link puede no tener cuenta todavía) — presentación
+         mínima propia, sin la barra de navegación de la app, con una
+         invitación a crear cuenta. -->
+    <div v-else class="min-h-screen bg-arka-base">
+        <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+            <div class="flex items-center justify-between mb-8">
+                <Link href="/">
+                    <ApplicationLogo size="text-3xl" />
+                </Link>
+                <Link
+                    :href="route('register')"
+                    class="px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-sm font-semibold hover:bg-arka-primary-bright transition"
+                >
+                    Crear cuenta
+                </Link>
+            </div>
+
+            <div class="flex items-center gap-3 mb-6">
+                <UserAvatar :user="profileUser" size-class="h-12 w-12 text-base" />
+                <div>
+                    <h2 class="font-semibold text-xl text-arka-text leading-tight">{{ profileUser.name }}</h2>
+                    <p class="text-sm text-arka-text-muted">
+                        <span v-if="profileUser.username">@{{ profileUser.username }}</span>
+                        <span v-if="profileUser.username && profileUser.member_code"> · </span>
+                        <span v-if="profileUser.member_code">Código #{{ profileUser.member_code }}</span>
+                    </p>
+                </div>
+            </div>
+
+            <PublicProfileContent
+                :profile-user="profileUser"
+                :average-rating="averageRating"
+                :review-count="reviewCount"
+                :reviews="reviews"
+                :is-client="isClient"
+                :is-driver="isDriver"
+                :can-request-ride="false"
+            />
+
+            <p class="mt-8 text-center text-sm text-arka-text-muted">
+                <Link :href="route('login')" class="text-arka-primary hover:text-arka-primary-bright">Iniciá sesión</Link>
+                o
+                <Link :href="route('register')" class="text-arka-primary hover:text-arka-primary-bright">creá una cuenta</Link>
+                para armar tu flota de confianza en Arka01.
+            </p>
+        </div>
+    </div>
 </template>
