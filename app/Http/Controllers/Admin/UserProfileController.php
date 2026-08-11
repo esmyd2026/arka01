@@ -6,9 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Fleet;
 use App\Models\Review;
 use App\Models\User;
+use App\Services\AdminAuditLogger;
 use App\Services\PlanLimits;
+use App\Services\UserFileCleanup;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -73,5 +78,55 @@ class UserProfileController extends Controller
         Log::info('Cuenta reactivada por un admin.', ['user_id' => $user->id]);
 
         return back()->with('status', 'Cuenta reactivada.');
+    }
+
+    /**
+     * Elimina una cuenta real y todo lo que le pertenece (pedido explícito
+     * del usuario): archivos en disco (avatar, licencia/vehículo, fotos de
+     * Viajes en VAN, comprobantes de pago — ver UserFileCleanup) y, por el
+     * cascade que ya tienen las FKs a `users.id` en todas las migraciones,
+     * su historial de carreras, flotas/membresías, reseñas recibidas y
+     * hechas, suscripciones, tickets de soporte, sesiones de WhatsApp, etc.
+     * Es irreversible, así que además del diálogo de confirmación del
+     * navegador se exige escribir el correo exacto de la cuenta — nunca hay
+     * que confiar solo en una confirmación del lado del cliente para una
+     * acción destructiva de este tamaño.
+     */
+    public function destroy(Request $request, User $user): RedirectResponse
+    {
+        // Nunca se borra una cuenta admin desde acá (mismo criterio que
+        // Admin\SystemController::resetDemo()) — cubre de paso que un admin
+        // se borre a sí mismo, porque su propia cuenta también es admin.
+        if ($user->is_admin) {
+            abort(403, 'No se pueden eliminar cuentas de administrador desde acá.');
+        }
+
+        $request->validate(['confirm_email' => ['required', 'string']]);
+
+        if (mb_strtolower(trim($request->string('confirm_email'))) !== mb_strtolower($user->email)) {
+            throw ValidationException::withMessages([
+                'confirm_email' => 'El correo escrito no coincide con el de esta cuenta.',
+            ]);
+        }
+
+        $summary = ['name' => $user->name, 'email' => $user->email, 'role' => $user->role];
+        $redirectRoute = $user->isDriver() ? 'admin.drivers.index' : 'admin.clients.index';
+
+        DB::transaction(function () use ($user) {
+            UserFileCleanup::purge($user);
+            $user->delete();
+        });
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'user.delete',
+            module: 'usuarios',
+            oldValue: $summary,
+        );
+
+        Log::warning('Cuenta eliminada por un admin.', ['admin_id' => $request->user()->id] + $summary);
+
+        return redirect()->route($redirectRoute)
+            ->with('status', "Se eliminó la cuenta de {$summary['name']} y todo su historial.");
     }
 }

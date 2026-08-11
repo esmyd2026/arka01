@@ -1,9 +1,13 @@
 <script setup>
+import { computed } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import DangerButton from '@/Components/DangerButton.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputError from '@/Components/InputError.vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
 
 const props = defineProps({
@@ -38,6 +42,23 @@ function subscriptionLine(plan) {
 async function unlockAccount() {
     if (!(await confirmDialog(`¿Reactivar la cuenta de ${props.profileUser.name}?`))) return;
     router.post(route('admin.users.unlock', props.profileUser.id), {}, { preserveScroll: true });
+}
+
+// Eliminar cuenta (pedido explícito del usuario): borra archivos y, por el
+// cascade que ya tienen las FKs, historial de carreras, flotas/membresías,
+// reseñas, suscripciones, tickets de soporte, etc. — ver
+// Admin\UserProfileController::destroy(). Es irreversible, así que en vez
+// de un simple confirmDialog se exige escribir el correo exacto de la
+// cuenta antes de habilitar el botón — misma fricción extra que usan otras
+// apps para borrados que no se pueden deshacer.
+const deleteForm = useForm({ confirm_email: '' });
+const canDelete = computed(
+    () => deleteForm.confirm_email.trim().toLowerCase() === props.profileUser.email.toLowerCase()
+);
+
+function destroyAccount() {
+    if (!canDelete.value) return;
+    deleteForm.delete(route('admin.users.destroy', props.profileUser.id));
 }
 </script>
 
@@ -173,6 +194,37 @@ async function unlockAccount() {
                             <p v-if="review.comment" class="text-arka-text-muted italic">"{{ review.comment }}"</p>
                         </li>
                     </ul>
+                </div>
+
+                <!-- Zona de peligro: eliminar cuenta (pedido explícito del
+                     usuario) — nunca se ofrece para cuentas admin, mismo
+                     criterio que "Reiniciar demo" (Admin/System.vue). -->
+                <div v-if="profileUser.role !== 'admin'" class="p-4 sm:p-6 bg-arka-danger/10 border border-arka-danger/30 rounded-arka space-y-3">
+                    <div>
+                        <p class="text-arka-danger font-medium">Zona de peligro</p>
+                        <p class="text-sm text-arka-text-muted mt-1">
+                            Elimina esta cuenta para siempre: su perfil, fotos y comprobantes subidos, historial de
+                            carreras, flotas y membresías, calificaciones hechas y recibidas, suscripciones y
+                            tickets de soporte. No se puede deshacer.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs text-arka-text-muted">
+                            Escriba <span class="font-mono text-arka-text">{{ profileUser.email }}</span> para confirmar
+                        </label>
+                        <TextInput
+                            type="text"
+                            class="mt-1 block w-full sm:w-80"
+                            v-model="deleteForm.confirm_email"
+                            autocomplete="off"
+                        />
+                        <InputError class="mt-1" :message="deleteForm.errors.confirm_email" />
+                    </div>
+
+                    <DangerButton :disabled="!canDelete || deleteForm.processing" @click="destroyAccount">
+                        Eliminar cuenta definitivamente
+                    </DangerButton>
                 </div>
 
                 <Link :href="route('admin.subscriptions.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">

@@ -291,6 +291,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // sin tener que navegar entre suscripciones/verificaciones/flotas.
     Route::get('/usuarios/{user}', [AdminUserProfileController::class, 'show'])->name('users.show');
     Route::post('/usuarios/{user}/reactivar', [AdminUserProfileController::class, 'unlock'])->name('users.unlock');
+    // Eliminar una cuenta real y todo lo que le pertenece (pedido explícito
+    // del usuario) — ver AdminUserProfileController::destroy().
+    Route::delete('/usuarios/{user}', [AdminUserProfileController::class, 'destroy'])->name('users.destroy');
 
     Route::get('/suscripciones', [AdminSubscriptionController::class, 'index'])->name('subscriptions.index');
     Route::post('/suscripciones', [AdminSubscriptionController::class, 'store'])->name('subscriptions.store');

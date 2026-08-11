@@ -2161,6 +2161,21 @@ No aplica — cambio puramente de CSS/layout en un componente compartido. Suite 
 
 ---
 
+### Eliminar cuentas reales desde el panel admin
+
+Pedido explícito del usuario: una opción para borrar una cuenta real (no de prueba) desde el panel admin, y que al hacerlo se borre todo lo suyo — archivos, historial de carreras, conexiones (flotas/membresías) y reseñas/comentarios.
+
+Antes de tocar código se revisó a fondo TODO el esquema actual (26 tablas con llaves foráneas a `users.id`, incluyendo las agregadas esta sesión: soporte, chat de carrera, VanTrip, auditoría) para confirmar que ninguna quedara con una FK restrictiva que tumbara el borrado a mitad de camino — todas ya son `cascadeOnDelete()` o `nullOnDelete()`, así que un `$user->delete()` de verdad se lleva puesto todo: flotas, membresías, invitaciones, carreras (como cliente o como conductor), reseñas (hechas y recibidas), suscripciones, tickets de soporte y sus mensajes, sesiones de WhatsApp, Viajes VAN publicados y sus reservas, rutas guardadas, alertas SOS, contactos de confianza, etc. Lo único que el cascade NUNCA toca son los archivos en disco.
+
+- **`App\Services\UserFileCleanup`** (nuevo): se extrajo la limpieza de archivos que antes vivía duplicada dentro de `Admin\SystemController` (avatar, licencia/vehículo, fotos de Viajes VAN, comprobantes de pago) a un servicio compartido — tanto "Reiniciar demo" como esta función nueva la usan igual, sin repetir la lógica.
+- **`Admin\UserProfileController::destroy()`** (nueva acción, ruta `DELETE /admin/usuarios/{user}`): nunca permite borrar una cuenta admin (mismo criterio que "Reiniciar demo" — de paso cubre que un admin se borre a sí mismo, porque su propia cuenta también es admin). Como es irreversible y puede tocar mucho historial real, además de la validación del backend se exige escribir el correo exacto de la cuenta antes de que el botón se habilite (mismo patrón que usan otras apps para borrados sin vuelta atrás — GitHub, por ejemplo). Queda un registro en `admin_audit_logs` (mismo mecanismo ya usado para otros cambios administrativos críticos) con quién borró qué cuenta y cuándo.
+- **`Admin/UserProfile.vue`**: nueva sección "Zona de peligro" al final del perfil completo del usuario (la misma pantalla que ya mostraba toda su info, a la que se llega desde Clientes/Conductores) — solo visible si la cuenta no es admin, con el campo de confirmación y el botón deshabilitado hasta que el correo escrito coincide.
+
+### Tests
+`tests/Feature/Admin/AdminUserProfileTest.php` (+5): un usuario normal no puede borrar cuentas, un admin no puede borrar a otro admin, falla si el correo escrito no coincide, borrar un cliente se lleva su flota/carrera/reseña pero no toca al conductor del otro lado (y queda el registro de auditoría), borrar un conductor purga sus fotos del disco. Suite completa: 582 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |
