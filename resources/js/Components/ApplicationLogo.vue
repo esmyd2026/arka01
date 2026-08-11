@@ -18,7 +18,7 @@ defineProps({
 // píxeles opacos) del mismo archivo original, sin ese margen muerto y sin el
 // eslogan (que ya se repite como texto en cada pantalla donde hace falta) —
 // mismo isotipo, mismo trazo, solo bien encuadrado.
-const LOGO_SRC = '/storage/img/logo-arka01.png';
+const LOGO_SRC = '/img/logo-arka01.png';
 </script>
 
 <template>

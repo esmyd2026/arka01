@@ -2315,6 +2315,18 @@ No aplica — cambio de Vue en un componente compartido, sin lógica de backend.
 
 ---
 
+### Bug real de arquitectura: los logos y las imágenes no llegaban a producción
+
+El usuario avisó que en producción ni los logos ni las imágenes nuevas se veían (ícono de imagen roto en el navegador, con el `alt` de texto en su lugar). No era un problema de tamaño ni de caché — los archivos nunca llegaban al servidor.
+
+- **Causa real**: las imágenes se habían guardado en `storage/app/public/img/` (el disco `public` de Laravel, accesible por la URL vía el symlink `public/storage`). Pero `storage/app/public/.gitignore` tiene `*` — ignora todo lo que haya ahí a propósito, porque ese disco está pensado para contenido subido en tiempo de ejecución (fotos de documentos de conductor, comprobantes de pago, etc.), no para assets de marca que son parte del código. `git pull origin main` en el servidor nunca los recibía, sin importar cuántas veces se compilara o desplegara.
+- **Corrección**: se movieron los 10 archivos de `storage/app/public/img/` a `public/img/` (carpeta real, sí versionada en git) y las 5 referencias en el código (`ApplicationLogo.vue`, `AuthBrandingPanel.vue`, `Welcome.vue` ×3) pasaron de `/storage/img/...` a `/img/...`. Con esto alcanza con el `git push` + `deploy.sh` de siempre — no depende del symlink de `storage:link` ni de ningún paso extra de despliegue.
+
+### Tests
+No aplica — reubicación de archivos estáticos y cambio de rutas de imagen en Vue, sin lógica de backend. Suite completa sin cambios: 614 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

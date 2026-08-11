@@ -240,7 +240,7 @@ function submitFeedback() {
                      reemplazar el mockup dibujado a mano por la imagen real). -->
                 <div class="relative mx-auto w-full max-w-xs">
                     <img
-                        src="/storage/img/como-funciona.png"
+                        src="/img/como-funciona.png"
                         alt="Cómo funciona Arka01: solicite un viaje dentro de su círculo de confianza"
                         class="w-full h-auto rounded-[2rem] shadow-2xl"
                     />
@@ -323,7 +323,7 @@ function submitFeedback() {
                                  simples de Clientes/Conductores — acá va solo el
                                  isotipo "A", igual de simple que esos íconos. -->
                             <span class="h-16 w-16 rounded-full bg-arka-primary/15 border-2 border-arka-primary flex items-center justify-center shadow-[0_0_20px_rgba(52,211,153,0.25)]">
-                                <img src="/storage/img/logo-arka01-icono.png" alt="Arka01" class="h-9 w-auto" />
+                                <img src="/img/logo-arka01-icono.png" alt="Arka01" class="h-9 w-auto" />
                             </span>
                         </div>
 
@@ -433,7 +433,7 @@ function submitFeedback() {
                  (#000304, tomado de la propia imagen) para que el borde
                  desaparezca en vez de quedar como un remiendo. -->
             <div class="mt-16 max-w-md sm:max-w-lg mx-auto rounded-arka overflow-hidden shadow-xl" style="background-color: #000304;">
-                <img src="/storage/img/pagina%20de%20inicio%20footer.png" alt="Arka01" class="w-full h-auto" />
+                <img src="/img/pagina%20de%20inicio%20footer.png" alt="Arka01" class="w-full h-auto" />
             </div>
 
             <!-- "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): barra

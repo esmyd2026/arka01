@@ -30,7 +30,7 @@ defineProps({
              (isotipo + "Arka01") se veía mal acá — se usa solo el isotipo,
              chico y proporcionado, para que el resto del contenido del panel
              quede bien ubicado debajo. -->
-        <img src="/storage/img/logo-arka01-icono.png" alt="Arka01" class="h-64 w-auto self-start" />
+        <img src="/img/logo-arka01-icono.png" alt="Arka01" class="h-64 w-auto self-start" />
 
         <div class="max-w-md">
             <h2 class="text-3xl font-bold text-arka-text leading-tight">{{ title }}</h2>
