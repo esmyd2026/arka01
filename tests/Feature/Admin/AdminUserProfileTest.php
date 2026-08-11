@@ -159,4 +159,43 @@ class AdminUserProfileTest extends TestCase
         Storage::disk('local')->assertMissing($licensePath);
         Storage::disk('public')->assertMissing($vehiclePath);
     }
+
+    /**
+     * Ajuste manual de puntos (pedido explícito del usuario): hoy los puntos
+     * solo suben solos, uno por carrera completada — acá se corrige a mano.
+     */
+    public function test_an_admin_can_manually_adjust_a_drivers_points(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['total_points' => 10]);
+
+        $response = $this->actingAs($admin)
+            ->patch(route('admin.users.update-points', $driver), ['total_points' => 600]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('driver_profiles', ['user_id' => $driver->id, 'total_points' => 600]);
+        $this->assertDatabaseHas('admin_audit_logs', ['action' => 'driver.points.update']);
+    }
+
+    public function test_a_regular_user_cannot_adjust_a_drivers_points(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($user)
+            ->patch(route('admin.users.update-points', $driver), ['total_points' => 600])
+            ->assertForbidden();
+    }
+
+    public function test_points_cannot_be_adjusted_for_a_user_without_a_driver_profile(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create();
+
+        $this->actingAs($admin)
+            ->patch(route('admin.users.update-points', $client), ['total_points' => 600])
+            ->assertNotFound();
+    }
 }

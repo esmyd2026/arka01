@@ -2363,6 +2363,37 @@ Pedido explícito del usuario: el botón de invitar por WhatsApp desde el perfil
 
 ---
 
+### Sesión que no se cierra sola (cliente y conductor)
+
+Pedido explícito del usuario: "que la sesión no se cierre así porque sí... solo cuando le dé cerrar sesión". Causa real: `SESSION_LIFETIME` estaba en el default de Laravel (120 minutos de **inactividad** — no de uso del navegador cerrado; con `expire_on_close=false`, que ya estaba bien, la cookie sí sobrevive cerrar el navegador). Pasadas esas 2 horas sin ninguna petición al servidor (típico si el celular queda con la pantalla bloqueada un rato largo), la sesión se borraba del lado del servidor y la próxima vez pedía loguearse de nuevo, aunque la cookie del navegador siguiera ahí.
+
+- **`SESSION_LIFETIME` subido de 120 a 43200 minutos (30 días)** en `.env`, `.env.example`, `deploy/.env.production.example` y el fallback de `config/session.php` — aplica igual a cuentas de cliente y de conductor, no hay diferencia entre ambas acá.
+- **Qué NO se tocó, a propósito**: la app ya tiene "sesión única por cuenta" (`App\Listeners\EnforceSingleActiveSession`, `ActiveSessionExistsException`) — un segundo login en otro dispositivo queda bloqueado mientras la sesión actual siga activa, justamente para que la cuenta no se comparta sin control. Esa regla usa "recordarme" (remember-token) **a propósito desactivado** — activarlo dejaría reingresar en silencio sin pasar por esa validación, y rompería la razón de ser de la sesión única. Subir `SESSION_LIFETIME` no toca esta regla: solo cambia cuánto dura la sesión por inactividad, no si se puede tener más de una a la vez.
+
+### Trabajar "siempre en segundo plano": qué es real y qué no
+
+Sobre "que el conductor no se desconecte así lo ponga en segundo plano" y "que trabaje siempre en segundo plano para que le lleguen notificaciones":
+
+- **Las notificaciones push YA le llegan con el navegador cerrado** — no hace falta nada nuevo para eso. El Service Worker (`public/sw.js`) recibe y muestra la notificación aunque no haya ninguna pestaña de Arka01 abierta; es justo para eso que existe. Lo único que hace falta de su lado es haber activado "Activar notificaciones" una vez.
+- **La disponibilidad del conductor (el punto verde "Disponible") es distinta y tiene un límite real de la plataforma**: mientras la pantalla está bloqueada o la pestaña en segundo plano, el navegador (Android, iOS, y de escritorio) pausa o recorta el GPS de la página — no hay forma de evitar eso desde el código de Arka01, es una decisión de batería del sistema operativo, no un bug. Por eso, después de un rato sin ping de ubicación, el conductor pasa a verse "desconectado" para sus clientes.
+- Lo que sí es ajustable: **cuánto tiempo sin ping tarda en pasar a "desconectado"** — `/admin/tarifas`, campo "minutos sin ping antes de considerarlo desconectado" (`PricingSetting::driver_stale_after_minutes`, hasta 60 minutos). Hoy puede estar en un valor bajo (2 minutos de fábrica) — **se recomienda subirlo ahí mismo** a algo como 15-20 minutos para tolerar bloqueos de pantalla cortos, sin necesidad de tocar código ni desplegar. No se cambió el valor desde acá para no pisar algo que ya haya configurado a propósito, y porque buena parte de la suite de tests (`StaleDriverAvailabilityTest` y otros) da por sentado ese default de fábrica al armar sus escenarios.
+- Si el conductor tiene la ventana de WhatsApp abierta (le escribió al número oficial en las últimas 24h), ya sigue viéndose "alcanzable" aunque el GPS esté viejo (`DriverProfile::isReachable()`, construido en una pasada anterior) — es la mitigación que ya existe para justamente este caso.
+
+### Tests
+No aplica — `SESSION_LIFETIME` es una variable de entorno, sin lógica de backend nueva que probar (el test existente de sesión única, `SingleActiveSessionTest`, ya lee `config('session.lifetime')` dinámicamente, así que sigue pasando con el valor nuevo). Suite completa sin cambios: 622 tests OK, Pint limpio, build limpio.
+
+### Ajuste manual de puntos de un conductor desde el admin
+
+El usuario preguntó dónde se ajustan los puntos de un conductor desde el panel admin — no existía: hoy solo suben solos, uno por carrera completada (`RideController::complete()`, vía `increment()`), sin ninguna forma de corregirlos a mano.
+
+- **`/admin/usuarios/{id}`** (perfil completo): la ficha de "Perfil de conductor" ahora muestra la medalla vigente y los puntos, con un campo chico para corregirlos y guardar — `Admin\UserProfileController::updatePoints()` (nuevo). Cambia la medalla al toque (`DriverTier::forPoints()`), así que puede habilitar o quitar el directorio público de inmediato — por eso queda registrado con `AdminAuditLogger`, igual que el resto de las acciones sensibles de este panel.
+- `total_points` sigue **fuera** de `$fillable` de `DriverProfile` a propósito (mismo criterio que `suspended_at`): esta acción es la única vía para tocarlo aparte del incremento automático, y pasa por `forceFill()`, nunca por un formulario del propio conductor.
+
+### Tests
+`tests/Feature/Admin/AdminUserProfileTest.php` (+3): un admin puede ajustar los puntos y queda auditado, un usuario sin permiso no puede, y un cliente sin perfil de conductor da 404. Suite completa: 625 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

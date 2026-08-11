@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\Review;
 use App\Models\User;
@@ -56,6 +57,9 @@ class UserProfileController extends Controller
             // bloqueada y puede reactivarla.
             'profileUser' => $user->makeVisible('locked_at'),
             'driverPlan' => $user->isDriver() ? $this->planLimits->forDriver($user) : null,
+            // Medalla vigente por puntos (pedido explícito del usuario: poder
+            // ver y ajustar los puntos desde acá) — ver updatePoints() abajo.
+            'driverTier' => $user->driverProfile ? DriverTier::forPoints($user->driverProfile->total_points)->toBadge() : null,
             'clientPlan' => $user->isClient() ? $this->planLimits->forClient($user) : null,
             'fleetsOwned' => $fleetsOwned,
             'averageRating' => $rating,
@@ -78,6 +82,46 @@ class UserProfileController extends Controller
         Log::info('Cuenta reactivada por un admin.', ['user_id' => $user->id]);
 
         return back()->with('status', 'Cuenta reactivada.');
+    }
+
+    /**
+     * Ajuste manual de puntos (pedido explícito del usuario): hoy los puntos
+     * de un conductor solo suben solos, uno por carrera completada (ver
+     * RideController::complete()) — no había ninguna forma de corregirlos a
+     * mano (ej. compensar una carrera coordinada fuera de la app, o un caso
+     * puntual). Cambia la medalla vigente al toque (App\Models\DriverTier::forPoints()),
+     * así que puede habilitar o quitar el directorio público de inmediato —
+     * por eso queda una acción de admin con registro, no un ajuste silencioso.
+     */
+    public function updatePoints(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->driverProfile, 404);
+
+        $validated = $request->validate([
+            'total_points' => ['required', 'integer', 'min:0'],
+        ]);
+
+        // Mismo criterio que suspended_at (Admin\DriverController): a
+        // propósito NO está en $fillable de DriverProfile — solo se toca
+        // desde acá, vía forceFill(), nunca desde un formulario del propio
+        // conductor.
+        $oldPoints = $user->driverProfile->total_points;
+        $user->driverProfile->forceFill(['total_points' => $validated['total_points']])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.points.update',
+            module: 'usuarios',
+            oldValue: ['user_id' => $user->id, 'total_points' => $oldPoints],
+            newValue: ['user_id' => $user->id, 'total_points' => $validated['total_points']],
+        );
+
+        Log::info('Puntos de conductor ajustados a mano por un admin.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id,
+            'de' => $oldPoints, 'a' => $validated['total_points'],
+        ]);
+
+        return back()->with('status', 'Puntos actualizados.');
     }
 
     /**

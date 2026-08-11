@@ -8,11 +8,15 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
+import InputLabel from '@/Components/InputLabel.vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
 
 const props = defineProps({
     profileUser: { type: Object, required: true },
     driverPlan: { type: Object, default: null },
+    driverTier: { type: Object, default: null },
     clientPlan: { type: Object, default: null },
     fleetsOwned: { type: Array, required: true },
     averageRating: { type: Number, required: true },
@@ -42,6 +46,15 @@ function subscriptionLine(plan) {
 async function unlockAccount() {
     if (!(await confirmDialog(`¿Reactivar la cuenta de ${props.profileUser.name}?`))) return;
     router.post(route('admin.users.unlock', props.profileUser.id), {}, { preserveScroll: true });
+}
+
+// Ajuste manual de puntos (pedido explícito del usuario): hoy solo suben
+// solos, uno por carrera completada — acá se corrige a mano un caso puntual
+// (ver Admin\UserProfileController::updatePoints()). Cambia la medalla al
+// toque, así que puede habilitar/quitar el directorio público de inmediato.
+const pointsForm = useForm({ total_points: props.profileUser.driver_profile?.total_points ?? 0 });
+function updatePoints() {
+    pointsForm.patch(route('admin.users.update-points', props.profileUser.id), { preserveScroll: true });
 }
 
 // Eliminar cuenta (pedido explícito del usuario): borra archivos y, por el
@@ -149,11 +162,37 @@ function destroyAccount() {
                         <dd class="text-arka-text">{{ profileUser.driver_profile.is_available ? 'Sí' : 'No' }}</dd>
                         <dt class="text-arka-text-muted">Directorio público</dt>
                         <dd class="text-arka-text">{{ profileUser.driver_profile.is_public ? 'Visible' : 'No visible' }}</dd>
+                        <dt class="text-arka-text-muted">Medalla</dt>
+                        <dd class="text-arka-text">
+                            <span v-if="driverTier" class="px-1.5 py-0.5 rounded text-xs font-medium" :class="tierColorClass(driverTier.color_key)">
+                                {{ tierLabel(driverTier) }}
+                            </span>
+                            ({{ profileUser.driver_profile.total_points }} puntos)
+                        </dd>
                         <dt v-if="profileUser.driver_profile.suspended_at" class="text-arka-danger">Suspendido</dt>
                         <dd v-if="profileUser.driver_profile.suspended_at" class="text-arka-danger">
                             {{ new Date(profileUser.driver_profile.suspended_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
                         </dd>
                     </dl>
+
+                    <!-- Ajuste manual de puntos (pedido explícito del usuario:
+                         "¿dónde actualizo los puntos de un conductor?" — hoy
+                         solo suben solos, uno por carrera completada). -->
+                    <form @submit.prevent="updatePoints" class="flex items-end gap-2 pt-2 border-t border-arka-text-muted/10">
+                        <div>
+                            <InputLabel for="total_points" value="Ajustar puntos" />
+                            <TextInput
+                                id="total_points"
+                                type="number"
+                                min="0"
+                                class="mt-1 w-28"
+                                v-model="pointsForm.total_points"
+                            />
+                            <InputError class="mt-1" :message="pointsForm.errors.total_points" />
+                        </div>
+                        <PrimaryButton type="submit" :disabled="pointsForm.processing">Guardar</PrimaryButton>
+                        <span v-if="pointsForm.recentlySuccessful" class="text-xs text-arka-primary-bright">¡Listo!</span>
+                    </form>
 
                     <div class="grid grid-cols-2 gap-3">
                         <img v-if="profileUser.driver_profile.license_photo_url" :src="profileUser.driver_profile.license_photo_url" alt="Licencia" class="h-32 w-full object-cover rounded-arka" />

@@ -301,6 +301,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // sin tener que navegar entre suscripciones/verificaciones/flotas.
     Route::get('/usuarios/{user}', [AdminUserProfileController::class, 'show'])->name('users.show');
     Route::post('/usuarios/{user}/reactivar', [AdminUserProfileController::class, 'unlock'])->name('users.unlock');
+    // Ajuste manual de puntos de un conductor (pedido explícito del usuario)
+    // — ver Admin\UserProfileController::updatePoints().
+    Route::patch('/usuarios/{user}/puntos', [AdminUserProfileController::class, 'updatePoints'])->name('users.update-points');
     // Eliminar una cuenta real y todo lo que le pertenece (pedido explícito
     // del usuario) — ver AdminUserProfileController::destroy().
     Route::delete('/usuarios/{user}', [AdminUserProfileController::class, 'destroy'])->name('users.destroy');
