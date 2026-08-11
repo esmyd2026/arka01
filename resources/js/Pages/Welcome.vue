@@ -29,15 +29,6 @@ defineProps({
 
 const authUser = usePage().props.auth?.user ?? null;
 
-// Burbujas de conductores de ejemplo alrededor del mockup de teléfono
-// (pedido explícito del usuario, referencia visual provista) — nombres y
-// calificaciones ilustrativos, no datos reales de ningún conductor.
-const HERO_DRIVER_BUBBLES = [
-    { name: 'Carlos', initial: 'C', rating: '4.9', position: 'top-2 -right-2 sm:-right-6' },
-    { name: 'María', initial: 'M', rating: '5.0', position: 'top-1/3 -left-4 sm:-left-10' },
-    { name: 'Andrés', initial: 'A', rating: '4.8', position: 'bottom-4 -right-2 sm:-right-8' },
-];
-
 // "Para Clientes" / "Para Conductores" (pedido explícito del usuario, mockup
 // provisto) — reemplaza el flujo de pasos anterior por dos fichas con lo que
 // gana cada lado, más el diagrama del medio.
@@ -103,7 +94,7 @@ function submitFeedback() {
             <!-- Con sesión iniciada, el hero completo (mockup, CTAs de registro)
                  no aplica — ya tiene el acceso directo arriba. -->
             <div v-if="authUser" class="text-center">
-                <ApplicationLogo size="text-5xl sm:text-6xl" />
+                <ApplicationLogo size="h-14 sm:h-16" />
                 <Link
                     :href="route('dashboard')"
                     class="mt-6 inline-flex items-center px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm text-arka-base hover:bg-arka-primary-bright transition"
@@ -116,7 +107,7 @@ function submitFeedback() {
                  teléfono, insignia y llamado a la acción "Crear mi círculo"). -->
             <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
                 <div class="text-center lg:text-start">
-                    <ApplicationLogo size="text-5xl sm:text-6xl" />
+                    <ApplicationLogo size="h-14 sm:h-16" />
 
                     <p class="mt-5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arka-primary/10 text-arka-primary-bright text-xs font-medium">
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -245,58 +236,14 @@ function submitFeedback() {
                     </div>
                 </div>
 
-                <!-- Mockup de teléfono con un viaje de ejemplo (pedido explícito
-                     del usuario, referencia visual provista) — datos ilustrativos
-                     fijos, no información real de ningún usuario ni conductor. -->
+                <!-- Ilustración de "cómo funciona" (pedido explícito del usuario:
+                     reemplazar el mockup dibujado a mano por la imagen real). -->
                 <div class="relative mx-auto w-full max-w-xs">
-                    <div class="relative rounded-[2rem] border border-arka-text-muted/15 bg-arka-card shadow-2xl p-4 pt-6">
-                        <p class="text-xs font-medium text-arka-text-muted">Viaje solicitado</p>
-                        <p class="text-sm font-semibold text-arka-primary-bright">En camino…</p>
-
-                        <!-- Bug real reportado por el usuario (captura: "no se nota bien") —
-                             el trazo quedaba muy fino y sin fondo de referencia. Ahora tiene
-                             un fondo tipo mapa (puntos), un trazo sólido más grueso con brillo,
-                             y los dos extremos bien marcados. -->
-                        <div
-                            class="mt-4 h-28 rounded-arka border border-arka-text-muted/10 flex items-center justify-center overflow-hidden"
-                            style="background-color: #0d1611; background-image: radial-gradient(rgba(52,211,153,0.18) 1px, transparent 1px); background-size: 14px 14px;"
-                        >
-                            <svg class="h-full w-full" viewBox="0 0 200 100" fill="none">
-                                <path
-                                    d="M18 78 C 60 78, 55 32, 100 32 S 150 70, 182 22"
-                                    stroke="#34D399"
-                                    stroke-width="4"
-                                    stroke-linecap="round"
-                                    opacity="0.35"
-                                    filter="blur(2px)"
-                                />
-                                <path d="M18 78 C 60 78, 55 32, 100 32 S 150 70, 182 22" stroke="#34D399" stroke-width="3" stroke-linecap="round" />
-                                <circle cx="18" cy="78" r="6" fill="#0d1611" stroke="#34D399" stroke-width="2.5" />
-                                <circle cx="182" cy="22" r="5" fill="#34D399" stroke="#EAFBF3" stroke-width="2" />
-                            </svg>
-                        </div>
-
-                        <div class="mt-4 flex items-center justify-between">
-                            <span class="text-xs text-arka-text-muted">Llegada estimada</span>
-                            <span class="text-sm font-semibold text-arka-text">5 min</span>
-                        </div>
-                    </div>
-
-                    <!-- Burbujas de conductores de ejemplo alrededor del teléfono. -->
-                    <div
-                        v-for="bubble in HERO_DRIVER_BUBBLES"
-                        :key="bubble.name"
-                        class="hidden sm:flex absolute items-center gap-2 px-2.5 py-1.5 rounded-full bg-arka-card border border-arka-text-muted/15 shadow-lg"
-                        :class="bubble.position"
-                    >
-                        <span class="h-7 w-7 rounded-full bg-arka-primary/15 text-arka-primary-bright text-xs font-semibold flex items-center justify-center shrink-0">
-                            {{ bubble.initial }}
-                        </span>
-                        <span class="text-xs">
-                            <span class="block font-medium text-arka-text leading-tight">{{ bubble.name }}</span>
-                            <span class="text-arka-lime leading-tight">★ {{ bubble.rating }}</span>
-                        </span>
-                    </div>
+                    <img
+                        src="/storage/img/como-funciona.png"
+                        alt="Cómo funciona Arka01: solicite un viaje dentro de su círculo de confianza"
+                        class="w-full h-auto rounded-[2rem] shadow-2xl"
+                    />
                 </div>
             </div>
 
@@ -370,8 +317,13 @@ function submitFeedback() {
                         <div class="w-10 lg:w-px lg:h-8 border-t-2 lg:border-t-0 lg:border-s-2 border-dashed border-arka-primary/30"></div>
 
                         <div class="flex flex-col items-center gap-1">
+                            <!-- Pedido explícito del usuario (con captura): el
+                                 lockup completo (isotipo + "Arka01") quedaba feo
+                                 apretado en esta burbuja chica, al lado de íconos
+                                 simples de Clientes/Conductores — acá va solo el
+                                 isotipo "A", igual de simple que esos íconos. -->
                             <span class="h-16 w-16 rounded-full bg-arka-primary/15 border-2 border-arka-primary flex items-center justify-center shadow-[0_0_20px_rgba(52,211,153,0.25)]">
-                                <ApplicationLogo size="text-base" />
+                                <img src="/storage/img/logo-arka01-icono.png" alt="Arka01" class="h-9 w-auto" />
                             </span>
                         </div>
 
@@ -469,6 +421,19 @@ function submitFeedback() {
                         <p class="text-xs text-arka-text-muted">{{ item.text }}</p>
                     </div>
                 </div>
+            </div>
+
+            <!-- Imagen de cierre de la página de inicio (pedido explícito del
+                 usuario, archivo provisto). Bug real reportado por el usuario
+                 (con captura): el archivo trae su propio fondo negro pintado
+                 (no es transparente) y a todo el ancho de la página se veía
+                 gigante y con un borde visible donde ese negro no calzaba con
+                 el fondo real de la app (#0a0f0c). Se achicó a modo tarjeta y
+                 el contenedor usa el mismo negro exacto de la imagen
+                 (#000304, tomado de la propia imagen) para que el borde
+                 desaparezca en vez de quedar como un remiendo. -->
+            <div class="mt-16 max-w-md sm:max-w-lg mx-auto rounded-arka overflow-hidden shadow-xl" style="background-color: #000304;">
+                <img src="/storage/img/pagina%20de%20inicio%20footer.png" alt="Arka01" class="w-full h-auto" />
             </div>
 
             <!-- "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): barra

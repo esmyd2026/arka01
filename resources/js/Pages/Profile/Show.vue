@@ -89,7 +89,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
         <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
             <div class="flex items-center justify-between mb-8">
                 <Link href="/">
-                    <ApplicationLogo size="text-3xl" />
+                    <ApplicationLogo size="h-10" />
                 </Link>
                 <Link
                     :href="route('register')"

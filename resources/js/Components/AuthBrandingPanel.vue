@@ -1,6 +1,4 @@
 <script setup>
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
-
 // Panel de marca para las pantallas de sesión (login, registro, etc.):
 // pensado como sección reutilizable y con contenido variable (título,
 // bajada y viñetas por prop), no un diseño fijo solo para el login — así
@@ -28,7 +26,11 @@ defineProps({
         class="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 overflow-hidden"
         style="background: radial-gradient(circle at 15% 15%, rgba(52, 211, 153, 0.16), transparent 45%), linear-gradient(160deg, #0a0f0c 0%, #0d1712 55%, #10251c 100%)"
     >
-        <ApplicationLogo size="text-2xl" />
+        <!-- Pedido explícito del usuario (con captura): el lockup completo
+             (isotipo + "Arka01") se veía mal acá — se usa solo el isotipo,
+             chico y proporcionado, para que el resto del contenido del panel
+             quede bien ubicado debajo. -->
+        <img src="/storage/img/logo-arka01-icono.png" alt="Arka01" class="h-64 w-auto self-start" />
 
         <div class="max-w-md">
             <h2 class="text-3xl font-bold text-arka-text leading-tight">{{ title }}</h2>
@@ -50,6 +52,6 @@ defineProps({
             </div>
         </div>
 
-        <p class="text-xs text-arka-text-muted">Movilidad de confianza, hecha en Ecuador.</p>
+        <p class="text-xs text-arka-text-muted">Copyright © 2026 - <a href="https://siglotecnologico.com/" target="_blank" rel="noopener noreferrer">Siglo Tecnológico</a>, Reservados todos los derechos.</p>
     </div>
 </template>

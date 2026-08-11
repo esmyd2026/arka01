@@ -2267,6 +2267,54 @@ No aplica — textos y un cambio de configuración fija, sin lógica de backend 
 
 ---
 
+### Imágenes reales en la portada, logo con imagen real, y QR de invitación arreglado
+
+El usuario subió 6 imágenes reales a `storage/app/public/img/` (mockup de "cómo funciona", imagen de cierre y 4 variantes del logo) para reemplazar piezas dibujadas a mano, más un bug real reportado del QR de invitación de flota.
+
+- **Mockup del hero reemplazado**: el bloque SVG ilustrativo del teléfono en `Welcome.vue` (dibujado a mano, con burbujas de conductores ficticios) se reemplazó por la imagen real `como-funciona.png`. Se eliminó el array `HERO_DRIVER_BUBBLES`, que ya no se usa.
+- **Imagen de cierre**: se agregó `pagina de inicio footer.png` justo después de la sección "¿Por qué elegir Arka01?" (el archivo tiene espacios en el nombre — se referencia con `%20` para evitar cualquier ambigüedad en el navegador).
+- **Logo con imagen real**: `ApplicationLogo.vue` dejó de ser texto tipográfico armado a mano y ahora renderiza `logo arka01 completo sin fondo.png` (fondo transparente, sirve tanto sobre tarjetas oscuras como sobre la base de la app). El prop `size` pasó de ser una clase de tamaño de texto (`text-2xl`, etc.) a una clase de alto (`h-8`, etc.) — se remapearon los 9 usos existentes (header, layouts de invitado/legal, panel de marca de auth, perfil público, referidos, y los 3 usos dentro de `Welcome.vue`, incluido el chico dentro del círculo del diagrama "Cómo funciona").
+- **Bug real: el QR de invitación de flota no llevaba a ningún lado** ("cuando escaneo el código QR del perfil del conductor me sigue arrojando solo el código, no la URL"). En `Driver/Profile.vue`, `drawInviteQr()` codificaba el texto pelado del `invite_code` — cualquier lector de cámara normal (fuera de la app) solo mostraba ese texto suelto, sin nada para tocar. Se corrigió para que codifique la URL pública ya existente `referrals.show` (`/referir/{invite_code}`, `ReferralController::show()`), la misma pantalla de "Referí a tu conductor" que ya resuelve agregar el conductor a la flota del que escanea — se reutilizó el flujo existente en vez de construir uno nuevo.
+
+### Tests
+No aplica — cambios de imágenes/rutas en Vue, sin lógica de backend nueva (el QR ahora codifica una ruta con nombre ya cubierta por los tests existentes de `ReferralController`). Suite completa: 614 tests OK, Pint limpio, build limpio.
+
+---
+
+### Logo ilegible en chico, imagen de cierre gigante y con borde visible
+
+El usuario mandó capturas: el logo se veía diminuto (header, y "fatal" en login/registro), y la imagen de cierre quedaba enorme con un recuadro negro que no combinaba con el fondo de la página.
+
+- **Causa real del logo chico**: el archivo original (`logo arka01 completo sin fondo.png`) trae un margen transparente enorme alrededor del isotipo — a las alturas en las que vive el logo en la app (`h-8`, `h-10`, etc.) ese margen se comía casi todo el alto disponible, dejando el trazo real minúsculo o invisible (por eso en el panel de login/registro directamente no se veía). Se generó una sola vez, con PHP/GD, un recorte ajustado al cuadro real de píxeles opacos del mismo archivo (`public/storage/img/logo-arka01.png`, isotipo + "Arka01", sin el eslogan — que ya aparece como texto en cada pantalla donde hace falta) y `ApplicationLogo.vue` ahora apunta a ese recorte. Mismo arte, mismo trazo, sin el margen muerto.
+- **Causa real de la imagen de cierre**: `pagina de inicio footer.png` no es transparente — trae su propio fondo casi negro (`#000304`) pintado, apenas distinto del fondo real de la app (`#0a0f0c`). A todo el ancho de la página (`w-full`) se veía desproporcionada y el borde entre ambos negros quedaba visible como un remiendo. Se la achicó a formato tarjeta (`max-w-md sm:max-w-lg`, centrada) y el contenedor que la envuelve usa el mismo negro exacto de la imagen como fondo, para que el borde deje de notarse.
+
+### Tests
+No aplica — recorte de imagen (script PHP puntual, no forma parte del código de la app) y ajustes de tamaño/CSS en Vue. Suite completa sin cambios: 614 tests OK, Pint limpio, build limpio.
+
+---
+
+### Burbuja del diagrama "Cómo funciona": lockup completo se veía feo, ahora solo el isotipo
+
+El usuario mandó una captura de la burbuja central del diagrama "Para Clientes / Cómo funciona / Para Conductores" — el lockup completo (isotipo + "Arka01") apretado en ese círculo chico, al lado de íconos simples de Clientes/Conductores, se veía mal. Pidió dejar solo el nombre, o una "A" en verde con "01", o usar directamente `logo arka01 solo la letra A en transparente.png`.
+
+- Se generó (mismo método PHP/GD que el recorte anterior) un recorte ajustado del isotipo "A" solo, sin el halo/margen que traía el archivo original (`public/storage/img/logo-arka01-icono.png`), y esa burbuja puntual ahora usa esa imagen en vez del componente `ApplicationLogo` — coherente con que las burbujas de al lado (Clientes/Conductores) también son íconos simples, no lockups con texto. El resto de los usos de `ApplicationLogo` (header, login, perfil, etc.) no se tocó — ese lockup completo sí funciona bien en esos lugares.
+
+### Tests
+No aplica — recorte de imagen y un cambio puntual de Vue en una sola pantalla. Build limpio, Pint limpio (sin cambios en PHP).
+
+---
+
+### Panel de marca de login/registro: el logo seguía viéndose mal
+
+El usuario mandó capturas de las pantallas de inicio de sesión y de creación de cuenta — el lockup completo desbordaba el panel, tapando casi todo el espacio antes del título "«Solo suben los suyos.»". Pidió usar directamente `logo-arka01-icono.png` (el isotipo solo, ya recortado en la corrección anterior), proporcionado.
+
+- **`AuthBrandingPanel.vue`** (usado tanto por login como por registro — un solo componente compartido, un solo lugar para arreglarlo): dejó de usar `ApplicationLogo` (el lockup completo) y ahora muestra directamente `logo-arka01-icono.png` a `h-10`, mismo criterio que la burbuja del diagrama de la portada.
+
+### Tests
+No aplica — cambio de Vue en un componente compartido, sin lógica de backend. Suite completa sin cambios: 614 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

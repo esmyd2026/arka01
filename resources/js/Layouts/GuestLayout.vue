@@ -15,7 +15,7 @@ import { Link } from '@inertiajs/vue3';
         <div class="flex-1 flex flex-col justify-center items-center px-6 py-12">
             <div class="w-full sm:max-w-md">
                 <Link href="/" class="lg:hidden flex justify-center mb-6">
-                    <ApplicationLogo size="text-3xl" />
+                    <ApplicationLogo size="h-10" />
                 </Link>
 
                 <div class="w-full px-6 py-4 bg-arka-card shadow-md overflow-hidden rounded-arka">

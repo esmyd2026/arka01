@@ -77,13 +77,21 @@ function whatsappTimeRemaining() {
 // Dibuja el código de invitación como QR en el <canvas> de abajo, para que un
 // cliente lo pueda escanear y agregarte a su flota sin escribir nada
 // (sección 3.2 y 9.5: búsqueda "por código de invitación o QR").
+//
+// Bug real reportado por el usuario: el QR codificaba el código PELADO
+// ("ABC12345"), así que cualquier lector de cámara normal (fuera de la
+// app) solo mostraba ese texto suelto, sin nada para tocar. Ahora codifica
+// la URL pública de "Referí a tu conductor" (/referir/{invite_code}, ver
+// ReferralController::show()) — quien escanea cae directo en esa pantalla,
+// con el botón de agregarlo a su flota si ya tiene sesión de cliente, o la
+// invitación a crear cuenta si todavía no.
 const drawInviteQr = async () => {
     if (!props.driverProfile) return;
 
     await nextTick();
     const canvas = document.getElementById('invite-qr');
     if (canvas) {
-        await QRCode.toCanvas(canvas, props.driverProfile.invite_code, { width: 160, margin: 1 });
+        await QRCode.toCanvas(canvas, route('referrals.show', props.driverProfile.invite_code), { width: 160, margin: 1 });
     }
 };
 

@@ -20,7 +20,7 @@ defineProps({
         <header class="border-b border-arka-text-muted/10 px-4 sm:px-6 py-4">
             <div class="max-w-3xl mx-auto flex items-center justify-between">
                 <Link href="/">
-                    <ApplicationLogo size="text-2xl" />
+                    <ApplicationLogo size="h-8" />
                 </Link>
                 <Link href="/" class="text-sm text-arka-text-muted hover:text-arka-primary-bright">
                     Volver al inicio

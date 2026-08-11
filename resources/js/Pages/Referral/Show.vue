@@ -39,7 +39,7 @@ function invite() {
 
     <div class="min-h-screen bg-arka-base flex flex-col items-center justify-center px-4 py-12">
         <Link href="/" class="mb-6">
-            <ApplicationLogo size="text-2xl" />
+            <ApplicationLogo size="h-8" />
         </Link>
 
         <div class="w-full max-w-sm bg-arka-card shadow-md rounded-arka p-6 text-center space-y-4">
