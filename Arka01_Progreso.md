@@ -2403,6 +2403,16 @@ El usuario preguntó qué pasaba con clientes/conductores de otros países — s
 ### Tests
 No aplica — cambio de catálogo fijo (constantes en PHP y JS), sin lógica nueva que probar; los tests existentes de registro con `+51` siguen pasando tal cual. Suite completa: 625 tests OK, Pint limpio, build limpio.
 
+### Pantallas de error con el estilo de Arka01
+
+El usuario mandó una captura del "503 | SERVICE UNAVAILABLE" en blanco y negro que muestra Laravel de fábrica (se ve durante el modo mantenimiento de un despliegue, `deploy.sh` ya lo pedía con `--render="errors::503"`, pero esa vista nunca se había creado — por eso caía en la página cruda del framework).
+
+- **`resources/views/errors/`** (nuevo): un cascarón compartido (`_shell.blade.php`) con el estilo oscuro de Arka01 — logo, mensaje amigable, botón "Volver al inicio" — reutilizado por `401`, `403`, `404`, `419`, `429`, `500` y `503`, cada uno con su propio título/mensaje en español. Laravel los usa automáticamente apenas existen, sin tocar ningún controlador.
+- A propósito **sin `@vite`** ni ninguna otra dependencia de los assets compilados (CSS en línea nomás): son justo las pantallas que tienen que verse bien incluso si el build está a medio desplegar o algo más de la app está roto — depender del CSS compilado ahí sería frágil.
+
+### Tests
+`tests/Feature/FriendlyErrorPagesTest.php` (nuevo, 2 tests): una ruta inexistente muestra el 404 con la marca de Arka01, y el modo mantenimiento (`php artisan down`) muestra el 503 nuevo — con `try/finally` para que el modo mantenimiento no se quede pegado si la aserción fallara. Suite completa: 627 tests OK, Pint limpio (sin cambios de frontend, no hizo falta build).
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)
