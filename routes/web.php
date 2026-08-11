@@ -91,14 +91,18 @@ Route::post('/opiniones', [PlatformFeedbackController::class, 'store'])
 // antes de registrarse.
 Route::get('/terminos', function () {
     return Inertia::render('Legal/Terms', [
-        'contactEmail' => config('mail.from.address'),
+        // Pedido explícito del usuario ("por el momento quemá el correo"):
+        // fijo en vez de depender de MAIL_FROM_ADDRESS — evita que quede
+        // mostrando el placeholder de Laravel si esa variable no está bien
+        // completada en el .env del servidor.
+        'contactEmail' => 'soporte@arka01.com',
         'updatedAt' => '2026-08-09',
     ]);
 })->name('legal.terms');
 
 Route::get('/privacidad', function () {
     return Inertia::render('Legal/Privacy', [
-        'contactEmail' => config('mail.from.address'),
+        'contactEmail' => 'soporte@arka01.com',
         'updatedAt' => '2026-08-09',
     ]);
 })->name('legal.privacy');

@@ -216,6 +216,16 @@ function submitFeedback() {
                         </a>
                     </div>
 
+                    <!-- Pedido explícito del usuario: "Crear mi círculo" es el CTA
+                         principal, pero quien ya tiene cuenta necesita un camino
+                         directo a iniciar sesión sin que se lo tape ese botón. -->
+                    <p v-if="canLogin && canRegister" class="mt-4 text-sm text-arka-text-muted">
+                        ¿Ya tiene una cuenta?
+                        <Link :href="route('login')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                            Iniciar sesión
+                        </Link>
+                    </p>
+
                     <div class="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-1.5 text-xs text-arka-text-muted">
                         <span class="inline-flex items-center gap-1.5">
                             <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

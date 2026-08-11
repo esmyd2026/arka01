@@ -2252,6 +2252,21 @@ El usuario mandó una captura de referencia (tarjeta negra con QR y el logo de A
 
 ---
 
+### Bug urgente propio: "props is not defined" en Mi perfil
+
+El usuario avisó con una captura de la consola en `arka01.com/profile`: `ReferenceError: props is not defined`. Era un bug propio, recién introducido en la misma pasada de "Compartir mi perfil" — en `Profile/Edit.vue` se usó `props.profileUrl` en dos lugares nuevos (el mensaje de WhatsApp y "Copiar enlace") pero `defineProps(...)` nunca se guardó en una variable `props`. Se corrigió de inmediato (`const props = defineProps(...)`) y se revisó el resto de los archivos tocados en esa misma pasada (`ShareProfileQr.vue`, `PublicProfileContent.vue`, `Profile/Show.vue`, `Welcome.vue`, `Auth/Register.vue`) para confirmar que ninguno tenía el mismo problema — solo `Profile/Edit.vue` lo tenía.
+
+### Textos legales y enlace de inicio de sesión
+
+- **Se sacó el aviso de "esto no reemplaza asesoría legal, conviene que un abogado lo revise"** de `Terms.vue` y `Privacy.vue` (pedido explícito del usuario: ya está en producción).
+- **Correo de contacto fijo a `soporte@arka01.com`** en ambas páginas legales (pedido explícito: "por el momento quemá el correo") — antes dependía de `config('mail.from.address')`, que podía mostrar el placeholder de Laravel si el `.env` del servidor no lo tenía bien completado.
+- **Enlace "¿Ya tiene una cuenta? Iniciar sesión"** debajo de los botones del hero en `Welcome.vue` — con "Crear mi círculo" como CTA principal, no quedaba ningún camino visible a iniciar sesión para quien ya tenía cuenta.
+
+### Tests
+No aplica — textos y un cambio de configuración fija, sin lógica de backend nueva. Suite completa sin cambios: 614 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

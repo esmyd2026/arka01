@@ -19,7 +19,7 @@ onMounted(() => {
     }
 });
 
-defineProps({
+const props = defineProps({
     mustVerifyEmail: {
         type: Boolean,
     },

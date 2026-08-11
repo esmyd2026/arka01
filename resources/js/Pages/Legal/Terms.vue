@@ -195,12 +195,5 @@ defineProps({
                 <span v-else>Escríbanos por los canales de contacto de la app.</span>
             </p>
         </section>
-
-        <p class="text-xs italic pt-4 border-t border-arka-text-muted/10">
-            Este documento es una base de referencia inspirada en las prácticas habituales de plataformas de
-            intermediación de transporte, y no reemplaza asesoría legal — antes de un lanzamiento con usuarios
-            reales, conviene que un abogado la revise contra la normativa ecuatoriana vigente (tránsito, transporte
-            comercial, protección al consumidor y protección de datos personales).
-        </p>
     </LegalLayout>
 </template>

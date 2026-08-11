@@ -180,12 +180,5 @@ defineProps({
                 <span v-else>Escríbanos por los canales de contacto de la app.</span>
             </p>
         </section>
-
-        <p class="text-xs italic pt-4 border-t border-arka-text-muted/10">
-            Esta política es una base de referencia, redactada conforme a los principios de la Ley Orgánica de
-            Protección de Datos Personales del Ecuador, y no reemplaza asesoría legal — antes de un lanzamiento con
-            usuarios reales, conviene que un abogado la revise contra la normativa vigente y confirme el proveedor y
-            la región definitivos de hospedaje de los datos.
-        </p>
     </LegalLayout>
 </template>
