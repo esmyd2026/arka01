@@ -40,9 +40,11 @@ class RegisteredUserController extends Controller
      * Código de país aceptado en el formulario (sección "manejemos el código
      * de país" del alcance) — no es un catálogo de negocio como planes o
      * zonas, es una lista fija de referencia (indicativos telefónicos
-     * reales), por eso vive acá y no en una tabla administrable.
+     * reales), por eso vive acá y no en una tabla administrable. Pedido
+     * explícito del usuario: solo Sudamérica (el mercado real de la app) —
+     * Ecuador, Perú, Colombia, Venezuela, Chile, Argentina.
      */
-    public const COUNTRY_CODES = ['+593', '+51', '+57', '+58', '+1', '+34'];
+    public const COUNTRY_CODES = ['+593', '+51', '+57', '+58', '+56', '+54'];
 
     public function store(Request $request): RedirectResponse
     {

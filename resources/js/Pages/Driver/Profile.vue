@@ -63,8 +63,8 @@ const countryCodes = [
     { code: '+51', label: '🇵🇪 +51 Perú', shortLabel: '🇵🇪 +51' },
     { code: '+57', label: '🇨🇴 +57 Colombia', shortLabel: '🇨🇴 +57' },
     { code: '+58', label: '🇻🇪 +58 Venezuela', shortLabel: '🇻🇪 +58' },
-    { code: '+1', label: '🇺🇸 +1 EE.UU./Canadá', shortLabel: '🇺🇸 +1' },
-    { code: '+34', label: '🇪🇸 +34 España', shortLabel: '🇪🇸 +34' },
+    { code: '+56', label: '🇨🇱 +56 Chile', shortLabel: '🇨🇱 +56' },
+    { code: '+54', label: '🇦🇷 +54 Argentina', shortLabel: '🇦🇷 +54' },
 ];
 const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.label, shortLabel: c.shortLabel }));
 

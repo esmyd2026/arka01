@@ -2392,6 +2392,17 @@ El usuario preguntó dónde se ajustan los puntos de un conductor desde el panel
 ### Tests
 `tests/Feature/Admin/AdminUserProfileTest.php` (+3): un admin puede ajustar los puntos y queda auditado, un usuario sin permiso no puede, y un cliente sin perfil de conductor da 404. Suite completa: 625 tests OK, Pint limpio, build limpio.
 
+### Códigos de país: solo Sudamérica
+
+El usuario preguntó qué pasaba con clientes/conductores de otros países — se detectó que el selector de código de país (registro y cambio de número desde el perfil de conductor) tenía una lista fija de solo 6 países, y de esos, 2 (EE.UU./Canadá y España) no eran el mercado real de la app. Pedido explícito del usuario: dejar solo Sudamérica — Ecuador, Perú, Colombia, Venezuela, Chile, Argentina.
+
+- `RegisteredUserController::COUNTRY_CODES` (única fuente de verdad del lado del servidor — `DriverProfileController` ya la reutiliza tal cual) cambió de `['+593', '+51', '+57', '+58', '+1', '+34']` a `['+593', '+51', '+57', '+58', '+56', '+54']`.
+- Las dos listas del frontend que la reflejan (`Auth/Register.vue`, `Driver/Profile.vue` — duplicadas porque una es del registro y la otra del cambio de número ya logueado) se actualizaron igual, quitando 🇺🇸 y 🇪🇸 y agregando 🇨🇱 Chile y 🇦🇷 Argentina.
+- `App\Rules\ValidPhoneNumberLocal` no necesitó cambios: ya validaba Ecuador con formato estricto (9 dígitos, empieza en 9) y el resto de países con un formato laxo (7 a 10 dígitos) — eso sigue igual para los 5 países no ecuatorianos de la lista.
+
+### Tests
+No aplica — cambio de catálogo fijo (constantes en PHP y JS), sin lógica nueva que probar; los tests existentes de registro con `+51` siguen pasando tal cual. Suite completa: 625 tests OK, Pint limpio, build limpio.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

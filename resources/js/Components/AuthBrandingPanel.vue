@@ -52,6 +52,6 @@ defineProps({
             </div>
         </div>
 
-        <p class="text-xs text-arka-text-muted">Copyright © 2026 - <a href="https://siglotecnologico.com/" target="_blank" rel="noopener noreferrer">Siglo Tecnológico</a>, Reservados todos los derechos.</p>
+        <p class="text-xs text-arka-text-muted">Copyright © 2026 - <a href="https://arka01.com/" target="_blank" rel="noopener noreferrer">Arka01</a>, Reservados todos los derechos.</p>
     </div>
 </template>
