@@ -2120,6 +2120,47 @@ No aplica — cambio puramente de audio/vibración en el navegador, sin lógica 
 
 ---
 
+### Error 500 al "Borrar y reiniciar demo" en producción
+
+El usuario mandó capturas: `POST /admin/sistema/borrar-demo` devolvía 500 en producción, y Sentry mostraba `Call to undefined function Database\Factories\fake()` en `UserFactory.php`.
+
+- **Causa real**: `fakerphp/faker` estaba en `require-dev` de `composer.json`. El propio Laravel (`vendor/laravel/framework/.../Foundation/helpers.php:509`) solo declara la función global `fake()` si la clase `Faker\Factory` existe — y en el servidor, el deploy corre `composer install --no-dev`, que nunca instala paquetes de `require-dev`. Como `DemoDataSeeder` usa `User::factory()`/`DriverProfile::factory()` (y estos, aunque casi todos sus campos vienen sobreescritos, igual ejecutan `fake()` dentro de su `definition()` base antes de aplicar el override), la función simplemente no existía en producción y todo el reinicio de demo tronaba.
+- **Fix**: se movió `fakerphp/faker` de `require-dev` a `require` en `composer.json` — es la corrección correcta porque "Reiniciar demo" es una función pensada para usarse en producción (parte del panel admin), no solo en tests; reescribir los factories para no usar `fake()` hubiera sido más frágil y hubiera dejado sin arreglar el mismo problema en `php artisan demo:seed-many-drivers` (otro comando que también usa factories y que el usuario puede correr a mano en el servidor). `composer.lock` se regeneró con `composer update fakerphp/faker --with-all-dependencies` para que quede clasificado del lado correcto.
+- **De paso**: ese mismo `composer update` reveló que `league/commonmark` (dependencia de Laravel, no elegida por el proyecto) tenía 6 avisos de seguridad conocidos (denegación de servicio al parsear cierto Markdown) en la versión que traía instalada — se actualizó con `composer update league/commonmark` dentro del mismo rango que exige `laravel/framework` (`^2.8.1`), sin tocar nada más. `composer audit` quedó en cero avisos.
+
+### Tests
+No aplica — cambio de dependencias/`composer.json`, no de lógica de la aplicación (los tests locales no distinguen `require`/`require-dev`, así que no hubieran detectado este bug — se verificó a mano que `fakerphp/faker` quedó en la sección `packages` de `composer.lock`, no en `packages-dev`). Suite completa sin cambios: 571 tests OK, Pint limpio, build limpio.
+
+**Importante para el despliegue**: como esta vez sí cambió `composer.lock`, el paso de `composer install --no-dev` del `deploy.sh` en el servidor tiene que volver a correr (ya lo hace siempre), pero avisá si el deploy script está fijado a alguna versión vieja del lock — no debería, pero es la única vez en la sesión que un cambio toca dependencias en vez de solo código de la app.
+
+---
+
+### Registro en móvil: preguntas, layout roto del teléfono, y validación real de celular ecuatoriano
+
+El usuario mandó capturas del registro en el celular: el paso 2 preguntaba "¿Cómo se llama?" (suena raro) y en el paso 4 el selector de país con el nombre completo del país aplastaba el campo del número a una cajita minúscula. También pidió validar que un número ecuatoriano sea un celular real — 9 dígitos (ya con el código de país puesto) y no basura como 9999999999 o 090000000.
+
+- **Pregunta reformulada**: "¿Cómo se llama?" → "¿Cuál es su nombre?" (`Auth/Register.vue`) — mismo tono formal ("usted") que el resto de las preguntas de este mismo formulario ("¿Cuál es su correo electrónico?", "¿Cuál es su número de teléfono?").
+- **Layout del teléfono en móvil**: el selector de país era un `<select>` nativo dentro de una fila `flex gap-2` — como no tenía ancho fijo, "🇪🇨 +593 Ecuador" completo competía por espacio contra el campo del número (que pedía `w-full`), y al no caber los dos, el número era el que terminaba aplastado casi a cero. Se reemplazó por `SearchableSelect` con un ancho fijo y angosto (`w-28 shrink-0`), y el campo del número pasó a `flex-1 min-w-0` para quedarse con el espacio que sobra, no al revés. Se agregó `shortLabel` opcional a `SearchableSelect.vue` (además del `label` de siempre): el selector ya cerrado muestra solo "🇪🇨 +593" (compacto), pero la lista desplegable sigue mostrando el nombre completo del país para poder reconocerlo/buscarlo. Mismo arreglo aplicado en `Driver/Profile.vue` (cambio de número de WhatsApp), que tenía exactamente el mismo problema.
+- **`App\Rules\ValidPhoneNumberLocal`** (regla nueva, reutilizada en `RegisteredUserController` y `DriverProfileController`, reemplazando el `regex:/^[0-9]{7,10}$/` suelto que había en los dos): para Ecuador (+593) exige exactamente 9 dígitos que empiecen en 9 (sin el 0 inicial, que ya lo reemplaza el código de país) y rechaza números con los 9 dígitos repetidos (999999999, 000000000, etc.) — "de relleno" obvios que antes pasaban el formato viejo. Para el resto de países se mantiene la validación suelta (7 a 10 dígitos), porque no tenemos el formato exacto de cada uno. La misma regla se replicó en el front (`isValidPhoneLocal()` en `Register.vue`) para que el botón "Siguiente" no se habilite con un número que el backend va a rechazar igual.
+- Un test existente (`RegistrationTest::test_new_users_can_register`) usaba `999999999` como número de prueba — justo el tipo de valor que ahora se rechaza — se cambió a un número válido.
+
+### Tests
+`tests/Feature/Auth/RegistrationTest.php` (+5): rechaza 10 dígitos, rechaza no empezar en 9, rechaza dígitos repetidos, acepta un celular ecuatoriano válido, confirma que otro país sigue con la validación suelta. `tests/Feature/Driver/DriverProfilePhoneUpdateTest.php` (+1): mismo rechazo de número obviamente falso al cambiar el teléfono desde el perfil. Suite completa: 577 tests OK, Pint limpio, build limpio.
+
+---
+
+### El desplegable del código de país quedaba aplastado al abrirse
+
+El usuario mandó una captura del selector de país recién angostado (el arreglo anterior): al abrirlo, el buscador y la lista de países se veían comprimidos y pegados con el texto de ayuda de al lado.
+
+- **Causa real** (`SearchableSelect.vue`): el panel desplegable usaba `w-full`, heredando el mismo ancho que el botón que lo abre — al angostar ese botón a propósito (`w-28`, para que el código de país no le robara espacio al campo del teléfono, ver la pasada anterior), el panel abierto se angostó con él, aunque adentro tuviera que mostrar nombres de países completos y un buscador.
+- **Fix**: se agregó `min-w-56` (piso de ancho, no importa qué tan angosto sea el botón) y `max-w-[90vw]` (para que no se salga de la pantalla en un celular chico) al panel. No afecta ningún otro uso existente de `SearchableSelect` en la app — donde el botón ya era ancho, el mínimo nunca entra en juego.
+
+### Tests
+No aplica — cambio puramente de CSS/layout en un componente compartido. Suite completa sin cambios: 577 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

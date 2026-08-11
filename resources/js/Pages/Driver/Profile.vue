@@ -7,6 +7,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import Checkbox from '@/Components/Checkbox.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
@@ -49,15 +50,19 @@ const props = defineProps({
 
 const WHATSAPP_STATUS_LABEL = { active: 'Activa', expiring_soon: 'Próxima a vencer', expired: 'Expirada' };
 
-// Misma lista que RegisteredUserController::COUNTRY_CODES.
+// Misma lista que RegisteredUserController::COUNTRY_CODES. shortLabel (ver
+// SearchableSelect.vue): bug real reportado por el usuario, el selector con
+// el nombre del país entero le dejaba casi nada de ancho al campo del
+// número en móvil, que quedaba aplastado.
 const countryCodes = [
-    { code: '+593', label: '🇪🇨 +593 Ecuador' },
-    { code: '+51', label: '🇵🇪 +51 Perú' },
-    { code: '+57', label: '🇨🇴 +57 Colombia' },
-    { code: '+58', label: '🇻🇪 +58 Venezuela' },
-    { code: '+1', label: '🇺🇸 +1 EE.UU./Canadá' },
-    { code: '+34', label: '🇪🇸 +34 España' },
+    { code: '+593', label: '🇪🇨 +593 Ecuador', shortLabel: '🇪🇨 +593' },
+    { code: '+51', label: '🇵🇪 +51 Perú', shortLabel: '🇵🇪 +51' },
+    { code: '+57', label: '🇨🇴 +57 Colombia', shortLabel: '🇨🇴 +57' },
+    { code: '+58', label: '🇻🇪 +58 Venezuela', shortLabel: '🇻🇪 +58' },
+    { code: '+1', label: '🇺🇸 +1 EE.UU./Canadá', shortLabel: '🇺🇸 +1' },
+    { code: '+34', label: '🇪🇸 +34 España', shortLabel: '🇪🇸 +34' },
 ];
+const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.label, shortLabel: c.shortLabel }));
 
 const whatsappOptInUrl = buildWhatsAppOptInUrl(props.whatsappBusinessNumber, usePage().props.auth.user.id);
 
@@ -299,27 +304,28 @@ const VERIFICATION_LABELS = {
                                 </span>
                             </p>
 
+                            <!-- Bug real reportado por el usuario (con capturas): el selector
+                                 con el nombre del país entero aplastaba el campo del número en
+                                 móvil — shrink-0 + w-28 lo deja angosto y fijo. -->
                             <div class="mt-2 flex gap-2">
-                                <select
+                                <SearchableSelect
                                     id="country_code"
-                                    class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                    class="w-28 shrink-0"
                                     v-model="form.country_code"
-                                >
-                                    <option v-for="country in countryCodes" :key="country.code" :value="country.code">
-                                        {{ country.label }}
-                                    </option>
-                                </select>
+                                    :options="countryCodeOptions"
+                                />
 
                                 <TextInput
                                     id="phone_local"
                                     type="tel"
-                                    class="block w-full"
+                                    class="block w-full min-w-0 flex-1"
                                     v-model="form.phone_local"
                                     autocomplete="tel-national"
                                     placeholder="Déjelo en blanco para no cambiarlo"
                                 />
                             </div>
                             <p class="mt-1 text-xs text-arka-text-muted">
+                                <template v-if="form.country_code === '+593'">9 dígitos, empieza en 9 — </template>
                                 Sin el 0 inicial ni espacios. Si lo cambia, va a tener que verificarlo de nuevo por
                                 WhatsApp.
                             </p>

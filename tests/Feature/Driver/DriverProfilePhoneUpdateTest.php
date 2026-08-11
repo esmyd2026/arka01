@@ -137,4 +137,23 @@ class DriverProfilePhoneUpdateTest extends TestCase
         $this->assertNotNull($driver->fresh()->phone_verified_at);
         $this->assertNull($driver->fresh()->phone_verification_code);
     }
+
+    /**
+     * Pedido explícito del usuario (con capturas): antes cualquier cadena de
+     * 7 a 10 dígitos pasaba, incluidos números obviamente falsos como
+     * 999999999 — ver App\Rules\ValidPhoneNumberLocal, mismo criterio que en
+     * el registro (RegistrationTest).
+     */
+    public function test_an_obviously_fake_ecuadorian_number_is_rejected_on_the_profile_too(): void
+    {
+        $driver = User::factory()->create(['phone' => '+593991111111']);
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), $this->baseVehiclePayload() + [
+            'country_code' => '+593',
+            'phone_local' => '999999999',
+        ])->assertSessionHasErrors('phone_local');
+
+        $this->assertSame('+593991111111', $driver->fresh()->phone);
+    }
 }

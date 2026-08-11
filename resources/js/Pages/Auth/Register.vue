@@ -6,19 +6,26 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
+import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 // Misma lista que RegisteredUserController::COUNTRY_CODES — es una lista fija
 // de indicativos telefónicos reales, no un catálogo de negocio que necesite
 // pantalla de mantenimiento (a diferencia de planes, tarifas o zonas).
+// Bug real reportado por el usuario (con capturas): en móvil, mostrar el
+// nombre del país entero en el selector ya cerrado le dejaba casi nada de
+// ancho al campo del número, que quedaba aplastado en una cajita minúscula
+// — shortLabel (ver SearchableSelect.vue) resuelve eso sin perder el nombre
+// completo en la lista desplegable, donde sí hay espacio de sobra.
 const countryCodes = [
-    { code: '+593', label: '🇪🇨 +593 Ecuador' },
-    { code: '+51', label: '🇵🇪 +51 Perú' },
-    { code: '+57', label: '🇨🇴 +57 Colombia' },
-    { code: '+58', label: '🇻🇪 +58 Venezuela' },
-    { code: '+1', label: '🇺🇸 +1 EE.UU./Canadá' },
-    { code: '+34', label: '🇪🇸 +34 España' },
+    { code: '+593', label: '🇪🇨 +593 Ecuador', shortLabel: '🇪🇨 +593' },
+    { code: '+51', label: '🇵🇪 +51 Perú', shortLabel: '🇵🇪 +51' },
+    { code: '+57', label: '🇨🇴 +57 Colombia', shortLabel: '🇨🇴 +57' },
+    { code: '+58', label: '🇻🇪 +58 Venezuela', shortLabel: '🇻🇪 +58' },
+    { code: '+1', label: '🇺🇸 +1 EE.UU./Canadá', shortLabel: '🇺🇸 +1' },
+    { code: '+34', label: '🇪🇸 +34 España', shortLabel: '🇪🇸 +34' },
 ];
+const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.label, shortLabel: c.shortLabel }));
 
 const form = useForm({
     account_type: '',
@@ -54,6 +61,16 @@ const passwordChecks = computed(() => ({
     number: /\d/.test(form.password),
 }));
 
+// Mismo criterio que App\Rules\ValidPhoneNumberLocal (backend): para Ecuador
+// un celular real tiene 9 dígitos y empieza en 9 (sin el 0 inicial, que ya
+// lo reemplaza el código de país), y se descartan números "de relleno"
+// obvios como 999999999. Pedido explícito del usuario, con ejemplos reales
+// que antes pasaban el formato viejo sin ser un celular de verdad.
+function isValidPhoneLocal(value, countryCode) {
+    if (countryCode !== '+593') return /^[0-9]{7,10}$/.test(value);
+    return /^9\d{8}$/.test(value) && !/^(\d)\1{8}$/.test(value);
+}
+
 // Validación mínima del lado del cliente para habilitar "Siguiente" — la
 // validación real (unicidad de correo/teléfono, reglas completas) sigue
 // siendo del backend al mandar el formulario en el último paso.
@@ -66,7 +83,7 @@ const stepIsValid = computed(() => {
         case 'email':
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
         case 'phone':
-            return /^[0-9]{7,10}$/.test(form.phone_local);
+            return isValidPhoneLocal(form.phone_local, form.country_code);
         case 'password':
             return passwordChecks.value.length && passwordChecks.value.mixedCase && passwordChecks.value.number
                 && form.password === form.password_confirmation;
@@ -182,7 +199,7 @@ const submit = () => {
 
             <!-- Paso 2: nombre -->
             <div v-else-if="STEPS[currentStep] === 'name'">
-                <InputLabel for="name" value="¿Cómo se llama?" />
+                <InputLabel for="name" value="¿Cuál es su nombre?" />
                 <TextInput
                     id="name"
                     type="text"
@@ -222,21 +239,24 @@ const submit = () => {
                      internacional para poder mandar el mensaje. -->
                 <InputLabel for="phone_local" value="¿Cuál es su número de teléfono?" />
 
+                <!-- Bug real reportado por el usuario (con capturas): en móvil, el
+                     selector de país con el nombre completo le quitaba casi todo
+                     el ancho al campo del número, que quedaba aplastado en una
+                     cajita minúscula — shrink-0 + w-28 lo mantiene angosto y
+                     fijo, min-w-0 en el input deja que sí se achique el select
+                     (no el número) si hiciera falta. -->
                 <div class="mt-1 flex gap-2">
-                    <select
+                    <SearchableSelect
                         id="country_code"
-                        class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                        class="w-28 shrink-0"
                         v-model="form.country_code"
-                    >
-                        <option v-for="country in countryCodes" :key="country.code" :value="country.code">
-                            {{ country.label }}
-                        </option>
-                    </select>
+                        :options="countryCodeOptions"
+                    />
 
                     <TextInput
                         id="phone_local"
                         type="tel"
-                        class="block w-full"
+                        class="block w-full min-w-0 flex-1"
                         v-model="form.phone_local"
                         required
                         autofocus
@@ -245,7 +265,14 @@ const submit = () => {
                         @keydown.enter.prevent="goNext"
                     />
                 </div>
-                <p class="mt-1 text-xs text-arka-text-muted">Sin el 0 inicial ni espacios — solo los dígitos.</p>
+                <!-- Pedido explícito del usuario: validar que sea un celular
+                     ecuatoriano real (9 dígitos, empieza en 9) y no cualquier
+                     cadena — ver App\Rules\ValidPhoneNumberLocal (backend) e
+                     isValidPhoneLocal() acá arriba (mismo criterio, en vivo). -->
+                <p class="mt-1 text-xs text-arka-text-muted">
+                    <template v-if="form.country_code === '+593'">9 dígitos, empieza en 9 — sin el 0 inicial ni espacios.</template>
+                    <template v-else>Sin el 0 inicial ni espacios — solo los dígitos.</template>
+                </p>
 
                 <InputError class="mt-2" :message="form.errors.country_code" />
                 <InputError class="mt-1" :message="form.errors.phone_local" />

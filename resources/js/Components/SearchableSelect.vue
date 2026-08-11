@@ -8,7 +8,11 @@ import { computed, nextTick, ref } from 'vue';
 // largo (ciudades, sectores, etc.), no solo en el formulario de carrera.
 const props = defineProps({
     modelValue: { type: [Number, String, null], default: null },
-    // [{ value, label }]
+    // [{ value, label, shortLabel? }] — shortLabel es opcional: si se pasa,
+    // es lo que se muestra en el botón ya cerrado (pedido explícito del
+    // usuario: el selector de código de país ocupaba demasiado espacio en
+    // móvil con el nombre completo del país) mientras que la lista
+    // desplegable sigue mostrando el label completo, más fácil de buscar.
     options: { type: Array, required: true },
     placeholder: { type: String, default: 'Elegí una opción' },
     // Texto de la opción "vacía" (ej. "Sin especificar") — si no se pasa, no
@@ -67,7 +71,7 @@ function close() {
             @keydown.escape="close"
         >
             <span :class="{ 'text-arka-text-muted': !selectedOption }" class="truncate">
-                {{ selectedOption ? selectedOption.label : emptyLabel ?? placeholder }}
+                {{ selectedOption ? (selectedOption.shortLabel ?? selectedOption.label) : emptyLabel ?? placeholder }}
             </span>
             <svg class="h-4 w-4 shrink-0 text-arka-text-muted transition-transform" :class="{ 'rotate-180': open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
@@ -76,9 +80,17 @@ function close() {
 
         <div v-if="open" class="fixed inset-0 z-40" @click="close" />
 
+        <!-- Bug real reportado por el usuario (con captura): el panel abierto
+             heredaba el mismo ancho que el botón (w-full = 100% del propio
+             selector) — con un selector angosto a propósito (ej. el código de
+             país, w-28) el buscador y los nombres completos de la lista
+             quedaban aplastados y se veían pegados con el contenido de al
+             lado. min-w-56 les da aire sin importar qué tan angosto sea el
+             botón que lo abre; max-w-[90vw] evita que se salga de la pantalla
+             en un celular muy chico. -->
         <div
             v-if="open"
-            class="absolute z-50 mt-1 w-full max-h-64 overflow-hidden rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg flex flex-col"
+            class="absolute z-50 mt-1 w-full min-w-56 max-w-[90vw] max-h-64 overflow-hidden rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg flex flex-col"
         >
             <div class="p-2 border-b border-arka-text-muted/10">
                 <input

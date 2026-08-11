@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class RegistrationTest extends TestCase
@@ -31,7 +32,7 @@ class RegistrationTest extends TestCase
             // se manda en dos partes (código de país + número local, sin el
             // 0 inicial — mismo formato que se le pide al usuario en el form).
             'country_code' => '+593',
-            'phone_local' => '999999999',
+            'phone_local' => '990001111',
             'password' => 'Password123',
             'password_confirmation' => 'Password123',
         ]);
@@ -108,5 +109,57 @@ class RegistrationTest extends TestCase
         $user = User::where('email', 'juan@example.com')->firstOrFail();
 
         Mail::assertSent(WelcomeMail::class, fn ($mail) => $mail->hasTo($user->email) && $mail->user->is($user));
+    }
+
+    // Pedido explícito del usuario (con capturas): antes cualquier cadena de
+    // 7 a 10 dígitos pasaba, incluidos números obviamente falsos como
+    // 9999999999 o 090000000 — ver App\Rules\ValidPhoneNumberLocal.
+
+    private function registerWith(string $countryCode, string $phoneLocal): TestResponse
+    {
+        return $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Juan Pérez',
+            'email' => 'juan@example.com',
+            'country_code' => $countryCode,
+            'phone_local' => $phoneLocal,
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+    }
+
+    public function test_an_ecuadorian_number_with_10_digits_is_rejected(): void
+    {
+        $this->registerWith('+593', '9900011112')->assertSessionHasErrors('phone_local');
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_an_ecuadorian_number_not_starting_with_9_is_rejected(): void
+    {
+        $this->registerWith('+593', '090001111')->assertSessionHasErrors('phone_local');
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_an_obviously_fake_repeated_digit_ecuadorian_number_is_rejected(): void
+    {
+        $this->registerWith('+593', '999999999')->assertSessionHasErrors('phone_local');
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_a_valid_ecuadorian_mobile_number_is_accepted(): void
+    {
+        $this->registerWith('+593', '992345671')->assertRedirect(RouteServiceProvider::HOME);
+        $this->assertDatabaseCount('users', 1);
+    }
+
+    /**
+     * Para el resto de países no tenemos el formato exacto de cada uno —
+     * la validación estricta (9 dígitos, empieza en 9) es solo para
+     * Ecuador, el mercado real de la app.
+     */
+    public function test_a_non_ecuadorian_number_still_uses_the_looser_format_check(): void
+    {
+        $this->registerWith('+51', '9876543')->assertRedirect(RouteServiceProvider::HOME);
+        $this->assertDatabaseCount('users', 1);
     }
 }

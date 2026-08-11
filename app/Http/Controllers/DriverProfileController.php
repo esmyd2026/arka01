@@ -7,6 +7,7 @@ use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\PricingSetting;
 use App\Models\User;
+use App\Rules\ValidPhoneNumberLocal;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppConfig;
 use App\Services\WhatsAppVerificationSender;
@@ -109,7 +110,7 @@ class DriverProfileController extends Controller
             // al que le llegan los avisos de carrera nueva. Opcional: si lo
             // deja en blanco, no se toca lo que ya tenía.
             'country_code' => ['nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
-            'phone_local' => ['nullable', 'string', 'regex:/^[0-9]{7,10}$/'],
+            'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
             'license_number' => ['required', 'string', 'max:50'],
             // Datos del vehículo, TODOS obligatorios (pedido explícito del
             // usuario): hacen falta para que un cliente pueda filtrar por
@@ -142,7 +143,6 @@ class DriverProfileController extends Controller
             'license_photo' => ['nullable', 'image', 'max:4096'],
             'vehicle_photo' => ['nullable', 'image', 'max:4096'],
         ], [
-            'phone_local.regex' => 'El número tiene que tener entre 7 y 10 dígitos, sin espacios ni guiones.',
             'minimum_fare.max' => 'La plataforma no permite superar $'.number_format($adminMinimumFare, 2).' como tarifa mínima de una carrera (tope general definido en /admin/tarifas). Puede dejarla en blanco o poner una menor.',
         ]);
 

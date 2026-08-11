@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\WelcomeMail;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
+use App\Rules\ValidPhoneNumberLocal;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -60,13 +61,11 @@ class RegisteredUserController extends Controller
             // Se arma en dos partes (código de país + número local) para poder
             // validar y normalizar el formato E.164 antes de guardarlo.
             'country_code' => ['required', 'string', Rule::in(self::COUNTRY_CODES)],
-            'phone_local' => ['required', 'string', 'regex:/^[0-9]{7,10}$/'],
+            'phone_local' => ['required', 'string', new ValidPhoneNumberLocal],
             'password' => [
                 'required', 'confirmed',
                 Rules\Password::defaults()->min(8)->mixedCase()->numbers(),
             ],
-        ], [
-            'phone_local.regex' => 'El número tiene que tener entre 7 y 10 dígitos, sin espacios ni guiones.',
         ]);
 
         $phone = $validated['country_code'].$validated['phone_local'];
