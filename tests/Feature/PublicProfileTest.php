@@ -153,6 +153,31 @@ class PublicProfileTest extends TestCase
         );
     }
 
+    /**
+     * Confidencialidad (pedido explícito del usuario): en el perfil público
+     * la foto del vehículo ya no viaja (solo el propio conductor y un admin
+     * la ven) y la placa va tapada, no completa — ver
+     * App\Models\DriverProfile::maskedPlate().
+     */
+    public function test_the_response_masks_the_plate_and_hides_the_vehicle_photo(): void
+    {
+        $viewer = User::factory()->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'vehicle_plate' => 'ABC-1234',
+            'vehicle_type' => 'suv',
+            'vehicle_photo_path' => 'driver-documents/vehiculo.jpg',
+        ]);
+
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('profileUser.driver_profile.vehicle_plate', 'Axxx34')
+            ->where('profileUser.driver_profile.vehicle_type', 'SUV')
+            ->missing('profileUser.driver_profile.vehicle_photo_url')
+        );
+    }
+
     public function test_a_regular_browser_still_gets_the_real_inertia_page(): void
     {
         $viewer = User::factory()->create();

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Mail\WelcomeMail;
+use App\Models\DriverProfile;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -161,5 +162,55 @@ class RegistrationTest extends TestCase
     {
         $this->registerWith('+51', '9876543')->assertRedirect(RouteServiceProvider::HOME);
         $this->assertDatabaseCount('users', 1);
+    }
+
+    /**
+     * Trazabilidad de referidos (pedido explícito del usuario): quién
+     * compartió el enlace que trajo a esta cuenta nueva — ver
+     * User::referredBy()/referrals().
+     */
+    public function test_registering_with_a_ref_records_who_referred_the_new_account(): void
+    {
+        $referrer = User::factory()->create();
+
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Juan Pérez',
+            'email' => 'juan@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+            'ref' => $referrer->id,
+        ]);
+
+        $user = User::where('email', 'juan@example.com')->firstOrFail();
+
+        $this->assertSame($referrer->id, $user->referred_by_user_id);
+    }
+
+    /**
+     * Pedido explícito del usuario ("que se una a su flota"): si el registro
+     * vino del enlace de invitación de un conductor, se vuelve a esa
+     * pantalla para completar el único paso que falta — agregarlo — en vez
+     * de dejarlo en el Inicio sin rumbo.
+     */
+    public function test_registering_from_a_driver_referral_link_redirects_back_to_add_the_driver(): void
+    {
+        $driver = User::factory()->create();
+        $driverProfile = DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Juan Pérez',
+            'email' => 'juan@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+            'ref' => $driver->id,
+        ]);
+
+        $response->assertRedirect(route('referrals.show', $driverProfile->invite_code));
     }
 }

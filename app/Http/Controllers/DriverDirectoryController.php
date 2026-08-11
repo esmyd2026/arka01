@@ -118,7 +118,11 @@ class DriverDirectoryController extends Controller
                     // sin importar el plan.
                     'is_verified' => $profile->verification_status === 'approved'
                         && $this->planLimits->forDriver($profile->user)['verified_badge'],
-                    'vehicle_photo_url' => $profile->vehicle_photo_url,
+                    // Confidencialidad (pedido explícito del usuario): la foto
+                    // del vehículo ya no se muestra en el directorio público —
+                    // solo el propio conductor y un admin la ven. El tipo de
+                    // vehículo (SUV, sedán, etc.) es lo que la reemplaza acá.
+                    'vehicle_type' => $profile->vehicleTypeLabel(),
                     // Medalla por puntos (pedido explícito del usuario): se
                     // usa abajo para filtrar (solo Oro para arriba entra al
                     // directorio, además del plan que ya se filtró en el

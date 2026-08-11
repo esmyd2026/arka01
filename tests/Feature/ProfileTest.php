@@ -27,6 +27,26 @@ class ProfileTest extends TestCase
     }
 
     /**
+     * Trazabilidad de referidos (pedido explícito del usuario): tabla de
+     * quiénes se registraron a través de un enlace que este usuario
+     * compartió — ver User::referrals().
+     */
+    public function test_profile_page_lists_the_users_referrals(): void
+    {
+        $referrer = User::factory()->create();
+        $referred = User::factory()->create(['name' => 'Ana Referida', 'referred_by_user_id' => $referrer->id]);
+        User::factory()->create(); // alguien sin relación, no debe aparecer
+
+        $response = $this->actingAs($referrer)->get('/profile');
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('referrals', 1)
+            ->where('referrals.0.id', $referred->id)
+            ->where('referrals.0.name', 'Ana Referida')
+        );
+    }
+
+    /**
      * "Mi suscripción" (consideración agregada al alcance): un conductor sin
      * flota ve solo el resumen de conductor, con el próximo plan como upsell.
      */

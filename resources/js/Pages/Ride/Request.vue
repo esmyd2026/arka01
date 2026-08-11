@@ -1139,9 +1139,13 @@ function submit() {
                                         · {{ driver.outOfRange ? 'Fuera de su zona de cobertura' : STATUS_STYLE[driver.status].label }}
                                     </span>
                                     <!-- Pedido explícito del usuario: qué vehículo tiene, para
-                                         saber qué esperar antes de pedirle la carrera. -->
+                                         saber qué esperar antes de pedirle la carrera. Placa
+                                         tapada, no completa (confidencialidad, ver
+                                         DriverProfile::maskedPlate()). -->
                                     <span v-if="driver.vehicle_make" class="block text-xs text-arka-text-muted">
-                                        {{ driver.vehicle_make }} {{ driver.vehicle_model }} {{ driver.vehicle_color }} · {{ driver.vehicle_plate }}
+                                        {{ driver.vehicle_make }} {{ driver.vehicle_model }} {{ driver.vehicle_color }}
+                                        <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
+                                        · {{ driver.vehicle_plate }}
                                         · {{ driver.passenger_capacity }} pasajero(s)
                                         <span v-if="driver.has_trunk"> · con cajuela</span>
                                     </span>

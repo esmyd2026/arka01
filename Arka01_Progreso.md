@@ -2327,6 +2327,42 @@ No aplica — reubicación de archivos estáticos y cambio de rutas de imagen en
 
 ---
 
+### Directorio público "no muestra conductores": no era un bug
+
+El usuario reportó que un conductor verificado con plan Pro aparecía en el dashboard del cliente (conductores cercanos fuera de su flota) pero no en el directorio público, que decía "no hay conductores para mostrar".
+
+- **Causa real (comportamiento esperado, no bug)**: `DriverDirectoryController::index()` exige DOS cosas para entrar al directorio — que el plan lo habilite (`is_public`) Y haber ganado, con carreras completadas, una medalla Oro o Diamante (`DriverTier::is_public_eligible`, pedido explícito del usuario de una pasada anterior: la visibilidad pública se gana con actividad, no solo se paga). El dashboard del cliente (`RideRequestController::driverCardData()`, lista de "conductores cercanos") no tiene ese segundo filtro — muestra tier pero no lo usa para excluir a nadie. El conductor en cuestión tenía el plan pero no la medalla todavía, por eso la diferencia entre ambas pantallas.
+
+### Confidencialidad: se quita la foto del vehículo y se tapa la placa en las pantallas de cliente
+
+Pedido explícito del usuario: la foto del vehículo y la placa completa dejan de mostrarse a un cliente — quedan solo para el propio conductor y para un admin. A cambio, el conductor ahora declara el tipo de carrocería (sedán, SUV, etc.), que sí se muestra tal cual.
+
+- **`vehicle_type` nuevo** en `driver_profiles` (migración, nullable): catálogo fijo en `DriverProfile::vehicleTypes()` (Sedán, SUV, Hatchback, Camioneta, Van/Furgoneta, Otro). Selector nuevo en `Driver/Profile.vue`, junto al de color — mismo criterio que ese campo (lista fija, sin texto libre). Pasa a ser obligatorio en `DriverProfileController::update()`.
+- **`DriverProfile::maskedPlate()`**: primera letra + `xxx` + los últimos dos caracteres de la placa real (ej. `ABC-1234` → `Axxx34`), un solo método reutilizado por las 4 pantallas de cliente en vez de repetir la lógica.
+- **Foto del vehículo**: se dejó de mandar `vehicle_photo_url` en `DriverDirectoryController::index()`, `PublicProfileController::show()` y `RideRequestController::driverCardData()` (esta última nunca la mandaba). Sigue viajando sin cambios en las pantallas de admin (`Admin\DriverVerifications`, `Admin\UserProfile`) y en el propio perfil del conductor (`Driver/Profile.vue`) — ahí sigue siendo necesaria para revisar/confirmar documentos.
+- **Placa**: pasa por `maskedPlate()` en `PublicProfileController::show()`, `RideRequestController::driverCardData()` y `PublicRideTrackingController::publicPayload()` (el enlace de seguimiento en vivo compartible). Se deja **sin tocar** en `SosAlertController`/`SosAlert` (registro de una emergencia real, con lo que le llega a los contactos de confianza y al admin) y en las pantallas de admin — ahí la placa completa sigue siendo información real de seguridad, no un dato de navegación.
+- El directorio público, que antes solo mostraba la foto del vehículo (ninguna placa), ahora en su lugar muestra el tipo de vehículo.
+
+### Tests
+`tests/Feature/Directory/DriverDirectoryTest.php` (+1): la foto no viaja, el tipo de vehículo sí. `tests/Feature/PublicProfileTest.php` (+1): placa tapada y foto ausente en el perfil público. `tests/Feature/Security/RideTrackingTest.php`: la aserción de la placa en el enlace de seguimiento se actualizó al valor tapado. Seis tests existentes que crean/editan el perfil de conductor (`DriverProfilePhoneUpdateTest`, `DriverMinimumFareTest`, `DriverCoverageRangeTest`, `MultiFleetTest`, `DriverVerificationTest`, `VehicleCapacityTest`) se ajustaron para mandar `vehicle_type` en el formulario, ahora obligatorio. Suite completa: 616 tests OK, Pint limpio, build limpio.
+
+---
+
+### Invitación a la flota por WhatsApp con mensaje real + trazabilidad de referidos
+
+Pedido explícito del usuario: el botón de invitar por WhatsApp desde el perfil del conductor no existía (solo se veía el QR y el código pelado, sin contexto) — y pidió además dejar registro de quién invitó a quién, visible tanto en el admin como en el propio perfil de cada usuario.
+
+- **Mensaje de invitación**: `Driver/Profile.vue` ahora tiene un botón "Compartir por WhatsApp" junto al QR de invitación, con un texto prearmado que aclara que es la plataforma ("Únase a Arka01...") y es personal (viene de una persona concreta, "regístreme en su flota") — mismo criterio (`wa.me/?text=`) que ya usa "Compartir mi perfil" en `Profile/Edit.vue`.
+- **`referred_by_user_id` nuevo** en `users` (migración, FK a sí misma, nullable): quién compartió el enlace que trajo a esta cuenta — `User::referredBy()`/`referrals()`. Se completa en `RegisteredUserController::store()` a partir de un campo `ref` oculto en el formulario de registro (nunca lo escribe la persona a mano), validado como `exists:users,id`.
+- **El enlace de invitación de un conductor ahora arrastra la trazabilidad**: `Referral/Show.vue` manda a quien no tiene cuenta a `register` con `?tipo=cliente&ref={driver.user_id}` — `Auth/Register.vue` lo lleva oculto en el formulario. Si el registro vino de ahí, `RegisteredUserController::store()` lo redirige de vuelta a esa misma pantalla de referido en vez de al Inicio, para que complete el único paso que falta: agregarlo a su flota nueva.
+- **Trazabilidad en el admin** (`/admin/referidos`, `Admin\ReferralController` — nuevo, con su propio nombre de clase pero namespace distinto del `ReferralController` público): tabla de quién se registró y quién lo invitó, con búsqueda por nombre.
+- **Trazabilidad en el perfil propio**: `Profile/Edit.vue` agrega una sección "Mis referidos" (solo visible si tiene al menos uno) con la lista de cuentas — cliente o conductor, cualquiera puede referir — que se registraron a través de un enlace suyo.
+
+### Tests
+`tests/Feature/Auth/RegistrationTest.php` (+2): `ref` queda guardado como `referred_by_user_id`, y registrarse desde el enlace de un conductor redirige de vuelta a esa pantalla. `tests/Feature/Admin/AdminReferralControllerTest.php` (nuevo, 3 tests): acceso restringido a admin, la lista solo trae cuentas con referente, filtro por nombre. `tests/Feature/ProfileTest.php` (+1): la tabla de "Mis referidos" lista solo lo que corresponde. Suite completa: 622 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

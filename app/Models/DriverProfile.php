@@ -28,6 +28,7 @@ class DriverProfile extends Model
         'vehicle_make',
         'vehicle_model',
         'vehicle_color',
+        'vehicle_type',
         'vehicle_plate',
         'vehicle_year',
         'passenger_capacity',
@@ -127,6 +128,52 @@ class DriverProfile extends Model
     public function getVehiclePhotoUrlAttribute(): ?string
     {
         return $this->vehicle_photo_path ? Storage::disk('public')->url($this->vehicle_photo_path) : null;
+    }
+
+    /**
+     * Catálogo fijo de tipos de carrocería (pedido explícito del usuario):
+     * a diferencia del color (VEHICLE_COLORS en Driver/Profile.vue, texto
+     * libre con opciones sugeridas), acá el valor guardado tiene que ser
+     * una de estas claves — es lo que sí se muestra tal cual al cliente en
+     * las pantallas públicas, así que no puede quedar en cualquier formato.
+     *
+     * @return array<string, string>
+     */
+    public static function vehicleTypes(): array
+    {
+        return [
+            'sedan' => 'Sedán',
+            'suv' => 'SUV',
+            'hatchback' => 'Hatchback',
+            'pickup' => 'Camioneta',
+            'van' => 'Van / Furgoneta',
+            'otro' => 'Otro',
+        ];
+    }
+
+    public function vehicleTypeLabel(): ?string
+    {
+        return self::vehicleTypes()[$this->vehicle_type] ?? null;
+    }
+
+    /**
+     * Confidencialidad (pedido explícito del usuario): en las pantallas de
+     * cara al cliente (directorio, lista de conductores al pedir carrera,
+     * perfil público, seguimiento en vivo) la placa no va completa — solo la
+     * primera letra y los últimos dos caracteres, el resto tapado. La placa
+     * real y sin tapar sigue viajando tal cual a quien ya la necesita
+     * completa: el propio conductor (Driver/Profile.vue), el admin
+     * (Admin\DriverVerifications, Admin\UserProfile) y el registro de una
+     * alerta SOS (App\Models\SosAlert — ahí la placa completa es información
+     * de seguridad real, no un dato de navegación).
+     */
+    public function maskedPlate(): ?string
+    {
+        if (blank($this->vehicle_plate)) {
+            return null;
+        }
+
+        return mb_substr($this->vehicle_plate, 0, 1).'xxx'.mb_substr($this->vehicle_plate, -2);
     }
 
     public function verifier(): BelongsTo

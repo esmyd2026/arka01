@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\PlanPromotionController;
 use App\Http\Controllers\Admin\PlatformFeedbackController as AdminPlatformFeedbackController;
 use App\Http\Controllers\Admin\PricingSettingController;
 use App\Http\Controllers\Admin\RatingReasonController;
+use App\Http\Controllers\Admin\ReferralController as AdminReferralController;
 use App\Http\Controllers\Admin\SosAlertController as AdminSosAlertController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\SupportTicketController;
@@ -315,6 +316,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/pedidos-plan/{subscriptionRequest}/rechazar', [AdminSubscriptionController::class, 'rejectRequest'])->name('subscription-requests.reject');
 
     Route::get('/metricas', [MetricsController::class, 'index'])->name('metrics.index');
+
+    // Trazabilidad de referidos (pedido explícito del usuario): quién invitó
+    // a quién a registrarse — ver App\Models\User::referredBy()/referrals().
+    Route::get('/referidos', [AdminReferralController::class, 'index'])->name('referrals.index');
 
     // Mantenimiento del catálogo de planes (secciones 7.2 y 7.3): nada de
     // esto queda quemado en código, se administra por completo desde acá.

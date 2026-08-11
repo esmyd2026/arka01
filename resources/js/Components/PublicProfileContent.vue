@@ -42,19 +42,17 @@ defineProps({
         <RatingStars :rating="averageRating" :count="reviewCount" readonly />
 
         <div v-if="profileUser.driver_profile" class="mt-4 text-sm text-arka-text-muted space-y-1">
-            <!-- Verificación visible antes de subir (sección 8): foto del
-                 vehículo, para reforzar confianza con un conductor que
-                 todavía no se conoce. -->
-            <img
-                v-if="profileUser.driver_profile.vehicle_photo_url"
-                :src="profileUser.driver_profile.vehicle_photo_url"
-                alt="Foto del vehículo"
-                class="w-full max-h-48 object-cover rounded-arka mb-3"
-            />
+            <!-- Confidencialidad (pedido explícito del usuario): acá ya no va
+                 la foto del vehículo (solo el propio conductor y un admin la
+                 ven) ni la placa completa — el tipo de vehículo es el dato
+                 que sí se muestra tal cual (ver DriverProfile::maskedPlate()). -->
             <p>
                 {{ profileUser.driver_profile.vehicle_make }} {{ profileUser.driver_profile.vehicle_model }}
+                <span v-if="profileUser.driver_profile.vehicle_type">
+                    · {{ profileUser.driver_profile.vehicle_type }}
+                </span>
                 <span v-if="profileUser.driver_profile.vehicle_plate">
-                    · {{ profileUser.driver_profile.vehicle_plate }}
+                    · Placa {{ profileUser.driver_profile.vehicle_plate }}
                 </span>
             </p>
             <p>${{ profileUser.driver_profile.rate_per_km }}/km</p>

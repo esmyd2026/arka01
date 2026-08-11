@@ -66,6 +66,12 @@ class RegisteredUserController extends Controller
                 'required', 'confirmed',
                 Rules\Password::defaults()->min(8)->mixedCase()->numbers(),
             ],
+            // Trazabilidad de referidos (pedido explícito del usuario): quién
+            // le compartió el enlace que trajo a esta cuenta nueva — llega en
+            // la URL de registro (Referral/Show.vue, Profile/Edit.vue vía
+            // ShareProfileQr, o cualquier perfil público) y viaja oculto en el
+            // formulario (Auth/Register.vue), nunca lo escribe la persona.
+            'ref' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         $phone = $validated['country_code'].$validated['phone_local'];
@@ -81,6 +87,7 @@ class RegisteredUserController extends Controller
             'email' => $validated['email'],
             'phone' => $phone,
             'password' => Hash::make($validated['password']),
+            'referred_by_user_id' => $validated['ref'] ?? null,
         ]);
 
         event(new Registered($user));
@@ -134,6 +141,16 @@ class RegisteredUserController extends Controller
         if ($validated['account_type'] === 'conductor') {
             return redirect()->route('driver.profile.edit')
                 ->with('status', '¡Cuenta creada! Ahora complete los datos de su vehículo para empezar a recibir carreras.');
+        }
+
+        // Pedido explícito del usuario ("que se una a su flota"): si vino del
+        // enlace de invitación de un conductor, lo volvemos a esa pantalla
+        // para que complete el único paso que le falta — agregarlo a su
+        // flota nueva — en vez de dejarlo en el Inicio sin rumbo.
+        $referrerDriverCode = User::find($validated['ref'] ?? null)?->driverProfile?->invite_code;
+        if ($referrerDriverCode) {
+            return redirect()->route('referrals.show', $referrerDriverCode)
+                ->with('status', '¡Cuenta creada! Ya puede agregarlo a su flota de confianza.');
         }
 
         return redirect(RouteServiceProvider::HOME);

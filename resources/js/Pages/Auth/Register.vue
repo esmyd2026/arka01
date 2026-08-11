@@ -33,6 +33,11 @@ const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.la
 const preselectedAccountType = new URLSearchParams(window.location.search).get('tipo');
 const validPreselection = ['cliente', 'conductor'].includes(preselectedAccountType) ? preselectedAccountType : '';
 
+// Trazabilidad de referidos (pedido explícito del usuario): quién compartió
+// el enlace que trajo a esta cuenta nueva — viaja oculto en el formulario,
+// nadie lo escribe a mano (ver Referral/Show.vue, RegisteredUserController::store()).
+const referrerId = new URLSearchParams(window.location.search).get('ref');
+
 const form = useForm({
     account_type: validPreselection,
     name: '',
@@ -41,6 +46,7 @@ const form = useForm({
     phone_local: '',
     password: '',
     password_confirmation: '',
+    ref: referrerId || null,
 });
 
 // Registro guiado paso a paso (consideración agregada al alcance: el usuario

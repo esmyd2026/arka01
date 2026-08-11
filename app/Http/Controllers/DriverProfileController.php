@@ -57,6 +57,9 @@ class DriverProfileController extends Controller
 
         return Inertia::render('Driver/Profile', [
             'driverProfile' => $request->user()->driverProfile,
+            // Catálogo fijo para el selector de "Tipo de vehículo" (pedido
+            // explícito del usuario) — ver DriverProfile::vehicleTypes().
+            'vehicleTypes' => DriverProfile::vehicleTypes(),
             // La pantalla usa esto para mostrar (o no) el toggle de directorio
             // público, según si el plan vigente lo habilita (sección 7.2).
             'planLimits' => $this->planLimits->forDriver($request->user()),
@@ -121,6 +124,11 @@ class DriverProfileController extends Controller
             'vehicle_make' => ['required', 'string', 'max:50'],
             'vehicle_model' => ['required', 'string', 'max:50'],
             'vehicle_color' => ['required', 'string', 'max:30'],
+            // Confidencialidad (pedido explícito del usuario): es el único
+            // dato del vehículo que se muestra tal cual al cliente en las
+            // pantallas públicas — la foto y la placa completa ya no (ver
+            // DriverProfile::vehicleTypes()/maskedPlate()).
+            'vehicle_type' => ['required', 'string', Rule::in(array_keys(DriverProfile::vehicleTypes()))],
             'vehicle_plate' => ['required', 'string', 'max:20'],
             'vehicle_year' => ['required', 'integer', 'min:1970', 'max:'.(date('Y') + 1)],
             'passenger_capacity' => ['required', 'integer', 'min:1', 'max:8'],
@@ -219,11 +227,14 @@ class DriverProfileController extends Controller
 
         if ($request->hasFile('license_photo')) {
             // Auditoría de seguridad (pedido explícito del usuario): la
-            // licencia es un documento de identidad — a diferencia de la
-            // foto del vehículo (que sí es pública, se muestra en el
-            // directorio para que un cliente vea qué auto es), esta va al
-            // disco privado. Solo el propio conductor y un admin pueden
-            // verla (ver DriverProfileController::licensePhoto()).
+            // licencia es un documento de identidad, va al disco privado.
+            // Solo el propio conductor y un admin pueden verla (ver
+            // DriverProfileController::licensePhoto()). La foto del vehículo
+            // usa el disco 'public' por el mismo motivo técnico de siempre
+            // (necesita URL directa), pero desde el pedido de confidencialidad
+            // del usuario NINGUNA pantalla de cliente la muestra — solo el
+            // propio conductor y un admin (ver Admin\DriverVerifications,
+            // Admin\UserProfile).
             if ($existingProfile?->license_photo_path) {
                 Storage::disk('local')->delete($existingProfile->license_photo_path);
             }

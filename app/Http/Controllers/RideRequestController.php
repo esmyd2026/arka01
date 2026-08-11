@@ -221,7 +221,10 @@ class RideRequestController extends Controller
             'vehicle_make' => $profile?->vehicle_make,
             'vehicle_model' => $profile?->vehicle_model,
             'vehicle_color' => $profile?->vehicle_color,
-            'vehicle_plate' => $profile?->vehicle_plate,
+            'vehicle_type' => $profile?->vehicleTypeLabel(),
+            // Confidencialidad (pedido explícito del usuario): placa tapada,
+            // no la completa — ver DriverProfile::maskedPlate().
+            'vehicle_plate' => $profile?->maskedPlate(),
             'passenger_capacity' => $profile?->passenger_capacity,
             'has_trunk' => (bool) $profile?->has_trunk,
             'status' => match (true) {

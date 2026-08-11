@@ -59,7 +59,9 @@ class RideTrackingTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->component('Public/RideTracking')
             ->where('ride.driver_name', 'Pedro Chofer')
-            ->where('ride.vehicle_plate', 'ABC-123')
+            // Confidencialidad (pedido explícito del usuario): este enlace es
+            // público, la placa viaja tapada — ver DriverProfile::maskedPlate().
+            ->where('ride.vehicle_plate', 'Axxx23')
         );
     }
 

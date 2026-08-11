@@ -46,6 +46,10 @@ const props = defineProps({
     // Pedido explícito del usuario: tope de la tarifa mínima propia — puede
     // declarar una MENOR (la plataforma la respeta), pero no una mayor.
     platformMinimumFare: { type: Number, required: true },
+    // Catálogo fijo para "Tipo de vehículo" (pedido explícito del usuario:
+    // confidencialidad en las pantallas públicas — este dato reemplaza a la
+    // foto y a la placa completa como lo que sí se muestra al cliente).
+    vehicleTypes: { type: Object, required: true },
 });
 
 const WHATSAPP_STATUS_LABEL = { active: 'Activa', expiring_soon: 'Próxima a vencer', expired: 'Expirada' };
@@ -97,6 +101,25 @@ const drawInviteQr = async () => {
 
 watch(() => props.driverProfile?.invite_code, drawInviteQr, { immediate: true });
 
+// Mensaje prearmado para compartir la invitación por WhatsApp (pedido
+// explícito del usuario): antes solo se veía el código pelado o el QR — sin
+// contexto, quien lo recibía no sabía qué era ni por qué confiar. El texto
+// aclara que es la plataforma (Arka01, no un enlace suelto) y lo hace
+// personal (viene de una persona concreta, pidiéndole que lo sume a SU
+// flota de confianza) — mismo criterio que whatsappShareUrl en Profile/Edit.vue.
+const whatsappInviteUrl = computed(() => {
+    if (!props.driverProfile) return null;
+
+    const name = usePage().props.auth.user.name;
+    const link = route('referrals.show', props.driverProfile.invite_code);
+    const text =
+        `¡Hola! Soy ${name} y ya estoy en Arka01 🚗 — la app donde cada quien arma su propia ` +
+        `flota de conductores de confianza, sin desconocidos.\n\n` +
+        `Únase a Arka01 y regístreme en su flota para que me busque cuando necesite una carrera:\n${link}`;
+
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+});
+
 // Mismo formulario sirve para crear el perfil por primera vez o para editarlo
 // después: si ya existe, se precargan sus valores.
 const form = useForm({
@@ -108,6 +131,7 @@ const form = useForm({
     vehicle_make: props.driverProfile?.vehicle_make ?? '',
     vehicle_model: props.driverProfile?.vehicle_model ?? '',
     vehicle_color: props.driverProfile?.vehicle_color ?? '',
+    vehicle_type: props.driverProfile?.vehicle_type ?? '',
     vehicle_plate: props.driverProfile?.vehicle_plate ?? '',
     vehicle_year: props.driverProfile?.vehicle_year ?? '',
     // Pedido explícito del usuario: para que un cliente pueda filtrar
@@ -259,6 +283,17 @@ const VERIFICATION_LABELS = {
                                     Su código de invitación (compártalo o deje que le escaneen el QR):
                                 </p>
                                 <span class="font-mono text-lg text-arka-primary-bright">{{ driverProfile.invite_code }}</span>
+                                <a
+                                    :href="whatsappInviteUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="mt-2 flex items-center gap-1.5 text-sm text-arka-primary hover:text-arka-primary-bright"
+                                >
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12.04 2c-5.5 0-9.96 4.46-9.96 9.96 0 1.76.46 3.45 1.32 4.95L2 22l5.2-1.36a9.9 9.9 0 0 0 4.84 1.24h.01c5.5 0 9.96-4.46 9.96-9.96S17.54 2 12.04 2Zm0 18.2h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.09.81.82-3-.2-.31a8.2 8.2 0 0 1-1.26-4.4c0-4.55 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.55-3.7 8.23-8.26 8.23Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.4-.12-.56.13-.17.25-.65.81-.79.97-.15.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.39-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.44-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.42h-.48c-.17 0-.44.06-.67.31s-.88.86-.88 2.09.9 2.42 1.02 2.59c.13.17 1.77 2.7 4.29 3.79.6.26 1.07.41 1.43.53.6.19 1.15.16 1.58.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.14-1.18-.06-.1-.23-.16-.48-.28Z" />
+                                    </svg>
+                                    Compartir por WhatsApp
+                                </a>
                             </div>
                         </div>
 
@@ -396,6 +431,20 @@ const VERIFICATION_LABELS = {
                                     <option v-for="color in vehicleColorOptions" :key="color" :value="color">{{ color }}</option>
                                 </select>
                                 <InputError class="mt-2" :message="form.errors.vehicle_color" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="vehicle_type" value="Tipo de vehículo" />
+                                <select
+                                    id="vehicle_type"
+                                    v-model="form.vehicle_type"
+                                    class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                    required
+                                >
+                                    <option value="" disabled>Elija un tipo</option>
+                                    <option v-for="(label, value) in vehicleTypes" :key="value" :value="value">{{ label }}</option>
+                                </select>
+                                <InputError class="mt-2" :message="form.errors.vehicle_type" />
                             </div>
 
                             <div>

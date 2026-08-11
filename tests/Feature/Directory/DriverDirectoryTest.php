@@ -113,6 +113,32 @@ class DriverDirectoryTest extends TestCase
         );
     }
 
+    /**
+     * Confidencialidad (pedido explícito del usuario): la foto del vehículo
+     * ya no se manda al directorio público — solo el propio conductor y un
+     * admin la ven. El tipo de vehículo (SUV, sedán, etc.) es lo que la
+     * reemplaza acá.
+     */
+    public function test_the_directory_does_not_expose_the_vehicle_photo_and_shows_the_vehicle_type(): void
+    {
+        $viewer = User::factory()->create();
+
+        $driver = User::factory()->create(['name' => 'Conductor Público']);
+        DriverProfile::factory()->for($driver)->create([
+            'is_public' => true,
+            'total_points' => 500,
+            'vehicle_type' => 'suv',
+            'vehicle_photo_path' => 'driver-documents/vehiculo.jpg',
+        ]);
+
+        $response = $this->actingAs($viewer)->get(route('directory.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->missing('drivers.data.0.vehicle_photo_url')
+            ->where('drivers.data.0.vehicle_type', 'SUV')
+        );
+    }
+
     public function test_can_invite_a_driver_found_in_the_directory(): void
     {
         $client = User::factory()->create();

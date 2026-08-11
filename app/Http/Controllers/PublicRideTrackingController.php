@@ -55,7 +55,10 @@ class PublicRideTrackingController extends Controller
             'status' => $ride->status,
             'driver_name' => $ride->driver->name,
             'vehicle' => trim(($profile?->vehicle_make ?? '').' '.($profile?->vehicle_model ?? '')) ?: null,
-            'vehicle_plate' => $profile?->vehicle_plate,
+            // Confidencialidad (pedido explícito del usuario): este enlace es
+            // público, sin cuenta ni firma más que la temporal — la placa va
+            // tapada, no la completa (ver DriverProfile::maskedPlate()).
+            'vehicle_plate' => $profile?->maskedPlate(),
             'origin_lat' => $ride->origin_lat,
             'origin_lng' => $ride->origin_lng,
             'origin_address' => $ride->origin_address,

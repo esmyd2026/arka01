@@ -48,6 +48,11 @@ class User extends Authenticatable
         'avatar_path',
         'city_id',
         'role',
+        // Trazabilidad de referidos (pedido explícito del usuario): siempre
+        // se pasa por RegisteredUserController::store() ya validado
+        // (exists:users,id), nunca directo desde un formulario del propio
+        // usuario, así que mass-assignment acá no es un riesgo real.
+        'referred_by_user_id',
     ];
 
     /**
@@ -277,6 +282,27 @@ class User extends Authenticatable
     public function fleets(): HasMany
     {
         return $this->hasMany(Fleet::class, 'owner_user_id');
+    }
+
+    /**
+     * Trazabilidad de referidos (pedido explícito del usuario): quién
+     * compartió el enlace (invitación de flota de un conductor, o el perfil
+     * público de cualquiera) que hizo que esta cuenta se registrara — null
+     * si llegó por su cuenta, sin invitación de nadie.
+     */
+    public function referredBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'referred_by_user_id');
+    }
+
+    /**
+     * Cuentas que se registraron a través de un enlace compartido por este
+     * usuario — la tabla de "Mis referidos" en Profile/Edit.vue y el panel
+     * admin (Admin\ReferralController) muestran esto.
+     */
+    public function referrals(): HasMany
+    {
+        return $this->hasMany(User::class, 'referred_by_user_id');
     }
 
     /**

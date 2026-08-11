@@ -88,7 +88,14 @@ function invite() {
 
             <template v-else>
                 <div class="space-y-2">
-                    <Link :href="route('register')" class="block">
+                    <!-- tipo=cliente: quien llega hasta acá ya mostró la
+                         intención (agregar un conductor a su flota), no hace
+                         falta volver a preguntarle. ref=driver.user_id: para
+                         la trazabilidad de referidos (pedido explícito del
+                         usuario) y para que, apenas se registre, lo volvamos
+                         acá mismo a completar el paso — ver
+                         RegisteredUserController::store(). -->
+                    <Link :href="route('register', { tipo: 'cliente', ref: driver.user_id })" class="block">
                         <PrimaryButton class="w-full justify-center">Crear cuenta y agregarlo</PrimaryButton>
                     </Link>
                     <Link :href="route('login')" class="text-sm text-arka-primary hover:text-arka-primary-bright">

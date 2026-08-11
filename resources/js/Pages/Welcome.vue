@@ -117,7 +117,7 @@ function submitFeedback() {
                     </p>
 
                     <h1 class="mt-4 text-3xl sm:text-4xl font-bold text-arka-text leading-tight">
-                        Viaje solo con conductores de su <span class="text-arka-primary">confianza.</span>
+                        Viaje solo con conductores de su <span class="text-arka-primary">confianza</span>
                     </h1>
                     <p class="mt-3 text-arka-text-muted max-w-md mx-auto lg:mx-0">
                         Cree su propia flota privada e invite a familiares, amigos o conductores de confianza. Cuando
@@ -193,21 +193,7 @@ function submitFeedback() {
                         >
                             Iniciar sesión
                         </Link>
-                        <!-- Ancla simple a la sección que ya existe más abajo — sin
-                             duplicar contenido en una página aparte (pedido
-                             explícito del usuario). -->
-                        <a
-                            href="#como-funciona"
-                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
-                        >
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z" />
-                            </svg>
-                            ¿Cómo funciona?
-                        </a>
-                    </div>
-
-                    <!-- Pedido explícito del usuario: "Crear mi círculo" es el CTA
+                            <!-- Pedido explícito del usuario: "Crear mi círculo" es el CTA
                          principal, pero quien ya tiene cuenta necesita un camino
                          directo a iniciar sesión sin que se lo tape ese botón. -->
                     <p v-if="canLogin && canRegister" class="mt-4 text-sm text-arka-text-muted">
@@ -216,6 +202,21 @@ function submitFeedback() {
                             Iniciar sesión
                         </Link>
                     </p>
+                        <!-- Ancla simple a la sección que ya existe más abajo — sin
+                             duplicar contenido en una página aparte (pedido
+                             explícito del usuario). -->
+
+                    </div> <br/>
+
+ <a
+                            href="#como-funciona"
+                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
+                        >
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z" />
+                            </svg>
+                            ¿Cómo funciona?
+                        </a>
 
                     <div class="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-1.5 text-xs text-arka-text-muted">
                         <span class="inline-flex items-center gap-1.5">

@@ -17,6 +17,7 @@ const sections = [
     { route: 'admin.plan-promotions.index', match: 'admin.plan-promotions.*', label: 'Promociones' },
     { route: 'admin.pricing.edit', match: 'admin.pricing.*', label: 'Tarifas' },
     { route: 'admin.metrics.index', match: 'admin.metrics.*', label: 'Indicadores' },
+    { route: 'admin.referrals.index', match: 'admin.referrals.*', label: 'Referidos' },
     { route: 'admin.drivers.index', match: 'admin.drivers.*', label: 'Conductores' },
     { route: 'admin.clients.index', match: 'admin.clients.*', label: 'Clientes' },
     { route: 'admin.driver-tiers.index', match: 'admin.driver-tiers.*', label: 'Medallas' },

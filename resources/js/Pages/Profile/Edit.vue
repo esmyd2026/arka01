@@ -38,6 +38,12 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    // Trazabilidad de referidos (pedido explícito del usuario): tabla de
+    // quiénes se registraron a través de un enlace que este usuario compartió.
+    referrals: {
+        type: Array,
+        required: true,
+    },
 });
 
 // Compartir mi perfil (pedido explícito del usuario, con captura de
@@ -110,6 +116,38 @@ async function copyProfileLink() {
                                 {{ linkCopied ? '¡Copiado!' : 'Copiar enlace' }}
                             </SecondaryButton>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Trazabilidad de referidos (pedido explícito del usuario):
+                     quiénes se registraron en Arka01 a través de un enlace que
+                     este usuario compartió (invitación de flota o perfil
+                     público) — solo se muestra si tiene al menos uno. -->
+                <div v-if="referrals.length" class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                    <h2 class="text-lg font-medium text-arka-text">Mis referidos</h2>
+                    <p class="mt-1 text-sm text-arka-text-muted max-w-xl">
+                        Personas que se registraron en Arka01 a través de un enlace que usted compartió.
+                    </p>
+
+                    <div class="mt-4 overflow-x-auto max-w-xl">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                    <th class="py-2 pr-3">Nombre</th>
+                                    <th class="py-2 pr-3">Rol</th>
+                                    <th class="py-2 pr-3">Se unió</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-arka-text-muted/10">
+                                <tr v-for="referral in referrals" :key="referral.id">
+                                    <td class="py-2 pr-3 text-arka-text font-medium">{{ referral.name }}</td>
+                                    <td class="py-2 pr-3 text-arka-text-muted">{{ referral.role }}</td>
+                                    <td class="py-2 pr-3 text-arka-text-muted">
+                                        {{ new Date(referral.registered_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 

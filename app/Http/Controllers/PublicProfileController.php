@@ -75,10 +75,15 @@ class PublicProfileController extends Controller
                 'member_code' => $user->member_code,
                 'avatar_url' => $user->avatar_url,
                 'driver_profile' => $user->driverProfile ? [
-                    'vehicle_photo_url' => $user->driverProfile->vehicle_photo_url,
+                    // Confidencialidad (pedido explícito del usuario): la foto
+                    // del vehículo ya no viaja a ninguna pantalla de cliente —
+                    // solo el propio conductor y un admin la ven. La placa va
+                    // tapada (ver DriverProfile::maskedPlate()); el tipo de
+                    // vehículo (SUV, sedán, etc.) es el dato que la reemplaza.
                     'vehicle_make' => $user->driverProfile->vehicle_make,
                     'vehicle_model' => $user->driverProfile->vehicle_model,
-                    'vehicle_plate' => $user->driverProfile->vehicle_plate,
+                    'vehicle_type' => $user->driverProfile->vehicleTypeLabel(),
+                    'vehicle_plate' => $user->driverProfile->maskedPlate(),
                     'rate_per_km' => $user->driverProfile->rate_per_km,
                     'accepts_cash' => $user->driverProfile->accepts_cash,
                     'accepts_transfer' => $user->driverProfile->accepts_transfer,

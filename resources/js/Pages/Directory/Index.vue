@@ -65,12 +65,6 @@ function invite(driver) {
                     <div v-for="driver in drivers.data" :key="driver.user_id" class="p-4 sm:p-6">
                         <div class="flex items-start justify-between gap-4">
                             <UserAvatar :user="driver" size-class="h-12 w-12 text-sm shrink-0" />
-                            <img
-                                v-if="driver.vehicle_photo_url"
-                                :src="driver.vehicle_photo_url"
-                                alt=""
-                                class="h-12 w-12 rounded-arka object-cover shrink-0"
-                            />
                             <div class="flex-1">
                                 <Link
                                     :href="route('profiles.show', driver.user_id)"
@@ -98,6 +92,7 @@ function invite(driver) {
                                 </div>
                                 <p class="mt-1 text-sm text-arka-text-muted">
                                     ${{ driver.rate_per_km }}/km
+                                    <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
                                     <span v-if="driver.distance_km != null"> · {{ driver.distance_km.toFixed(1) }} km</span>
                                     <span v-if="!driver.is_available"> · no disponible ahora</span>
                                 </p>

@@ -29,6 +29,7 @@ class VehicleCapacityTest extends TestCase
             'vehicle_make' => 'Chevrolet',
             'vehicle_model' => 'Spark',
             'vehicle_color' => 'Blanco',
+            'vehicle_type' => 'sedan',
             'vehicle_plate' => 'ABC-1234',
             'vehicle_year' => 2020,
             'passenger_capacity' => 4,
@@ -44,7 +45,7 @@ class VehicleCapacityTest extends TestCase
         $this->actingAs($driver)->post(route('driver.profile.update'), [
             'license_number' => 'LIC-001',
             'rate_per_km' => 0.5,
-        ])->assertSessionHasErrors(['vehicle_make', 'vehicle_model', 'vehicle_color', 'vehicle_plate', 'vehicle_year', 'passenger_capacity']);
+        ])->assertSessionHasErrors(['vehicle_make', 'vehicle_model', 'vehicle_color', 'vehicle_type', 'vehicle_plate', 'vehicle_year', 'passenger_capacity']);
     }
 
     public function test_completing_every_vehicle_field_succeeds(): void

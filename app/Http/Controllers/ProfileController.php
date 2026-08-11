@@ -41,6 +41,18 @@ class ProfileController extends Controller
             // WhatsApp) — absoluto, con dominio, porque termina en un lector
             // de QR o un mensaje de WhatsApp, fuera de la app.
             'profileUrl' => route('profiles.show', $user->id),
+            // Trazabilidad de referidos (pedido explícito del usuario): tabla
+            // de quiénes se registraron a través de un enlace compartido por
+            // este usuario — ver User::referrals().
+            'referrals' => $user->referrals()
+                ->latest()
+                ->get(['id', 'name', 'role', 'created_at'])
+                ->map(fn (User $referral) => [
+                    'id' => $referral->id,
+                    'name' => $referral->name,
+                    'role' => $referral->isDriver() ? 'Conductor' : ($referral->isClient() ? 'Cliente' : 'Admin'),
+                    'registered_at' => $referral->created_at->toIso8601String(),
+                ]),
         ]);
     }
 

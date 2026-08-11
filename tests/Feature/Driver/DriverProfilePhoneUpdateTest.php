@@ -26,6 +26,7 @@ class DriverProfilePhoneUpdateTest extends TestCase
             'vehicle_make' => 'Chevrolet',
             'vehicle_model' => 'Spark',
             'vehicle_color' => 'Blanco',
+            'vehicle_type' => 'sedan',
             'vehicle_plate' => 'ABC-1234',
             'vehicle_year' => 2020,
             'passenger_capacity' => 4,
