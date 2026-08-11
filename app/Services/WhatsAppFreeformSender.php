@@ -152,24 +152,6 @@ class WhatsAppFreeformSender
     }
 
     /**
-     * Pedido explícito del usuario: el "bot" le responde apenas se abre la
-     * ventana de 24h (WhatsAppWebhookController::receive()), confirmándole
-     * que ya quedó conectado — le sirve de comprobante de que el WhatsApp
-     * está bien enlazado para recibir avisos de carreras.
-     */
-    public static function sendWindowConfirmation(User $driver): void
-    {
-        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
-            return;
-        }
-
-        $message = "✅ ¡Listo, {$driver->name}! Ya quedó conectado y activo para recibir avisos de carreras nuevas por acá.\n\n"
-            .'A partir de ahora le vamos a escribir apenas le llegue una solicitud — ¡a generar ingresos! 🚀';
-
-        self::sendText($driver->phone, $message);
-    }
-
-    /**
      * Pedido explícito del usuario: verificar el número desde el que se
      * conecta contra el que declaró en su perfil de conductor — si no
      * coincide, no se abre la ventana en su nombre (los avisos siempre se

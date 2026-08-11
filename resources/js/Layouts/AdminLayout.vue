@@ -33,6 +33,10 @@ const sections = [
     { route: 'admin.monitoring.index', match: 'admin.monitoring.*', label: 'Monitoreo' },
     { route: 'admin.faqs.index', match: 'admin.faqs.*', label: 'Preguntas frecuentes' },
     { route: 'admin.support-tickets.index', match: 'admin.support-tickets.*', label: 'Soporte' },
+    // Asistente virtual sobre WhatsApp (pedido explícito del usuario) — a
+    // propósito separado de "Integraciones" (esa es la config transaccional
+    // cruda de WhatsApp, nunca se mezclan).
+    { route: 'admin.chatbot.intents.index', match: 'admin.chatbot.*', label: 'Chatbot' },
     { route: 'admin.platform-feedback.index', match: 'admin.platform-feedback.*', label: 'Opiniones' },
 ];
 </script>

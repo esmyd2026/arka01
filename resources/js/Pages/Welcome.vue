@@ -29,6 +29,15 @@ defineProps({
 
 const authUser = usePage().props.auth?.user ?? null;
 
+// Burbujas de conductores de ejemplo alrededor del mockup de teléfono
+// (pedido explícito del usuario, referencia visual provista) — nombres y
+// calificaciones ilustrativos, no datos reales de ningún conductor.
+const HERO_DRIVER_BUBBLES = [
+    { name: 'Carlos', initial: 'C', rating: '4.9', position: 'top-2 -right-2 sm:-right-6' },
+    { name: 'María', initial: 'M', rating: '5.0', position: 'top-1/3 -left-4 sm:-left-10' },
+    { name: 'Andrés', initial: 'A', rating: '4.8', position: 'bottom-4 -right-2 sm:-right-8' },
+];
+
 // "Para Clientes" / "Para Conductores" (pedido explícito del usuario, mockup
 // provisto) — reemplaza el flujo de pasos anterior por dos fichas con lo que
 // gana cada lado, más el diagrama del medio.
@@ -91,46 +100,175 @@ function submitFeedback() {
                 </Link>
             </div>
 
-            <!-- Encabezado -->
-            <div class="text-center max-w-2xl mx-auto">
+            <!-- Con sesión iniciada, el hero completo (mockup, CTAs de registro)
+                 no aplica — ya tiene el acceso directo arriba. -->
+            <div v-if="authUser" class="text-center">
                 <ApplicationLogo size="text-5xl sm:text-6xl" />
-                <h1 class="mt-5 text-2xl sm:text-3xl font-bold text-arka-text leading-tight">
-                    Tu círculo - Tus viajes - <span class="text-arka-primary">Tu decisión</span>
-                </h1>
-                <p class="mt-3 text-arka-text-muted">
-                    Arme su propia red de conductores de confianza o genere nuevas oportunidades como conductor
-                    independiente.
-                </p>
+                <Link
+                    :href="route('dashboard')"
+                    class="mt-6 inline-flex items-center px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm text-arka-base hover:bg-arka-primary-bright transition"
+                >
+                    Ir a mi cuenta
+                </Link>
+            </div>
 
-                <div class="mt-6 flex justify-center gap-3" v-if="canLogin">
-                    <Link
-                        v-if="authUser"
-                        :href="route('dashboard')"
-                        class="inline-flex items-center px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm text-arka-base hover:bg-arka-primary-bright transition"
-                    >
-                        Ir a mi cuenta
-                    </Link>
-                    <template v-else>
+            <!-- Encabezado (pedido explícito del usuario: hero con mockup de
+                 teléfono, insignia y llamado a la acción "Crear mi círculo"). -->
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+                <div class="text-center lg:text-start">
+                    <ApplicationLogo size="text-5xl sm:text-6xl" />
+
+                    <p class="mt-5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arka-primary/10 text-arka-primary-bright text-xs font-medium">
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                        </svg>
+                        Su círculo, sus viajes, su tranquilidad
+                    </p>
+
+                    <h1 class="mt-4 text-3xl sm:text-4xl font-bold text-arka-text leading-tight">
+                        Viaje solo con conductores de su <span class="text-arka-primary">confianza.</span>
+                    </h1>
+                    <p class="mt-3 text-arka-text-muted max-w-md mx-auto lg:mx-0">
+                        Cree su propia flota privada e invite a familiares, amigos o conductores de confianza. Cuando
+                        necesite un viaje, solicítelo dentro de su círculo.
+                    </p>
+
+                    <ul class="mt-6 space-y-4 max-w-md mx-auto lg:mx-0">
+                        <li class="flex items-start gap-3 text-start">
+                            <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
+                                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="9" cy="8" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19a6.5 6.5 0 0 1 13 0" />
+                                    <circle cx="17" cy="8" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 12.5c2.4 0 4.5 1.9 5 6.5" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p class="text-sm font-medium text-arka-text">Usted decide quién forma parte de su flota</p>
+                                <p class="text-xs text-arka-text-muted">Invite solo a quienes usted conoce y confía.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3 text-start">
+                            <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
+                                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v10M14.5 9.5a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.9-2.5 2s1.1 1.7 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2a2.5 2.5 0 0 1-2.5-1.5" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p class="text-sm font-medium text-arka-text">Conozca el precio antes de aceptar el viaje</p>
+                                <p class="text-xs text-arka-text-muted">Transparencia total, sin costos ocultos.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3 text-start">
+                            <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
+                                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p class="text-sm font-medium text-arka-text">Seguimiento en vivo y funciones de seguridad</p>
+                                <p class="text-xs text-arka-text-muted">Comparta su viaje y use el botón SOS si lo necesita.</p>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <div class="mt-7 flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
+                        <!-- Pedido explícito del usuario: "crear mi círculo" es el
+                             registro de cuenta, pero directo como cliente — no hace
+                             falta volver a preguntarle el tipo de cuenta. -->
                         <Link
+                            v-if="canRegister"
+                            :href="route('register', { tipo: 'cliente' })"
+                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright transition"
+                        >
+                            Crear mi círculo
+                        </Link>
+                        <Link
+                            v-else-if="canLogin"
                             :href="route('login')"
-                            class="inline-flex items-center px-5 py-2.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-semibold text-sm text-arka-text hover:bg-arka-card transition"
+                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright transition"
                         >
                             Iniciar sesión
                         </Link>
-                        <Link
-                            v-if="canRegister"
-                            :href="route('register')"
-                            class="inline-flex items-center px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm text-arka-base hover:bg-arka-primary-bright transition"
+                        <!-- Ancla simple a la sección que ya existe más abajo — sin
+                             duplicar contenido en una página aparte (pedido
+                             explícito del usuario). -->
+                        <a
+                            href="#como-funciona"
+                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
                         >
-                            Crear cuenta
-                        </Link>
-                    </template>
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z" />
+                            </svg>
+                            ¿Cómo funciona?
+                        </a>
+                    </div>
+
+                    <div class="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-1.5 text-xs text-arka-text-muted">
+                        <span class="inline-flex items-center gap-1.5">
+                            <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
+                            </svg>
+                            Sus viajes, siempre privados
+                        </span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                            </svg>
+                            Conductores verificados
+                        </span>
+                        <!-- Pedido explícito del usuario: sacar "Hecho en Ecuador"
+                             de esta fila — el resto se deja igual. -->
+                    </div>
+                </div>
+
+                <!-- Mockup de teléfono con un viaje de ejemplo (pedido explícito
+                     del usuario, referencia visual provista) — datos ilustrativos
+                     fijos, no información real de ningún usuario ni conductor. -->
+                <div class="relative mx-auto w-full max-w-xs">
+                    <div class="relative rounded-[2rem] border border-arka-text-muted/15 bg-arka-card shadow-2xl p-4 pt-6">
+                        <p class="text-xs font-medium text-arka-text-muted">Viaje solicitado</p>
+                        <p class="text-sm font-semibold text-arka-primary-bright">En camino…</p>
+
+                        <div class="mt-4 h-28 rounded-arka bg-arka-base border border-arka-text-muted/10 flex items-center justify-center overflow-hidden">
+                            <svg class="h-full w-full" viewBox="0 0 200 100" fill="none">
+                                <path d="M15 80 C 60 80, 60 30, 100 30 S 150 75, 185 20" stroke="#34D399" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 8" />
+                                <circle cx="15" cy="80" r="4" fill="#34D399" />
+                                <circle cx="185" cy="20" r="4" fill="#34D399" />
+                            </svg>
+                        </div>
+
+                        <div class="mt-4 flex items-center justify-between">
+                            <span class="text-xs text-arka-text-muted">Llegada estimada</span>
+                            <span class="text-sm font-semibold text-arka-text">5 min</span>
+                        </div>
+                    </div>
+
+                    <!-- Burbujas de conductores de ejemplo alrededor del teléfono. -->
+                    <div
+                        v-for="bubble in HERO_DRIVER_BUBBLES"
+                        :key="bubble.name"
+                        class="hidden sm:flex absolute items-center gap-2 px-2.5 py-1.5 rounded-full bg-arka-card border border-arka-text-muted/15 shadow-lg"
+                        :class="bubble.position"
+                    >
+                        <span class="h-7 w-7 rounded-full bg-arka-primary/15 text-arka-primary-bright text-xs font-semibold flex items-center justify-center shrink-0">
+                            {{ bubble.initial }}
+                        </span>
+                        <span class="text-xs">
+                            <span class="block font-medium text-arka-text leading-tight">{{ bubble.name }}</span>
+                            <span class="text-arka-lime leading-tight">★ {{ bubble.rating }}</span>
+                        </span>
+                    </div>
                 </div>
             </div>
 
             <!-- Para Clientes / diagrama / Para Conductores (pedido explícito del
-                 usuario, mockup provisto) -->
-            <div class="mt-16 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-8">
+                 usuario, mockup provisto) — id como destino del botón "¿Cómo
+                 funciona?" del hero, para reusar este mismo contenido en vez de
+                 duplicarlo en una página aparte. -->
+            <div id="como-funciona" class="mt-16 scroll-mt-6 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-8">
                 <!-- Para Clientes -->
                 <div class="p-6 bg-arka-card shadow rounded-arka">
                     <div class="flex items-center gap-3 mb-1">

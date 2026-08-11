@@ -215,6 +215,36 @@ class AdminSubscriptionTest extends TestCase
         );
     }
 
+    /**
+     * Pedido explícito del usuario: "necesito agregarle la fecha de registro
+     * e actualización, y ordenar por eso principalmente de manera
+     * descendente" — antes ordenaba por nombre sin ninguna forma de ver
+     * quién se sumó último.
+     */
+    public function test_the_subscriptions_list_defaults_to_newest_registrations_first(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $older = User::factory()->create();
+        $older->forceFill(['created_at' => now()->subDays(5)])->save();
+
+        $newer = User::factory()->create();
+        $newer->forceFill(['created_at' => now()->subDay()])->save();
+
+        // Filtrado a clientes para no depender del orden relativo con la
+        // propia cuenta admin (creada en el momento real del test).
+        $response = $this->actingAs($admin)->get(route('admin.subscriptions.index', ['role' => 'cliente']));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('filters.sort', 'created_at')
+            ->where('filters.direction', 'desc')
+            ->where('users.data.0.id', $newer->id)
+            ->where('users.data.1.id', $older->id)
+            ->has('users.data.0.created_at')
+            ->has('users.data.0.updated_at')
+        );
+    }
+
     public function test_admin_metrics_page_reports_the_plan_breakdown(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

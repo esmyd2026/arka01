@@ -44,10 +44,16 @@ class SubscriptionController extends Controller
         $search = $request->string('q')->trim()->toString();
         $roleFilter = $request->string('role')->toString();
         $planStatusFilter = $request->string('plan_status')->toString();
-        $sort = in_array($request->string('sort')->toString(), ['name', 'expiry'], true)
+        // Pedido explícito del usuario: fecha de registro/actualización
+        // visibles y como orden por defecto (los suscriptores más nuevos
+        // primero) — antes ordenaba por nombre, sin ninguna forma de ver
+        // quién se sumó último.
+        $sort = in_array($request->string('sort')->toString(), ['name', 'expiry', 'created_at', 'updated_at'], true)
             ? $request->string('sort')->toString()
-            : 'name';
-        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
+            : 'created_at';
+        $direction = in_array($request->string('direction')->toString(), ['asc', 'desc'], true)
+            ? $request->string('direction')->toString()
+            : 'desc';
 
         $users = User::query()
             ->when($search !== '', function (Builder $query) use ($search) {
@@ -88,6 +94,8 @@ class SubscriptionController extends Controller
             ->addSelect('users.*')
             ->when($sort === 'expiry', fn (Builder $query) => $query->orderByRaw("next_expiry is null, next_expiry {$direction}"))
             ->when($sort === 'name', fn (Builder $query) => $query->orderBy('name', $direction))
+            ->when($sort === 'created_at', fn (Builder $query) => $query->orderBy('users.created_at', $direction))
+            ->when($sort === 'updated_at', fn (Builder $query) => $query->orderBy('users.updated_at', $direction))
             ->paginate(20)
             ->withQueryString();
 

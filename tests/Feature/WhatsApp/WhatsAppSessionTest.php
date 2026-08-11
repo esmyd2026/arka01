@@ -2,10 +2,10 @@
 
 namespace Tests\Feature\WhatsApp;
 
+use App\Jobs\ProcessChatbotMessage;
 use App\Jobs\SendWhatsAppNumberAlreadyRegisteredNotice;
 use App\Jobs\SendWhatsAppPhoneMismatchNotice;
 use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
-use App\Jobs\SendWhatsAppWindowConfirmation;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use App\Services\WhatsAppFreeformSender;
@@ -71,10 +71,12 @@ class WhatsAppSessionTest extends TestCase
     }
 
     /**
-     * Pedido explícito del usuario: el "bot" le confirma al conductor que ya
-     * quedó conectado, apenas se abre la ventana.
+     * Pedido explícito del usuario: en vez de la confirmación fija de
+     * siempre, el chatbot procesa el mensaje de verdad — sigue abriendo la
+     * ventana de 24h exactamente igual (eso no cambió), solo cambia qué
+     * responde.
      */
-    public function test_an_inbound_message_dispatches_the_window_confirmation_job(): void
+    public function test_an_inbound_message_dispatches_the_chatbot_job(): void
     {
         Queue::fake();
         $user = User::factory()->create(['phone' => '+593991234567']);
@@ -89,7 +91,7 @@ class WhatsAppSessionTest extends TestCase
 
         $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
 
-        Queue::assertPushed(SendWhatsAppWindowConfirmation::class, fn ($job) => $job->driverUserId === $user->id);
+        Queue::assertPushed(ProcessChatbotMessage::class, fn ($job) => $job->userId === $user->id && $job->text === 'Hola');
     }
 
     /**
@@ -115,7 +117,7 @@ class WhatsAppSessionTest extends TestCase
         $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
 
         Queue::assertPushed(SendWhatsAppSessionRecoveryPrompt::class, fn ($job) => $job->userId === $user->id);
-        Queue::assertNotPushed(SendWhatsAppWindowConfirmation::class);
+        Queue::assertNotPushed(ProcessChatbotMessage::class);
     }
 
     /**
@@ -138,22 +140,6 @@ class WhatsAppSessionTest extends TestCase
         $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
 
         Queue::assertPushed(SendWhatsAppSessionRecoveryPrompt::class, fn ($job) => $job->userId === $user->id);
-    }
-
-    public function test_the_window_confirmation_actually_sends_a_whatsapp_message(): void
-    {
-        Config::set('services.whatsapp.token', 'fake-token');
-        Config::set('services.whatsapp.phone_number_id', '123456');
-        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
-
-        $driver = User::factory()->create(['phone' => '+593991234567']);
-        WhatsAppSession::query()->create(['user_id' => $driver->id, 'opened_at' => now(), 'expires_at' => now()->addHours(24)]);
-
-        WhatsAppFreeformSender::sendWindowConfirmation($driver);
-
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com')
-            && $request['type'] === 'text'
-            && $request['to'] === '593991234567');
     }
 
     /**
@@ -183,7 +169,7 @@ class WhatsAppSessionTest extends TestCase
 
         $this->assertSame('+593991234567', $driver->fresh()->phone);
         $this->assertDatabaseHas('whatsapp_sessions', ['user_id' => $driver->id]);
-        Queue::assertPushed(SendWhatsAppWindowConfirmation::class, fn ($job) => $job->driverUserId === $driver->id);
+        Queue::assertPushed(ProcessChatbotMessage::class, fn ($job) => $job->userId === $driver->id);
     }
 
     /**
@@ -245,7 +231,7 @@ class WhatsAppSessionTest extends TestCase
         $this->assertNull($otherUser->fresh()->phone);
         $this->assertDatabaseCount('whatsapp_sessions', 0);
         Queue::assertPushed(SendWhatsAppNumberAlreadyRegisteredNotice::class, fn ($job) => $job->toE164 === '+593991234567');
-        Queue::assertNotPushed(SendWhatsAppWindowConfirmation::class);
+        Queue::assertNotPushed(ProcessChatbotMessage::class);
     }
 
     /**
@@ -272,7 +258,7 @@ class WhatsAppSessionTest extends TestCase
         $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
 
         $this->assertDatabaseHas('whatsapp_sessions', ['user_id' => $phoneOwner->id]);
-        Queue::assertPushed(SendWhatsAppWindowConfirmation::class);
+        Queue::assertPushed(ProcessChatbotMessage::class, fn ($job) => $job->userId === $phoneOwner->id);
     }
 
     public function test_a_reference_to_a_nonexistent_user_does_not_error(): void

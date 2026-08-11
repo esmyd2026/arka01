@@ -14,8 +14,8 @@ use Throwable;
  * escribe primero al WhatsApp oficial (WhatsAppWebhookController::receive(),
  * frase exacta de Utils/whatsapp.js::buildSessionRecoveryWhatsAppUrl()), el
  * "bot" le confirma que ya puede volver a la web y pedir el código — mismo
- * patrón que SendWhatsAppWindowConfirmation, encolado para no demorar la
- * respuesta 200 al webhook de Meta.
+ * patrón que App\Jobs\ProcessChatbotMessage (el resto de los mensajes
+ * normales), encolado para no demorar la respuesta 200 al webhook de Meta.
  */
 class SendWhatsAppSessionRecoveryPrompt implements ShouldQueue
 {

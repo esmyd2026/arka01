@@ -27,8 +27,14 @@ const countryCodes = [
 ];
 const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.label, shortLabel: c.shortLabel }));
 
+// Pedido explícito del usuario: "Crear mi círculo" en Welcome.vue linkea acá
+// con ?tipo=cliente — ya declaró la intención en ese botón, no hace falta
+// volver a preguntarle el tipo de cuenta en el primer paso.
+const preselectedAccountType = new URLSearchParams(window.location.search).get('tipo');
+const validPreselection = ['cliente', 'conductor'].includes(preselectedAccountType) ? preselectedAccountType : '';
+
 const form = useForm({
-    account_type: '',
+    account_type: validPreselection,
     name: '',
     email: '',
     country_code: '+593',
@@ -43,7 +49,7 @@ const form = useForm({
 // pantalla, empezando por el tipo de cuenta porque cambia a dónde va apenas
 // termina (ver RegisteredUserController::store()).
 const STEPS = ['account_type', 'name', 'email', 'phone', 'password'];
-const currentStep = ref(0);
+const currentStep = ref(validPreselection ? 1 : 0);
 
 // Mismo ícono de "ojito" que ya usa Auth/Login.vue (pedido explícito del
 // usuario) — un solo toggle para las dos contraseñas, no tiene sentido

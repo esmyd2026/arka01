@@ -411,6 +411,21 @@ function clientPlanOf(user) {
                                             <span v-if="sortColumn === 'expiry'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
                                         </button>
                                     </th>
+                                    <!-- Pedido explícito del usuario: fecha de registro/actualización
+                                         visibles, con orden por defecto por registro descendente (los
+                                         suscriptores más nuevos primero). -->
+                                    <th class="px-4 py-3 font-medium whitespace-nowrap">
+                                        <button type="button" class="flex items-center gap-1 hover:text-arka-text" @click="toggleSort('created_at')">
+                                            Registro
+                                            <span v-if="sortColumn === 'created_at'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+                                        </button>
+                                    </th>
+                                    <th class="px-4 py-3 font-medium whitespace-nowrap">
+                                        <button type="button" class="flex items-center gap-1 hover:text-arka-text" @click="toggleSort('updated_at')">
+                                            Actualización
+                                            <span v-if="sortColumn === 'updated_at'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+                                        </button>
+                                    </th>
                                     <th class="px-4 sm:px-6 py-3 font-medium text-right">Acciones</th>
                                 </tr>
                             </thead>
@@ -444,6 +459,12 @@ function clientPlanOf(user) {
                                             </p>
                                         </template>
                                     </td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs text-arka-text-muted">
+                                        {{ new Date(user.created_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs text-arka-text-muted">
+                                        {{ new Date(user.updated_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                                    </td>
                                     <td class="px-4 sm:px-6 py-3">
                                         <div class="flex items-center justify-end gap-2 flex-wrap">
                                             <Link
@@ -463,7 +484,7 @@ function clientPlanOf(user) {
                                     </td>
                                 </tr>
                                 <tr v-if="!users.data.length">
-                                    <td colspan="4" class="px-4 sm:px-6 py-8 text-center text-sm text-arka-text-muted">
+                                    <td colspan="6" class="px-4 sm:px-6 py-8 text-center text-sm text-arka-text-muted">
                                         No se encontraron usuarios con esos filtros.
                                     </td>
                                 </tr>

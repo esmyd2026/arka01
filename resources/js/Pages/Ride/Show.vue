@@ -65,6 +65,27 @@ const chatBody = ref('');
 const chatSending = ref(false);
 const chatError = ref('');
 const chatListEl = ref(null);
+const chatPanelEl = ref(null);
+
+// Bug real reportado por el usuario: el aviso de mensaje nuevo era solo
+// sonido — si la persona no tenía el panel de chat a la vista (scrolleada
+// más arriba, viendo el mapa), sonaba pero no había forma de saber qué
+// pasó ni de dónde venía. Este toast queda visible sin importar el scroll,
+// dice quién escribió y qué, y al tocarlo lleva directo al chat.
+const chatToast = ref(null);
+let chatToastTimer = null;
+
+function showChatToast(message) {
+    chatToast.value = message;
+    clearTimeout(chatToastTimer);
+    chatToastTimer = setTimeout(() => (chatToast.value = null), 6000);
+}
+
+function dismissChatToast(scrollToChat = false) {
+    chatToast.value = null;
+    clearTimeout(chatToastTimer);
+    if (scrollToChat) chatPanelEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 
 // Respuestas rápidas (pedido explícito del usuario): distintas según el rol,
 // un clic manda el mensaje tal cual — no hace falta escribirlo, pero el
@@ -165,6 +186,7 @@ onMounted(() => {
     if (chatOpen.value) {
         rideChannel = window.Echo.private(`ride.${props.ride.id}`);
         rideChannel.listen('.ride.message.sent', (e) => {
+            showChatToast(e);
             chatMessages.value.push(e);
             playUpdateChime();
             scrollChatToBottom();
@@ -325,6 +347,36 @@ function submitReview() {
 <template>
     <Head title="Carrera" />
 
+    <!-- Aviso visible de mensaje nuevo (pedido explícito del usuario: "suena
+         pero no sé qué es ni de dónde viene") — queda arriba de todo sin
+         importar el scroll; tocarlo lleva directo al chat. -->
+    <Teleport to="body">
+        <div
+            v-if="chatToast"
+            class="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-96 z-50 cursor-pointer"
+            @click="dismissChatToast(true)"
+        >
+            <div class="p-3 bg-arka-card border border-arka-primary/30 shadow-lg rounded-arka flex items-start gap-3">
+                <span class="h-8 w-8 rounded-full bg-arka-primary/15 flex items-center justify-center shrink-0">
+                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 5.5h16v10.5H8.5L4 20V5.5Z" />
+                    </svg>
+                </span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-arka-text truncate">💬 {{ chatToast.sender_name }}</p>
+                    <p class="text-xs text-arka-text-muted truncate">{{ chatToast.body }}</p>
+                </div>
+                <button
+                    type="button"
+                    class="text-arka-text-muted hover:text-arka-text shrink-0"
+                    @click.stop="dismissChatToast(false)"
+                >
+                    ✕
+                </button>
+            </div>
+        </div>
+    </Teleport>
+
     <AuthenticatedLayout>
         <template #header>
             <h2 class="font-semibold text-xl text-arka-text leading-tight">
@@ -477,7 +529,7 @@ function submitReview() {
                      personas — nunca antes de que el conductor acepte, ni
                      después de que la carrera termine o se cancele. No expone
                      teléfonos: todo pasa por acá. -->
-                <div v-if="chatOpen" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                <div v-if="chatOpen" ref="chatPanelEl" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
                     <h3 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">
                         Chat con {{ isDriver ? 'el cliente' : 'el conductor' }}
                     </h3>

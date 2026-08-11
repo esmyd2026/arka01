@@ -99,9 +99,12 @@ onMounted(() => {
             req.current_offer_expires_at = e.current_offer_expires_at;
         }
     });
-    personal.listen('.ride-request.accepted', () => {
+    // Pedido explícito del usuario: apenas el conductor acepta, el cliente
+    // pasa directo al detalle de esa carrera en vez de quedarse mirando la
+    // lista — ahí es donde puede seguir la ubicación en vivo y chatear.
+    personal.listen('.ride-request.accepted', (e) => {
         playUpdateChime();
-        router.reload({ only: ['pendingRequestsAsClient', 'activeRides'] });
+        router.visit(route('rides.show', e.ride_id));
     });
     personal.listen('.ride-request.countered', (e) => {
         playUpdateChime();

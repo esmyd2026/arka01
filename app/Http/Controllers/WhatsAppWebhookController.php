@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessChatbotMessage;
 use App\Jobs\SendWhatsAppNumberAlreadyRegisteredNotice;
 use App\Jobs\SendWhatsAppPhoneMismatchNotice;
 use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
-use App\Jobs\SendWhatsAppWindowConfirmation;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use App\Services\WhatsAppConfig;
@@ -135,7 +135,7 @@ class WhatsAppWebhookController extends Controller
                     continue;
                 }
 
-                $this->openWindowFor($phoneOwner, isRecoveryPrompt: $this->isSessionRecoveryMessage($text));
+                $this->openWindowFor($phoneOwner, $text, isRecoveryPrompt: $this->isSessionRecoveryMessage($text));
 
                 continue;
             }
@@ -147,7 +147,12 @@ class WhatsAppWebhookController extends Controller
             // quién intentó conectar de verdad, y validar su número contra
             // lo que declaró en su perfil de conductor.
             if ($refUserId === null) {
-                Log::info('WhatsApp: mensaje entrante de un número sin cuenta asociada.', ['from' => $from]);
+                // Pedido explícito del usuario: el chatbot también atiende a
+                // números sin cuenta todavía (prospectos que escriben
+                // "quiero ser conductor" antes de registrarse) — antes esto
+                // se ignoraba en silencio.
+                Log::info('WhatsApp: mensaje entrante de un número sin cuenta asociada — pasa al chatbot.', ['from' => $from]);
+                ProcessChatbotMessage::dispatch($fromE164, $text, null);
 
                 continue;
             }
@@ -166,7 +171,7 @@ class WhatsAppWebhookController extends Controller
                 // prueba de que el número es suyo de verdad.
                 $intendedUser->update(['phone' => $fromE164]);
                 Log::info('WhatsApp: teléfono completado a partir de la conexión.', ['user_id' => $intendedUser->id]);
-                $this->openWindowFor($intendedUser);
+                $this->openWindowFor($intendedUser, $text);
 
                 continue;
             }
@@ -187,7 +192,7 @@ class WhatsAppWebhookController extends Controller
         return response('', 200);
     }
 
-    private function openWindowFor(User $user, bool $isRecoveryPrompt = false): void
+    private function openWindowFor(User $user, string $text, bool $isRecoveryPrompt = false): void
     {
         WhatsAppSession::query()->create([
             'user_id' => $user->id,
@@ -198,15 +203,17 @@ class WhatsAppWebhookController extends Controller
         Log::info('WhatsApp: ventana de 24h abierta.', ['user_id' => $user->id, 'is_recovery_prompt' => $isRecoveryPrompt]);
 
         // Pedido explícito del usuario: si escribió la frase de recuperar
-        // sesión, el "bot" lo manda de vuelta a la web en vez de la
-        // confirmación genérica de "activarme" del conductor (que no tiene
-        // sentido para un cliente, ni para un conductor que solo quería
-        // recuperar su sesión). Encolado en los dos casos para no demorar
-        // la respuesta 200 a Meta.
+        // sesión, el "bot" lo manda de vuelta a la web — este flujo puntual
+        // se deja intacto, tal cual estaba. Para cualquier otro mensaje,
+        // antes se mandaba siempre la misma confirmación fija ("ya quedó
+        // conectado"); ahora el chatbot lee el mensaje de verdad y responde
+        // acorde (pedido explícito del usuario: dejar de ser "un mecanismo
+        // para enviar mensajes específicos del sistema"). Encolado en los
+        // dos casos para no demorar la respuesta 200 a Meta.
         if ($isRecoveryPrompt) {
             SendWhatsAppSessionRecoveryPrompt::dispatch($user->id);
         } else {
-            SendWhatsAppWindowConfirmation::dispatch($user->id);
+            ProcessChatbotMessage::dispatch($user->phone, $text, $user->id);
         }
     }
 }

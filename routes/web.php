@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\AdBannerController;
+use App\Http\Controllers\Admin\ChatbotIntentController;
+use App\Http\Controllers\Admin\ChatbotSettingController;
+use App\Http\Controllers\Admin\ChatbotUnrecognizedController;
 use App\Http\Controllers\Admin\ClientController as AdminClientController;
 use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\DriverController as AdminDriverController;
@@ -351,6 +354,23 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/soporte/{supportTicket}', [SupportTicketController::class, 'show'])->name('support-tickets.show');
     Route::post('/soporte/{supportTicket}/mensajes', [SupportTicketController::class, 'reply'])->name('support-tickets.reply');
     Route::patch('/soporte/{supportTicket}/estado', [SupportTicketController::class, 'updateStatus'])->name('support-tickets.update-status');
+
+    // Chatbot / asistente virtual (pedido explícito del usuario): a
+    // propósito separado de /admin/integraciones/whatsapp (esa es la
+    // configuración transaccional cruda), nunca mezclados.
+    Route::prefix('chatbot')->name('chatbot.')->group(function () {
+        Route::get('/intenciones', [ChatbotIntentController::class, 'index'])->name('intents.index');
+        Route::post('/intenciones', [ChatbotIntentController::class, 'store'])->name('intents.store');
+        Route::patch('/intenciones/{chatbotIntent}', [ChatbotIntentController::class, 'update'])->name('intents.update');
+        Route::post('/intenciones/{chatbotIntent}/vocablos', [ChatbotIntentController::class, 'storeKeyword'])->name('intents.keywords.store');
+        Route::delete('/vocablos/{chatbotIntentKeyword}', [ChatbotIntentController::class, 'destroyKeyword'])->name('intents.keywords.destroy');
+
+        Route::get('/mensajes', [ChatbotSettingController::class, 'edit'])->name('settings.edit');
+        Route::patch('/mensajes', [ChatbotSettingController::class, 'update'])->name('settings.update');
+
+        Route::get('/no-reconocidas', [ChatbotUnrecognizedController::class, 'index'])->name('unrecognized.index');
+        Route::post('/no-reconocidas/{chatbotUnrecognizedMessage}/revisar', [ChatbotUnrecognizedController::class, 'markReviewed'])->name('unrecognized.review');
+    });
 
     // Opiniones del Home público (roadmap de mejoras, sección 14).
     Route::get('/opiniones', [AdminPlatformFeedbackController::class, 'index'])->name('platform-feedback.index');

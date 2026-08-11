@@ -12,6 +12,7 @@ import PermissionsPrompt from '@/Components/PermissionsPrompt.vue';
 import HelpTip from '@/Components/HelpTip.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
+import { canInstallApp, installApp } from '@/pwaInstall.js';
 import { playIncomingRideAlert } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
@@ -68,6 +69,15 @@ async function activatePushNotifications() {
 
     const ok = await subscribeToPush(usePage().props.vapidPublicKey);
     alert(ok ? 'Notificaciones activadas.' : 'No se pudo activar — revise los permisos del navegador.');
+}
+
+// Instalar como app (pedido explícito del usuario: "un botón que guarde un
+// acceso directo en su teléfono o computador") — el botón solo aparece si
+// el navegador ya avisó que se puede instalar (ver pwaInstall.js); si ya
+// está instalada o el navegador no lo soporta, no se muestra nada.
+async function installAppNow() {
+    const accepted = await installApp();
+    if (accepted) alert('¡Listo! Ya quedó instalada.');
 }
 
 // Mismo set de accesos rápidos que el bottom sheet de móvil, para que en
@@ -405,7 +415,8 @@ onBeforeUnmount(() => {
 
                         <!-- Cuenta: avatar circular (referencia de diseño: ícono de cuenta de Google).
                              Si el usuario tiene foto (ej. entró con Google), se muestra esa foto;
-                             si no, iniciales — nunca una imagen rota (sección 13: avatar por defecto). -->
+                             si no (o si falla al cargar), un ícono según el rol — nunca una imagen
+                             rota (sección 13: avatar por defecto, ver Components/UserAvatar.vue). -->
                         <div class="ms-1 relative">
                             <Dropdown align="right" width="56">
                                 <template #trigger>
@@ -496,6 +507,14 @@ onBeforeUnmount(() => {
                                         class="block w-full px-4 py-2 text-start text-sm leading-5 text-arka-text hover:bg-arka-base focus:outline-none focus:bg-arka-base transition duration-150 ease-in-out"
                                     >
                                         Activar notificaciones
+                                    </button>
+                                    <button
+                                        v-if="canInstallApp"
+                                        type="button"
+                                        @click="installAppNow"
+                                        class="block w-full px-4 py-2 text-start text-sm leading-5 text-arka-text hover:bg-arka-base focus:outline-none focus:bg-arka-base transition duration-150 ease-in-out"
+                                    >
+                                        Instalar app
                                     </button>
                                     <DropdownLink :href="route('logout')" method="post" as="button">
                                         Cerrar sesión

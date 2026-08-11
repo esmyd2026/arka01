@@ -2176,6 +2176,55 @@ Antes de tocar código se revisó a fondo TODO el esquema actual (26 tablas con 
 
 ---
 
+### Avatar roto mostrando texto desbordado ("GREG")
+
+El usuario mandó una captura del ícono de cuenta: un texto ("GREG") desbordando el círculo del avatar. La refactorización de `UserAvatar.vue` de esta sesión (iniciales → ícono según el rol) ya había sacado el único código que renderizaba texto, pero quedaba un hueco: si `avatar_url` existe pero la imagen falla al cargar (foto de Google vencida, archivo borrado), el propio navegador dibuja su ícono de imagen rota + el `alt` como texto plano, sin respetar el tamaño chico del círculo — eso es lo que se veía. Se agregó un manejador `@error` en el `<img>` que cae al mismo ícono por rol de siempre en vez de dejarle el control al navegador.
+
+### Tests
+No aplica — cambio de manejo de errores en el navegador, sin lógica de backend. Build limpio.
+
+---
+
+### Chatbot / asistente virtual sobre WhatsApp (núcleo + integración)
+
+Pedido explícito y extenso del usuario ("MEJORA DEL CHATBOT — AMPLIAR CAPACIDADES SIN ALTERAR LOS FLUJOS ACTUALES"): evolucionar WhatsApp de "mecanismo que manda mensajes fijos" a un asistente real que interpreta texto libre, sin tocar ni un mensaje transaccional existente. Antes de escribir código se investigó a fondo el webhook actual (`WhatsAppWebhookController`) y se confirmó el diagnóstico del usuario: solo reconocía UNA frase exacta ("recuperar mi sesion") y, para cualquier otro mensaje, contestaba siempre el mismo texto fijo sin leer el contenido. Se armó un plan (modo plan, aprobado por el usuario) con dos decisiones confirmadas explícitamente: motor de intención por reglas/palabras clave (no un modelo de lenguaje externo — sin costo ni dependencia nueva) y atención también a números sin cuenta todavía (prospectos).
+
+- **Datos nuevos**: `chatbot_conversations` (estado de conversación por teléfono, no por usuario — separado a propósito de `whatsapp_sessions`), `chatbot_intents` + `chatbot_intent_keywords` (catálogo administrable, con un seeder inicial de 13 intenciones reales de Arka01 sembrado en la propia migración, mismo criterio que `faqs`), `chatbot_settings` (mensajes de bienvenida/ayuda/fallback/despedida, fila única), `chatbot_unrecognized_messages` (log de lo que no se entendió, sección 15 del pedido).
+- **`App\Services\Chatbot\IntentDetector`**: normaliza el mensaje (sin tildes/mayúsculas/puntuación), le da prioridad al contexto (si el bot mostró un menú, la respuesta a ese menú se resuelve directo, sin pasar por el reconocimiento genérico — sección 8 del pedido), y clasifica por palabras clave con un puntaje de confianza (penaliza cuando dos intenciones quedan muy cerca — mensaje ambiguo).
+- **`App\Services\Chatbot\ChatbotEngine`**: orquesta todo — reutiliza servicios YA existentes en vez de duplicar lógica (sección 7 del pedido): `WhatsAppVerificationSender::sendCode()` para "no me llegó el código", `SupportTicket::openOrCreateFor()` para "hablar con soporte" (con un resumen automático de contexto en el primer mensaje del ticket), y el catálogo real de `Faq` (el mismo de `/admin/preguntas-frecuentes`, sin duplicar) tanto para el menú de FAQ como para "rescatar" preguntas libres que no tienen intención fija (ej. "¿cómo se calcula el precio?"). Fallback profesional con reintentos limitados (configurable) antes de ofrecer soporte; nunca expone errores técnicos (reutiliza `SystemEventLogger`, ya alimenta Monitoreo).
+- **Cambio quirúrgico en `WhatsAppWebhookController`**: se preservó intacta la detección de la frase de recuperación de sesión y el resto de la lógica transaccional (número duplicado, número que no coincide) — el ÚNICO cambio real es que, para un mensaje "normal" de un número conocido (o de un prospecto sin cuenta), ahora se despacha `ProcessChatbotMessage` en vez de la confirmación fija de siempre (`SendWhatsAppWindowConfirmation`, que quedó sin uso y se eliminó junto con el método que llamaba). La apertura de la ventana de 24h sigue corriendo exactamente igual.
+
+### Tests
+`tests/Feature/Chatbot/IntentDetectorTest.php` (11 tests): clasificación por palabras clave, prioridad del contexto, scoping por rol. `tests/Feature/Chatbot/ChatbotWebhookTest.php` (8 tests): saludo real (no el texto fijo viejo), prospecto sin cuenta atendido, reenvío real de código, ticket de soporte con contexto, mensaje sin sentido registrado y con fallback, escalamiento tras reintentos, la frase de recuperación de sesión sigue yendo por su propio camino (regresión), pregunta sin intención fija resuelta por FAQ. `tests/Feature/WhatsApp/WhatsAppSessionTest.php` actualizado (mismos 16 tests, ahora afirmando que se despacha el chatbot en el caso genérico). Suite completa: 601 tests OK, Pint limpio, build limpio.
+
+### Panel `Administración → Chatbot`
+
+Cierre del pedido del chatbot: la parte administrable, separada a propósito de "Integraciones" (config transaccional cruda de WhatsApp) y de "Preguntas frecuentes" (que se deja donde está — el chatbot solo la lee, no se duplica).
+
+- **Intenciones** (`/admin/chatbot/intenciones`): editar cada intención sembrada (nombre, a quién aplica, activa/inactiva, si aparece en el menú y con qué texto, orden, y su respuesta libre — salvo las 4 que disparan una acción del sistema, esas muestran de qué acción se trata en vez del campo de texto). Agregar/quitar vocablos por intención. **Crear intenciones nuevas** — siempre solo texto de respuesta, nunca una acción del sistema (esas 4 son fijas y no se inventan desde el panel, sección 7 del pedido: nunca ejecutar código nuevo sin revisar).
+- **Mensajes generales** (`/admin/chatbot/mensajes`): bienvenida, ayuda, fallback, fallback tras varios intentos, despedida, y cuántos intentos sin entender antes de ofrecer soporte — fila única, mismo patrón que la config de WhatsApp.
+- **Consultas no reconocidas** (`/admin/chatbot/no-reconocidas`, sección 15 del pedido): lista de lo que el motor no supo clasificar, con quién la escribió (o "sin cuenta" si era un prospecto) y con qué confianza. Botón "Crear intención" que lleva a Intenciones con el texto ya sugerido como nombre y como primer vocablo — cierra el ciclo pedido explícitamente ("esto permitirá... convertirlas en nueva intención").
+
+### Tests
+`tests/Feature/Admin/AdminChatbotTest.php` (9 tests): acceso restringido a admin, ver el catálogo sembrado (13 intenciones), editar una intención, crear una intención nueva sin acción de sistema, código duplicado rechazado, agregar/quitar un vocablo, editar los mensajes generales, listar y marcar revisada una consulta no reconocida, las revisadas quedan ocultas por defecto. Suite completa: 610 tests OK, Pint limpio, build limpio.
+
+---
+
+### Lote de ajustes: carrera aceptada, chat sin contexto, instalar app, portada nueva, fechas en admin
+
+Batería de pedidos puntuales del usuario, varios de una sola vez.
+
+- **Cliente al detalle al aceptar**: `Ride/Index.vue` navegaba a la misma lista al recibir `.ride-request.accepted` — ahora navega directo a `rides.show` (el evento ya traía `ride_id`), justo donde el cliente aterriza después de pedir la carrera.
+- **Aviso de chat sin contexto** ("suena pero no sé qué es ni de dónde viene"): `Ride/Show.vue` solo reproducía un sonido al llegar un mensaje nuevo — si el chat no estaba a la vista (scrolleado hacia el mapa, por ejemplo), no había forma de saber qué pasó. Se agregó un toast fijo arriba de la pantalla (vía `Teleport`, no depende del scroll) con quién escribió y qué, que al tocarlo lleva directo al panel de chat.
+- **Botón "Instalar app"** (pedido explícito: "acceso directo en su teléfono o computador"): el manifest y el service worker ya existían — faltaba un botón propio. `resources/js/pwaInstall.js` (nuevo) captura el evento `beforeinstallprompt` del navegador y lo dispara a demanda; el botón vive en el menú de cuenta de `AuthenticatedLayout.vue` (mismo lugar que "Activar notificaciones"), y solo aparece si el navegador realmente puede instalarla.
+- **Portada nueva** (`Welcome.vue`, referencia visual provista): hero rehecho con insignia, 3 puntos de beneficio, mockup de teléfono con un viaje de ejemplo (datos ilustrativos, sin fotos de personas reales) y CTAs "Crear mi círculo"/"¿Cómo funciona?". "Crear mi círculo" enlaza al registro con `?tipo=cliente`, y `Auth/Register.vue` ahora lee ese parámetro para arrancar directo en el paso del nombre (sin volver a preguntar el tipo de cuenta). "¿Cómo funciona?" es un ancla a la sección "Para Clientes/Conductores" que ya existía más abajo en la misma página — sin duplicar contenido. Se sacó "Hecho en Ecuador" de la fila de confianza, tal como pidió el usuario.
+- **Fechas de registro/actualización en el admin de suscripciones**: `Admin\SubscriptionController::index()` solo ordenaba por nombre — ahora agrega columnas "Registro" y "Actualización" (ordenables) y el orden por defecto pasó a ser por fecha de registro, descendente (los suscriptores más nuevos primero), sin tocar el resto de los filtros existentes.
+
+### Tests
+`tests/Feature/Admin/AdminSubscriptionTest.php` (+1): confirma que sin parámetros de orden explícitos, la lista queda ordenada por registro descendente y que ambas fechas viajan en la respuesta. El resto de los cambios de esta sección son de UI/navegación en el navegador, sin lógica de backend nueva. Suite completa: 601 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

@@ -1,4 +1,6 @@
 <script setup>
+import { ref, watch } from 'vue';
+
 // Avatar reutilizable (sección 13: la foto de perfil debe verse en navbar,
 // perfiles y cualquier lugar donde se identifique a un usuario, con un
 // respaldo consistente si no tiene foto — nunca una imagen rota).
@@ -10,10 +12,20 @@
 // `user.role` viaja tal cual en cualquier User de Eloquent (no está en
 // $hidden); en los pocos lugares donde se arma un array a mano sin esa
 // clave, cae al ícono de persona por defecto — nunca a algo roto.
-defineProps({
+const props = defineProps({
     user: { type: Object, required: true },
     sizeClass: { type: String, default: 'h-9 w-9 text-sm' },
 });
+
+// Bug real reportado por el usuario (captura: el texto "GREG" desbordando
+// el círculo): si avatar_url existe pero la imagen falla al cargar (foto de
+// Google vencida, archivo borrado del disco), el navegador dibuja SU PROPIO
+// ícono de imagen rota + el atributo alt como texto plano, sin respetar el
+// tamaño chico del círculo — se ve roto pase lo que pase acá adentro. Con
+// @error se detecta el fallo y se cae al mismo ícono por rol de siempre, en
+// vez de dejar que el navegador improvise.
+const imageFailed = ref(false);
+watch(() => props.user?.avatar_url, () => (imageFailed.value = false));
 </script>
 
 <template>
@@ -22,11 +34,12 @@ defineProps({
         class="rounded-full bg-arka-primary/15 text-arka-primary flex items-center justify-center overflow-hidden shrink-0"
     >
         <img
-            v-if="user?.avatar_url"
+            v-if="user?.avatar_url && !imageFailed"
             :src="user.avatar_url"
             :alt="user.name"
             class="h-full w-full object-cover"
             referrerpolicy="no-referrer"
+            @error="imageFailed = true"
         />
         <svg v-else-if="user?.role === 'conductor'" class="h-3/5 w-3/5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
