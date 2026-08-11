@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Fleet;
+use App\Models\Ride;
+use App\Models\SupportTicket;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -33,4 +35,31 @@ Broadcast::channel('fleet.{fleetId}', function ($user, $fleetId) {
     }
 
     return $fleet->activeMembers()->where('driver_user_id', $user->id)->exists();
+});
+
+// Canal privado de UNA carrera puntual (sección 10 del roadmap de mejoras:
+// chat cliente↔conductor) — a propósito separado del canal de flota, que
+// llega a todos sus miembros: acá solo pueden escuchar las dos partes de
+// ESTA carrera, nadie más.
+Broadcast::channel('ride.{rideId}', function ($user, $rideId) {
+    $ride = Ride::find($rideId);
+
+    if (! $ride) {
+        return false;
+    }
+
+    return (int) $user->id === (int) $ride->client_user_id || (int) $user->id === (int) $ride->driver_user_id;
+});
+
+// Canal privado de un ticket de soporte (sección 12 del roadmap de mejoras):
+// solo el dueño del ticket o cualquier admin puede escuchar — nadie más
+// puede ver la conversación de un tercero con soporte.
+Broadcast::channel('support-ticket.{ticketId}', function ($user, $ticketId) {
+    if ($user->is_admin) {
+        return true;
+    }
+
+    $ticket = SupportTicket::find($ticketId);
+
+    return $ticket && (int) $user->id === (int) $ticket->user_id;
 });

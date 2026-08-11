@@ -8,6 +8,7 @@ use App\Models\DriverTier;
 use App\Models\PricingSetting;
 use App\Models\User;
 use App\Services\PlanLimits;
+use App\Services\WhatsAppConfig;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,7 +66,7 @@ class DriverProfileController extends Controller
                 'status' => $whatsappSession->status(),
                 'expires_at' => $whatsappSession->expires_at->toIso8601String(),
             ] : null,
-            'whatsappBusinessNumber' => config('services.whatsapp.business_number'),
+            'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
             // Pedido explícito del usuario: el conductor tiene que poder ver
             // y corregir el número que declaró — es el que se valida contra
             // el que usa para conectarse por WhatsApp.
@@ -178,6 +179,18 @@ class DriverProfileController extends Controller
                     Log::info('Código de verificación enviado tras cambiar el número desde el perfil de conductor.', [
                         'user_id' => $user->id, 'enviado_por_whatsapp' => $sent,
                     ]);
+
+                    // Bug crítico reportado por el usuario: si el envío
+                    // falla de verdad, no puede quedar bloqueando la cuenta
+                    // esperando un código que nunca va a llegar — mismo
+                    // criterio que "no configurada".
+                    if (! $sent) {
+                        $user->forceFill([
+                            'phone_verified_at' => now(),
+                            'phone_verification_code' => null,
+                            'phone_verification_expires_at' => null,
+                        ])->save();
+                    }
                 } else {
                     $user->forceFill(['phone_verified_at' => now()])->save();
                 }

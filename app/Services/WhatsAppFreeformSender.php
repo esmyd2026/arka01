@@ -20,7 +20,7 @@ class WhatsAppFreeformSender
 {
     public static function enabled(): bool
     {
-        return filled(config('services.whatsapp.token')) && filled(config('services.whatsapp.phone_number_id'));
+        return filled(WhatsAppConfig::token()) && filled(WhatsAppConfig::phoneNumberId());
     }
 
     /**
@@ -32,8 +32,8 @@ class WhatsAppFreeformSender
             return false;
         }
 
-        $response = Http::withToken(config('services.whatsapp.token'))
-            ->post('https://graph.facebook.com/v20.0/'.config('services.whatsapp.phone_number_id').'/messages', [
+        $response = Http::withToken(WhatsAppConfig::token())
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => ltrim($phoneE164, '+'),
                 'type' => 'text',
@@ -45,6 +45,19 @@ class WhatsAppFreeformSender
                 'status' => $response->status(),
                 'body' => $response->json(),
             ]);
+
+            // Monitoreo (roadmap de mejoras, sección 9): visible desde
+            // /admin/monitoreo sin tener que entrar a storage/logs. Nunca se
+            // guarda el token acá — solo el estado y el error que devolvió Meta.
+            SystemEventLogger::log(
+                eventType: 'whatsapp_send_failed',
+                module: 'whatsapp',
+                message: "No se pudo enviar el mensaje libre de WhatsApp a {$phoneE164}.",
+                severity: 'error',
+                context: ['status' => $response->status(), 'body' => $response->json()],
+                channel: 'whatsapp',
+                providerErrorCode: (string) $response->status(),
+            );
         }
 
         return $response->successful();

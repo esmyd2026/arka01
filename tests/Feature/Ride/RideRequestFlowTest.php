@@ -18,6 +18,7 @@ use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\RideArrivedPushNotification;
 use App\Notifications\RideCancelledPushNotification;
+use App\Notifications\RidePickedUpPushNotification;
 use App\Notifications\RideRequestDeclinedPushNotification;
 use App\Services\PriceCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -612,6 +613,7 @@ class RideRequestFlowTest extends TestCase
     public function test_driver_can_mark_the_client_as_picked_up(): void
     {
         Event::fake([RidePickedUp::class]);
+        Notification::fake();
 
         [$client, $driver, $fleet] = $this->clientWithFleetDriver();
 
@@ -630,6 +632,7 @@ class RideRequestFlowTest extends TestCase
         $this->assertNotNull($ride->picked_up_at);
 
         Event::assertDispatched(RidePickedUp::class);
+        Notification::assertSentTo($client, RidePickedUpPushNotification::class);
     }
 
     public function test_pickup_cannot_be_marked_twice(): void

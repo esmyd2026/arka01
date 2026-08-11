@@ -6,17 +6,22 @@ use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Admin\DriverTierController;
 use App\Http\Controllers\Admin\DriverVerificationController;
+use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\Admin\LocationController;
 use App\Http\Controllers\Admin\MetricsController;
 use App\Http\Controllers\Admin\OperationsController as AdminOperationsController;
 use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\Admin\PlanPromotionController;
+use App\Http\Controllers\Admin\PlatformFeedbackController as AdminPlatformFeedbackController;
 use App\Http\Controllers\Admin\PricingSettingController;
 use App\Http\Controllers\Admin\RatingReasonController;
 use App\Http\Controllers\Admin\SosAlertController as AdminSosAlertController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
+use App\Http\Controllers\Admin\SupportTicketController;
 use App\Http\Controllers\Admin\SystemController as AdminSystemController;
+use App\Http\Controllers\Admin\SystemEventController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
+use App\Http\Controllers\Admin\WhatsAppSettingController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DriverDirectoryController;
@@ -33,6 +38,7 @@ use App\Http\Controllers\FleetInvitationController;
 use App\Http\Controllers\FleetMemberController;
 use App\Http\Controllers\MyPlanController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\PlatformFeedbackController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\PublicRideTrackingController;
@@ -40,10 +46,12 @@ use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\RideController;
+use App\Http\Controllers\RideMessageController;
 use App\Http\Controllers\RideRequestController;
 use App\Http\Controllers\SavedRouteController;
 use App\Http\Controllers\SosAlertController;
 use App\Http\Controllers\SubscriptionRequestController;
+use App\Http\Controllers\SupportController;
 use App\Http\Controllers\TrustedContactController;
 use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
@@ -67,6 +75,13 @@ Route::get('/', function () {
         'canRegister' => Route::has('register'),
     ]);
 });
+
+// "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): formulario
+// público en el Home, sin necesidad de sesión — throttle porque no hay
+// cuenta detrás que limite cuántas veces se puede mandar.
+Route::post('/opiniones', [PlatformFeedbackController::class, 'store'])
+    ->middleware('throttle:6,1')
+    ->name('platform-feedback.store');
 
 // Páginas legales (pedido explícito del usuario, gap identificado antes del
 // despliegue): públicas, sin necesidad de sesión — hace falta poder verlas
@@ -166,6 +181,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');
     Route::post('/carreras/{ride}/completar', [RideController::class, 'complete'])->name('rides.complete');
+    // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras).
+    Route::post('/carreras/{ride}/mensajes', [RideMessageController::class, 'store'])->name('ride-messages.store');
     Route::post('/carreras/{ride}/calificar', [ReviewController::class, 'store'])->name('reviews.store');
     Route::get('/carreras/{ride}/seguimiento', [RideController::class, 'trackingLink'])->name('rides.tracking-link');
     // Auditoría de seguridad (pedido explícito del usuario): sin límite,
@@ -250,6 +267,10 @@ Route::middleware('auth')->group(function () {
     // las dos — sección 3.1), administradas desde /admin/cupones.
     Route::get('/cupones', [CouponController::class, 'index'])->name('coupons.index');
 
+    // Centro de Ayuda / Soporte (roadmap de mejoras, secciones 11 y 12).
+    Route::get('/soporte', [SupportController::class, 'index'])->name('support.index');
+    Route::post('/soporte/mensajes', [SupportController::class, 'storeMessage'])->name('support.messages.store');
+
     // Contactos de confianza (sección 8): a quién avisar desde el botón SOS.
     Route::get('/contactos-de-confianza', [TrustedContactController::class, 'index'])->name('trusted-contacts.index');
     Route::post('/contactos-de-confianza', [TrustedContactController::class, 'store'])->name('trusted-contacts.store');
@@ -316,6 +337,22 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/motivos-calificacion', [RatingReasonController::class, 'store'])->name('rating-reasons.store');
     Route::patch('/motivos-calificacion/{ratingReason}', [RatingReasonController::class, 'update'])->name('rating-reasons.update');
 
+    // Preguntas frecuentes del Centro de Ayuda (roadmap de mejoras, sección 11).
+    Route::get('/preguntas-frecuentes', [FaqController::class, 'index'])->name('faqs.index');
+    Route::post('/preguntas-frecuentes', [FaqController::class, 'store'])->name('faqs.store');
+    Route::patch('/preguntas-frecuentes/{faq}', [FaqController::class, 'update'])->name('faqs.update');
+    Route::delete('/preguntas-frecuentes/{faq}', [FaqController::class, 'destroy'])->name('faqs.destroy');
+
+    // Soporte (roadmap de mejoras, sección 12): tickets de "Hablar con soporte".
+    Route::get('/soporte', [SupportTicketController::class, 'index'])->name('support-tickets.index');
+    Route::get('/soporte/{supportTicket}', [SupportTicketController::class, 'show'])->name('support-tickets.show');
+    Route::post('/soporte/{supportTicket}/mensajes', [SupportTicketController::class, 'reply'])->name('support-tickets.reply');
+    Route::patch('/soporte/{supportTicket}/estado', [SupportTicketController::class, 'updateStatus'])->name('support-tickets.update-status');
+
+    // Opiniones del Home público (roadmap de mejoras, sección 14).
+    Route::get('/opiniones', [AdminPlatformFeedbackController::class, 'index'])->name('platform-feedback.index');
+    Route::patch('/opiniones/{platformFeedback}', [AdminPlatformFeedbackController::class, 'update'])->name('platform-feedback.update');
+
     // Módulo de publicidad y promociones (pedido explícito del usuario):
     // banners tipo slider, vendibles a negocios aliados — ver AdBannerController.
     Route::get('/banners', [AdBannerController::class, 'index'])->name('ad-banners.index');
@@ -370,6 +407,16 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // de prueba (@arka01.test) y dejar el sistema reiniciado — ver Admin\SystemController.
     Route::get('/sistema', [AdminSystemController::class, 'index'])->name('system.index');
     Route::post('/sistema/borrar-demo', [AdminSystemController::class, 'resetDemo'])->name('system.reset-demo');
+
+    // Configuración → Integraciones → WhatsApp (roadmap de mejoras, sección
+    // 8): evita tener que tocar el .env para cambiar el token.
+    Route::get('/integraciones/whatsapp', [WhatsAppSettingController::class, 'edit'])->name('integrations.whatsapp.edit');
+    Route::patch('/integraciones/whatsapp', [WhatsAppSettingController::class, 'update'])->name('integrations.whatsapp.update');
+
+    // Monitoreo (roadmap de mejoras, sección 9): errores/eventos críticos
+    // sin tener que entrar a storage/logs.
+    Route::get('/monitoreo', [SystemEventController::class, 'index'])->name('monitoring.index');
+    Route::post('/monitoreo/{systemEvent}/resolver', [SystemEventController::class, 'markResolved'])->name('monitoring.resolve');
 });
 
 // Seguimiento en vivo compartible (sección 8): páginas públicas, sin login,

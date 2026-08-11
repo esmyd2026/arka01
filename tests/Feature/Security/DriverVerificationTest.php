@@ -53,6 +53,37 @@ class DriverVerificationTest extends TestCase
         Storage::disk('public')->assertExists($profile->vehicle_photo_path);
     }
 
+    /**
+     * Bug crítico reportado por el usuario: un conductor guardaba su perfil
+     * la primera vez SIN subir ninguna foto, y terminaba con
+     * verification_status = 'pending' igual (antes era el default de la
+     * columna ENUM) — quedaba bloqueado para subir documentos sin haber
+     * subido ninguno todavía, y no aparecía en la cola de revisión del
+     * admin (que exige license_photo_path no nulo) porque no había nada que
+     * revisar. Ahora el estado sin documentos es null, no 'pending'.
+     */
+    public function test_saving_the_profile_for_the_first_time_without_photos_does_not_mark_it_pending(): void
+    {
+        $driver = User::factory()->create();
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), [
+            'license_number' => 'LIC-001',
+            'vehicle_make' => 'Chevrolet',
+            'vehicle_model' => 'Spark',
+            'vehicle_color' => 'Blanco',
+            'vehicle_plate' => 'ABC-1234',
+            'vehicle_year' => 2020,
+            'passenger_capacity' => 4,
+            'has_trunk' => true,
+            'rate_per_km' => 0.5,
+        ])->assertSessionHasNoErrors();
+
+        $profile = $driver->driverProfile()->first();
+        $this->assertNull($profile->verification_status);
+        $this->assertNull($profile->license_photo_path);
+        $this->assertTrue($profile->canUploadDocuments());
+    }
+
     public function test_an_admin_can_approve_a_pending_verification(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

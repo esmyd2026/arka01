@@ -274,10 +274,17 @@ const atLimit = props.maxDriversPerFleet !== null && memberCount >= props.maxDri
                     </p>
 
                     <ul v-else class="divide-y divide-arka-text-muted/10">
+                        <!-- Bug reportado por el usuario (con captura: diseño roto en
+                             móvil, botones superpuestos y nombre cortado) — la fila era
+                             `flex items-center` sin apilar en pantallas angostas, y los
+                             tres botones de acción (shrink-0) le comían todo el ancho al
+                             bloque de nombre/datos, sin importar cuánto min-w-0 tuviera.
+                             Mismo patrón "apilar en mobile" que ya se usa en el resto del
+                             panel admin para filas con acciones al costado. -->
                         <li
                             v-for="member in fleet.active_members"
                             :key="member.id"
-                            class="py-3 flex items-center justify-between gap-4"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="member.driver" size-class="h-11 w-11 text-sm shrink-0" />
@@ -311,7 +318,7 @@ const atLimit = props.maxDriversPerFleet !== null && memberCount >= props.maxDri
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-2 shrink-0">
+                            <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
                                 <!-- Pedido explícito del usuario: elegir un conductor de
                                      la flota tiene que ofrecer pedirle una carrera directo.
                                      Mismas clases que SecondaryButton, pero es una navegación

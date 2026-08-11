@@ -103,10 +103,26 @@ class RegisteredUserController extends Controller
         // agregada al alcance): si no está configurada todavía, el teléfono
         // queda auto-verificado para no bloquear a nadie por una integración
         // pendiente (mismo criterio que googleLoginEnabled).
+        //
+        // Bug crítico reportado por el usuario: si SÍ está configurada pero
+        // el envío falla de verdad (token vencido, límite de Meta, etc.),
+        // antes quedaba igual esperando un código que nunca iba a llegar —
+        // EnsurePhoneIsVerified lo trababa ahí para siempre, sin ninguna
+        // salida (ni reenviar, que repetía el mismo fallo en silencio, ni un
+        // escape del lado admin). Mismo criterio que "no configurada": si el
+        // envío no salió, no puede quedar bloqueando la cuenta.
         if (WhatsAppVerificationSender::enabled()) {
             $code = $user->issuePhoneVerificationCode();
             $sent = WhatsAppVerificationSender::sendCode($user->phone, $code);
             Log::info('Código de verificación de teléfono enviado al registrarse.', ['user_id' => $user->id, 'enviado_por_whatsapp' => $sent]);
+
+            if (! $sent) {
+                $user->forceFill([
+                    'phone_verified_at' => now(),
+                    'phone_verification_code' => null,
+                    'phone_verification_expires_at' => null,
+                ])->save();
+            }
         } else {
             $user->forceFill(['phone_verified_at' => now()])->save();
         }

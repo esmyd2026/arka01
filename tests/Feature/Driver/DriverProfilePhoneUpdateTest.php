@@ -113,4 +113,28 @@ class DriverProfilePhoneUpdateTest extends TestCase
 
         $this->assertNotNull($driver->fresh()->phone_verified_at);
     }
+
+    /**
+     * Bug crítico reportado por el usuario: si la integración está
+     * configurada pero el envío falla de verdad, no puede quedar el número
+     * nuevo trabado sin verificar para siempre — mismo criterio que "no
+     * configurada".
+     */
+    public function test_changing_the_phone_when_the_whatsapp_send_actually_fails_stays_verified(): void
+    {
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Invalid token']], 401)]);
+
+        $driver = User::factory()->create(['phone' => '+593991111111', 'phone_verified_at' => now()]);
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), $this->baseVehiclePayload() + [
+            'country_code' => '+593',
+            'phone_local' => '992222222',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNotNull($driver->fresh()->phone_verified_at);
+        $this->assertNull($driver->fresh()->phone_verification_code);
+    }
 }

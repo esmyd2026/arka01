@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -13,6 +13,7 @@ import TextInput from '@/Components/TextInput.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { playUpdateChime } from '@/Utils/liveAlert';
 
 const props = defineProps({
     ride: { type: Object, required: true },
@@ -23,6 +24,8 @@ const props = defineProps({
     // el admin, distinto según quién califica a quién (ya viene filtrado por
     // dirección y solo con los activos — ver RideController::show()).
     ratingReasons: { type: Array, default: () => [] },
+    // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras).
+    messages: { type: Array, default: () => [] },
 });
 
 // Posición en vivo del conductor durante el viaje: reutiliza el mismo canal
@@ -50,8 +53,52 @@ function googleNavigateUrl(lat, lng) {
 }
 
 let fleetChannel = null;
+let rideChannel = null;
+
+// Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras): solo
+// existe mientras hay una relación de viaje vigente — mismo criterio que el
+// backend (Ride::chatIsOpen()), para no ofrecer escribir algo que el
+// servidor de todas formas va a rechazar.
+const chatOpen = computed(() => ['scheduled', 'in_progress'].includes(props.ride.status));
+const chatMessages = ref([...props.messages]);
+const chatBody = ref('');
+const chatSending = ref(false);
+const chatError = ref('');
+const chatListEl = ref(null);
+
+// Respuestas rápidas (pedido explícito del usuario): distintas según el rol,
+// un clic manda el mensaje tal cual — no hace falta escribirlo, pero el
+// campo de texto libre sigue disponible para lo que no calce en ninguna.
+const QUICK_REPLIES_DRIVER = ['Voy en camino.', 'Estoy cerca.', 'Estoy en el punto de recogida.', 'No logro ubicarte.', 'Hay tráfico, llegaré en unos minutos.'];
+const QUICK_REPLIES_CLIENT = ['¿Vienes en camino?', '¿Ya llegaste?', 'Estoy saliendo.', 'Estoy en el punto indicado.', 'No logro ubicarte.'];
+const quickReplies = computed(() => (props.isDriver ? QUICK_REPLIES_DRIVER : QUICK_REPLIES_CLIENT));
+
+async function scrollChatToBottom() {
+    await nextTick();
+    if (chatListEl.value) chatListEl.value.scrollTop = chatListEl.value.scrollHeight;
+}
+
+async function sendChatMessage(text) {
+    const body = (text ?? chatBody.value).trim();
+    if (!body || chatSending.value) return;
+
+    chatSending.value = true;
+    chatError.value = '';
+
+    try {
+        const { data } = await window.axios.post(route('ride-messages.store', props.ride.id), { body });
+        chatMessages.value.push(data);
+        chatBody.value = '';
+        scrollChatToBottom();
+    } catch (error) {
+        chatError.value = error.response?.data?.errors?.body?.[0] ?? 'No se pudo mandar el mensaje.';
+    } finally {
+        chatSending.value = false;
+    }
+}
 
 onMounted(() => {
+    scrollChatToBottom();
     fleetChannel = window.Echo.private(`fleet.${props.ride.fleet_id}`);
     fleetChannel.listen('.driver.location.updated', (e) => {
         if (e.driver_user_id !== props.ride.driver_user_id) return;
@@ -96,10 +143,25 @@ onMounted(() => {
         if (e.ride_id !== props.ride.id) return;
         router.reload({ only: ['ride'] });
     });
+
+    // Chat (sección 10 del roadmap de mejoras): canal PROPIO de esta carrera
+    // puntual, no el de flota — ahí solo escuchan las dos partes de este
+    // viaje, nadie más de la flota (ver routes/channels.php: `ride.{id}`).
+    // Solo tiene sentido suscribirse mientras el chat sigue abierto — ver
+    // Ride::chatIsOpen().
+    if (chatOpen.value) {
+        rideChannel = window.Echo.private(`ride.${props.ride.id}`);
+        rideChannel.listen('.ride.message.sent', (e) => {
+            chatMessages.value.push(e);
+            playUpdateChime();
+            scrollChatToBottom();
+        });
+    }
 });
 
 onBeforeUnmount(() => {
     window.Echo.leave(`fleet.${props.ride.fleet_id}`);
+    if (chatOpen.value) window.Echo.leave(`ride.${props.ride.id}`);
 });
 
 const mapMarkers = computed(() => {
@@ -395,6 +457,65 @@ function submitReview() {
                     <p class="text-xs text-arka-text-muted">
                         Cualquiera con este enlace puede ver la ubicación en vivo del viaje, sin necesidad de cuenta.
                     </p>
+                </div>
+
+                <!-- Chat temporal (sección 10 del roadmap de mejoras): solo
+                     mientras hay una relación de viaje vigente entre estas dos
+                     personas — nunca antes de que el conductor acepte, ni
+                     después de que la carrera termine o se cancele. No expone
+                     teléfonos: todo pasa por acá. -->
+                <div v-if="chatOpen" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                    <h3 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">
+                        Chat con {{ isDriver ? 'el cliente' : 'el conductor' }}
+                    </h3>
+
+                    <div ref="chatListEl" class="max-h-64 overflow-y-auto space-y-2 pe-1">
+                        <p v-if="!chatMessages.length" class="text-sm text-arka-text-muted">
+                            Todavía no hay mensajes — use una respuesta rápida o escriba la suya.
+                        </p>
+                        <div
+                            v-for="message in chatMessages"
+                            :key="message.id"
+                            class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
+                            :class="message.sender_user_id === $page.props.auth.user.id
+                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                : 'bg-arka-base text-arka-text'"
+                        >
+                            <p>{{ message.body }}</p>
+                            <p
+                                class="mt-0.5 text-[10px]"
+                                :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-base/70' : 'text-arka-text-muted'"
+                            >
+                                {{ new Date(message.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Mensajes rápidos: un clic manda el texto tal cual. -->
+                    <div class="flex flex-wrap gap-1.5">
+                        <button
+                            v-for="reply in quickReplies"
+                            :key="reply"
+                            type="button"
+                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                            :disabled="chatSending"
+                            @click="sendChatMessage(reply)"
+                        >
+                            {{ reply }}
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="sendChatMessage()" class="flex items-center gap-2">
+                        <TextInput
+                            v-model="chatBody"
+                            type="text"
+                            class="flex-1"
+                            placeholder="Escriba un mensaje…"
+                            maxlength="500"
+                        />
+                        <PrimaryButton :disabled="chatSending || !chatBody.trim()">Enviar</PrimaryButton>
+                    </form>
+                    <InputError :message="chatError" />
                 </div>
 
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka flex flex-wrap gap-3">

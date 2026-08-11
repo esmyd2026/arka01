@@ -16,6 +16,7 @@ use App\Models\RideRequest;
 use App\Notifications\RideArrivedPushNotification;
 use App\Notifications\RideCancelledPushNotification;
 use App\Notifications\RideCompletedPushNotification;
+use App\Notifications\RidePickedUpPushNotification;
 use App\Notifications\RideStartedPushNotification;
 use App\Services\RideDispatchAdvancer;
 use Illuminate\Http\JsonResponse;
@@ -216,6 +217,12 @@ class RideController extends Controller
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(['id', 'text']),
+            // Chat temporal cliente↔conductor (sección 10 del roadmap de
+            // mejoras) — historial completo aunque el chat ya esté "cerrado"
+            // (carrera completada/cancelada), sigue siendo consulta normal
+            // del historial de esa carrera, solo que ya no se puede escribir
+            // más (ver Ride::chatIsOpen() y RideMessageController::store()).
+            'messages' => $ride->messages()->with('sender')->oldest()->get(),
         ]);
     }
 
@@ -330,6 +337,11 @@ class RideController extends Controller
         $ride->update(['picked_up_at' => now()]);
 
         broadcast(new RidePickedUp($ride))->toOthers();
+
+        // Pedido explícito del usuario (roadmap de mejoras, sección 5): cada
+        // cambio de estado visible para el cliente necesita también un aviso
+        // push, no solo el refresco en vivo por WebSocket.
+        $ride->client->notify(new RidePickedUpPushNotification($ride));
 
         return back();
     }

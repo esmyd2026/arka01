@@ -175,9 +175,11 @@ const statusItems = computed(() => {
             ? 'Se ve en su perfil y en el directorio público.'
             : p.verification_status === 'rejected'
               ? `Su verificación fue rechazada${p.verification_rejection_reason ? `: "${p.verification_rejection_reason}"` : ''} — corrija eso y vuelva a subir sus fotos más abajo.`
-              : p.verification_status !== 'approved'
-                ? `Su verificación está "${VERIFICATION_LABELS[p.verification_status]}" — suba una foto de su licencia y del vehículo más abajo.`
-                : 'Ya está verificado, pero su plan actual no incluye la insignia — hace falta un plan superior.',
+              : p.verification_status == null
+                ? 'Todavía no subió sus documentos — suba una foto de su licencia y del vehículo más abajo.'
+                : p.verification_status !== 'approved'
+                  ? `Su verificación está "${VERIFICATION_LABELS[p.verification_status]}" — suba una foto de su licencia y del vehículo más abajo.`
+                  : 'Ya está verificado, pero su plan actual no incluye la insignia — hace falta un plan superior.',
     });
 
     return items;
@@ -187,7 +189,13 @@ const submit = () => {
     form.post(route('driver.profile.update'), { forceFormData: true });
 };
 
+// Bug reportado por el usuario: un conductor que nunca subió ninguna foto
+// terminaba igual con `verification_status = 'pending'` (el default de la
+// columna al crearse la fila) y quedaba bloqueado para subirlas — la fuente
+// real ahora es `null` ("sin documentos todavía"), ver la migración
+// `driver_profiles_verification_status_nullable`.
 const VERIFICATION_LABELS = {
+    null: 'Sin documentos',
     pending: 'Pendiente de revisión',
     approved: 'Verificado',
     rejected: 'Rechazada, suba una foto más clara',
@@ -494,6 +502,7 @@ const VERIFICATION_LABELS = {
                                         'bg-arka-primary/10 text-arka-primary-bright': driverProfile.verification_status === 'approved',
                                         'bg-arka-warning/10 text-arka-warning': driverProfile.verification_status === 'pending',
                                         'bg-arka-danger/10 text-arka-danger': driverProfile.verification_status === 'rejected',
+                                        'bg-arka-text-muted/10 text-arka-text-muted': driverProfile.verification_status == null,
                                     }"
                                 >
                                     {{ VERIFICATION_LABELS[driverProfile.verification_status] }}

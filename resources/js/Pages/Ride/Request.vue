@@ -262,15 +262,25 @@ async function useCurrentLocationAsOrigin({ overwriteAddress = true } = {}) {
 
     navigator.geolocation.getCurrentPosition(
         async (position) => {
-            originLat.value = position.coords.latitude;
-            originLng.value = position.coords.longitude;
-            mapCenter.value = { lat: originLat.value, lng: originLng.value };
             locationError.value = '';
             locatingOrigin.value = false;
 
-            if (overwriteAddress || !originAddress.value.trim()) {
-                originAddress.value = (await reverseGeocode(originLat.value, originLng.value)) ?? 'Mi ubicación actual';
-            }
+            // Bug real reportado ("el precio queda pegado en un valor
+            // anterior al cambiar origen/destino"): este mismo guard ya
+            // protegía el TEXTO de la dirección, pero originLat/originLng se
+            // pisaban sin condición ninguna un par de líneas más abajo — si
+            // el cliente eligió un origen por autocompletar o en el mapa
+            // MIENTRAS la geolocalización silenciosa todavía no resolvía, la
+            // respuesta tardía de esta función terminaba pisando esas
+            // coordenadas con las crudas del GPS cuando por fin llegaba,
+            // dejando el precio calculado sobre un punto viejo aunque el
+            // texto en pantalla mostrara el correcto.
+            if (!overwriteAddress && originAddress.value.trim()) return;
+
+            originLat.value = position.coords.latitude;
+            originLng.value = position.coords.longitude;
+            mapCenter.value = { lat: originLat.value, lng: originLng.value };
+            originAddress.value = (await reverseGeocode(originLat.value, originLng.value)) ?? 'Mi ubicación actual';
         },
         () => {
             locationError.value = 'No pudimos acceder a su ubicación. Active los permisos del navegador.';
@@ -399,6 +409,22 @@ function pickDestinationFromAddress({ lat, lng, sectorId }) {
     destinationLat.value = lat;
     destinationLng.value = lng;
     if (sectorId) destinationSectorId.value = sectorId;
+}
+
+// Botón "X" del campo (pedido explícito del usuario): borrar el texto no
+// alcanza — si quedaban lat/lng/sector de la elección anterior, el precio
+// seguía calculándose sobre ese punto viejo aunque el campo se viera vacío.
+function clearOrigin() {
+    originLat.value = null;
+    originLng.value = null;
+    originSectorId.value = null;
+    locationError.value = '';
+}
+
+function clearDestination() {
+    destinationLat.value = null;
+    destinationLng.value = null;
+    destinationSectorId.value = null;
 }
 
 // --- Trazado real del recorrido (consideración agregada al alcance: "que
@@ -778,6 +804,7 @@ function submit() {
                             :favorites="frequentPlaces"
                             placeholder="Su ubicación actual o busque una dirección"
                             @place-selected="pickOriginFromAddress"
+                            @clear="clearOrigin"
                         />
                     </div>
 
@@ -791,6 +818,7 @@ function submit() {
                             :favorites="frequentPlaces"
                             placeholder="¿A dónde vas?"
                             @place-selected="pickDestinationFromAddress"
+                            @clear="clearDestination"
                         />
                     </div>
 

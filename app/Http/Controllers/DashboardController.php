@@ -12,6 +12,7 @@ use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Services\Haversine;
 use App\Services\PlanLimits;
+use App\Services\WhatsAppConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -151,7 +152,7 @@ class DashboardController extends Controller
             // ya es la pantalla más visitada, debajo del saludo.
             'adBanners' => AdBanner::query()->visible()->orderBy('sort_order')->get(),
             'whatsappSession' => $whatsappSession,
-            'whatsappBusinessNumber' => config('services.whatsapp.business_number'),
+            'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
         ]);
     }
 

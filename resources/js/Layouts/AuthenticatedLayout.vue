@@ -41,6 +41,12 @@ function openOnboardingAgain() {
     showingOnboarding.value = true;
 }
 
+// Saludo del navbar (pedido explícito del usuario, roadmap de mejoras
+// sección 1): antes era un título grande dentro del contenido de Inicio —
+// se mueve acá, discreto, para recuperar ese espacio vertical. Visible en
+// cualquier pantalla (no solo Inicio), igual que el resto de esta barra.
+const firstName = computed(() => (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] ?? '');
+
 // route().has(...) evita que la navegación se rompa si algún módulo
 // (por ejemplo Flota) todavía no tiene sus rutas registradas.
 const hasRoute = (name) => route().has(name);
@@ -141,6 +147,11 @@ const quickLinks = computed(() =>
             help: 'A quién avisa el botón SOS si lo activa durante un viaje.',
         },
         {
+            route: 'support.index',
+            label: 'Centro de ayuda',
+            help: 'Preguntas frecuentes según su rol, y "Hablar con soporte" si no encuentra lo que necesita.',
+        },
+        {
             route: 'coupons.index',
             label: 'Cupones y beneficios',
             help: 'Promos de comercios aliados, separadas para clientes y para conductores.',
@@ -231,9 +242,13 @@ onBeforeUnmount(() => {
 
                     <!-- Navegación de escritorio: agrupada en una sola "pastilla" con
                          ícono + texto (coherente con el lenguaje visual del resto de la
-                         app), centrada para aprovechar el ancho del header. -->
-                    <div class="hidden sm:flex justify-center">
-                        <div class="flex items-center gap-1 bg-arka-base/60 rounded-full p-1">
+                         app), centrada para aprovechar el ancho del header. En móvil, esta
+                         misma columna del grid queda libre (la pastilla es "hidden
+                         sm:flex") — ahí entra el saludo (pedido explícito del usuario,
+                         roadmap de mejoras sección 1), sin sumar una fila nueva al header. -->
+                    <div class="flex justify-center">
+                        <p class="sm:hidden text-sm text-arka-text-muted truncate">¡Hola, {{ firstName }}! 👋</p>
+                        <div class="hidden sm:flex items-center gap-1 bg-arka-base/60 rounded-full p-1">
                             <Link
                                 v-if="hasRoute('fleet.index') && showClientNav"
                                 :href="route('fleet.index')"
@@ -311,6 +326,9 @@ onBeforeUnmount(() => {
                          en escritorio Y en móvil, donde reemplazan al viejo menú de
                          hamburguesa: búsqueda, ayuda, accesos rápidos y avatar de cuenta. -->
                     <div class="flex items-center justify-end gap-0.5">
+                        <!-- En escritorio la columna del medio ya la ocupa la nav — el
+                             saludo va acá, discreto, antes del avatar. -->
+                        <span class="hidden sm:inline text-sm text-arka-text-muted mr-1">¡Hola, {{ firstName }}! 👋</span>
                         <!-- Buscar: acceso directo al directorio de conductores (herramienta
                              de cliente — buscar a quién invitar a la flota). -->
                         <Link

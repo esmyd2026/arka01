@@ -23,7 +23,7 @@ const props = defineProps({
     favorites: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(['update:modelValue', 'place-selected']);
+const emit = defineEmits(['update:modelValue', 'place-selected', 'clear']);
 
 let placesLib = null;
 let sessionToken = null;
@@ -129,10 +129,25 @@ async function fetchSuggestions(text) {
     }
 }
 
+// Bug real reportado ("el precio se queda pegado en un valor anterior"):
+// fetchFields() es asíncrono — si el cliente toca una sugerencia y, antes de
+// que resuelva, toca otra (o la misma dos veces seguidas), la que resuelve
+// último "gana" sin importar cuál se tocó último de verdad, pudiendo dejar
+// lat/lng de una sugerencia vieja. Un token de selección descarta cualquier
+// resultado que ya no sea el más reciente.
+let selectionToken = 0;
+
 async function selectSuggestion(suggestion) {
+    const myToken = ++selectionToken;
+    // Cierra ya mismo, no al final: evita poder tocar una segunda sugerencia
+    // mientras la primera todavía está resolviendo sus coordenadas.
+    open.value = false;
+
     try {
         const place = suggestion.placePrediction.toPlace();
         await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+        if (myToken !== selectionToken) return;
+
         emit('update:modelValue', place.formattedAddress ?? suggestion.placePrediction.text.text);
         emit('place-selected', {
             lat: place.location.lat(),
@@ -142,13 +157,27 @@ async function selectSuggestion(suggestion) {
     } catch {
         // Se pudo listar la sugerencia pero no resolver sus coordenadas — se
         // deja el texto nomás, el cliente puede marcar el punto en el mapa.
+        if (myToken !== selectionToken) return;
         emit('update:modelValue', suggestion.placePrediction.text.text);
     }
 
+    if (myToken !== selectionToken) return;
     suggestions.value = [];
-    open.value = false;
     // Nueva sesión para la próxima búsqueda (así se factura como una sola
     // sesión de autocompletado + selección, no una por cada tecla).
+    sessionToken = null;
+}
+
+// Botón "X" (pedido explícito del usuario): antes había que borrar el texto
+// a mano, y encima eso NO limpiaba lat/lng/sector ya elegidos — quien
+// escuchaba este componente (Ride/Request.vue) seguía calculando el precio
+// sobre el punto viejo aunque el campo se viera vacío. El evento `clear` le
+// avisa al padre que también tiene que soltar esos datos, no solo el texto.
+function clearField() {
+    emit('update:modelValue', '');
+    emit('clear');
+    suggestions.value = [];
+    open.value = false;
     sessionToken = null;
 }
 
@@ -167,11 +196,27 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
             :value="modelValue"
             :placeholder="placeholder"
             class="w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary focus:ring-arka-primary"
+            :class="{ 'pe-9': modelValue?.trim() }"
             autocomplete="off"
             @input="onInput"
             @keydown.escape="close"
             @focus="() => (open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0)"
         />
+
+        <!-- Limpiar el campo (pedido explícito del usuario): borra el texto Y
+             lo que ya se había elegido (lat/lng/sector), no solo lo visible. -->
+        <button
+            v-if="modelValue?.trim()"
+            type="button"
+            class="absolute inset-y-0 right-0 flex items-center px-2.5 text-arka-text-muted hover:text-arka-text"
+            aria-label="Limpiar"
+            tabindex="-1"
+            @click="clearField"
+        >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18" />
+            </svg>
+        </button>
 
         <!-- Bug reportado por el usuario: el mapa de Leaflet (Components/FleetMap.vue,
              más abajo en la pantalla) trae sus propios controles internos con

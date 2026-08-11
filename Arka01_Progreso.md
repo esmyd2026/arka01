@@ -1880,6 +1880,142 @@ El usuario compartió una captura de referencia y, tras confirmar que sí la que
 ### Tests
 `tests/Feature/DashboardTest.php` (+1: el cliente recibe `clientPlanName` para la insignia). Suite completa: 522 tests OK, Pint limpio, build limpio.
 
+## Fase 1 del roadmap grande ("PROMPT — MEJORAS INTEGRALES"): bugs críticos
+El usuario mandó un roadmap de 20 secciones a implementar por fases, verificando cada bloque antes de seguir. Esta entrada cubre la Fase 1 (bugs críticos); las demás fases quedan pendientes de confirmación antes de arrancarlas.
+
+### Bug crítico: un conductor sin documentos quedaba "en revisión" y bloqueado para subirlos
+Reporte del usuario: un conductor guardó su perfil sin subir ninguna foto, y el sistema igual mostraba "Pendiente de revisión" y no lo dejaba subir nada — y del lado admin no aparecía en la cola de verificación (no había nada que revisar). Investigado antes de tocar nada: `verification_status` era una columna `ENUM` con default `'pending'` — al crear la fila del perfil por primera vez sin subir ninguna foto, `DriverProfileController::update()` no incluía esa clave en absoluto (solo la setea cuando de verdad se sube un archivo), así que el INSERT caía en el default de la columna, no en una decisión real del código. `DriverProfile::canUploadDocuments()` (que ya tenía la intención correcta en su comentario: "o todavía no subió ninguna") se topaba con ese 'pending' espurio y bloqueaba igual.
+
+- **Migración** `make_verification_status_nullable_on_driver_profiles_table`: la columna pasa de `ENUM` a `string` nullable, sin default — 'pending' ahora SOLO lo pone el código cuando se sube un archivo de verdad. Incluye backfill: las filas ya afectadas (`pending` sin ninguna foto) se corrigen a `null`.
+- **`Driver/Profile.vue`**: insignia y textos nuevos para el estado `null` ("Sin documentos"), sin tocar la lógica de bloqueo (que ya estaba bien escrita, solo esperaba nunca ver un 'pending' falso).
+
+### Bug: el precio de la carrera quedaba "pegado" en un valor anterior
+Investigado a fondo antes de tocar nada (el cálculo en sí, vía `computed()`, ya era reactivo y correcto — no era un problema de caché de Vue ni del backend, que ya recalcula todo desde las coordenadas que llegan en cada pedido). El problema real eran dos condiciones de carrera de async:
+
+- **`useCurrentLocationAsOrigin()`** (`Ride/Request.vue`): el intento silencioso de geolocalización al abrir la pantalla ya protegía el TEXTO de la dirección para no pisar lo que el cliente ya hubiera escrito, pero `originLat`/`originLng` se pisaban sin ninguna condición un par de líneas más abajo. Si el cliente elegía un origen por autocompletar mientras la geolocalización todavía no resolvía, la respuesta tardía del GPS terminaba pisando esas coordenadas igual — el precio quedaba calculado sobre el punto viejo aunque el texto en pantalla mostrara el correcto.
+- **`AddressAutocomplete.vue::selectSuggestion()`**: sin token de selección, tocar una sugerencia y después otra (o la misma dos veces) antes de que la primera resolviera sus coordenadas dejaba que la que resolviera último "ganara", sin importar cuál se tocó último de verdad.
+
+### Botón "X" en origen y destino
+Pedido explícito del usuario, parte del mismo bug de fondo: antes solo se podía borrar el texto a mano, y eso NO limpiaba lat/lng/sector ya elegidos — el precio seguía calculado sobre el punto viejo aunque el campo se viera vacío. `AddressAutocomplete.vue` ahora tiene una "X" que limpia texto + emite un evento `clear` nuevo; `Ride/Request.vue` lo escucha y suelta lat/lng/sector de verdad.
+
+Sobre "validaciones backend" (parte de la Fase 1 en el pedido del usuario): ya estaban — `RideRequestController::store()` recalcula distancia y precio sugerido desde las coordenadas del pedido en curso, nunca confía en un número que mande el navegador, y ya rechaza cualquier oferta por debajo de ese estimado (confirmado al investigar el bug del precio, no hizo falta agregar nada acá).
+
+### Tests
+`tests/Feature/Security/DriverVerificationTest.php` (+1: guardar el perfil la primera vez sin fotos deja `verification_status = null`, no `'pending'`, y `canUploadDocuments()` da `true`). Los bugs de `Request.vue`/`AddressAutocomplete.vue` son de reactividad de Vue en el navegador — no se pueden reproducir en un test de Feature de PHP (mismo criterio que otros fixes de frontend de esta sesión). Suite completa: 523 tests OK, Pint limpio, build limpio.
+
+## Fase 2 del roadmap grande: experiencia de viaje
+
+### Notificaciones push por cambio de estado — casi todo ya existía
+Investigado antes de construir nada: de los cinco avisos que pedía el roadmap ("aceptó", "va en camino", "llegó al punto de recogida", "viaje comenzó", "viaje finalizó"), cuatro ya estaban implementados de sesiones anteriores (`RideAcceptedPushNotification`, `RideStartedPushNotification`, `RideArrivedPushNotification`, `RideCompletedPushNotification`). Solo faltaba uno: cuando el conductor marca "ya recogí al cliente" (función agregada hoy mismo, antes solo transmitía por WebSocket sin push). Se agregó **`RidePickedUpPushNotification`** ("▶️ Su viaje comenzó"), mismo patrón que las demás — sin duplicar el evento ni el broadcast que ya existía.
+
+### Chat temporal cliente↔conductor
+Pedido explícito del usuario: un chat que SOLO existe mientras hay una carrera programada o en curso entre esas dos personas puntuales — nunca antes de que el conductor acepte, ni después de que termine o se cancele. Sin exponer teléfonos.
+
+- **`ride_messages`** (tabla nueva): cada carrera es su propio hilo (`ride_id`), no hace falta una tabla de "conversación" aparte ni un estado propio — `Ride::chatIsOpen()` (`status` en `scheduled`/`in_progress`) decide si se puede seguir escribiendo.
+- **Canal de broadcast nuevo, `ride.{id}`** (`routes/channels.php`): a propósito separado del canal de flota — acá SOLO pueden escuchar las dos partes de esa carrera puntual, ningún otro miembro de la flota. Evento `RideMessageSent` (`ride.message.sent`).
+- **`RideMessageController::store()`**: valida que quien escribe sea cliente o conductor de esa carrera, que el chat siga abierto, y el texto (máx. 500 caracteres). Responde JSON directo (no Inertia) para que el remitente agregue su propio mensaje sin esperar el eco del WebSocket, que sí le llega a la otra parte.
+- **`Ride/Show.vue`**: tarjeta de chat nueva, visible mientras `chatOpen` — historial con scroll automático, respuestas rápidas distintas por rol (5 para conductor, 5 para cliente, tal cual las pidió el usuario) y campo de texto libre. Un sonido (`playUpdateChime`) avisa cuando llega un mensaje nuevo de la otra parte.
+
+Sobre "estados en tiempo real" (parte de la Fase 2 en el pedido del usuario): ya estaba cubierto — cambios de estado de carrera, ubicación del conductor y ahora el chat usan todos la misma infraestructura existente (Laravel Reverb + Echo), sin agregar ninguna dependencia nueva, tal como pidió el usuario.
+
+### Tests
+`tests/Feature/Ride/RideRequestFlowTest.php` (+1: `pickedUp()` manda el push nuevo). `tests/Feature/Ride/RideChatTest.php` (nuevo, 7: mandar mensaje mientras está en curso o programada; un desconocido no puede; no se puede escribir con la carrera completada o cancelada; validación del texto; el historial se expone en `rides.show`). Suite completa: 530 tests OK, Pint limpio, build limpio.
+
+## Fase 3 del roadmap grande: Viajes en VAN por rol
+Investigado a fondo antes de tocar nada (`VanTripController`, `VanTrip`, `VanTripReservationController`, las tres pantallas Vue, `routes/web.php`): el módulo YA separaba los roles correctamente donde importa de verdad — `store()` bloquea a cualquier cuenta que no sea conductor (`isDriver()` + `van_trips_enabled` del plan), `Index.vue` (gestión) esconde el formulario de publicar si `canPublish` es falso, `Show.vue` ya distingue dueño/no-dueño. No hacía falta reconstruir nada de eso.
+
+El único bug real era propio de esta sesión: la tarjeta "Viajes en VAN" que agregué hoy en el Inicio del cliente (rediseño de mockup) apuntaba a `van-trips.index` — la pantalla de gestión del CONDUCTOR ("Mis viajes VAN"), que para un cliente se ve siempre vacía porque filtra por `driver_user_id`. Corregido a `van-trips.browse`, el catálogo real de viajes publicados (origen → destino, fecha, hora, cupos, precio por persona — exactamente lo que pedía el roadmap). Se revisó también la tarjeta "Expresos" del mismo bloque por si tenía el mismo problema — no lo tenía: `express-routes.index` ya es la pantalla correcta para el cliente (`ExpressRouteController::index()` incluso redirige a un conductor que intente entrar ahí).
+
+### Tests
+No aplica — es un cambio de una sola URL de destino en un `<Link>` de Vue, sin lógica nueva de backend que probar (el backend ya estaba bien). Suite completa sin cambios: 530 tests OK, Pint limpio, build limpio.
+
+## Fase 4 del roadmap grande: WhatsApp configurable, Monitoreo y Auditoría
+
+### Configuración de WhatsApp desde /admin/integraciones/whatsapp
+Pedido explícito del usuario: "evitar tener que modificar constantemente el .env". Se armó la jerarquía completa: base de datos primero, `.env` como respaldo (nunca se elimina), nunca se expone un token real al frontend, valores sensibles cifrados.
+
+- **`whatsapp_settings`** (tabla nueva, singleton — mismo patrón que `pricing_settings`): `token`, `webhook_verify_token` y `app_secret` con cast `'encrypted'` (cifrados con la propia `APP_KEY`) y `$hidden` en el modelo; `phone_number_id`/`verification_template`/`business_number` en texto plano (no son secretos). `updated_by` para saber quién hizo el último cambio.
+- **`App\Services\WhatsAppConfig`** (nuevo): un solo lugar con la jerarquía "base de datos si hay algo, si no `.env`" — los 12 puntos del código que antes leían `config('services.whatsapp.*')` directo (controladores, middleware de firma del webhook, los dos servicios que mandan mensajes) ahora pasan por acá.
+- **`Admin\WhatsAppSettingController`**: la pantalla nunca manda el valor real de un campo sensible, solo si está "Configurado acá" / "Usando el .env" / "Sin configurar". Dejar un campo sensible en blanco al guardar significa "no tocar lo que ya había" (no lo borra); los no sensibles sí se pueden vaciar de verdad.
+
+### Monitoreo (Administración → Monitoreo)
+Pedido explícito del usuario: "poder detectar problemas importantes sin revisar directamente logs del servidor" — un módulo de triage, no un visor de logs.
+
+- **`system_events`** (tabla nueva) + **`App\Services\SystemEventLogger`**: un punto único para dejar un registro (severidad, módulo, tipo de evento, mensaje, código de error del proveedor, contexto) — nunca se guarda un token ni una contraseña ahí.
+- Se conectó en los lugares donde el código YA sabía que algo había fallado, sin instrumentar todo desde cero: `WhatsAppFreeformSender`/`WhatsAppVerificationSender` (fallo al mandar), `SosAlertController` (correo a un contacto que no salió), y un hook nuevo en `App\Exceptions\Handler` (excepciones no atrapadas — al lado de Sentry, que ya existía pero necesita un panel aparte y solo funciona si está configurado; con su propio try/catch, para que un fallo de base de datos durante el reporte de un error no tumbe el reporte en sí).
+- **`Admin\SystemEventController`**: filtros por módulo, severidad, estado, fecha y texto libre; marcar un evento como resuelto sin borrarlo.
+
+### Auditoría (sección 18)
+- **`admin_audit_logs`** (tabla nueva) + **`App\Services\AdminAuditLogger`**: registro inmutable de quién cambió qué. Para un campo sensible (token, etc.) nunca guarda el valor real — solo si cambió o no ("cambiado"/"sin cambios"), el resto de los campos sí se guarda tal cual (no son secretos). Arrancó con la configuración de WhatsApp (el primer módulo que lo necesitaba); reutilizable para lo que se sume después sin otra tabla. Se muestra en la misma pantalla de Integraciones en vez de una pestaña aparte casi vacía (sección 15 del pedido: "no implementar literalmente la estructura sugerida si la navegación actual permite algo mejor").
+
+### Tests
+`tests/Feature/Admin/WhatsAppSettingsTest.php` (nuevo, 7: acceso solo admin, nunca expone el secreto real, guardar campos normales, la base gana sobre el `.env`, el `.env` sigue de respaldo, dejar en blanco no borra, el cambio queda auditado sin el valor real). `tests/Feature/Admin/SystemEventTest.php` (nuevo, 4: acceso solo admin, filtros por módulo/severidad, marcar resuelto, un envío de WhatsApp fallido de verdad deja el registro — no solo el modelo/factory). Suite completa: 541 tests OK, Pint limpio, build limpio.
+
+## Fase 5 del roadmap grande: Centro de Ayuda y Soporte
+
+### Preguntas frecuentes por rol
+- **`faqs`** (tabla nueva, con catálogo inicial sembrado en la propia migración — mismo criterio que `rating_reasons`): `audience` (cliente/conductor/ambos), categoría, pregunta, respuesta. Administrable desde `/admin/preguntas-frecuentes` (CRUD completo, mismo patrón que `RatingReasonController`).
+- **`Support/Index.vue`**: buscador (filtra en el navegador, ya viene toda la lista de una) + acordeón por categoría, mostrando solo las de "ambos" más las del rol de quien mira (`Faq::scopeForAudience()`).
+
+### "Hablar con soporte"
+Pedido explícito del usuario: un ticket por usuario a la vez — mientras no esté cerrado, "Hablar con soporte" retoma el mismo en vez de abrir uno nuevo cada vez (mismo criterio de "un hilo por relación" que ya se usó para el chat de carreras).
+
+- **`support_tickets`** + **`support_ticket_messages`** (tablas nuevas). `SupportTicket::openOrCreateFor()` resuelve "retomar o crear". Si el usuario le escribe a un ticket que soporte había dejado "esperando usuario" o "resuelto", vuelve a quedar como pendiente de atender — evita que un cliente quede sin salida si necesita hacer una repregunta.
+- **Canal de broadcast nuevo, `support-ticket.{id}`** (mismo patrón que el de una carrera): solo el dueño del ticket o cualquier admin puede escuchar. Evento `SupportMessageSent`.
+- **`SupportController`** (cliente/conductor): mandar mensaje, con respuestas rápidas según el rol (las 5 de conductor y las 5 de cliente, tal cual las pidió el usuario).
+- **`Admin\SupportTicketController`**: lista de tickets con filtro por estado, vista de conversación con respuestas rápidas propias del admin, y cambio de estado explícito (Nuevo/En atención/Esperando usuario/Resuelto/Cerrado) — no se infiere solo, el admin lo elige.
+
+### Tests
+`tests/Feature/Support/SupportCenterTest.php` (nuevo, 7: FAQ filtradas por rol, inactivas no se ven, primer mensaje crea ticket, un segundo mensaje reutiliza el mismo, un ticket cerrado abre uno nuevo, responder a uno resuelto lo reabre). `tests/Feature/Admin/SupportTicketTest.php` (nuevo, 4: acceso solo admin, filtro por estado, responder mueve a "esperando usuario", cambiar estado a mano). `tests/Feature/Admin/FaqTest.php` (nuevo, 4: acceso solo admin, crear, desactivar, eliminar). Suite completa: 556 tests OK, Pint limpio, build limpio.
+
+## Fase 6 del roadmap grande: Home público
+
+### "¿Cómo funciona ARKA01?"
+Pedido explícito del usuario: nada de bloques de texto — un flujo ilustrado con los pasos que dio textualmente, uno para Cliente y otro para Conductor, con emojis y una línea conectora entre pasos. Se agregó directo en `Welcome.vue` (ya era una pantalla simple, sin necesitar backend nuevo), respetando la identidad gráfica existente (tema oscuro, verde de marca).
+
+### "Ayúdanos a mejorar ARKA01"
+Formulario público en el Home, sin necesidad de cuenta (nombre y correo opcionales) — con throttle (6 por minuto) porque no hay una cuenta detrás que límite el abuso.
+
+- **`platform_feedback`** (tabla nueva) + **`PlatformFeedbackController::store()`** (público, fuera del grupo `auth`).
+- **`Admin\PlatformFeedbackController`**: `/admin/opiniones` — filtrar por estado/tipo, clasificar (Nueva → Revisando → Considerada → Implementada → Descartada) y dejar una nota interna que nunca ve quien mandó la opinión (no hay cuenta a la que devolvérsela).
+
+### Tests
+`tests/Feature/PlatformFeedbackTest.php` (nuevo, 4: un visitante sin cuenta puede mandar una opinión, el comentario es obligatorio, acceso admin restringido, clasificar con nota interna). Suite completa: 560 tests OK, Pint limpio, build limpio.
+
+## Fase 7 del roadmap grande: optimización de UI (última fase)
+
+### Saludo movido al navbar
+Pedido explícito del usuario: el "¡Hola, X!" grande ocupaba espacio importante dentro del contenido de Inicio. Se movió a `AuthenticatedLayout.vue` — en escritorio, discreto junto a los íconos de cuenta; en móvil, aprovecha la columna del medio del header que quedaba vacía (ahí vive la navegación de escritorio, oculta en pantallas chicas). Se sacaron los títulos duplicados de `Dashboard.vue` (cliente y conductor), dejando solo la insignia de rol/plan/disponibilidad, que sí es información funcional.
+
+### Diseño roto en móvil de "Conductores en su flota" + avatares por defecto
+Esto quedó pendiente de un reporte anterior (con captura), que el usuario pidió explícitamente dejar agrupado acá con el resto de la Fase 7:
+
+- **`Fleet/Show.vue`**: la fila de cada conductor era `flex items-center` sin apilar en pantallas angostas — los tres botones de acción ("Pedir carrera", "Referir", "Sacar", todos `shrink-0`) le comían todo el ancho al nombre, sin importar el `min-w-0` que ya tenía ese bloque. Se apila en columna en móvil (mismo patrón ya usado en el panel admin) y los botones ahora pueden envolver en vez de desbordar.
+- **`UserAvatar.vue`**: sin foto, ya no se muestran iniciales — un ícono genérico distinto según el rol (volante para conductor, persona para cliente/admin), para que se vea igual de "terminado" en cualquier pantalla en vez de notarse que "falta diseño". Se aplica en TODA la app de una sola vez, al ser un componente compartido.
+
+Se revisaron también "Conductores cerca" (`Dashboard.vue`) y el directorio público (`Directory/Index.vue`) contra el pedido de "no mostrar únicamente la fotografía" (sección 2 del roadmap) — ya mostraban foto, nombre, calificación, distancia e indicador de disponibilidad de antes, no hizo falta tocarlos.
+
+### Tests
+No aplica — cambios puramente visuales/de layout en Vue, sin lógica de backend nueva que probar. Suite completa sin cambios: 560 tests OK, Pint limpio, build limpio.
+
+---
+
+### Bug crítico: cuentas trabadas para siempre si fallaba el envío del código de WhatsApp
+Reporte del usuario, con casos reales en producción: gente que se registró y nunca pudo pasar de la pantalla de verificar teléfono, porque el código nunca llegaba. Investigado a fondo: la app YA tenía el criterio correcto para cuando la integración de WhatsApp NO está configurada (auto-verifica, no bloquea a nadie por una integración pendiente) — pero ese mismo criterio nunca se aplicaba cuando la integración SÍ estaba configurada y el envío fallaba de verdad (token vencido, límite de Meta, plantilla no aprobada). En ese caso, `sendCode()` devolvía `false`, pero los tres lugares que lo llaman solo lo registraban en el log — la cuenta quedaba esperando un código que nunca iba a llegar, y ni siquiera "Reenviar código" ayudaba: repetía el mismo fallo en silencio y decía "le mandamos un código nuevo" igual, fuera verdad o no. No existía ningún otro escape (ni admin, ni automático).
+
+- **`RegisteredUserController::store()`**: si el envío falla al registrarse, el teléfono queda auto-verificado ahí mismo — la cuenta nueva nunca llega a quedar trabada.
+- **`DriverProfileController::update()`** (cambio de número desde el perfil): mismo criterio.
+- **`PhoneVerificationController::resend()`**: mismo criterio, y es la salida real para quien YA está trabado hoy en producción — con este cambio desplegado, tocar "Reenviar código" una vez más los desbloquea solos, sin necesitar que un admin toque nada a mano en la base de datos. El mensaje que ve el usuario ahora también es honesto ("no pudimos mandarle el código, lo dejamos verificado igual") en vez de siempre decir que se mandó.
+
+### Tests
+`tests/Feature/Auth/PhoneVerificationTest.php` (+2: registrarse con el envío fallando de verdad no bloquea el dashboard; reenviar con el envío fallando desbloquea la cuenta). `tests/Feature/Driver/DriverProfilePhoneUpdateTest.php` (+1: cambiar el número con el envío fallando queda verificado igual). Suite completa: 563 tests OK, Pint limpio (sin cambios de frontend, no hizo falta build).
+
+---
+
+## Roadmap grande — resumen final
+
+Las 7 fases del "PROMPT — MEJORAS INTEGRALES PLATAFORMA ARKA01" quedaron completas: bugs críticos (documentos, precio, limpieza de campos), notificaciones push + chat de carrera, separación de roles en Viajes VAN, WhatsApp configurable + Monitoreo + Auditoría, Centro de Ayuda + Soporte, Home público (cómo funciona + opiniones), y optimización de UI. Todo verificado por bloques (tests + Pint + build después de cada fase), sin romper funcionalidad existente. Como el resto de lo construido en esta sesión, queda pendiente del mismo `git push` + despliegue pendiente de confirmación del usuario.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

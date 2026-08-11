@@ -23,7 +23,7 @@ class WhatsAppVerificationSender
 {
     public static function enabled(): bool
     {
-        return filled(config('services.whatsapp.token')) && filled(config('services.whatsapp.phone_number_id'));
+        return filled(WhatsAppConfig::token()) && filled(WhatsAppConfig::phoneNumberId());
     }
 
     /**
@@ -35,13 +35,13 @@ class WhatsAppVerificationSender
             return false;
         }
 
-        $response = Http::withToken(config('services.whatsapp.token'))
-            ->post('https://graph.facebook.com/v20.0/'.config('services.whatsapp.phone_number_id').'/messages', [
+        $response = Http::withToken(WhatsAppConfig::token())
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => ltrim($phoneE164, '+'),
                 'type' => 'template',
                 'template' => [
-                    'name' => config('services.whatsapp.verification_template'),
+                    'name' => WhatsAppConfig::verificationTemplate(),
                     'language' => ['code' => 'es'],
                     'components' => [
                         [
@@ -57,6 +57,16 @@ class WhatsAppVerificationSender
                 'status' => $response->status(),
                 'body' => $response->json(),
             ]);
+
+            SystemEventLogger::log(
+                eventType: 'whatsapp_verification_send_failed',
+                module: 'whatsapp',
+                message: "No se pudo enviar el código de verificación por WhatsApp a {$phoneE164}.",
+                severity: 'error',
+                context: ['status' => $response->status(), 'body' => $response->json()],
+                channel: 'whatsapp',
+                providerErrorCode: (string) $response->status(),
+            );
         }
 
         return $response->successful();

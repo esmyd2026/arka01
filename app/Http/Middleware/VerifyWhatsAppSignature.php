@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\WhatsAppConfig;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -20,7 +21,7 @@ class VerifyWhatsAppSignature
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $secret = config('services.whatsapp.app_secret');
+        $secret = WhatsAppConfig::appSecret();
 
         // Mientras WHATSAPP_APP_SECRET no esté completado en .env, se deja
         // pasar sin validar — mismo criterio que el resto de la integración

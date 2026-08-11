@@ -52,6 +52,18 @@ class PhoneVerificationController extends Controller
         return redirect()->intended(RouteServiceProvider::HOME);
     }
 
+    /**
+     * Bug crítico reportado por el usuario: cuentas creadas que se quedaban
+     * trabadas acá para siempre porque el código nunca llegaba (envío
+     * fallido — token vencido, límite de Meta, etc.) y "Reenviar" repetía el
+     * mismo fallo en silencio, siempre mostrando "le mandamos un código
+     * nuevo" aunque no fuera cierto. Ahora, si el envío de verdad falla, el
+     * teléfono queda auto-verificado en vez de trabar la cuenta — mismo
+     * criterio que cuando la integración ni está configurada
+     * (RegisteredUserController). Esto además es la salida para quien YA
+     * está trabado hoy: le alcanza con tocar "Reenviar código" una vez más
+     * después de este cambio.
+     */
     public function resend(Request $request): RedirectResponse
     {
         $user = $request->user();
@@ -64,6 +76,17 @@ class PhoneVerificationController extends Controller
         $sent = WhatsAppVerificationSender::sendCode($user->phone, $code);
 
         Log::info('Código de verificación de teléfono reenviado.', ['user_id' => $user->id, 'enviado_por_whatsapp' => $sent]);
+
+        if (! $sent) {
+            $user->forceFill([
+                'phone_verified_at' => now(),
+                'phone_verification_code' => null,
+                'phone_verification_expires_at' => null,
+            ])->save();
+
+            return redirect()->intended(RouteServiceProvider::HOME)
+                ->with('status', 'No pudimos mandarle el código por WhatsApp, así que lo dejamos verificado igual — ya puede seguir usando la app.');
+        }
 
         return back()->with('status', 'Le mandamos un código nuevo por WhatsApp.');
     }

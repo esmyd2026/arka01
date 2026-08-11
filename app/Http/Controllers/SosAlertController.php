@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\SosAlertMail;
 use App\Models\Ride;
 use App\Models\SosAlert;
+use App\Services\SystemEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -68,6 +69,19 @@ class SosAlertController extends Controller
                     'contact_id' => $contact->id,
                     'error' => $e->getMessage(),
                 ]);
+
+                // Monitoreo (roadmap de mejoras, sección 9): una alerta SOS
+                // que no le llega a un contacto es justo el tipo de falla que
+                // el admin necesita ver sin ir a storage/logs.
+                SystemEventLogger::log(
+                    eventType: 'sos_contact_email_failed',
+                    module: 'sos',
+                    message: "No se pudo enviar la alerta SOS al contacto de confianza #{$contact->id}.",
+                    severity: 'warning',
+                    context: ['sos_alert_id' => $alert->id, 'error' => $e->getMessage()],
+                    userId: $request->user()->id,
+                    channel: 'email',
+                );
             }
         }
 

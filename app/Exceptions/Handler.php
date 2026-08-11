@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Services\SystemEventLogger;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Support\Facades\Log;
@@ -51,6 +52,30 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             if (app()->bound('sentry')) {
                 app('sentry')->captureException($e);
+            }
+
+            // Monitoreo interno (roadmap de mejoras, sección 9): además de
+            // Sentry (que necesita entrar a un panel aparte, y solo funciona
+            // si está configurado), esto queda visible desde
+            // /admin/monitoreo sin ninguna integración externa. Este closure
+            // ya solo se dispara para excepciones "de verdad" — Laravel
+            // filtra antes las rutinarias (ValidationException,
+            // AuthenticationException, HTTP 404/403, etc.). Envuelto en su
+            // propio try/catch: si la excepción original fue justo una falla
+            // de base de datos, este INSERT fallaría también — no puede
+            // tumbar el reporte de errores en sí.
+            try {
+                SystemEventLogger::log(
+                    eventType: 'unhandled_exception',
+                    module: 'backend',
+                    message: $e->getMessage() ?: $e::class,
+                    severity: 'critical',
+                    context: ['exception' => $e::class, 'file' => $e->getFile(), 'line' => $e->getLine()],
+                    userId: request()->user()?->id,
+                );
+            } catch (Throwable) {
+                // Nada más que hacer acá — ya quedó en storage/logs y,
+                // si está configurado, en Sentry.
             }
         });
     }

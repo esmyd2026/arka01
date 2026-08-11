@@ -26,6 +26,16 @@ class PhoneVerificationTest extends TestCase
         Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
     }
 
+    // Integración configurada, pero el envío en sí falla de verdad (token
+    // vencido, límite de Meta, plantilla no aprobada, etc.) — distinto de
+    // "no configurada" (WhatsAppVerificationSender::enabled() === false).
+    private function enableWhatsAppButFailToSend(): void
+    {
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Invalid token']], 401)]);
+    }
+
     public function test_registering_with_whatsapp_configured_requires_verification_before_reaching_the_dashboard(): void
     {
         $this->enableWhatsApp();
@@ -47,6 +57,52 @@ class PhoneVerificationTest extends TestCase
         $response->assertRedirect(route('phone.verify.show'));
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com'));
+    }
+
+    /**
+     * Bug crítico reportado por el usuario: cuentas creadas que se quedaban
+     * trabadas para siempre esperando un código que nunca llegaba porque el
+     * envío fallaba de verdad (no por falta de configuración). Ahora, igual
+     * que "no configurada", el teléfono queda auto-verificado.
+     */
+    public function test_registering_when_the_whatsapp_send_actually_fails_does_not_block_the_dashboard(): void
+    {
+        $this->enableWhatsAppButFailToSend();
+
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $user = User::where('email', 'test@example.com')->firstOrFail();
+        $this->assertNotNull($user->phone_verified_at);
+        $this->assertNull($user->phone_verification_code);
+
+        $this->actingAs($user)->get(route('dashboard'))->assertOk();
+    }
+
+    /**
+     * La salida real para quien YA está trabado hoy en producción: tocar
+     * "Reenviar código" una vez desplegado este fix lo desbloquea solo,
+     * aunque el envío vuelva a fallar.
+     */
+    public function test_resending_when_the_whatsapp_send_actually_fails_unblocks_the_account(): void
+    {
+        $this->enableWhatsAppButFailToSend();
+
+        $user = User::factory()->unverifiedPhone()->create();
+
+        $response = $this->actingAs($user)->post(route('phone.verify.resend'));
+
+        $response->assertRedirect();
+        $this->assertNotNull($user->fresh()->phone_verified_at);
+
+        $this->actingAs($user->fresh())->get(route('dashboard'))->assertOk();
     }
 
     public function test_the_correct_code_verifies_the_phone_and_unlocks_the_dashboard(): void

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ride extends Model
 {
@@ -93,5 +94,20 @@ class Ride extends Model
     public function destinationSector(): BelongsTo
     {
         return $this->belongsTo(Sector::class, 'destination_sector_id');
+    }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(RideMessage::class);
+    }
+
+    /**
+     * El chat (sección 10 del roadmap de mejoras) solo existe mientras hay
+     * una relación de viaje vigente entre cliente y conductor — nunca antes
+     * de que el conductor acepte, ni después de que termine o se cancele.
+     */
+    public function chatIsOpen(): bool
+    {
+        return in_array($this->status, ['scheduled', 'in_progress'], true);
     }
 }

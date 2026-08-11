@@ -1,0 +1,175 @@
+<script setup>
+import AdminLayout from '@/Layouts/AdminLayout.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
+import { Head, useForm } from '@inertiajs/vue3';
+
+const props = defineProps({
+    settings: { type: Object, required: true },
+    envFallback: { type: Object, required: true },
+    auditLogs: { type: Array, required: true },
+});
+
+// Pedido explícito del usuario: nunca se manda el valor real de un campo
+// sensible al navegador — el form arranca vacío para esos tres, "en blanco"
+// significa "no tocar" al guardar (ver Admin\WhatsAppSettingController::update()).
+const form = useForm({
+    token: '',
+    phone_number_id: props.settings.phone_number_id ?? '',
+    verification_template: props.settings.verification_template ?? '',
+    business_number: props.settings.business_number ?? '',
+    webhook_verify_token: '',
+    app_secret: '',
+});
+
+const submit = () => {
+    form.patch(route('admin.integrations.whatsapp.update'), {
+        preserveScroll: true,
+        onSuccess: () => form.reset('token', 'webhook_verify_token', 'app_secret'),
+    });
+};
+
+function statusFor(hasInDb, envValue) {
+    if (hasInDb) return { label: 'Configurado acá', class: 'text-arka-primary-bright' };
+    if (envValue) return { label: 'Usando el .env', class: 'text-arka-text-muted' };
+    return { label: 'Sin configurar', class: 'text-arka-warning' };
+}
+</script>
+
+<template>
+    <Head title="Admin · Integraciones · WhatsApp" />
+
+    <AdminLayout title="Integraciones · WhatsApp">
+        <div class="py-12">
+            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <p class="text-sm text-arka-text-muted mb-6">
+                        Configuración de la API de WhatsApp Cloud (Meta), editable acá en vez de tocar el <code>.env</code>
+                        cada vez. Si deja un campo en blanco, se usa lo que ya estaba guardado (para los sensibles) o lo
+                        que haya en el <code>.env</code> del servidor (siempre queda como respaldo — nunca se elimina).
+                    </p>
+
+                    <form @submit.prevent="submit" class="space-y-4">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <InputLabel for="token" value="Token de acceso" />
+                                <span class="text-xs" :class="statusFor(settings.has_token, envFallback.has_token).class">
+                                    {{ statusFor(settings.has_token, envFallback.has_token).label }}
+                                </span>
+                            </div>
+                            <TextInput
+                                id="token"
+                                type="password"
+                                class="mt-1 block w-full"
+                                v-model="form.token"
+                                placeholder="Dejar en blanco para no cambiarlo"
+                                autocomplete="off"
+                            />
+                            <InputError class="mt-1" :message="form.errors.token" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="phone_number_id" value="ID del número de teléfono (Meta)" />
+                            <TextInput id="phone_number_id" type="text" class="mt-1 block w-full" v-model="form.phone_number_id" />
+                            <InputError class="mt-1" :message="form.errors.phone_number_id" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="verification_template" value="Plantilla de verificación de teléfono" />
+                            <TextInput id="verification_template" type="text" class="mt-1 block w-full" v-model="form.verification_template" />
+                            <InputError class="mt-1" :message="form.errors.verification_template" />
+                        </div>
+
+                        <div>
+                            <InputLabel for="business_number" value="Número de WhatsApp del negocio (para los links wa.me)" />
+                            <TextInput id="business_number" type="text" class="mt-1 block w-full" v-model="form.business_number" placeholder="Ej. 593991234567" />
+                            <InputError class="mt-1" :message="form.errors.business_number" />
+                        </div>
+
+                        <div class="pt-2 border-t border-arka-text-muted/10">
+                            <div class="flex items-center justify-between">
+                                <InputLabel for="webhook_verify_token" value="Token de verificación del webhook" />
+                                <span class="text-xs" :class="statusFor(settings.has_webhook_verify_token, envFallback.has_webhook_verify_token).class">
+                                    {{ statusFor(settings.has_webhook_verify_token, envFallback.has_webhook_verify_token).label }}
+                                </span>
+                            </div>
+                            <TextInput
+                                id="webhook_verify_token"
+                                type="password"
+                                class="mt-1 block w-full"
+                                v-model="form.webhook_verify_token"
+                                placeholder="Dejar en blanco para no cambiarlo"
+                                autocomplete="off"
+                            />
+                            <InputError class="mt-1" :message="form.errors.webhook_verify_token" />
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <InputLabel for="app_secret" value="App Secret (firma del webhook)" />
+                                <span class="text-xs" :class="statusFor(settings.has_app_secret, envFallback.has_app_secret).class">
+                                    {{ statusFor(settings.has_app_secret, envFallback.has_app_secret).label }}
+                                </span>
+                            </div>
+                            <TextInput
+                                id="app_secret"
+                                type="password"
+                                class="mt-1 block w-full"
+                                v-model="form.app_secret"
+                                placeholder="Dejar en blanco para no cambiarlo"
+                                autocomplete="off"
+                            />
+                            <InputError class="mt-1" :message="form.errors.app_secret" />
+                        </div>
+
+                        <p v-if="settings.updated_at" class="text-xs text-arka-text-muted">
+                            Último cambio: {{ new Date(settings.updated_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) }}
+                            <span v-if="settings.updated_by_name"> — {{ settings.updated_by_name }}</span>
+                        </p>
+
+                        <div class="flex items-center gap-4">
+                            <PrimaryButton :disabled="form.processing">Guardar</PrimaryButton>
+                            <Transition
+                                enter-active-class="transition ease-in-out"
+                                enter-from-class="opacity-0"
+                                leave-active-class="transition ease-in-out"
+                                leave-to-class="opacity-0"
+                            >
+                                <p v-if="form.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
+                            </Transition>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Auditoría (sección 18): quién cambió qué y cuándo — nunca el
+                     valor real de un campo sensible, solo si cambió o no. -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <h3 class="text-lg font-medium text-arka-text mb-4">Historial de cambios</h3>
+
+                    <p v-if="!auditLogs.length" class="text-sm text-arka-text-muted">Todavía no hay cambios registrados.</p>
+
+                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                        <li v-for="log in auditLogs" :key="log.id" class="py-3 text-sm">
+                            <div class="flex items-center gap-2">
+                                <UserAvatar :user="log.admin" size-class="h-6 w-6 text-[10px] shrink-0" />
+                                <span class="text-arka-text font-medium">{{ log.admin.name }}</span>
+                                <span class="text-arka-text-muted">
+                                    — {{ new Date(log.created_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) }}
+                                </span>
+                            </div>
+                            <ul class="mt-1 ms-8 text-xs text-arka-text-muted space-y-0.5">
+                                <li v-for="(value, key) in log.new_value" :key="key">
+                                    <span class="font-mono">{{ key }}</span>:
+                                    {{ log.old_value?.[key] ?? '(vacío)' }} → {{ value ?? '(vacío)' }}
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </AdminLayout>
+</template>

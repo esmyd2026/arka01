@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Providers\RouteServiceProvider;
+use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,7 +35,7 @@ class AuthenticatedSessionController extends Controller
             // 24h ya está abierta cuando pide el código, y le llega por ahí
             // en vez de por correo (ver WhatsAppWebhookController::receive()
             // y WhatsAppFreeformSender::sendSessionRecoveryPrompt()).
-            'whatsappBusinessNumber' => config('services.whatsapp.business_number'),
+            'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
         ]);
     }
 

@@ -39,11 +39,6 @@ const hasRoute = (name) => route().has(name);
 // puerta de entrada real es el panel admin.
 const isAdmin = usePage().props.auth.user.is_admin;
 
-// Saludo del inicio (consideración agregada al alcance, mockups provistos por
-// el usuario) — mismo criterio de "primer nombre" que las iniciales del
-// avatar del navbar.
-const firstName = (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] ?? '';
-
 // Mismos colores de estado que Ride/Request.vue (STATUS_STYLE): disponible en
 // verde, en carrera en naranja, desconectado "quemado" (opacidad + gris).
 const STATUS_RING = {
@@ -397,9 +392,10 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     </div>
 
                     <div>
-                        <h3 class="text-2xl font-semibold text-arka-text">
-                            ¡Hola, {{ firstName }}!
-                        </h3>
+                        <!-- Pedido explícito del usuario (roadmap de mejoras, sección 1): el
+                             saludo se mudó al navbar (AuthenticatedLayout.vue) para
+                             recuperar este espacio vertical — acá queda la insignia de
+                             rol/disponibilidad, que sí es información funcional. -->
                         <p class="text-arka-text-muted flex items-center gap-1.5">
                             Conductor
                             <span class="text-arka-primary-bright" title="Cuenta de conductor">✓</span>
@@ -608,7 +604,8 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          insignia de rol/plan, mismo criterio que ya usa el lado conductor
                          ("Conductor ✓ · Disponible"). -->
                     <div>
-                        <h3 class="text-2xl font-semibold text-arka-text">¡Hola, {{ firstName }}!</h3>
+                        <!-- Pedido explícito del usuario (roadmap de mejoras, sección 1): el
+                             saludo se mudó al navbar — acá queda la insignia de rol/plan. -->
                         <p class="text-arka-text-muted flex items-center gap-1.5">
                             Cliente
                             <span v-if="clientPlanName" class="ms-1 px-2 py-0.5 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
@@ -701,9 +698,15 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 <p class="mt-2 text-sm text-arka-text font-medium">Expresos</p>
                                 <p class="text-xs text-arka-text-muted">Rutas fijas</p>
                             </Link>
+                            <!-- Bug propio de esta sesión (roadmap de mejoras, sección 3: "el
+                                 cliente no debe ver opciones para publicar, debe ver el
+                                 catálogo"): esta tarjeta apuntaba a `van-trips.index`, la
+                                 pantalla de gestión del CONDUCTOR ("Mis viajes VAN") — un
+                                 cliente la veía siempre vacía. Acá va `van-trips.browse`, el
+                                 catálogo de viajes publicados, que es lo que corresponde. -->
                             <Link
-                                v-if="hasRoute('van-trips.index')"
-                                :href="route('van-trips.index')"
+                                v-if="hasRoute('van-trips.browse')"
+                                :href="route('van-trips.browse')"
                                 class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
                             >
                                 <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

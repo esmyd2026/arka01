@@ -8,6 +8,7 @@ use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
 use App\Jobs\SendWhatsAppWindowConfirmation;
 use App\Models\User;
 use App\Models\WhatsAppSession;
+use App\Services\WhatsAppConfig;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -57,7 +58,7 @@ class WhatsAppWebhookController extends Controller
         // cual (evita dejarlo en texto plano en storage/logs/laravel.log),
         // solo si coinciden — alcanza para diagnosticar un webhook mal
         // configurado sin exponer el secreto en el log.
-        $tokenMatches = filled($token) && $token === config('services.whatsapp.webhook_verify_token');
+        $tokenMatches = filled($token) && $token === WhatsAppConfig::webhookVerifyToken();
 
         Log::info('WhatsApp: intento de verificación del webhook.', [
             'mode' => $mode,

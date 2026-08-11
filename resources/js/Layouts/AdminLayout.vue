@@ -28,6 +28,12 @@ const sections = [
     { route: 'admin.sos-alerts.index', match: 'admin.sos-alerts.*', label: 'Alertas SOS' },
     { route: 'admin.locations.index', match: 'admin.locations.*', label: 'Zonas' },
     { route: 'admin.system.index', match: 'admin.system.*', label: 'Sistema' },
+    // Roadmap de mejoras, secciones 8, 9, 11 y 12.
+    { route: 'admin.integrations.whatsapp.edit', match: 'admin.integrations.*', label: 'Integraciones' },
+    { route: 'admin.monitoring.index', match: 'admin.monitoring.*', label: 'Monitoreo' },
+    { route: 'admin.faqs.index', match: 'admin.faqs.*', label: 'Preguntas frecuentes' },
+    { route: 'admin.support-tickets.index', match: 'admin.support-tickets.*', label: 'Soporte' },
+    { route: 'admin.platform-feedback.index', match: 'admin.platform-feedback.*', label: 'Opiniones' },
 ];
 </script>
 
