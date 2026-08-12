@@ -192,9 +192,16 @@ function submitFeedback() {
                             </svg>
                             Iniciar sesión
                         </Link>
+                        <!-- Bug real reportado por el usuario: con tipo=cliente
+                             forzado, quien quería registrarse como conductor
+                             nunca veía esa opción — tenía sentido cuando el botón
+                             se llamaba "Crear mi círculo" (acción específica de
+                             cliente), ya no ahora que es genérico "Crear una
+                             cuenta". Sin el parámetro, Auth/Register.vue arranca
+                             en el primer paso y deja elegir. -->
                         <Link
                             v-if="canRegister"
-                            :href="route('register', { tipo: 'cliente' })"
+                            :href="route('register')"
                             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-primary/50 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-primary-bright hover:bg-arka-primary/10 transition"
                         >
                             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

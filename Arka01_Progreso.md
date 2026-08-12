@@ -2490,6 +2490,18 @@ No aplica — cambio puramente visual en `Welcome.vue`. Build limpio, Pint limpi
 
 ---
 
+### Bug real: "Crear una cuenta" no dejaba elegir conductor
+
+El usuario reportó que el enlace de "Crear una cuenta" mandaba directo a registrarse como cliente, sin dejar elegir el rol.
+
+- **Causa real**: el botón del hero (`Welcome.vue`) y el enlace que aparece en el login cuando no encuentra una cuenta (`Auth/Login.vue`, agregado en la pasada anterior) mandaban a `register` con `?tipo=cliente` forzado — tenía sentido cuando el botón se llamaba "Crear mi círculo" (una acción específica de cliente), pero dejó de tener sentido en cuanto pasó a ser el "Crear una cuenta" genérico de la pasada anterior. Con ese parámetro, `Auth/Register.vue` arranca directo en el segundo paso (nombre) y nunca muestra la pregunta de "¿cliente o conductor?".
+- **Corrección**: ambos enlaces ahora van a `register` sin ese parámetro — el asistente vuelve a arrancar en el primer paso y deja elegir. El único lugar donde `?tipo=cliente` sigue forzado a propósito es `Referral/Show.vue` ("Crear cuenta y agregarlo" desde el enlace de invitación de un conductor específico) — ahí sí es correcto, porque la intención ya está clara por el contexto.
+
+### Tests
+No aplica — cambio de dos enlaces en Vue, sin lógica de backend nueva. Suite completa sin cambios: 637 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

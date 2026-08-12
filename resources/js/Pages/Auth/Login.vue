@@ -146,9 +146,12 @@ async function confirmTakeover() {
 
                 <!-- Pedido explícito del usuario ("la gente se pierde"): si
                      no existe ninguna cuenta con ese dato, ofrecer crear una
-                     en vez de dejarlo sin salida. -->
+                     en vez de dejarlo sin salida. Sin tipo=cliente forzado
+                     (bug real reportado: no dejaba elegir conductor) — acá no
+                     hay forma de saber qué quiere ser, así que Auth/Register.vue
+                     arranca en el primer paso y se lo pregunta. -->
                 <p v-if="showsAccountNotFoundError" class="mt-2 text-sm">
-                    <Link :href="route('register', { tipo: 'cliente' })" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                    <Link :href="route('register')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
                         Crear una cuenta →
                     </Link>
                 </p>
