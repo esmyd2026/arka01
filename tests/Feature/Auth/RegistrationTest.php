@@ -165,6 +165,46 @@ class RegistrationTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario ("la gente se pierde" entre iniciar
+     * sesión y crear cuenta): un correo o teléfono ya registrado invita a
+     * iniciar sesión en vez de solo decir "ya está en uso" — Auth/Register.vue
+     * detecta este mensaje puntual para ofrecer el atajo.
+     */
+    public function test_registering_with_an_existing_email_invites_to_log_in(): void
+    {
+        $existing = User::factory()->create(['email' => 'ya@arka01.test']);
+
+        $response = $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Otra Persona',
+            'email' => $existing->email,
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertSessionHasErrors(['email' => 'Ya existe una cuenta con este correo. ¿Ya tiene una cuenta? Inicie sesión.']);
+    }
+
+    public function test_registering_with_an_existing_phone_invites_to_log_in(): void
+    {
+        User::factory()->create(['phone' => '+593991234567']);
+
+        $response = $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Otra Persona',
+            'email' => 'otra.persona@arka01.test',
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertSessionHasErrors(['phone_local' => 'Ese número de teléfono ya está registrado. ¿Ya tiene una cuenta? Inicie sesión.']);
+    }
+
+    /**
      * Trazabilidad de referidos (pedido explícito del usuario): quién
      * compartió el enlace que trajo a esta cuenta nueva — ver
      * User::referredBy()/referrals().

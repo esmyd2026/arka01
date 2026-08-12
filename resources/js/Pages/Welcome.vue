@@ -176,39 +176,38 @@ function submitFeedback() {
                     </ul>
 
                     <div class="mt-7 flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
-                        <!-- Pedido explícito del usuario: "crear mi círculo" es el
-                             registro de cuenta, pero directo como cliente — no hace
-                             falta volver a preguntarle el tipo de cuenta. -->
+                        <!-- Pedido explícito del usuario ("la gente se pierde"):
+                             los dos en modo botón, iniciar sesión primero — quien
+                             ya tiene cuenta es quien más se confundía antes, con
+                             "crear mi círculo" como único botón grande y el
+                             login escondido en un texto chico debajo. -->
                         <Link
-                            v-if="canRegister"
-                            :href="route('register', { tipo: 'cliente' })"
-                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright transition"
-                        >
-                            Crear mi círculo
-                        </Link>
-                        <Link
-                            v-else-if="canLogin"
+                            v-if="canLogin"
                             :href="route('login')"
                             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright transition"
                         >
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 8.5 15 12l-4 3.5M15 12H4" />
+                            </svg>
                             Iniciar sesión
                         </Link>
-                            <!-- Pedido explícito del usuario: "Crear mi círculo" es el CTA
-                         principal, pero quien ya tiene cuenta necesita un camino
-                         directo a iniciar sesión sin que se lo tape ese botón. -->
-                    <p v-if="canLogin && canRegister" class="mt-4 text-sm text-arka-text-muted">
-                        ¿Ya tiene una cuenta?
-                        <Link :href="route('login')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
-                            Iniciar sesión
+                        <Link
+                            v-if="canRegister"
+                            :href="route('register', { tipo: 'cliente' })"
+                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-primary/50 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-primary-bright hover:bg-arka-primary/10 transition"
+                        >
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9.5" cy="8.5" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18 8v6M15 11h6" />
+                            </svg>
+                            Crear una cuenta
                         </Link>
-                    </p>
                         <!-- Ancla simple a la sección que ya existe más abajo — sin
                              duplicar contenido en una página aparte (pedido
                              explícito del usuario). -->
-
-                    </div> <br/>
-
- <a
+                        <a
                             href="#como-funciona"
                             class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
                         >
@@ -217,6 +216,7 @@ function submitFeedback() {
                             </svg>
                             ¿Cómo funciona?
                         </a>
+                    </div>
 
                     <div class="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-1.5 text-xs text-arka-text-muted">
                         <span class="inline-flex items-center gap-1.5">

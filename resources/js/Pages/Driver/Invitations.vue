@@ -1,16 +1,22 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
 
 const props = defineProps({
     pendingInvitations: { type: Array, required: true },
-    activeMemberships: { type: Array, required: true },
+    // Paginado (pedido explícito del usuario: "se ve muy largo, paginala") —
+    // objeto de paginador de Laravel, no un array plano.
+    activeMemberships: { type: Object, required: true },
+    // Pedido explícito del usuario: "indicale cuántos tiene, nuevos, con
+    // carreras, sin carrera" — sobre el total sin filtrar.
+    activeMembershipStats: { type: Object, required: true },
+    filters: { type: Object, required: true },
     // null = sin límite (plan Institucional sin cupo pactado).
     maxClients: { type: Number, default: null },
     planName: { type: String, required: true },
@@ -111,6 +117,37 @@ function formatLastRide(iso) {
     return `Última carrera: ${new Date(iso).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
+// Filtros + orden de "Flotas a las que pertenecés" (pedido explícito del
+// usuario: "paginala y colocale filtros y ordenala de manera descendente,
+// indicale cuántos tiene, nuevos, con carreras, sin carrera") — el backend
+// (DriverInvitationController::index()) ya devuelve todo filtrado/ordenado/
+// paginado según estos dos parámetros, acá solo se arma la URL.
+const FILTER_CHIPS = [
+    { value: 'todos', label: 'Todos' },
+    { value: 'nuevos', label: 'Nuevos' },
+    { value: 'con_carreras', label: 'Con carreras' },
+    { value: 'sin_carreras', label: 'Sin carreras' },
+];
+
+const membershipQuery = reactive({
+    filter: props.filters.filter ?? 'todos',
+    sort: props.filters.sort ?? 'recientes',
+});
+
+function applyMembershipQuery() {
+    router.get(route('driver.invitations.index'), membershipQuery, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: ['activeMemberships', 'activeMembershipStats', 'filters'],
+    });
+}
+
+function setMembershipFilter(value) {
+    membershipQuery.filter = value;
+    applyMembershipQuery();
+}
+
 const atLimit = props.maxClients !== null && props.activeClientCount >= props.maxClients;
 </script>
 
@@ -192,15 +229,51 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
 
                 <!-- Flotas a las que ya pertenezco -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <h3 class="text-lg font-medium text-arka-text mb-4">Flotas a las que pertenecés</h3>
+                    <h3 class="text-lg font-medium text-arka-text mb-4">
+                        Flotas a las que pertenecés ({{ activeMembershipStats.total }})
+                    </h3>
 
-                    <p v-if="!activeMemberships.length" class="text-sm text-arka-text-muted">
-                        Todavía no formás parte de ninguna flota.
+                    <!-- Contadores + filtro (pedido explícito del usuario:
+                         "indicale cuántos tiene, nuevos, con carreras, sin
+                         carrera") — cada chip filtra al tocarlo, sobre el
+                         total sin filtrar así los números no se mueven solos. -->
+                    <div class="flex flex-wrap items-center gap-2 mb-4">
+                        <button
+                            v-for="chip in FILTER_CHIPS"
+                            :key="chip.value"
+                            type="button"
+                            class="px-3 py-1.5 rounded-full text-xs font-medium transition"
+                            :class="
+                                membershipQuery.filter === chip.value
+                                    ? 'bg-arka-primary/15 text-arka-primary-bright'
+                                    : 'bg-arka-base/60 text-arka-text-muted hover:text-arka-text'
+                            "
+                            @click="setMembershipFilter(chip.value)"
+                        >
+                            {{ chip.label }} ({{ activeMembershipStats[chip.value === 'todos' ? 'total' : chip.value] }})
+                        </button>
+
+                        <!-- Orden (pedido explícito del usuario: "ordénala de
+                             manera descendente") — ambas opciones ya son
+                             descendentes de por sí (más reciente primero,
+                             más carreras primero), solo cambia el criterio. -->
+                        <select
+                            v-model="membershipQuery.sort"
+                            class="ms-auto rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text text-xs py-1.5"
+                            @change="applyMembershipQuery"
+                        >
+                            <option value="recientes">Más recientes</option>
+                            <option value="carreras">Más carreras</option>
+                        </select>
+                    </div>
+
+                    <p v-if="!activeMemberships.data.length" class="text-sm text-arka-text-muted">
+                        {{ activeMembershipStats.total === 0 ? 'Todavía no formás parte de ninguna flota.' : 'Ningún cliente coincide con este filtro.' }}
                     </p>
 
                     <ul v-else class="divide-y divide-arka-text-muted/10">
                         <li
-                            v-for="member in activeMemberships"
+                            v-for="member in activeMemberships.data"
                             :key="member.id"
                             class="py-3 flex items-center justify-between gap-4"
                         >
@@ -232,6 +305,28 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             <DangerButton class="shrink-0" @click="leave(member.id)">No es mi cliente</DangerButton>
                         </li>
                     </ul>
+
+                    <!-- Paginado (pedido explícito del usuario: "se ve muy largo, paginala") -->
+                    <div v-if="activeMemberships.prev_page_url || activeMemberships.next_page_url" class="flex justify-between pt-4">
+                        <Link
+                            v-if="activeMemberships.prev_page_url"
+                            :href="activeMemberships.prev_page_url"
+                            preserve-scroll
+                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        >
+                            &larr; Anterior
+                        </Link>
+                        <span v-else></span>
+
+                        <Link
+                            v-if="activeMemberships.next_page_url"
+                            :href="activeMemberships.next_page_url"
+                            preserve-scroll
+                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        >
+                            Siguiente &rarr;
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>

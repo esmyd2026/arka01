@@ -36,12 +36,33 @@ class AuthenticationTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $this->post('/login', [
+        $response = $this->post('/login', [
             'login' => $user->email,
             'password' => 'wrong-password',
         ]);
 
         $this->assertGuest();
+        // Contraseña incorrecta para una cuenta que SÍ existe: mensaje
+        // genérico de siempre, no el de "no encontramos una cuenta".
+        $response->assertSessionHasErrors(['login' => trans('auth.failed')]);
+    }
+
+    /**
+     * Pedido explícito del usuario ("la gente se pierde" entre iniciar
+     * sesión y crear cuenta): si el dato no corresponde a ninguna cuenta, un
+     * mensaje puntual que Auth/Login.vue usa para ofrecer crear una cuenta —
+     * distinto del genérico que se usa cuando la cuenta sí existe pero la
+     * contraseña está mal.
+     */
+    public function test_logging_in_with_a_nonexistent_account_offers_to_create_one(): void
+    {
+        $response = $this->post('/login', [
+            'login' => 'nadie@arka01.test',
+            'password' => 'Password123',
+        ]);
+
+        $this->assertGuest();
+        $response->assertSessionHasErrors(['login' => 'No encontramos una cuenta con ese dato. ¿Quiere crear una cuenta?']);
     }
 
     /**

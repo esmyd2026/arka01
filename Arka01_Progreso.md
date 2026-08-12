@@ -2442,6 +2442,54 @@ Pedido explícito del usuario ("entran y no saben qué hacer"): un cliente con l
 
 ---
 
+### Inicio: "iniciar sesión" primero, y cruce entre iniciar sesión / crear cuenta
+
+Pedido explícito del usuario: "la gente se pierde" — en la portada, "Crear mi círculo" era un botón grande y "Iniciar sesión" apenas un texto chico debajo, casi invisible. Y si alguien intenta iniciar sesión sin tener cuenta (o crear una que ya existe), se quedaba sin salida clara.
+
+- **`Welcome.vue`**: los dos como botón, **"Iniciar sesión" primero** (sólido) y "Crear mi círculo" segundo (contorno) — se sacó el texto chico redundante de abajo, ya no hace falta. De paso se prolijó un desorden que había quedado en ese bloque (una edición previa había dejado un `<br/>` suelto y el botón "¿Cómo funciona?" fuera de la fila).
+- **Login sin cuenta que corresponda**: `LoginRequest::authenticate()` ahora distingue "no existe ninguna cuenta con ese dato" (mensaje puntual: "No encontramos una cuenta con ese dato. ¿Quiere crear una cuenta?") de "la cuenta existe pero la contraseña está mal" (sigue con el mensaje genérico de siempre — no hay motivo para confirmarle a nadie que la cuenta existe cuando lo que falló fue la contraseña). `Auth/Login.vue` detecta ese mensaje puntual y ofrece "Crear una cuenta →".
+- **Registro con correo/teléfono ya usados**: en vez del "ya está en uso" genérico de Laravel, `RegisteredUserController::store()` ahora tira un mensaje propio invitando a iniciar sesión ("Ya existe una cuenta con este correo. ¿Ya tiene una cuenta? Inicie sesión." / mismo criterio para el teléfono). `Auth/Register.vue` lo detecta y ofrece "Iniciar sesión →" en el paso correspondiente.
+
+### Tests
+`tests/Feature/Auth/AuthenticationTest.php` (+1, +1 aserción): login sin ninguna cuenta que corresponda ofrece crear una; contraseña incorrecta para una cuenta que sí existe sigue con el mensaje genérico. `tests/Feature/Auth/RegistrationTest.php` (+2): correo y teléfono ya registrados invitan a iniciar sesión. Suite completa: 633 tests OK, Pint limpio, build limpio.
+
+---
+
+### Bug real de arquitectura: faltaba `lang/es/validation.php` — mensajes en inglés
+
+El usuario avisó, con capturas, que al registrarse con un correo ya existente el mensaje salía en inglés ("The email has already been taken.") — pese al arreglo de la pasada anterior (mensaje propio para ese caso puntual).
+
+- **Causa real**: no existía `lang/es/validation.php` en el proyecto — solo `lang/es/auth.php` y `lang/es/passwords.php`. `APP_LOCALE=es` no alcanza por sí solo: sin ese archivo, **cualquier** regla de validación del framework sin mensaje a mano (no solo `unique` del correo — también `required`, `min`, `email`, `Rule::in`, etc., en cualquier formulario de toda la app) caía al inglés de fábrica de `vendor/laravel/framework`. El mensaje propio que se agregó la pasada anterior para el correo duplicado en el registro no llegó a producción todavía (falta el deploy), por eso seguía viéndose el genérico viejo.
+- **Corrección**: se creó `lang/es/validation.php` completo, traducido, con las mismas claves que usa esta versión de Laravel — de raíz para toda la app, no solo para el registro. Incluye además un mapa de `attributes` (nombre legible en español para los campos reales de los formularios de Arka01: correo electrónico, teléfono, placa, tarifa por km, etc.) para que un mensaje sin traducción manual diga "El campo correo electrónico es obligatorio" en vez de "El campo email es obligatorio".
+
+### Tests
+No aplica — archivo de idioma, sin lógica de backend nueva (se verificó a mano con `Validator::make()` que ahora responde en español). Suite completa sin cambios: 633 tests OK, Pint limpio, build limpio.
+
+---
+
+### Lista de clientes del conductor: contadores, filtros, orden y paginado
+
+Pedido explícito del usuario, con captura: "Flotas a las que pertenecés" (lado conductor, `/mis-clientes`) se veía muy larga.
+
+- **`DriverInvitationController::index()`**: la lista de flotas activas ahora se pagina (10 por página), se puede filtrar (`filter=todos|nuevos|con_carreras|sin_carreras`) y ordenar (`sort=recientes|carreras`, ambos ya descendentes por defecto — más reciente o más carreras primero). A esta escala (un conductor difícilmente pasa de unas pocas decenas de clientes de confianza) se sigue trayendo todo a memoria y filtrando/ordenando/paginando ahí, mismo criterio que ya usa `DriverDirectoryController::index()` — sin reescribir el cálculo de calificación/medalla/carreras juntas en SQL.
+- **Contadores** (pedido explícito: "indicale cuántos tiene, nuevos, con carreras, sin carrera"): se calculan sobre el total SIN filtrar, para que no cambien solos cuando se aplica un filtro. "Nuevos" = se unió a la flota en los últimos 30 días.
+- **`Driver/Invitations.vue`**: los 4 contadores son chips clicables que aplican el filtro (con la cantidad de cada uno al lado), un selector de orden, y paginado Anterior/Siguiente — mismo patrón visual que ya usan otras listas paginadas de la app (ej. `Directory/Index.vue`).
+- **Bug propio detectado durante esta pasada**: comparar fechas para el filtro "Nuevos" y el orden "Más recientes" mezclaba dos formatos de fecha distintos como texto (la serialización de Eloquent para `joined_at` vía `toArray()` vs. el string crudo de MySQL para `last_ride_at` de una consulta aparte) — se corrigió normalizando ambas a instancias `Carbon` reales antes de comparar/ordenar, en vez de comparar strings con formatos que no coinciden.
+
+### Tests
+`tests/Feature/Fleet/DriverClientListTest.php` (nuevo, 4 tests): los contadores cuentan bien cada categoría, el filtro "sin carreras" trae solo lo que corresponde, el orden "más carreras" prioriza bien, y el paginado corta en 10. `tests/Feature/Fleet/DisableClientRequestsTest.php` (1 test existente actualizado a la nueva forma paginada, `activeMemberships.data.*` en vez de `activeMemberships.*`). Suite completa: 637 tests OK, Pint limpio, build limpio.
+
+---
+
+### Retoque a los botones del hero: iconos + "Crear una cuenta"
+
+Pedido explícito del usuario, con captura: iconos en "Iniciar sesión" y "Crear mi círculo" (el tercer botón, "¿Cómo funciona?", ya tenía uno), y renombrar "Crear mi círculo" a "Crear una cuenta".
+
+### Tests
+No aplica — cambio puramente visual en `Welcome.vue`. Build limpio, Pint limpio (sin cambios en PHP).
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

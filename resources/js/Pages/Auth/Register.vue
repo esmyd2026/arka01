@@ -49,6 +49,16 @@ const form = useForm({
     ref: referrerId || null,
 });
 
+// Pedido explícito del usuario ("la gente se pierde" entre iniciar sesión y
+// crear cuenta): si el correo o el teléfono ya tienen cuenta (mensajes
+// puntuales de RegisteredUserController::store()), se ofrece el atajo a
+// iniciar sesión en vez de dejar a la persona en un callejón sin salida.
+const showsAccountExistsError = computed(
+    () =>
+        (form.errors.email ?? '').includes('¿Ya tiene una cuenta?') ||
+        (form.errors.phone_local ?? '').includes('¿Ya tiene una cuenta?')
+);
+
 // Registro guiado paso a paso (consideración agregada al alcance: el usuario
 // pidió explícitamente que no sea un formulario largo de una sola vez, sino
 // que vaya "registrando poco a poco" con feedback de progreso) — un dato por
@@ -239,6 +249,15 @@ const submit = () => {
                     @keydown.enter.prevent="goNext"
                 />
                 <InputError class="mt-2" :message="form.errors.email" />
+
+                <!-- Pedido explícito del usuario ("la gente se pierde"): si
+                     ese correo ya tiene cuenta, ofrecer iniciar sesión en vez
+                     de dejarlo sin salida. -->
+                <p v-if="showsAccountExistsError" class="mt-2 text-sm">
+                    <Link :href="route('login')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                        Iniciar sesión →
+                    </Link>
+                </p>
             </div>
 
             <!-- Paso 4: teléfono -->
@@ -288,6 +307,15 @@ const submit = () => {
 
                 <InputError class="mt-2" :message="form.errors.country_code" />
                 <InputError class="mt-1" :message="form.errors.phone_local" />
+
+                <!-- Pedido explícito del usuario ("la gente se pierde"): si
+                     ese teléfono ya tiene cuenta, ofrecer iniciar sesión en
+                     vez de dejarlo sin salida. -->
+                <p v-if="showsAccountExistsError" class="mt-2 text-sm">
+                    <Link :href="route('login')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                        Iniciar sesión →
+                    </Link>
+                </p>
             </div>
 
             <!-- Paso 5: contraseña -->

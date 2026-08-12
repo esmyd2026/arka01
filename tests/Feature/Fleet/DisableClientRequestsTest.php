@@ -122,13 +122,13 @@ class DisableClientRequestsTest extends TestCase
         $response = $this->actingAs($driver)->get(route('driver.invitations.index'));
 
         $response->assertInertia(fn ($page) => $page
-            ->where('activeMemberships.0.id', $member->id)
-            ->where('activeMemberships.0.client_rating', fn ($rating) => (float) $rating === 5.0)
-            ->where('activeMemberships.0.client_review_count', 1)
-            ->where('activeMemberships.0.client_category', 'plata')
-            ->where('activeMemberships.0.rides_together_count', 1)
-            ->where('activeMemberships.0.requests_disabled', false)
-            ->has('activeMemberships.0.last_ride_at')
+            ->where('activeMemberships.data.0.id', $member->id)
+            ->where('activeMemberships.data.0.client_rating', fn ($rating) => (float) $rating === 5.0)
+            ->where('activeMemberships.data.0.client_review_count', 1)
+            ->where('activeMemberships.data.0.client_category', 'plata')
+            ->where('activeMemberships.data.0.rides_together_count', 1)
+            ->where('activeMemberships.data.0.requests_disabled', false)
+            ->has('activeMemberships.data.0.last_ride_at')
         );
     }
 }

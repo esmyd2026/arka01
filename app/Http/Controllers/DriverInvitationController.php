@@ -10,6 +10,9 @@ use App\Services\DriverCategory;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,8 +47,12 @@ class DriverInvitationController extends Controller
 
         // Ficha de cada cliente de confianza (pedido explícito del usuario:
         // foto, puntos, cuántas carreras le hizo, su último viaje y su
-        // categoría) — antes solo se veía el nombre.
-        $activeMemberships = FleetMember::query()
+        // categoría) — antes solo se veía el nombre. A esta escala (un
+        // conductor difícilmente pasa de unas pocas decenas de clientes de
+        // confianza, sección 7.2 pone tope a la mayoría de los planes)
+        // alcanza con traer todo a memoria y filtrar/ordenar/paginar ahí —
+        // mismo criterio que ya usa DriverDirectoryController::index().
+        $allMemberships = FleetMember::query()
             ->where('driver_user_id', $userId)
             ->whereNull('left_at')
             ->with(['fleet.owner'])
@@ -62,20 +69,53 @@ class DriverInvitationController extends Controller
 
                 return array_merge($member->toArray(), $this->clientReviewStats($clientId), [
                     'rides_together_count' => (int) $rideStats->rides_count,
-                    'last_ride_at' => $rideStats->last_ride_at,
+                    // Carbon de verdad, no el string crudo de la consulta —
+                    // hace falta comparar fechas para el filtro/orden de acá
+                    // abajo. joined_at también se pisa por lo mismo: el
+                    // toArray() de arriba ya lo había vuelto string (formato
+                    // distinto al de esta consulta cruda), mezclar los dos
+                    // formatos en un mismo orden daría resultados mal.
+                    'last_ride_at' => $rideStats->last_ride_at ? Carbon::parse($rideStats->last_ride_at) : null,
+                    'joined_at' => $member->joined_at,
                 ]);
             });
+
+        // Pedido explícito del usuario: "indicale cuántos tiene, nuevos, con
+        // carreras, sin carreras" — sobre el total sin filtrar, para que los
+        // contadores no cambien cuando se aplica un filtro (si no, "Nuevos"
+        // dejaría de tener sentido apenas se lo toca).
+        $newSince = now()->subDays(30);
+        $activeMembershipStats = [
+            'total' => $allMemberships->count(),
+            'nuevos' => $allMemberships->filter(fn ($m) => $m['joined_at'] && $m['joined_at'] >= $newSince)->count(),
+            'con_carreras' => $allMemberships->filter(fn ($m) => $m['rides_together_count'] > 0)->count(),
+            'sin_carreras' => $allMemberships->filter(fn ($m) => $m['rides_together_count'] === 0)->count(),
+        ];
+
+        $activeMemberships = $this->filterAndSortMemberships($allMemberships, $request, $newSince);
+
+        $perPage = 10;
+        $page = max(1, (int) $request->input('page', 1));
+        $paginatedMemberships = new LengthAwarePaginator(
+            $activeMemberships->forPage($page, $perPage)->values(),
+            $activeMemberships->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
 
         $limits = $this->planLimits->forDriver($request->user());
 
         return Inertia::render('Driver/Invitations', [
             'pendingInvitations' => $pendingInvitations,
-            'activeMemberships' => $activeMemberships,
+            'activeMemberships' => $paginatedMemberships,
+            'activeMembershipStats' => $activeMembershipStats,
+            'filters' => $request->only(['filter', 'sort']),
             // null = sin límite (plan Institucional sin cupo pactado).
             'maxClients' => $limits['max_clients'],
             'planCode' => $limits['plan_code'],
             'planName' => $limits['plan_name'],
-            'activeClientCount' => $activeMemberships->count(),
+            'activeClientCount' => $activeMembershipStats['total'],
             // Pedido explícito del usuario: que el conductor pueda invitar por
             // WhatsApp a un cliente a que lo sume a su flota — mismo
             // `invite_code` que ya usa "Referí a tu conductor"
@@ -83,6 +123,29 @@ class DriverInvitationController extends Controller
             // en vez de tener que copiar el código pelado a mano.
             'inviteCode' => $request->user()->driverProfile?->invite_code,
         ]);
+    }
+
+    /**
+     * Filtro (pedido explícito del usuario: "nuevos, con carreras, sin
+     * carrera") y orden (por defecto descendente, lo más reciente primero)
+     * de "Flotas a las que pertenecés" — separado de index() para no
+     * mezclar el armado de la ficha con esta parte.
+     */
+    private function filterAndSortMemberships(Collection $memberships, Request $request, \DateTimeInterface $newSince): Collection
+    {
+        $filtered = match ($request->string('filter')->value()) {
+            'nuevos' => $memberships->filter(fn ($m) => $m['joined_at'] && $m['joined_at'] >= $newSince),
+            'con_carreras' => $memberships->filter(fn ($m) => $m['rides_together_count'] > 0),
+            'sin_carreras' => $memberships->filter(fn ($m) => $m['rides_together_count'] === 0),
+            default => $memberships,
+        };
+
+        return match ($request->string('sort')->value()) {
+            // Nulls-last a mano: sortByDesc trata null como "menor que
+            // cualquier cosa" en PHP, así que ya quedan al final solos.
+            'carreras' => $filtered->sortByDesc(fn ($m) => $m['rides_together_count']),
+            default => $filtered->sortByDesc(fn ($m) => $m['last_ride_at'] ?? $m['joined_at']),
+        };
     }
 
     /**

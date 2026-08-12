@@ -57,7 +57,13 @@ class RegisteredUserController extends Controller
             // el siguiente paso de la guía.
             'account_type' => ['required', 'string', Rule::in(['cliente', 'conductor'])],
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
+            // Sin 'unique:' acá a propósito: el correo duplicado se valida a
+            // mano más abajo (mismo criterio que el teléfono), con un
+            // mensaje que invita a iniciar sesión en vez del genérico "ya
+            // está en uso" de Laravel — Auth/Register.vue lo detecta y
+            // ofrece el atajo (pedido explícito del usuario: "la gente se
+            // pierde" entre iniciar sesión y crear cuenta).
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255'],
             // El teléfono es clave para que otros clientes puedan encontrar e invitar
             // a este usuario a su flota (sección 3.2), por eso es obligatorio y único.
             // Se arma en dos partes (código de país + número local) para poder
@@ -76,11 +82,22 @@ class RegisteredUserController extends Controller
             'ref' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
+        // Pedido explícito del usuario ("la gente se pierde" entre iniciar
+        // sesión y crear cuenta): si el correo o el teléfono ya tienen
+        // cuenta, se lo dice claro invitándolo a iniciar sesión en vez de
+        // dejarlo solo con "ya está en uso" — Auth/Register.vue detecta
+        // estos mensajes puntuales y ofrece el atajo.
+        if (User::where('email', $validated['email'])->exists()) {
+            throw ValidationException::withMessages([
+                'email' => 'Ya existe una cuenta con este correo. ¿Ya tiene una cuenta? Inicie sesión.',
+            ]);
+        }
+
         $phone = $validated['country_code'].$validated['phone_local'];
 
         if (User::where('phone', $phone)->exists()) {
             throw ValidationException::withMessages([
-                'phone_local' => 'Ese número de teléfono ya está registrado.',
+                'phone_local' => 'Ese número de teléfono ya está registrado. ¿Ya tiene una cuenta? Inicie sesión.',
             ]);
         }
 

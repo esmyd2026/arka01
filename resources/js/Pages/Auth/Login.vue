@@ -61,6 +61,12 @@ const showsSessionBlockedError = computed(
         (props.status ?? '').startsWith('Ya tiene una sesión activa')
 );
 
+// Pedido explícito del usuario ("la gente se pierde" entre iniciar sesión y
+// crear cuenta): si el dato no corresponde a ninguna cuenta (mensaje puntual
+// de LoginRequest::authenticate()), se ofrece el atajo a crear una en vez de
+// dejar a la persona en un callejón sin salida.
+const showsAccountNotFoundError = computed(() => (form.errors.login ?? '').startsWith('No encontramos una cuenta con ese dato'));
+
 const takeoverStep = ref('idle'); // 'idle' | 'code-sent'
 const takeoverCode = ref('');
 const takeoverStatus = ref('');
@@ -137,6 +143,15 @@ async function confirmTakeover() {
                 />
 
                 <InputError class="mt-2" :message="form.errors.login" />
+
+                <!-- Pedido explícito del usuario ("la gente se pierde"): si
+                     no existe ninguna cuenta con ese dato, ofrecer crear una
+                     en vez de dejarlo sin salida. -->
+                <p v-if="showsAccountNotFoundError" class="mt-2 text-sm">
+                    <Link :href="route('register', { tipo: 'cliente' })" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                        Crear una cuenta →
+                    </Link>
+                </p>
 
                 <!-- Sesión única por cuenta (pedido explícito del usuario,
                      caso real: "no sé dónde dejé loguiada mi sesión") — atajo

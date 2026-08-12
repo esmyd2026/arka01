@@ -59,11 +59,27 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // Pedido explícito del usuario ("la gente se pierde" entre iniciar
+        // sesión y crear cuenta): si el dato no corresponde a NINGUNA cuenta,
+        // se lo dice claro en vez del mensaje genérico de "credenciales no
+        // coinciden" — Auth/Login.vue detecta este mensaje puntual y ofrece
+        // el atajo a "Crear cuenta". Si la cuenta sí existe pero la
+        // contraseña está mal, se sigue usando el mensaje genérico de
+        // siempre (trans('auth.failed')) — no hace falta confirmarle a nadie
+        // que la cuenta existe cuando lo que falló fue la contraseña.
+        if (! $user) {
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'login' => 'No encontramos una cuenta con ese dato. ¿Quiere crear una cuenta?',
+            ]);
+        }
+
         // Sin "recordarme" a propósito (sección de seguridad agregada al
         // alcance): la sesión única por cuenta necesita que cada re-login
         // pase siempre por acá, nunca en silencio por un remember-token.
         try {
-            $attempted = $user && Auth::attempt(['id' => $user->id, 'password' => $this->string('password')]);
+            $attempted = Auth::attempt(['id' => $user->id, 'password' => $this->string('password')]);
         } catch (ActiveSessionExistsException $e) {
             throw ValidationException::withMessages(['login' => $e->getMessage()]);
         }
