@@ -2413,6 +2413,33 @@ El usuario mandó una captura del "503 | SERVICE UNAVAILABLE" en blanco y negro 
 ### Tests
 `tests/Feature/FriendlyErrorPagesTest.php` (nuevo, 2 tests): una ruta inexistente muestra el 404 con la marca de Arka01, y el modo mantenimiento (`php artisan down`) muestra el 503 nuevo — con `try/finally` para que el modo mantenimiento no se quede pegado si la aserción fallara. Suite completa: 627 tests OK, Pint limpio (sin cambios de frontend, no hizo falta build).
 
+### Bug real: "Volver al inicio" no dirigía en el error 419
+
+El usuario reportó que el botón de las pantallas de error no dirigía a ningún lado en el 419.
+
+- **Causa real**: Inertia.js muestra las respuestas que no reconoce como suyas (sin la cabecera `X-Inertia` — justo lo que pasa en un 419 por token vencido, o cualquier error que corte antes de llegar a la respuesta de Inertia) dentro de un `<iframe>` flotando en un modal encima de la app, en vez de navegar la pestaña de verdad. El enlace `href="/"` de `errors/_shell.blade.php` navegaba ESE iframe — la ventana real se quedaba exactamente igual, como si el botón no hiciera nada.
+- **Corrección**: se agregó `target="_top"` al enlace — hace que la navegación "se escape" del iframe y mueva la ventana de verdad. Sin efecto cuando la página de error se ve normal (fuera de un iframe), así que no cambia nada en el resto de los casos (404 por URL directa, etc.).
+
+### Tests
+`tests/Feature/FriendlyErrorPagesTest.php` (+1): confirma que el enlace lleva `target="_top"`. Suite completa: 628 tests OK, Pint limpio (sin cambios de frontend, no hizo falta build).
+
+### Sesión única: ya no bloquea al mismo navegador, y ventana más corta
+
+El usuario pidió que reingresar desde el mismo navegador/persona no dispare el aviso de "sesión activa en otro dispositivo" — que se detecte que es la misma persona y se cierre la sesión vieja sola.
+
+- **Cookie de dispositivo** (`arka01_device`, nueva, de muy larga duración): al hacer login, si la otra sesión "activa" en la base es del MISMO navegador (misma cookie), se borra esa sesión vieja y el login sigue normal — sin bloquear, sin el correo de aviso. Si es de un navegador distinto (o no hay cookie que coincida), sigue bloqueando exactamente igual que antes.
+- El `device_id` de cada sesión se guarda dentro de su propio `payload` (vía `session(['device_id' => ...])`) — evita depender de una columna nueva en `sessions` con problemas de orden de escritura a mitad de request.
+- **Bug propio detectado de paso**: `EnforceSingleActiveSession` medía "otra sesión activa" contra `config('session.lifetime')` — bien cuando eran 2 horas, pero desde que se subió a 30 días (pasada anterior, para que la sesión no se cierre sola) esto empezó a bloquear logins legítimos por una sesión de semanas atrás que el usuario ni recordaba. Ahora usa una ventana propia y corta (`EnforceSingleActiveSession::CONCURRENT_WINDOW_MINUTES`, 15 minutos) — lo que importa para esta regla es uso concurrente de verdad, no si la sesión vieja sigue siendo técnicamente válida.
+
+### Aviso más visible para un cliente nuevo sin flota
+
+Pedido explícito del usuario ("entran y no saben qué hacer"): un cliente con la flota vacía solo veía un renglón chico dentro de la tarjeta "Tu flota" — fácil de pasar por alto entre el resto del Inicio.
+
+- `Dashboard.vue`: mientras la flota esté vacía, aparece un aviso propio y visible arriba de todo ("Primero arme su flota") con dos botones directos — buscar por código de invitación o ver el directorio público. Desaparece solo apenas tiene al menos un conductor.
+
+### Tests
+`tests/Feature/Auth/SingleActiveSessionTest.php` (+2): login del mismo dispositivo cierra la sesión vieja y no manda correo; login de un dispositivo distinto sigue bloqueado. El test de "sesión ya expirada" se actualizó a la nueva ventana de 15 minutos. El aviso del Dashboard es puramente de Vue (sin prop nueva del backend, la misma `fleetDrivers` ya cubierta por los tests existentes) — no aplica test de PHP nuevo ahí. Suite completa: 630 tests OK, Pint limpio, build limpio.
+
 ---
 
 ## Qué falta (roadmap, sección 12 del alcance)

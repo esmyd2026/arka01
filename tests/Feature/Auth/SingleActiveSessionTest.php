@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Listeners\EnforceSingleActiveSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -24,14 +25,14 @@ class SingleActiveSessionTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function fakeOtherDeviceSession(User $user, int $minutesAgo = 1): void
+    private function fakeOtherDeviceSession(User $user, int $minutesAgo = 1, ?string $deviceId = null): void
     {
         DB::table('sessions')->insert([
             'id' => Str::random(40),
             'user_id' => $user->id,
             'ip_address' => '10.0.0.9',
             'user_agent' => 'otro-dispositivo',
-            'payload' => base64_encode(serialize([])),
+            'payload' => base64_encode(serialize($deviceId ? ['device_id' => $deviceId] : [])),
             'last_activity' => now()->subMinutes($minutesAgo)->getTimestamp(),
         ]);
     }
@@ -72,10 +73,18 @@ class SingleActiveSessionTest extends TestCase
         $this->assertGuest();
     }
 
+    /**
+     * "Otra sesión activa" se mide con una ventana propia y corta
+     * (EnforceSingleActiveSession::CONCURRENT_WINDOW_MINUTES) — separada de
+     * cuánto dura la sesión en sí (config('session.lifetime'), 30 días desde
+     * que se pidió que no se cierre sola). Antes de ese cambio esta prueba
+     * usaba config('session.lifetime') como referencia, pero eso ya no
+     * refleja qué cuenta como "concurrente" — ver el comentario en el listener.
+     */
     public function test_login_is_allowed_again_once_the_other_session_expired(): void
     {
         $user = User::factory()->create();
-        $this->fakeOtherDeviceSession($user, minutesAgo: (int) config('session.lifetime') + 10);
+        $this->fakeOtherDeviceSession($user, minutesAgo: EnforceSingleActiveSession::CONCURRENT_WINDOW_MINUTES + 10);
 
         $this->post('/login', [
             'login' => $user->email,
@@ -83,6 +92,57 @@ class SingleActiveSessionTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
+    }
+
+    /**
+     * Pedido explícito del usuario: si la sesión "activa en otro lado" es en
+     * realidad del MISMO navegador (misma cookie de dispositivo), no tiene
+     * sentido bloquear ni avisar por correo — es la misma persona
+     * reingresando (pestaña nueva, sesión vencida, etc.), no una cuenta
+     * compartida. Se cierra la sesión vieja sola y el login sigue normal.
+     */
+    public function test_a_login_from_the_same_device_closes_the_old_session_instead_of_blocking(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $this->fakeOtherDeviceSession($user, deviceId: 'mismo-navegador-de-siempre');
+
+        $response = $this
+            ->withCookie(EnforceSingleActiveSession::DEVICE_COOKIE, 'mismo-navegador-de-siempre')
+            ->post('/login', [
+                'login' => $user->email,
+                'password' => 'password',
+            ]);
+
+        $response->assertSessionDoesntHaveErrors('login');
+        $this->assertAuthenticated();
+        Mail::assertNothingSent();
+
+        // La sesión vieja de ese mismo dispositivo quedó cerrada — solo
+        // sigue la nueva.
+        $this->assertSame(1, DB::table('sessions')->where('user_id', $user->id)->count());
+    }
+
+    /**
+     * Sin la cookie de dispositivo (o con una distinta), sigue bloqueando
+     * como siempre — un navegador/dispositivo genuinamente distinto no debe
+     * poder colarse solo por probar suerte con una cookie distinta.
+     */
+    public function test_a_login_with_a_different_device_cookie_is_still_blocked(): void
+    {
+        $user = User::factory()->create();
+        $this->fakeOtherDeviceSession($user, deviceId: 'navegador-viejo');
+
+        $response = $this
+            ->withCookie(EnforceSingleActiveSession::DEVICE_COOKIE, 'navegador-nuevo-distinto')
+            ->post('/login', [
+                'login' => $user->email,
+                'password' => 'password',
+            ]);
+
+        $response->assertSessionHasErrors('login');
+        $this->assertGuest();
     }
 
     public function test_google_login_is_also_blocked_while_another_session_is_active(): void

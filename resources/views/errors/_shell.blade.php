@@ -63,7 +63,12 @@
         <h1>{{ $title }}</h1>
         <p>{{ $message }}</p>
         @if($showHomeLink ?? true)
-            <a class="button" href="/">Volver al inicio</a>
+            {{-- Bug real reportado por el usuario: en un 419 (token vencido)
+                 Inertia muestra esta página dentro de un <iframe> flotando en
+                 un modal, no como navegación normal — sin target="_top" el
+                 enlace solo navegaba ESE iframe, la ventana real se quedaba
+                 igual y parecía que el botón no hacía nada. --}}
+            <a class="button" href="/" target="_top">Volver al inicio</a>
         @endif
     </div>
 </body>

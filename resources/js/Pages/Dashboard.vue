@@ -619,6 +619,34 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          también en el Inicio quedaba redundante. -->
                     <AdBannerSlider :banners="adBanners" />
 
+                    <!-- Pedido explícito del usuario: "entran y no saben qué
+                         hacer" — un cliente nuevo con la flota vacía necesita
+                         que le digan, antes que nada, que el primer paso es
+                         buscar conductores (no que lo adivine solo entre el
+                         resto de la pantalla). Desaparece solo apenas tiene
+                         al menos un conductor en su flota. -->
+                    <div v-if="!fleetDriversLocal.length" class="p-4 bg-arka-primary/10 border border-arka-primary/30 rounded-arka">
+                        <p class="text-sm font-semibold text-arka-primary-bright">Primero arme su flota</p>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Para pedir un viaje necesita al menos un conductor de confianza. Búsquelo por código de
+                            invitación o elija uno del directorio público — después ya puede pedirle una carrera.
+                        </p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <Link
+                                :href="route('fleet.show', targetFleetId)"
+                                class="px-3 py-1.5 rounded-arka bg-arka-primary text-arka-base text-xs font-semibold uppercase tracking-wide hover:bg-arka-primary-bright"
+                            >
+                                Buscar por código
+                            </Link>
+                            <Link
+                                :href="route('directory.index')"
+                                class="px-3 py-1.5 rounded-arka border border-arka-primary/40 text-arka-primary-bright text-xs font-semibold uppercase tracking-wide hover:bg-arka-primary/10"
+                            >
+                                Ver directorio público
+                            </Link>
+                        </div>
+                    </div>
+
                     <!-- "Tu flota": resumen glanceable, no la lista completa — el
                          detalle por conductor (buscar, invitar, pedir carrera directo)
                          ya vive en Fleet/Show.vue, no tiene sentido duplicarlo acá. -->

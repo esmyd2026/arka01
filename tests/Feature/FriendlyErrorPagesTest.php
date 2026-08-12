@@ -41,4 +41,17 @@ class FriendlyErrorPagesTest extends TestCase
             Artisan::call('up');
         }
     }
+
+    /**
+     * Bug real reportado por el usuario ("el botón no dirige" en el 419):
+     * Inertia muestra las respuestas que no son suyas (como esta página de
+     * error) dentro de un <iframe> flotando en un modal — sin target="_top"
+     * el enlace navegaba ese iframe nomás, no la ventana real.
+     */
+    public function test_the_home_link_targets_the_top_window_so_it_escapes_inertias_error_iframe(): void
+    {
+        $response = $this->get('/esta-ruta-no-existe-nunca');
+
+        $response->assertSee('target="_top"', false);
+    }
 }
