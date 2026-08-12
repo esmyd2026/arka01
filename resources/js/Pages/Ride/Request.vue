@@ -726,7 +726,7 @@ function submit() {
                      usuario): "ahora mismo" por defecto, o programar fecha/hora — con
                      la opción de marcarla como ida y vuelta. -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
-                    <h3 class="text-lg font-medium text-arka-text">¿Cuándo salís?</h3>
+                    <h3 class="text-lg font-medium text-arka-text">¿Cuándo?</h3>
 
                     <div class="flex items-center gap-1 bg-arka-base/60 rounded-full p-1 text-sm w-fit">
                         <button
@@ -969,9 +969,6 @@ function submit() {
                             {{ mapExpanded ? 'Minimizar' : 'Expandir' }}
                         </button>
                     </div>
-                    <p class="text-sm text-arka-text-muted mb-3">
-                        También puede tocar el mapa para ajustar el destino a mano.
-                    </p>
 
                     <FleetMap
                         :markers="mapMarkers"
@@ -1074,7 +1071,7 @@ function submit() {
                     >
                         <input type="radio" :value="WHOLE_FLEET" v-model="selectedDriverId" class="text-arka-primary" />
                         <span class="text-arka-text font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</span>
-                        <span class="text-sm text-arka-text-muted">(se le ofrece primero al más cercano; si no responde en 30 seg. pasa al siguiente · recomendado)</span>
+                          <!--(se le ofrece primero al más cercano; si no responde en 30 seg. pasa al siguiente · recomendado) -->
                     </label>
 
                     <p v-if="!driversWithDistance.length && visibleDrivers.length" class="text-sm text-arka-text-muted py-3">
