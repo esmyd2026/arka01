@@ -190,6 +190,10 @@ class FleetController extends Controller
             ->with('user')
             // Un cliente no se busca ni se invita a sí mismo, aunque también sea conductor.
             ->where('user_id', '!=', $request->user()->id)
+            // Pedido explícito del usuario ("pasarme a cliente"): con el
+            // perfil pausado no se lo puede buscar/invitar como conductor —
+            // la cuenta está operando como cliente ahora mismo.
+            ->whereNull('deactivated_at')
             ->where(function ($query) use ($term, $memberCode) {
                 $query->whereHas('user', function ($query) use ($term, $memberCode) {
                     $query->where('name', 'like', "%{$term}%")

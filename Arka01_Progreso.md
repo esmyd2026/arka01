@@ -2502,6 +2502,24 @@ No aplica — cambio de dos enlaces en Vue, sin lógica de backend nueva. Suite 
 
 ---
 
+### Cambiar de rol: "pasarme a conductor" / "pasarme a cliente"
+
+Pedido explícito del usuario: poder pasar de cliente a conductor (pidiendo los requisitos) y de conductor a cliente, fácil, desde un botón en el perfil — antes esto era imposible: una cuenta con flota propia estaba bloqueada de raíz para activarse como conductor (sección 3.1, "cada cuenta es cliente o conductor, nunca las dos"), y no había ninguna forma de "dejar de ser conductor" sin borrar el perfil por completo.
+
+- **`driver_profiles.deactivated_at`** (nuevo, nullable): un "pausado" reversible que el propio conductor controla — distinto de `suspended_at`, que es moderación de un admin. Mientras esté puesto, `User::isDriver()` da `false` (la cuenta vuelve a operar como cliente) pero **nada se borra**: vehículo, verificación, medallas y puntos, suscripción de conductor — todo queda guardado tal cual, listo para retomar.
+- **Cliente → conductor, ahora sí posible**: se sacó el bloqueo de `DriverProfileController` que impedía activarse como conductor teniendo una flota propia. La flota no se toca — simplemente deja de ser lo que la cuenta muestra mientras opera como conductor (mismo criterio "pausado, no borrado"). El único bloqueo real que queda es tener un viaje en curso (cambiar de rol a mitad de una carrera propia sí sería un problema).
+- **Conductor → cliente**: nuevo botón "Pasarme a cliente" (menú de cuenta) → `DriverProfileController::deactivate()` — pide confirmación, pausa el perfil, apaga la disponibilidad, bloqueado si hay un viaje en curso.
+- **Reactivar**: botón "Pasarme a conductor" (menú de cuenta, cuando la cuenta es cliente) lleva al formulario de siempre — si el perfil estaba pausado, `Driver/Profile.vue` muestra un aviso con un atajo de un solo toque ("Reactivar mi perfil de conductor") que no pide llenar nada de nuevo. Guardar el formulario completo (revisando/editando datos) también reactiva solo, por las dudas.
+- **Un conductor pausado desaparece de las pantallas de cliente**: directorio público (`DriverDirectoryController`), la bolsa pública de despacho de carreras (`RideDispatchCandidates`), el listado de conductores públicos al pedir carrera y la validación de una solicitud dirigida (`RideRequestController`), y la búsqueda por nombre/código de `Fleet/Show.vue` (`FleetController::searchDrivers()`). La mayoría de estos ya quedaban cubiertos indirectamente porque `deactivate()` también apaga `is_available`, pero se agregó el filtro explícito por `deactivated_at` donde hacía falta (directorio y búsqueda no dependen de `is_available` para decidir si mostrar al conductor).
+- **Nav actualizada**: `AuthenticatedLayout.vue` ocultaba "Mi perfil de conductor" de los accesos rápidos si el cliente ya tenía una flota propia (reflejo de la regla vieja) — ahora se muestra siempre que la cuenta no sea admin.
+
+### Tests
+`tests/Feature/Driver/RoleSwitchingTest.php` (nuevo, 8 tests): pasar a cliente sin perder datos, bloqueado con viaje en curso, 404 sin perfil de conductor, reactivar de un toque, guardar el formulario reactiva solo, un cliente con flota puede pasar a conductor sin que la flota se toque, bloqueado con viaje en curso del lado cliente, un conductor pausado no aparece en el directorio. `tests/Feature/NavigationRolesTest.php`: el test que probaba el bloqueo viejo ahora prueba el cambio de rol exitoso. Suite completa: 645 tests OK, Pint limpio, build limpio.
+
+**Pendiente de tu parte**: la migración nueva (`deactivated_at`) no se pudo correr en la base local — el MySQL de Laragon está caído ahora mismo (`No se puede establecer una conexión...`). Corré `php artisan migrate` apenas lo levantes; en producción, `deploy.sh` ya la corre sola con `migrate --force`.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

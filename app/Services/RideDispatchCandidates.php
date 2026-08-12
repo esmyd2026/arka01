@@ -48,6 +48,12 @@ class RideDispatchCandidates
                 DriverProfile::query()
                     ->where('is_public', true)
                     ->where('verification_status', '!=', 'rejected')
+                    // Pedido explícito del usuario ("pasarme a cliente"): con
+                    // el perfil pausado no entra a la bolsa pública — is_available
+                    // en false (que deactivate() ya fuerza) lo saca del
+                    // filtro más abajo de todas formas, esto es nomás la
+                    // misma defensa en profundidad que el resto de esta clase.
+                    ->whereNull('deactivated_at')
                     ->where('user_id', '!=', $client->id)
                     ->with('user')
                     ->get()

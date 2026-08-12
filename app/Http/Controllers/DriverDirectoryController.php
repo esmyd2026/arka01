@@ -54,6 +54,11 @@ class DriverDirectoryController extends Controller
             // Panel admin (pedido explícito del usuario): un conductor
             // suspendido no aparece ni para descubrirlo de nuevas.
             ->whereNull('suspended_at')
+            // Pedido explícito del usuario ("pasarme a cliente"): mientras el
+            // perfil esté pausado, la cuenta opera como cliente — no tiene
+            // sentido que siga apareciendo en el directorio como "no
+            // disponible ahora", tiene que desaparecer del todo.
+            ->whereNull('deactivated_at')
             ->with('user')
             ->get();
 

@@ -63,6 +63,7 @@ class DriverProfile extends Model
         'location_updated_at' => 'datetime',
         'max_request_distance_km' => 'integer',
         'suspended_at' => 'datetime',
+        'deactivated_at' => 'datetime',
         'passenger_capacity' => 'integer',
         'has_trunk' => 'boolean',
     ];
@@ -212,6 +213,21 @@ class DriverProfile extends Model
     public function isSuspended(): bool
     {
         return $this->suspended_at !== null;
+    }
+
+    /**
+     * "Pausado" por el propio conductor (pedido explícito del usuario:
+     * poder pasar de conductor a cliente y volver, fácil) — distinto de
+     * `isSuspended()`, que es moderación de un admin. A propósito NO está en
+     * $fillable: solo se toca desde
+     * DriverProfileController::deactivate()/reactivate()/update(), nunca
+     * desde el formulario genérico del conductor. Mientras esté pausado,
+     * `User::isDriver()` da false — todos los datos siguen guardados tal
+     * cual, listos para reactivar sin volver a completar nada.
+     */
+    public function isDeactivated(): bool
+    {
+        return $this->deactivated_at !== null;
     }
 
     /**

@@ -16,6 +16,7 @@ import { canInstallApp, installApp } from '@/pwaInstall.js';
 import { playIncomingRideAlert } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
+import { confirmDialog } from '@/Utils/confirmDialog';
 
 // Menú de accesos rápidos que abre el botón central flotante de la barra
 // inferior (preferencia de diseño: bottom sheet, no modal lateral).
@@ -80,17 +81,29 @@ async function installAppNow() {
     if (accepted) alert('¡Listo! Ya quedó instalada.');
 }
 
+// "Pasarme a cliente" (pedido explícito del usuario: un botón en el perfil
+// para cambiar de rol) — pausa el perfil de conductor sin borrar nada
+// (DriverProfileController::deactivate()); se puede reactivar después con
+// todos los datos intactos. Confirmación primero porque tiene consecuencias
+// reales: deja de recibir carreras de inmediato.
+async function switchToClient() {
+    if (!(await confirmDialog('¿Pasar a cliente? Su perfil de conductor queda guardado — puede volver a activarlo cuando quiera.'))) return;
+    router.post(route('driver.profile.deactivate'));
+}
+
 // Mismo set de accesos rápidos que el bottom sheet de móvil, para que en
 // escritorio también estén a un clic desde el ícono de grilla del header
 // (referencia de diseño: el selector de apps "de los puntos" de Google).
 // "Mi perfil de conductor" no lleva clientOnly/driverOnly: es la puerta de
-// entrada para activar el rol de conductor, tiene que verse para cualquiera
-// que todavía pueda hacerlo — pero un cliente que ya tiene flota propia no
-// puede (sección 3.1: cada cuenta es cliente o conductor, nunca las dos), así
-// que a ese sí se le oculta (ver `canBecomeOrIsDriver`).
+// entrada para activar el rol de conductor (o para editarlo, si ya lo es) —
+// se muestra para cualquier cuenta que no sea admin. Pedido explícito del
+// usuario ("pasarme a conductor, fácil"): antes se ocultaba si el cliente ya
+// tenía una flota propia (sección 3.1, versión vieja de la regla) — ya no,
+// ahora activarse como conductor pausa la flota en vez de bloquearse (ver
+// DriverProfileController::deactivate()/reactivate()).
 // El admin tiene su propio acceso directo y prominente (pastilla de escritorio,
 // tab de móvil) así que no repetimos "Panel admin" acá también.
-const canBecomeOrIsDriver = computed(() => showDriverNav.value || !usePage().props.auth.hasFleet);
+const canBecomeOrIsDriver = computed(() => !isAdmin.value);
 // `help` (pedido explícito del usuario: ícono "?" contextual en cada módulo,
 // alternativa que él mismo ofreció al ver que la guía de bienvenida siempre
 // aparece en el mismo lugar) — qué hace cada uno y con qué otro se relaciona,
@@ -516,6 +529,23 @@ onBeforeUnmount(() => {
                                     >
                                         Instalar app
                                     </button>
+
+                                    <!-- Cambiar de rol (pedido explícito del usuario): "fácil",
+                                         un botón acá mismo — de cliente pasa al formulario que ya
+                                         pide los requisitos (vehículo, licencia); de conductor,
+                                         pausa el perfil sin borrar nada, listo para reactivar. -->
+                                    <DropdownLink v-if="!isAdmin && !showDriverNav" :href="route('driver.profile.edit')">
+                                        Pasarme a conductor
+                                    </DropdownLink>
+                                    <button
+                                        v-if="!isAdmin && showDriverNav"
+                                        type="button"
+                                        @click="switchToClient"
+                                        class="block w-full px-4 py-2 text-start text-sm leading-5 text-arka-text hover:bg-arka-base focus:outline-none focus:bg-arka-base transition duration-150 ease-in-out"
+                                    >
+                                        Pasarme a cliente
+                                    </button>
+
                                     <DropdownLink :href="route('logout')" method="post" as="button">
                                         Cerrar sesión
                                     </DropdownLink>

@@ -5,10 +5,11 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import Checkbox from '@/Components/Checkbox.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
@@ -226,6 +227,14 @@ const submit = () => {
     form.post(route('driver.profile.update'), { forceFormData: true });
 };
 
+// "Reactivar mi perfil de conductor" (pedido explícito del usuario): atajo
+// de un solo toque para quien pausó antes — los datos siguen guardados, no
+// hace falta volver a completar el formulario (aunque guardarlo también
+// reactiva, ver DriverProfileController::update()).
+function reactivate() {
+    router.post(route('driver.profile.reactivate'));
+}
+
 // Bug reportado por el usuario: un conductor que nunca subió ninguna foto
 // terminaba igual con `verification_status = 'pending'` (el default de la
 // columna al crearse la fila) y quedaba bloqueado para subirlas — la fuente
@@ -253,9 +262,24 @@ const VERIFICATION_LABELS = {
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
                     <header class="mb-6">
+                        <!-- Pedido explícito del usuario ("pasarme a conductor
+                             / pasarme a cliente, fácil"): si el perfil está
+                             pausado, un atajo de un solo toque para volver —
+                             sin esto tendría que revisar/reguardar todo el
+                             formulario de abajo para reactivarse. -->
+                        <div v-if="driverProfile?.deactivated_at" class="mb-4 p-4 rounded-arka bg-arka-warning/10 border border-arka-warning/30">
+                            <p class="text-sm font-medium text-arka-warning">Su perfil de conductor está pausado</p>
+                            <p class="mt-1 text-sm text-arka-text-muted">
+                                Ahora mismo su cuenta opera como cliente. Sus datos (vehículo, verificación, medallas)
+                                siguen guardados — reactive cuando quiera sin volver a completar nada.
+                            </p>
+                            <SecondaryButton class="mt-3" @click="reactivate">Reactivar mi perfil de conductor</SecondaryButton>
+                        </div>
+
                         <p class="text-sm text-arka-text-muted">
-                            Cualquier usuario puede ser cliente y conductor a la vez. Complete estos datos para que
-                            otros clientes puedan invitarlo a sus flotas.
+                            Cada cuenta opera como cliente o como conductor, nunca las dos a la vez — pero puede
+                            cambiar de uno a otro cuando quiera (menú de cuenta, "Pasarme a conductor"/"Pasarme a
+                            cliente"). Complete estos datos para que otros clientes puedan invitarlo a sus flotas.
                         </p>
 
                         <!-- "Tu estado" (pedido explícito del usuario): de un vistazo,

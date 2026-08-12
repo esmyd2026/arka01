@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\PricingSetting;
+use App\Models\Ride;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\PlanLimits;
@@ -22,23 +23,28 @@ use Inertia\Response;
 
 class DriverProfileController extends Controller
 {
-    /** Cada cuenta es cliente o conductor, nunca las dos (sección 3.1). */
-    private const SINGLE_ROLE_MESSAGE = 'No puede activarse como conductor: esta cuenta ya es cliente (tiene una flota propia). Cada cuenta es cliente o conductor, no ambas.';
+    /**
+     * Pedido explícito del usuario ("pasarme a conductor... fácil"): activarse
+     * como conductor ya no lo bloquea tener una flota propia como cliente —
+     * cada cuenta sigue operando como cliente O conductor, nunca las dos a la
+     * vez (User::isClient()/isDriver() son mutuamente excluyentes), pero
+     * ahora sí se puede cambiar de uno a otro. Lo único que sigue bloqueando
+     * el cambio es tener un viaje en curso — cambiar de rol a mitad de una
+     * carrera sí sería un problema real.
+     */
+    private const ACTIVE_RIDE_MESSAGE = 'Tiene un viaje en curso — termínelo antes de cambiar de rol.';
 
     public function __construct(private readonly PlanLimits $planLimits) {}
 
     /**
      * Muestra el formulario de "Convertirme en conductor" (módulo de registro del
-     * conductor, sección 9.5-B). Si el usuario ya tiene perfil, este mismo formulario
-     * sirve para editarlo — no hace falta una pantalla separada.
+     * conductor, sección 9.5-B). Si el usuario ya tiene perfil (activo o pausado),
+     * este mismo formulario sirve para editarlo/reactivarlo — no hace falta una
+     * pantalla separada.
      */
     public function edit(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
-
-        if (! $user->isDriver() && $user->fleets()->exists()) {
-            return redirect()->route('dashboard')->with('status', self::SINGLE_ROLE_MESSAGE);
-        }
 
         // Avisos de carrera nueva por WhatsApp (pedido explícito del
         // usuario): la pantalla usa esto para mostrar el estado de la
@@ -86,16 +92,20 @@ class DriverProfileController extends Controller
     }
 
     /**
-     * Crea o actualiza el perfil de conductor del usuario autenticado. Cada
-     * cuenta es cliente o conductor, nunca las dos (sección 3.1) — si ya es
-     * dueño de una flota propia, no puede activarse como conductor acá.
+     * Crea, actualiza o reactiva el perfil de conductor del usuario
+     * autenticado (pedido explícito del usuario: "pasarme a conductor,
+     * fácil"). Si venía con el perfil pausado (isDeactivated()), guardar acá
+     * ya lo deja activo de nuevo — no hace falta un paso aparte.
      */
     public function update(Request $request): RedirectResponse
     {
         $user = $request->user();
 
-        if (! $user->isDriver() && $user->fleets()->exists()) {
-            throw ValidationException::withMessages(['license_number' => self::SINGLE_ROLE_MESSAGE]);
+        // Único bloqueo real que queda para cambiar de rol: un viaje en
+        // curso. Cambiar de cliente a conductor a mitad de una carrera
+        // propia sí sería un problema (ver ACTIVE_RIDE_MESSAGE).
+        if (! $user->isDriver() && Ride::where('client_user_id', $user->id)->where('status', 'in_progress')->exists()) {
+            throw ValidationException::withMessages(['license_number' => self::ACTIVE_RIDE_MESSAGE]);
         }
 
         // Tope de la tarifa mínima propia del conductor (pedido explícito
@@ -262,12 +272,73 @@ class DriverProfileController extends Controller
 
         // updateOrCreate porque un usuario tiene, como mucho, un solo perfil de
         // conductor (la primera vez lo crea, después lo va editando acá mismo).
-        DriverProfile::query()->updateOrCreate(
+        $profile = DriverProfile::query()->updateOrCreate(
             ['user_id' => $request->user()->id],
             $validated,
         );
 
+        // Pedido explícito del usuario ("pasarme a conductor, fácil"):
+        // guardar este formulario siempre deja la cuenta como conductor
+        // activo, incluso si el perfil venía pausado — no hace falta un
+        // paso aparte de "reactivar" si ya está acá revisando sus datos.
+        // deactivated_at nunca es un campo del formulario (no está en
+        // $fillable), se limpia a mano.
+        if ($profile->deactivated_at !== null) {
+            $profile->forceFill(['deactivated_at' => null])->save();
+        }
+
         return redirect()->route('driver.profile.edit');
+    }
+
+    /**
+     * "Pasarme a cliente" (pedido explícito del usuario): pausa el perfil de
+     * conductor sin borrar nada — vehículo, verificación, medallas y
+     * suscripción de conductor quedan tal cual, listos para retomar. La
+     * cuenta pasa a operar como cliente de inmediato (User::isDriver() da
+     * false en cuanto se guarda esto).
+     */
+    public function deactivate(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        abort_unless($user->isDriver(), 404);
+
+        if (Ride::where('driver_user_id', $user->id)->where('status', 'in_progress')->exists()) {
+            throw ValidationException::withMessages(['driver' => self::ACTIVE_RIDE_MESSAGE]);
+        }
+
+        // Se apaga la disponibilidad de una — mismo motivo que al cerrar
+        // sesión (AuthenticatedSessionController): un conductor "pausado" no
+        // puede seguir mostrándose disponible para sus clientes.
+        $user->driverProfile->forceFill([
+            'deactivated_at' => now(),
+            'is_available' => false,
+        ])->save();
+
+        Log::info('Conductor pasó a cliente (perfil de conductor pausado por su propia cuenta).', ['user_id' => $user->id]);
+
+        return redirect()->route('dashboard')->with('status', 'Listo — ahora es cliente. Su perfil de conductor quedó guardado, puede volver a activarlo cuando quiera.');
+    }
+
+    /**
+     * "Reactivar mi perfil de conductor" (pedido explícito del usuario):
+     * atajo de un solo toque para quien pausó antes y quiere volver — no
+     * hace falta llenar el formulario de nuevo, los datos siguen ahí.
+     */
+    public function reactivate(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $profile = $user->driverProfile;
+
+        abort_if($profile === null, 404);
+
+        if (! $user->isDriver() && Ride::where('client_user_id', $user->id)->where('status', 'in_progress')->exists()) {
+            throw ValidationException::withMessages(['driver' => self::ACTIVE_RIDE_MESSAGE]);
+        }
+
+        $profile->forceFill(['deactivated_at' => null])->save();
+
+        return redirect()->route('driver.profile.edit')->with('status', 'Listo — ya volvió a ser conductor.');
     }
 
     /**

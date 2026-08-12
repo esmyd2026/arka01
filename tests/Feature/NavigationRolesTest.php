@@ -66,24 +66,39 @@ class NavigationRolesTest extends TestCase
     }
 
     /**
-     * Mismo criterio, del otro lado: un dueño de flota no puede activarse
-     * como conductor con la misma cuenta.
+     * Pedido explícito del usuario ("pasarme a conductor... fácil"): un dueño
+     * de flota SÍ puede activarse como conductor con la misma cuenta — antes
+     * quedaba bloqueado de raíz (ver git blame), ahora cambia de rol en vez
+     * de sumar los dos. La flota que ya tenía como cliente queda guardada tal
+     * cual, no se borra (ver tests/Feature/Driver/RoleSwitchingTest.php para
+     * el flujo completo de ida y vuelta).
      */
-    public function test_a_fleet_owner_cannot_activate_the_driver_role(): void
+    public function test_a_fleet_owner_can_switch_to_the_driver_role(): void
     {
         $client = User::factory()->create();
-        Fleet::factory()->for($client, 'owner')->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
 
-        $this->actingAs($client)->get(route('driver.profile.edit'))->assertRedirect(route('dashboard'));
+        $this->actingAs($client)->get(route('driver.profile.edit'))->assertOk();
 
         $this->actingAs($client)
             ->post(route('driver.profile.update'), [
                 'license_number' => 'ABC123',
+                'vehicle_make' => 'Chevrolet',
+                'vehicle_model' => 'Spark',
+                'vehicle_color' => 'Blanco',
+                'vehicle_type' => 'sedan',
+                'vehicle_plate' => 'ABC-1234',
+                'vehicle_year' => 2020,
+                'passenger_capacity' => 4,
+                'has_trunk' => true,
                 'rate_per_km' => 0.4,
             ])
-            ->assertSessionHasErrors('license_number');
+            ->assertSessionHasNoErrors();
 
-        $this->assertDatabaseMissing('driver_profiles', ['user_id' => $client->id]);
+        $this->assertDatabaseHas('driver_profiles', ['user_id' => $client->id]);
+        $this->assertDatabaseHas('fleets', ['id' => $fleet->id, 'owner_user_id' => $client->id]);
+        $this->assertTrue($client->fresh()->isDriver());
+        $this->assertFalse($client->fresh()->isClient());
     }
 
     /**

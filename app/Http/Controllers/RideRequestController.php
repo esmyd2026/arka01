@@ -91,6 +91,10 @@ class RideRequestController extends Controller
         $publicDrivers = DriverProfile::query()
             ->where('is_public', true)
             ->where('verification_status', '!=', 'rejected')
+            // Pedido explícito del usuario ("pasarme a cliente"): con el
+            // perfil pausado, la cuenta opera como cliente — no debe seguir
+            // ofreciéndose como conductor en el directorio.
+            ->whereNull('deactivated_at')
             ->whereNotIn('user_id', $fleetDriverIds)
             ->where('user_id', '!=', $request->user()->id)
             ->with('user')
@@ -333,12 +337,23 @@ class RideRequestController extends Controller
                 ]);
             }
 
+            $chosenProfile = DriverProfile::query()->with('user')->where('user_id', $validated['driver_user_id'])->first();
+
+            // Pedido explícito del usuario ("pasarme a cliente"): con el
+            // perfil pausado no puede recibir solicitudes, ni siquiera
+            // dirigidas de su propia flota — la cuenta está operando como
+            // cliente ahora mismo, no como conductor.
+            if ($chosenProfile?->isDeactivated()) {
+                throw ValidationException::withMessages([
+                    'driver_user_id' => 'Ese conductor pausó su perfil — no puede recibir solicitudes en este momento.',
+                ]);
+            }
+
             // Zona de cobertura (pedido explícito del usuario): un conductor
             // puede limitar hasta qué distancia de su ubicación quiere recibir
             // solicitudes — "así sea de mi flota, tiene que estar fuera de
             // rango" si no la cumple. Se valida ACÁ (no solo se oculta en el
             // formulario) para que no se pueda pedir igual manipulando el pedido.
-            $chosenProfile = DriverProfile::query()->with('user')->where('user_id', $validated['driver_user_id'])->first();
             if ($chosenProfile && ! $chosenProfile->isWithinRangeOf((float) $validated['origin_lat'], (float) $validated['origin_lng'])) {
                 throw ValidationException::withMessages([
                     'driver_user_id' => 'Ese conductor no recibe solicitudes tan lejos de su zona en este momento.',

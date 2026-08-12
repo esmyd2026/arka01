@@ -127,6 +127,10 @@ Route::middleware('auth')->group(function () {
     // este endpoint la sirve solo al propio conductor o a un admin (ver
     // DriverProfileController::licensePhoto()).
     Route::get('/driver/profile/{user}/licencia', [DriverProfileController::class, 'licensePhoto'])->name('driver-profile.license-photo');
+    // Pasar de conductor a cliente y volver (pedido explícito del usuario) —
+    // ver DriverProfileController::deactivate()/reactivate().
+    Route::post('/driver/profile/pasar-a-cliente', [DriverProfileController::class, 'deactivate'])->name('driver.profile.deactivate');
+    Route::post('/driver/profile/reactivar', [DriverProfileController::class, 'reactivate'])->name('driver.profile.reactivate');
 
     // Mi Flota (lado cliente, sección 3.2 y 9.5-A). Desde la Fase 5 un cliente
     // puede tener más de una flota si su plan lo permite (sección 7.3, plan

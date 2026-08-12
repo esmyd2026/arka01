@@ -412,19 +412,26 @@ class User extends Authenticatable
     }
 
     /**
-     * true si el usuario ya tiene perfil de conductor creado.
+     * true si el usuario ya tiene perfil de conductor creado Y activo.
+     *
+     * Pedido explícito del usuario ("pasarme a conductor / pasarme a
+     * cliente, fácil"): un conductor puede pausar su perfil sin borrarlo
+     * (App\Models\DriverProfile::isDeactivated(), ver
+     * DriverProfileController::deactivate()) — mientras esté pausado, acá da
+     * false y la cuenta vuelve a operar como cliente, aunque el
+     * `driver_profiles` siga existiendo con todos sus datos.
      */
     public function isDriver(): bool
     {
-        return $this->driverProfile()->exists();
+        return $this->driverProfile()->whereNull('deactivated_at')->exists();
     }
 
     /**
      * true si el usuario es del lado cliente — el rol por defecto de
-     * cualquier cuenta que no sea admin ni haya activado el de conductor.
-     * Cada cuenta es cliente O conductor, nunca las dos (una cuenta no puede
-     * ser dueña de una flota propia y tener perfil de conductor a la vez —
-     * ver los chequeos en FleetController y DriverProfileController).
+     * cualquier cuenta que no sea admin ni tenga un perfil de conductor
+     * activo en este momento. Cada cuenta opera como cliente O conductor
+     * (nunca las dos al mismo tiempo), pero sí puede cambiar de uno a otro
+     * — ver los chequeos en FleetController y DriverProfileController.
      */
     public function isClient(): bool
     {
