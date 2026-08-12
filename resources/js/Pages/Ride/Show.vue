@@ -92,7 +92,28 @@ function dismissChatToast(scrollToChat = false) {
 // campo de texto libre sigue disponible para lo que no calce en ninguna.
 const QUICK_REPLIES_DRIVER = ['Voy en camino.', 'Estoy cerca.', 'Estoy en el punto de recogida.', 'No logro ubicarte.', 'Hay tráfico, llegaré en unos minutos.'];
 const QUICK_REPLIES_CLIENT = ['¿Vienes en camino?', '¿Ya llegaste?', 'Estoy saliendo.', 'Estoy en el punto indicado.', 'No logro ubicarte.'];
-const quickReplies = computed(() => (props.isDriver ? QUICK_REPLIES_DRIVER : QUICK_REPLIES_CLIENT));
+
+// Pedido explícito del usuario: "un chat entre el conductor y el cliente
+// para confirmar mensajes de fecha y hora de recogida" — las frases de
+// arriba son todas de "ya estoy en camino", no tienen sentido para una
+// carrera que puede faltar días. Mientras sigue programada (sin arrancar),
+// se usan estas otras, pensadas para coordinar antes del día.
+const QUICK_REPLIES_DRIVER_SCHEDULED = [
+    'Confirmo que voy a estar a la hora programada.',
+    '¿Seguimos con la fecha y hora acordada?',
+    'Voy a llegar unos minutos tarde el día de la carrera.',
+];
+const QUICK_REPLIES_CLIENT_SCHEDULED = [
+    '¿Confirmamos que sigue siendo a la hora programada?',
+    'Necesito cambiar el horario, ¿puede?',
+    'Todo listo para la hora acordada.',
+];
+const quickReplies = computed(() => {
+    if (props.ride.status === 'scheduled') {
+        return props.isDriver ? QUICK_REPLIES_DRIVER_SCHEDULED : QUICK_REPLIES_CLIENT_SCHEDULED;
+    }
+    return props.isDriver ? QUICK_REPLIES_DRIVER : QUICK_REPLIES_CLIENT;
+});
 
 async function scrollChatToBottom() {
     await nextTick();
@@ -274,17 +295,42 @@ function markPickedUp() {
     router.post(route('rides.picked-up', props.ride.id), {}, { preserveScroll: true });
 }
 
-// Cancelar una carrera ya aceptada (pedido explícito del usuario): solo el
-// cliente puede, mientras el conductor no la completó — importante avisar
-// bien si ya está "en camino", por eso el mensaje distingue ambos casos.
-async function cancelRide() {
-    const message = props.ride.status === 'in_progress'
-        ? '¿Seguro que quiere cancelar? Su conductor ya está en camino y se le va a avisar.'
-        : '¿Seguro que quiere cancelar esta carrera programada?';
+// Cancelar una carrera ya aceptada (pedido explícito del usuario): al
+// principio solo podía el cliente; ahora también el conductor, pidiendo un
+// motivo (lista fija según el rol, mismas opciones que
+// RideController::CLIENT_CANCEL_REASONS/DRIVER_CANCEL_REASONS) y una
+// observación libre, opcional.
+const CLIENT_CANCEL_REASONS = [
+    'Cambié de planes',
+    'Encontré otro medio de transporte',
+    'Pedí la carrera por error',
+    'El conductor demoró demasiado',
+    'Otro motivo',
+];
+const DRIVER_CANCEL_REASONS = [
+    'Imprevisto personal',
+    'Problema con el vehículo',
+    'No voy a poder llegar a tiempo',
+    'El cliente no responde o no aparece',
+    'Motivo de seguridad',
+    'Otro motivo',
+];
+const cancelReasons = computed(() => (props.isDriver ? DRIVER_CANCEL_REASONS : CLIENT_CANCEL_REASONS));
 
-    if (!(await confirmDialog(message, { danger: true, confirmLabel: 'Cancelar carrera' }))) return;
+const showCancelForm = ref(false);
+const cancelReason = ref('');
+const cancelNote = ref('');
+const cancellingRide = ref(false);
 
-    router.post(route('rides.cancel', props.ride.id), {}, { preserveScroll: true });
+function submitCancelRide() {
+    if (!cancelReason.value) return;
+
+    cancellingRide.value = true;
+    router.post(
+        route('rides.cancel', props.ride.id),
+        { reason: cancelReason.value, note: cancelNote.value.trim() || null },
+        { preserveScroll: true, onFinish: () => (cancellingRide.value = false) }
+    );
 }
 
 // Editar una carrera programada (pedido explícito del usuario: "si es que
@@ -592,6 +638,9 @@ function submitReview() {
                         {{ ride.origin_address ?? 'Sin referencia de origen' }} &rarr;
                         {{ ride.destination_address ?? 'Sin referencia de destino' }}
                     </p>
+                    <!-- Observación del cliente (pedido explícito del usuario): la
+                         sigue teniendo a mano el conductor durante toda la carrera. -->
+                    <p v-if="ride.notes" class="text-sm text-arka-text-muted italic pt-1">"{{ ride.notes }}"</p>
                 </div>
 
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
@@ -768,14 +817,52 @@ function submitReview() {
                         Esperando que el conductor marque la carrera como completada.
                     </p>
 
-                    <!-- Solo el cliente puede cancelar, y solo antes de que se complete
-                         (pedido explícito del usuario). -->
-                    <DangerButton v-if="!isDriver && ['scheduled', 'in_progress'].includes(ride.status)" @click="cancelRide">
-                        Cancelar carrera
-                    </DangerButton>
+                    <!-- Cancelar, mientras no se completó (pedido explícito del
+                         usuario: ahora también el conductor puede, no solo el
+                         cliente — cada uno con su propia lista de motivos, más
+                         una observación libre opcional). -->
+                    <template v-if="['scheduled', 'in_progress'].includes(ride.status)">
+                        <DangerButton v-if="!showCancelForm" @click="showCancelForm = true">
+                            Cancelar carrera
+                        </DangerButton>
+
+                        <div v-else class="w-full p-4 rounded-arka bg-arka-danger/10 border border-arka-danger/30 space-y-3">
+                            <p v-if="ride.status === 'in_progress'" class="text-sm text-arka-danger">
+                                {{ isDriver ? 'El cliente' : 'Su conductor' }} ya está en camino — se le va a avisar apenas cancele.
+                            </p>
+                            <div>
+                                <InputLabel value="Motivo de la cancelación" />
+                                <select
+                                    v-model="cancelReason"
+                                    class="mt-1 block w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text focus:border-arka-primary focus:ring-arka-primary"
+                                >
+                                    <option value="" disabled>Elija un motivo</option>
+                                    <option v-for="reason in cancelReasons" :key="reason" :value="reason">{{ reason }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Observación (opcional)" />
+                                <TextInput
+                                    type="text"
+                                    class="mt-1 block w-full"
+                                    v-model="cancelNote"
+                                    maxlength="500"
+                                    placeholder="Algún detalle más, si quiere agregarlo"
+                                />
+                            </div>
+                            <div class="flex gap-2">
+                                <DangerButton :disabled="!cancelReason || cancellingRide" @click="submitCancelRide">
+                                    Confirmar cancelación
+                                </DangerButton>
+                                <SecondaryButton @click="showCancelForm = false">Volver</SecondaryButton>
+                            </div>
+                        </div>
+                    </template>
 
                     <p v-if="ride.status === 'cancelled'" class="text-sm text-arka-danger">
-                        Esta carrera fue cancelada{{ ride.cancelled_at ? ` el ${new Date(ride.cancelled_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}` : '' }}.
+                        Esta carrera fue cancelada{{ ride.cancelled_at ? ` el ${new Date(ride.cancelled_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}` : '' }}{{ ride.cancelled_by ? ` por ${ride.cancelled_by === 'driver' ? 'el conductor' : 'el cliente'}` : '' }}.
+                        <span v-if="ride.cancellation_reason" class="block text-arka-text-muted">Motivo: {{ ride.cancellation_reason }}</span>
+                        <span v-if="ride.cancellation_note" class="block text-arka-text-muted">"{{ ride.cancellation_note }}"</span>
                     </p>
 
                     <!-- Bug reportado por el usuario (captura: recuadro vacío en el

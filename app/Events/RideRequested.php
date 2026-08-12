@@ -104,6 +104,9 @@ class RideRequested implements ShouldBroadcast
             'is_scheduled' => $this->rideRequest->is_scheduled,
             'scheduled_at' => $this->rideRequest->scheduled_at,
             'round_trip' => $this->rideRequest->round_trip,
+            // Observación libre del cliente (pedido explícito del usuario),
+            // para que el conductor la vea antes de aceptar, no solo después.
+            'notes' => $this->rideRequest->notes,
             // Despacho secuencial estilo Uber (pedido explícito del usuario):
             // el frontend usa esto para mostrar el contéo regresivo de 30 seg.
             // antes de que la solicitud pase al siguiente conductor de la bolsa.

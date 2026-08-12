@@ -13,6 +13,28 @@ function context() {
     return audioCtx;
 }
 
+/**
+ * Pedido explícito del usuario: los avisos con sonido de toda la app
+ * dependen de la política de autoplay del navegador (sin un gesto real del
+ * usuario antes, el `AudioContext` queda "suspended" y no suena nada) — en
+ * vez de esperar a que cada aviso individual choque contra eso, se
+ * desbloquea acá mismo en el momento en que el usuario ya está dando su
+ * consentimiento explícito para algo parecido (activar notificaciones, un
+ * clic real que el navegador sí cuenta como gesto de usuario). Llamarla
+ * ahí dejar el resto de los avisos de esta sesión sonando de una,
+ * sin volver a depender de que la próxima alerta también tenga un clic
+ * fresco detrás.
+ */
+export function unlockAudioContext() {
+    try {
+        const ctx = context();
+        if (ctx && ctx.state === 'suspended') ctx.resume();
+    } catch {
+        // Sin Web Audio en este navegador — no pasa nada, los avisos
+        // visuales siguen funcionando igual.
+    }
+}
+
 function tone(ctx, frequency, startAt, durationSeconds, peakGain) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -65,6 +87,35 @@ export function playUpdateChime() {
 
 export function vibrateDevice(pattern = [200, 100, 200]) {
     if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+/**
+ * Sonido de arranque para la pantalla de carga inicial (ver
+ * Components/SplashScreen.vue). Pedido explícito del usuario: la primera
+ * versión (bocina de barco antiguo, dos osciladores graves en diente de
+ * sierra) sonaba a alarma de error, no a bienvenida — reemplazada por un
+ * arpeggio corto de tres notas suaves (mismo `tone()` de acá arriba, onda
+ * senoidal, volumen bajo), más parecido al "ding" discreto de abrir una
+ * app que a una señal de alerta.
+ *
+ * Ojo: los navegadores bloquean el autoplay de sonido sin una interacción
+ * previa del usuario en la pestaña — puede no sonar en la primera carga en
+ * frío según el navegador, sin que eso rompa nada más de la pantalla.
+ */
+export function playStartupChime() {
+    try {
+        const ctx = context();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const now = ctx.currentTime;
+        tone(ctx, 523.25, now, 0.22, 0.14); // Do
+        tone(ctx, 659.25, now + 0.14, 0.22, 0.14); // Mi
+        tone(ctx, 783.99, now + 0.28, 0.32, 0.16); // Sol
+    } catch {
+        // Política de autoplay del navegador: sin sonido, la pantalla de
+        // carga se ve igual — nunca bloquea el arranque de la app.
+    }
 }
 
 /**

@@ -179,6 +179,13 @@ onMounted(() => {
         playAttentionAlert();
         router.reload({ only: ['scheduledRides'] });
     });
+    // Recordatorio de 15-20 min antes de una carrera programada (pedido
+    // explícito del usuario) — solo le llega al conductor (ver
+    // RideReminderDue::broadcastOn()), acá solo hace falta el sonido: la
+    // tarjeta ya muestra la hora, no hace falta recargar nada.
+    personal.listen('.ride.reminder-due', () => {
+        playAttentionAlert();
+    });
     channels.push(personal);
 
     // Una por cada flota donde soy conductor activo: acá llegan las
@@ -459,6 +466,8 @@ function confirmRaiseOffer(id) {
                                 📅 Programada para {{ formatScheduledAt(r.scheduled_at) }}
                                 <span v-if="r.round_trip"> · Ida y vuelta</span>
                             </p>
+                            <!-- Observación del cliente (pedido explícito del usuario). -->
+                            <p v-if="r.notes" class="mt-1 text-sm text-arka-text-muted italic">"{{ r.notes }}"</p>
 
                             <!-- Despacho secuencial estilo Uber (pedido explícito del usuario):
                                  si no respondo en este tiempo, pasa al siguiente conductor de la bolsa. -->

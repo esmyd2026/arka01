@@ -8,9 +8,11 @@ use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
 /**
- * Aviso push al conductor de que el cliente canceló la carrera (pedido
- * explícito del usuario) — sobre todo importante si ya iba en camino, para
- * que se entere aunque tenga la app cerrada, mismo criterio que las demás push.
+ * Aviso push de que la carrera se canceló (pedido explícito del usuario) —
+ * sobre todo importante si ya iba en camino, para que se entere aunque
+ * tenga la app cerrada. Pedido explícito del usuario: ahora también puede
+ * cancelar el conductor, no solo el cliente — el texto distingue quién fue,
+ * mismo criterio que FleetInvitationPushNotification.
  */
 class RideCancelledPushNotification extends Notification
 {
@@ -26,9 +28,12 @@ class RideCancelledPushNotification extends Notification
 
     public function toWebPush($notifiable, $notification): WebPushMessage
     {
+        $who = $this->ride->cancelled_by === 'driver' ? $this->ride->driver->name : 'El cliente';
+        $reason = $this->ride->cancellation_reason;
+
         return (new WebPushMessage)
             ->title('Carrera cancelada')
-            ->body('El cliente canceló la carrera.')
+            ->body($reason ? "{$who} canceló la carrera: {$reason}." : "{$who} canceló la carrera.")
             ->icon('/icons/icon.svg')
             ->data(['url' => '/carreras'])
             ->action('Ver', 'view');

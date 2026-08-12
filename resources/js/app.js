@@ -6,6 +6,7 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import ConfirmDialogHost from './Components/ConfirmDialogHost.vue';
+import SplashScreen from './Components/SplashScreen.vue';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -16,7 +17,7 @@ createInertiaApp({
         // ConfirmDialogHost, una sola vez acá (no en cada layout): reemplaza
         // los window.confirm() nativos por un diálogo con el estilo oscuro de
         // la app (pedido explícito del usuario) — ver Utils/confirmDialog.js.
-        return createApp({ render: () => [h(App, props), h(ConfirmDialogHost)] })
+        return createApp({ render: () => [h(App, props), h(ConfirmDialogHost), h(SplashScreen)] })
             .use(plugin)
             .use(ZiggyVue)
             .mount(el);

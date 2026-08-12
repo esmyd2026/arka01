@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -113,6 +113,25 @@ function isValidPhoneLocal(value, countryCode) {
     if (countryCode !== '+593') return /^[0-9]{7,10}$/.test(value);
     return /^9\d{8}$/.test(value) && !/^(\d)\1{8}$/.test(value);
 }
+
+// Bug real reportado por el usuario (con captura: el campo dejaba escribir
+// más de 20 dígitos aunque un celular ecuatoriano son 9): antes solo se
+// invalidaba el paso al mandar el formulario, nada impedía seguir tecleando
+// de más. Ahora se sanea en cada tecla — saca todo lo que no sea dígito, el
+// 0 inicial si es Ecuador (ya lo reemplaza el código de país, sección de
+// teléfono del alcance) y corta al máximo real de ese país.
+const phoneMaxLength = computed(() => (form.country_code === '+593' ? 9 : 10));
+
+function sanitizePhoneLocal() {
+    let digits = form.phone_local.replace(/\D/g, '');
+    if (form.country_code === '+593') digits = digits.replace(/^0+/, '');
+    form.phone_local = digits.slice(0, phoneMaxLength.value);
+}
+
+// Si cambia de país con un número ya escrito (ej. de +593 a +51), lo vuelve
+// a sanear contra el nuevo máximo — un número de 10 dígitos de otro país no
+// debería quedar cortado en 9 solo porque antes tenía elegido Ecuador.
+watch(() => form.country_code, sanitizePhoneLocal);
 
 // Validación mínima del lado del cliente para habilitar "Siguiente" — la
 // validación real (unicidad de correo/teléfono, reglas completas) sigue
@@ -239,12 +258,17 @@ const submit = () => {
                 </div>
                 <!-- Transparencia (pedido explícito del usuario: pedir la
                      ubicación al registrarse) — el navegador va a mostrar su
-                     propio permiso nativo; esto solo explica para qué,
-                     nunca bloquea si lo rechaza. -->
-                <p class="mt-3 text-xs text-arka-text-muted">
-                    📍 Es posible que el navegador le pida acceso a su ubicación — nos ayuda a completar su ciudad
-                    automáticamente. Si prefiere no compartirla, puede seguir igual.
-                </p>
+                     propio permiso nativo de todas formas; esto solo explica
+                     para qué, sin ocupar espacio de por sí (pedido explícito
+                     del usuario: "ocultá esto o dejalo como más
+                     información") — colapsado por defecto. -->
+                <details class="mt-3 text-xs text-arka-text-muted">
+                    <summary class="cursor-pointer select-none hover:text-arka-text">📍 ¿Por qué nos pide la ubicación?</summary>
+                    <p class="mt-1">
+                        Es posible que el navegador le pida acceso a su ubicación — nos ayuda a completar su ciudad
+                        automáticamente. Si prefiere no compartirla, puede seguir igual.
+                    </p>
+                </details>
                 <InputError class="mt-2" :message="form.errors.account_type" />
             </div>
 
@@ -322,6 +346,8 @@ const submit = () => {
                         autofocus
                         autocomplete="tel-national"
                         placeholder="991234567"
+                        :maxlength="phoneMaxLength"
+                        @input="sanitizePhoneLocal"
                         @keydown.enter.prevent="goNext"
                     />
                 </div>

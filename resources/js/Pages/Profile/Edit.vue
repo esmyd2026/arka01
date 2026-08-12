@@ -7,8 +7,10 @@ import UpdateProfileInformationForm from './Partials/UpdateProfileInformationFor
 import UserAvatar from '@/Components/UserAvatar.vue';
 import ShareProfileQr from '@/Components/ShareProfileQr.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
+import { canInstallApp, installApp } from '@/pwaInstall';
+import { confirmDialog } from '@/Utils/confirmDialog';
 
 // "Ver mi suscripción" del menú de cuenta lleva a /profile#suscripcion — el
 // scroll automático de Inertia al hash no es parejo entre versiones, así que
@@ -62,6 +64,22 @@ async function copyProfileLink() {
     linkCopied.value = true;
     setTimeout(() => (linkCopied.value = false), 2000);
 }
+
+// Pedido explícito del usuario: "Instalar app" y "Pasarme a..." también acá,
+// no solo en el menú desplegable del header (mismas funciones, mismo
+// criterio — ver AuthenticatedLayout.vue).
+async function installAppNow() {
+    const accepted = await installApp();
+    if (accepted) alert('¡Listo! Ya quedó instalada.');
+}
+
+const isDriver = computed(() => usePage().props.auth.isDriver);
+const isAdmin = computed(() => usePage().props.auth.user.is_admin);
+
+async function switchToClient() {
+    if (!(await confirmDialog('¿Pasar a cliente? Su perfil de conductor queda guardado — puede volver a activarlo cuando quiera.'))) return;
+    router.post(route('driver.profile.deactivate'));
+}
 </script>
 
 <template>
@@ -85,6 +103,54 @@ async function copyProfileLink() {
                         :cities="cities"
                         class="max-w-xl"
                     />
+                </div>
+
+                <!-- Cuenta (pedido explícito del usuario): usuario y código de
+                     socio siempre visibles acá, más los accesos que antes solo
+                     estaban en el menú desplegable del header. -->
+                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                    <h2 class="text-lg font-medium text-arka-text">Cuenta</h2>
+
+                    <dl class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl text-sm">
+                        <div>
+                            <dt class="text-arka-text-muted">Su usuario</dt>
+                            <dd class="text-arka-text font-medium">@{{ $page.props.auth.user.username }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-arka-text-muted">
+                                Código de socio
+                                <!-- Pedido explícito del usuario ("¿este código es el
+                                     mismo con el que me buscan?"): aclarado a
+                                     propósito — es un código distinto al del link de
+                                     invitación (ese es más largo, ver "Compartir mi
+                                     perfil" abajo). -->
+                                <span class="block text-xs">(con este lo encuentran en el buscador)</span>
+                            </dt>
+                            <dd class="text-arka-text font-medium">#{{ $page.props.auth.user.member_code }}</dd>
+                        </div>
+                    </dl>
+
+                    <!-- Verificar teléfono (pedido explícito del usuario: que el
+                         cliente también pueda, no solo quedar bloqueado esperando
+                         a que el sistema se lo exija de golpe). -->
+                    <p v-if="$page.props.auth.user.phone && !$page.props.auth.user.phone_verified_at" class="mt-4 text-sm text-arka-warning">
+                        📵 Su teléfono todavía no está verificado.
+                        <Link :href="route('phone.verify.show')" class="underline hover:opacity-80 font-medium">
+                            Verificar ahora
+                        </Link>
+                    </p>
+
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <SecondaryButton v-if="canInstallApp" @click="installAppNow">Instalar app</SecondaryButton>
+                        <Link
+                            v-if="!isAdmin && !isDriver"
+                            :href="route('driver.profile.edit')"
+                            class="inline-flex items-center px-4 py-2 bg-arka-card border border-arka-text-muted/30 rounded-arka font-semibold text-xs text-arka-text uppercase tracking-widest shadow-sm hover:bg-arka-base focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150"
+                        >
+                            Pasarme a conductor
+                        </Link>
+                        <SecondaryButton v-if="!isAdmin && isDriver" @click="switchToClient">Pasarme a cliente</SecondaryButton>
+                    </div>
                 </div>
 
                 <!-- Compartir mi perfil (pedido explícito del usuario): QR con el

@@ -15,6 +15,12 @@ const current = computed(() => incomingRideRequestState.queue[0] ?? null);
 const show = computed(() => current.value !== null);
 const processing = ref(false);
 
+// Bug real reportado por el usuario (con captura): decía "📅 Programada"
+// pero nunca la hora — mismo formato que ya usa Ride/Index.vue.
+function formatScheduledAt(iso) {
+    return new Date(iso).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 // Mismo patrón de contéo regresivo que Ride/Index.vue (despacho secuencial).
 const nowFast = ref(Date.now());
 let clock = null;
@@ -162,7 +168,14 @@ function discard() {
                 </p>
 
                 <p v-if="current.is_scheduled" class="text-xs text-arka-warning font-medium">
-                    📅 Programada
+                    📅 Programada para {{ formatScheduledAt(current.scheduled_at) }}
+                    <span v-if="current.round_trip">· Ida y vuelta</span>
+                </p>
+
+                <!-- Observación del cliente (pedido explícito del usuario): antes
+                     de aceptar, no solo después. -->
+                <p v-if="current.notes" class="text-sm text-arka-text-muted italic">
+                    "{{ current.notes }}"
                 </p>
             </div>
 

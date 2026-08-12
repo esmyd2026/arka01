@@ -508,6 +508,174 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario: "en el futuro" a secas dejaba programar
+     * para dentro de unos minutos — ahora exige un mínimo de 2 horas de
+     * anticipación, incluso programando para el mismo día.
+     */
+    public function test_scheduling_less_than_two_hours_ahead_is_rejected(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        // "Ahora" en el test es 2026-01-15 12:00:00 — 13:00 es solo 1 hora después.
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-15',
+            'scheduled_time' => '13:00',
+        ])->assertSessionHasErrors('scheduled_time');
+    }
+
+    public function test_scheduling_exactly_two_hours_ahead_is_allowed(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-15',
+            'scheduled_time' => '14:00',
+        ])->assertSessionHasNoErrors();
+    }
+
+    /**
+     * Pedido explícito del usuario: no se le puede pisar a un conductor
+     * puntual un horario que ya tiene comprometido con otra carrera
+     * programada YA ACEPTADA (no una que todavía nadie tomó).
+     */
+    public function test_cannot_schedule_a_specific_driver_who_already_has_a_nearby_committed_ride(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $existingRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'is_scheduled' => true,
+            'scheduled_at' => '2026-01-16 08:00:00',
+            'status' => 'accepted',
+        ]);
+        Ride::factory()->create([
+            'ride_request_id' => $existingRequest->id,
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'scheduled',
+            'started_at' => null,
+        ]);
+
+        // 30 minutos después del compromiso ya aceptado — cae dentro de la
+        // ventana de una hora antes/después.
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-16',
+            'scheduled_time' => '08:30',
+        ])->assertSessionHasErrors('scheduled_time');
+    }
+
+    public function test_can_schedule_a_specific_driver_far_enough_from_their_committed_ride(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $existingRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'is_scheduled' => true,
+            'scheduled_at' => '2026-01-16 08:00:00',
+            'status' => 'accepted',
+        ]);
+        Ride::factory()->create([
+            'ride_request_id' => $existingRequest->id,
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'scheduled',
+            'started_at' => null,
+        ]);
+
+        // 3 horas después — bien afuera de la ventana de conflicto.
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-16',
+            'scheduled_time' => '11:00',
+        ])->assertSessionHasNoErrors();
+    }
+
+    /**
+     * Pedido explícito del usuario: un campo de observación libre para el
+     * cliente al pedir la carrera, nunca obligatorio.
+     */
+    public function test_a_ride_request_can_include_an_optional_note(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'notes' => 'El portón es el azul.',
+        ])->assertRedirect();
+
+        $this->assertSame('El portón es el azul.', RideRequest::firstOrFail()->notes);
+    }
+
+    public function test_a_ride_request_without_a_note_is_still_accepted(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull(RideRequest::firstOrFail()->notes);
+    }
+
+    /**
+     * La observación se copia a la carrera aceptada — el conductor la sigue
+     * teniendo a mano durante todo el viaje, no solo al decidir si aceptar.
+     */
+    public function test_the_note_is_copied_to_the_ride_when_accepted(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'notes' => 'Llamar al llegar.',
+        ]);
+
+        $this->actingAs($driver)->post(route('ride-requests.accept', $rideRequest))->assertRedirect();
+
+        $this->assertSame('Llamar al llegar.', Ride::where('ride_request_id', $rideRequest->id)->firstOrFail()->notes);
+    }
+
+    /**
      * El punto central de 'scheduled' (consideración agregada al alcance):
      * aceptar una solicitud programada NO puede dejar al conductor "ocupado"
      * desde ya — recién lo está cuando arranca de verdad (RideController::start()).
@@ -895,11 +1063,15 @@ class RideRequestFlowTest extends TestCase
             'status' => 'in_progress',
         ]);
 
-        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertRedirect();
+        $this->actingAs($client)
+            ->post(route('rides.cancel', $ride), ['reason' => 'Cambié de planes'])
+            ->assertRedirect();
 
         $ride->refresh();
         $this->assertSame('cancelled', $ride->status);
         $this->assertNotNull($ride->cancelled_at);
+        $this->assertSame('client', $ride->cancelled_by);
+        $this->assertSame('Cambié de planes', $ride->cancellation_reason);
     }
 
     public function test_client_can_cancel_a_scheduled_ride_before_the_driver_starts_it(): void
@@ -913,12 +1085,46 @@ class RideRequestFlowTest extends TestCase
             'started_at' => null,
         ]);
 
-        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertRedirect();
+        $this->actingAs($client)
+            ->post(route('rides.cancel', $ride), ['reason' => 'Cambié de planes'])
+            ->assertRedirect();
 
         $this->assertSame('cancelled', $ride->fresh()->status);
     }
 
-    public function test_the_driver_cannot_cancel_a_ride(): void
+    /**
+     * Pedido explícito del usuario: antes solo el cliente podía cancelar —
+     * ahora el conductor también, con su propia lista de motivos, y a quien
+     * NO canceló (el cliente, acá) le llega el aviso.
+     */
+    public function test_driver_can_cancel_a_ride_with_a_reason_and_an_optional_note(): void
+    {
+        Notification::fake();
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.cancel', $ride), [
+                'reason' => 'Problema con el vehículo',
+                'note' => 'Se pinchó una llanta.',
+            ])
+            ->assertRedirect();
+
+        $ride->refresh();
+        $this->assertSame('cancelled', $ride->status);
+        $this->assertSame('driver', $ride->cancelled_by);
+        $this->assertSame('Problema con el vehículo', $ride->cancellation_reason);
+        $this->assertSame('Se pinchó una llanta.', $ride->cancellation_note);
+        Notification::assertSentTo($client, RideCancelledPushNotification::class);
+        Notification::assertNotSentTo($driver, RideCancelledPushNotification::class);
+    }
+
+    public function test_cancelling_without_a_note_is_allowed(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
 
@@ -928,7 +1134,57 @@ class RideRequestFlowTest extends TestCase
             'status' => 'in_progress',
         ]);
 
-        $this->actingAs($driver)->post(route('rides.cancel', $ride))->assertForbidden();
+        $this->actingAs($client)
+            ->post(route('rides.cancel', $ride), ['reason' => 'Cambié de planes'])
+            ->assertRedirect();
+
+        $this->assertNull($ride->fresh()->cancellation_note);
+    }
+
+    public function test_cancelling_without_a_reason_is_rejected(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertSessionHasErrors('reason');
+    }
+
+    /**
+     * Cada rol tiene su propia lista de motivos — un motivo del lado
+     * conductor no es válido si lo manda el cliente, y viceversa.
+     */
+    public function test_a_reason_from_the_other_roles_list_is_rejected(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('rides.cancel', $ride), ['reason' => 'Problema con el vehículo'])
+            ->assertSessionHasErrors('reason');
+    }
+
+    public function test_a_stranger_cannot_cancel_a_ride(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $stranger = User::factory()->create();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($stranger)->post(route('rides.cancel', $ride))->assertForbidden();
 
         $this->assertSame('in_progress', $ride->fresh()->status);
     }
@@ -944,7 +1200,9 @@ class RideRequestFlowTest extends TestCase
             'completed_at' => now(),
         ]);
 
-        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertSessionHasErrors('ride');
+        $this->actingAs($client)
+            ->post(route('rides.cancel', $ride), ['reason' => 'Cambié de planes'])
+            ->assertSessionHasErrors('ride');
     }
 
     /**
@@ -964,7 +1222,9 @@ class RideRequestFlowTest extends TestCase
             'status' => 'in_progress',
         ]);
 
-        $this->actingAs($client)->post(route('rides.cancel', $ride))->assertRedirect();
+        $this->actingAs($client)
+            ->post(route('rides.cancel', $ride), ['reason' => 'Cambié de planes'])
+            ->assertRedirect();
 
         Event::assertDispatched(RideCancelled::class, fn ($event) => $event->ride->id === $ride->id);
         Notification::assertSentTo($driver, RideCancelledPushNotification::class);

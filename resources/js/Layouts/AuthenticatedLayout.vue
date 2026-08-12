@@ -13,7 +13,7 @@ import HelpTip from '@/Components/HelpTip.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
-import { playIncomingRideAlert } from '@/Utils/liveAlert';
+import { playIncomingRideAlert, unlockAudioContext } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -67,6 +67,11 @@ async function activatePushNotifications() {
         alert('Su navegador no soporta notificaciones push.');
         return;
     }
+
+    // Pedido explícito del usuario: mismo gesto real, mismo momento para
+    // desbloquear el sonido de los demás avisos en vivo de la app (ver
+    // PermissionsPrompt.vue::enableNotifications()).
+    unlockAudioContext();
 
     const ok = await subscribeToPush(usePage().props.vapidPublicKey);
     alert(ok ? 'Notificaciones activadas.' : 'No se pudo activar — revise los permisos del navegador.');

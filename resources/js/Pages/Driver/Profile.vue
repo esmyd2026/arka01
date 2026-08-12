@@ -12,6 +12,8 @@ import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
+import { canInstallApp, installApp } from '@/pwaInstall';
+import { confirmDialog } from '@/Utils/confirmDialog';
 
 // Pedido explícito del usuario: mostrar una lista de colores para elegir en
 // vez de obligar a escribirlo a mano (evita variantes como "blanco"/"Blanco
@@ -235,6 +237,18 @@ function reactivate() {
     router.post(route('driver.profile.reactivate'));
 }
 
+// Pedido explícito del usuario: "Instalar app" y "Pasarme a cliente" también
+// acá, no solo en el menú del header — mismo criterio que Profile/Edit.vue.
+async function installAppNow() {
+    const accepted = await installApp();
+    if (accepted) alert('¡Listo! Ya quedó instalada.');
+}
+
+async function switchToClient() {
+    if (!(await confirmDialog('¿Pasar a cliente? Su perfil de conductor queda guardado — puede volver a activarlo cuando quiera.'))) return;
+    router.post(route('driver.profile.deactivate'));
+}
+
 // Bug reportado por el usuario: un conductor que nunca subió ninguna foto
 // terminaba igual con `verification_status = 'pending'` (el default de la
 // columna al crearse la fila) y quedaba bloqueado para subirlas — la fuente
@@ -281,6 +295,26 @@ const VERIFICATION_LABELS = {
                             cambiar de uno a otro cuando quiera (menú de cuenta, "Pasarme a conductor"/"Pasarme a
                             cliente"). Complete estos datos para que otros clientes puedan invitarlo a sus flotas.
                         </p>
+
+                        <!-- Usuario y código de socio (pedido explícito del usuario):
+                             el que usan los clientes para encontrarlo en el buscador —
+                             distinto del código de invitación de más abajo, que es
+                             para el link directo. -->
+                        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                                <dt class="text-arka-text-muted">Su usuario</dt>
+                                <dd class="text-arka-text font-medium">@{{ $page.props.auth.user.username }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-arka-text-muted">Código de socio <span class="block text-xs">(con este lo buscan)</span></dt>
+                                <dd class="text-arka-text font-medium">#{{ $page.props.auth.user.member_code }}</dd>
+                            </div>
+                        </dl>
+
+                        <div v-if="!driverProfile?.deactivated_at" class="mt-4 flex flex-wrap gap-2">
+                            <SecondaryButton v-if="canInstallApp" @click="installAppNow">Instalar app</SecondaryButton>
+                            <SecondaryButton v-if="driverProfile" @click="switchToClient">Pasarme a cliente</SecondaryButton>
+                        </div>
 
                         <!-- "Tu estado" (pedido explícito del usuario): de un vistazo,
                              qué está activo y qué falta para cada cosa (disponible,

@@ -3,11 +3,17 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { useForm, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
 const passwordInput = ref(null);
 const currentPasswordInput = ref(null);
+
+// Bug real reportado por el usuario: quien entra con Google tiene una
+// contraseña al azar que nunca escribió — pedirle "la actual" acá lo dejaba
+// bloqueado para siempre, sin forma de crear una propia. `password_set_at`
+// (null = todavía no tiene una propia) distingue "crear" de "cambiar".
+const hasOwnPassword = computed(() => usePage().props.auth.user.password_set_at !== null);
 
 const form = useForm({
     current_password: '',
@@ -36,15 +42,23 @@ const updatePassword = () => {
 <template>
     <section>
         <header>
-            <h2 class="text-lg font-medium text-arka-text">Cambiar contraseña</h2>
+            <h2 class="text-lg font-medium text-arka-text">
+                {{ hasOwnPassword ? 'Cambiar contraseña' : 'Crear contraseña' }}
+            </h2>
 
             <p class="mt-1 text-sm text-arka-text-muted">
-                Use una contraseña larga y aleatoria para mantener su cuenta segura.
+                <template v-if="hasOwnPassword">
+                    Use una contraseña larga y aleatoria para mantener su cuenta segura.
+                </template>
+                <template v-else>
+                    Inició sesión con Google — cree una contraseña propia para poder entrar también con su correo y
+                    contraseña, sin depender de Google.
+                </template>
             </p>
         </header>
 
         <form @submit.prevent="updatePassword" class="mt-6 space-y-6">
-            <div>
+            <div v-if="hasOwnPassword">
                 <InputLabel for="current_password" value="Contraseña actual" />
 
                 <TextInput
@@ -60,7 +74,7 @@ const updatePassword = () => {
             </div>
 
             <div>
-                <InputLabel for="password" value="Contraseña nueva" />
+                <InputLabel for="password" :value="hasOwnPassword ? 'Contraseña nueva' : 'Contraseña'" />
 
                 <TextInput
                     id="password"

@@ -26,6 +26,7 @@ class Ride extends Model
         'destination_sector_id',
         'distance_km',
         'payment_method',
+        'notes',
         'round_trip',
         'rate_per_km_snapshot',
         'price',
@@ -36,7 +37,11 @@ class Ride extends Model
         'picked_up_at',
         'completed_at',
         'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
+        'cancellation_note',
         'pending_reschedule_at',
+        'driver_reminder_sent_at',
     ];
 
     protected $casts = [
@@ -55,6 +60,7 @@ class Ride extends Model
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'pending_reschedule_at' => 'datetime',
+        'driver_reminder_sent_at' => 'datetime',
     ];
 
     /**

@@ -43,6 +43,19 @@ class RideRequestController extends Controller
     /** Pedido explícito del usuario: "pedir una carrera" es del lado cliente. */
     private const SINGLE_ROLE_MESSAGE = 'Los conductores no pueden pedir una carrera — cada cuenta es cliente o conductor, no ambas.';
 
+    /**
+     * Pedido explícito del usuario: no alcanza con "en el futuro" — programar
+     * para dentro de 10 minutos no le da tiempo real a nadie de organizarse.
+     */
+    private const MIN_SCHEDULING_LEAD_HOURS = 2;
+
+    /**
+     * Pedido explícito del usuario: si se dirige a un conductor puntual, no
+     * se le puede programar otra carrera pisando un horario que ya tiene
+     * comprometido (ver el chequeo de conflicto en store()).
+     */
+    private const SCHEDULED_CONFLICT_BUFFER_MINUTES = 60;
+
     public function __construct(private readonly PlanLimits $planLimits) {}
 
     /**
@@ -299,6 +312,10 @@ class RideRequestController extends Controller
             // elige al pedir la carrera, para que el conductor la vea antes
             // de aceptar — "efectivo" de default si no manda nada.
             'payment_method' => ['sometimes', 'in:efectivo,transferencia'],
+            // Observación libre del cliente (pedido explícito del usuario:
+            // "que exista un campo que el cliente meta una observación que
+            // no sea obligatoria") — nunca obligatoria.
+            'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
         $needsTrunk = (bool) ($validated['needs_trunk'] ?? false);
@@ -320,9 +337,13 @@ class RideRequestController extends Controller
                 config('app.timezone')
             );
 
-            if ($scheduledAt->isPast()) {
+            // Pedido explícito del usuario: "en el futuro" a secas dejaba
+            // programar para dentro de 5 minutos, sin darle tiempo real a
+            // nadie de organizarse — ahora exige un mínimo de anticipación,
+            // incluso para "el mismo día".
+            if ($scheduledAt->lessThan(now()->addHours(self::MIN_SCHEDULING_LEAD_HOURS))) {
                 throw ValidationException::withMessages([
-                    'scheduled_time' => 'La fecha y hora programada tiene que ser en el futuro.',
+                    'scheduled_time' => 'La hora programada tiene que ser al menos '.self::MIN_SCHEDULING_LEAD_HOURS.' horas después de ahora.',
                 ]);
             }
         }
@@ -411,6 +432,33 @@ class RideRequestController extends Controller
                 throw ValidationException::withMessages([
                     'driver_user_id' => 'Ese conductor no tiene cajuela disponible.',
                 ]);
+            }
+
+            // Pedido explícito del usuario: si es programada y dirigida a un
+            // conductor puntual, no se le puede pisar un horario que ya
+            // tiene comprometido — se valida contra sus carreras YA
+            // aceptadas (`rides.status = 'scheduled'`, no contra
+            // solicitudes todavía pendientes de nadie) dentro de una
+            // ventana de una hora antes/después (no se conoce cuánto dura
+            // cada carrera, así que se trata cada una como si ocupara ese
+            // bloque de tiempo).
+            if ($isScheduled && $scheduledAt) {
+                $hasConflict = Ride::query()
+                    ->where('driver_user_id', $validated['driver_user_id'])
+                    ->where('status', 'scheduled')
+                    ->whereHas('rideRequest', function ($query) use ($scheduledAt) {
+                        $query->whereBetween('scheduled_at', [
+                            $scheduledAt->clone()->subMinutes(self::SCHEDULED_CONFLICT_BUFFER_MINUTES),
+                            $scheduledAt->clone()->addMinutes(self::SCHEDULED_CONFLICT_BUFFER_MINUTES),
+                        ]);
+                    })
+                    ->exists();
+
+                if ($hasConflict) {
+                    throw ValidationException::withMessages([
+                        'scheduled_time' => 'Ese conductor ya tiene otra carrera programada cerca de ese horario.',
+                    ]);
+                }
             }
         }
 
@@ -543,6 +591,7 @@ class RideRequestController extends Controller
                 'current_offer_expires_at' => $currentOfferExpiresAt,
                 'passenger_count' => $passengerCount,
                 'needs_trunk' => $needsTrunk,
+                'notes' => $validated['notes'] ?? null,
             ]);
 
             RidePriceOffer::query()->create([
@@ -752,6 +801,7 @@ class RideRequestController extends Controller
                 'destination_sector_id' => $locked->destination_sector_id,
                 'distance_km' => $locked->distance_km,
                 'payment_method' => $locked->payment_method,
+                'notes' => $locked->notes,
                 'round_trip' => $locked->round_trip,
                 'rate_per_km_snapshot' => $ratePerKm,
                 // El precio final es el que quedó vigente en la negociación

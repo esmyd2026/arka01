@@ -125,6 +125,13 @@ class RegisteredUserController extends Controller
             'registration_lng' => $hasCoordinates ? $validated['lng'] : null,
         ]);
 
+        // A diferencia de una cuenta creada por Google (contraseña al azar
+        // que nadie conoce, ver GoogleAuthController), acá el usuario SÍ
+        // acaba de elegir la suya — marcarlo es lo que le permite después
+        // cambiarla pidiéndole la actual, en vez de quedar bloqueado como le
+        // pasaba a las cuentas de Google (ver PasswordController::update()).
+        $user->forceFill(['password_set_at' => now()])->save();
+
         event(new Registered($user));
 
         // El nombre del barrio/zona es informativo (panel admin) y depende

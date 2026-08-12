@@ -43,6 +43,7 @@ class RideRequest extends Model
         'current_offer_expires_at',
         'passenger_count',
         'needs_trunk',
+        'notes',
     ];
 
     protected $casts = [

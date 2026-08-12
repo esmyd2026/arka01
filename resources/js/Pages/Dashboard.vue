@@ -227,6 +227,10 @@ onMounted(() => {
     personal.listen('.ride-request.created', (e) => handleNewRequest(e, { alert: false }));
     personal.listen('.ride-request.cancelled', handleRequestGoneWhileWaiting);
     personal.listen('.fleet-invitation.created', handleNewInvitation);
+    // Recordatorio de 15-20 min antes de una carrera programada (pedido
+    // explícito del usuario) — "Próximos viajes" ya muestra la hora, acá
+    // solo hace falta el aviso sonoro.
+    personal.listen('.ride.reminder-due', () => playAttentionAlert());
     driverChannels.push(`App.Models.User.${userId}`);
 
     (props.driverFleetIds ?? []).forEach((fleetId) => {
@@ -553,7 +557,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <Link
                             v-for="(trip, i) in upcomingTrips"
                             :key="i"
-                            :href="route('rides.index')"
+                            :href="trip.ride_id ? route('rides.show', trip.ride_id) : route('rides.index')"
                             class="flex items-center justify-between gap-3 p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
                         >
                             <div class="min-w-0">
@@ -874,7 +878,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <Link
                             v-for="(trip, i) in upcomingTrips"
                             :key="i"
-                            :href="route('rides.index')"
+                            :href="trip.ride_id ? route('rides.show', trip.ride_id) : route('rides.index')"
                             class="flex items-center justify-between gap-3 p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
                         >
                             <div class="min-w-0">

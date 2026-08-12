@@ -48,6 +48,12 @@ class NewPasswordController extends Controller
             function ($user) use ($request) {
                 $user->forceFill([
                     'password' => Hash::make($request->password),
+                    // Mismo criterio que PasswordController::update(): quien
+                    // resetea por acá también acaba de elegir una contraseña
+                    // propia (aunque haya entrado siempre por Google) — sin
+                    // esto, seguiría bloqueado para cambiarla después desde
+                    // su perfil (le pediría la actual, que jamás supo).
+                    'password_set_at' => now(),
                     'remember_token' => Str::random(60),
                 ])->save();
 

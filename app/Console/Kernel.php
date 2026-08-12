@@ -20,6 +20,10 @@ class Kernel extends ConsoleKernel
         // en la base sin estarlo de verdad (app cerrada, celular sin batería) —
         // ver el comando para el detalle completo.
         $schedule->command('drivers:sweep-stale-availability')->everyTwoMinutes();
+
+        // Pedido explícito del usuario: recordatorio al conductor 15-20 min
+        // antes de una carrera programada — ver el comando para el detalle.
+        $schedule->command('rides:send-upcoming-reminders')->everyFiveMinutes();
     }
 
     /**

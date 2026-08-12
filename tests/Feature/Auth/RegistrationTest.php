@@ -93,6 +93,27 @@ class RegistrationTest extends TestCase
     }
 
     /**
+     * Bug real reportado por el usuario: una cuenta de Google no puede
+     * cambiar su contraseña porque no conoce la actual (al azar, ver
+     * GoogleAuthController) — acá SÍ acaba de elegir la suya, así que
+     * `password_set_at` queda marcado desde el vamos.
+     */
+    public function test_registration_marks_that_the_account_has_its_own_password(): void
+    {
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Con Contraseña',
+            'email' => 'concontrasena@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991114444',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $this->assertNotNull(User::where('email', 'concontrasena@example.com')->firstOrFail()->password_set_at);
+    }
+
+    /**
      * Pedido explícito del usuario: "ver de dónde se registran las personas,
      * por su ubicación" — si el navegador dio permiso de ubicación, se
      * guarda la coordenada real y se resuelve la ciudad más cercana del

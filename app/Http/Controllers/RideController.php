@@ -28,12 +28,36 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RideController extends Controller
 {
+    /**
+     * Motivos de cancelación (pedido explícito del usuario: "que agregue un
+     * motivo") — lista fija de código, no un catálogo administrable como
+     * `RatingReason`: acá alcanza con unas pocas opciones reales por lado,
+     * sin necesidad de mantenimiento desde el panel admin.
+     */
+    private const CLIENT_CANCEL_REASONS = [
+        'Cambié de planes',
+        'Encontré otro medio de transporte',
+        'Pedí la carrera por error',
+        'El conductor demoró demasiado',
+        'Otro motivo',
+    ];
+
+    private const DRIVER_CANCEL_REASONS = [
+        'Imprevisto personal',
+        'Problema con el vehículo',
+        'No voy a poder llegar a tiempo',
+        'El cliente no responde o no aparece',
+        'Motivo de seguridad',
+        'Otro motivo',
+    ];
+
     /**
      * "Carreras" (ítem de la barra inferior, sección 9.9): solicitudes
      * pendientes, carrera activa e historial reciente, tanto del lado cliente
@@ -418,18 +442,24 @@ class RideController extends Controller
     }
 
     /**
-     * El cliente cancela una carrera YA ACEPTADA (pedido explícito del
-     * usuario: antes de esto, no había ninguna forma — una vez aceptada, el
-     * cliente quedaba sin salida hasta que se completara). Solo el cliente
-     * puede, y solo mientras el conductor todavía no la completó: si ya está
-     * en camino ('in_progress') o la aceptó para más tarde ('scheduled'), se
-     * avisa al conductor por WebSocket + push — importante sobre todo si ya
-     * iba en camino de verdad. Se cuenta como cancelación real (`cancelled_at`)
-     * para poder medirlo después (pedido explícito del usuario).
+     * Cancela una carrera YA ACEPTADA (pedido explícito del usuario: antes de
+     * esto, no había ninguna forma — una vez aceptada, quedaba sin salida
+     * hasta que se completara). Al principio solo podía el cliente; pedido
+     * explícito del usuario, ahora también el conductor — cada uno con su
+     * propia lista de motivos (CLIENT_CANCEL_REASONS/DRIVER_CANCEL_REASONS)
+     * más una observación libre, opcional. Solo mientras la otra parte
+     * todavía no la completó: si ya está en camino ('in_progress') o la
+     * aceptó para más tarde ('scheduled'), se avisa a quien NO canceló por
+     * WebSocket + push — importante sobre todo si ya iba en camino de
+     * verdad. Se cuenta como cancelación real (`cancelled_at`) para poder
+     * medirlo después (pedido explícito del usuario).
      */
     public function cancel(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->client_user_id !== $request->user()->id) {
+        $userId = $request->user()->id;
+        $isDriver = $ride->driver_user_id === $userId;
+
+        if (! $isDriver && $ride->client_user_id !== $userId) {
             abort(403);
         }
 
@@ -439,17 +469,27 @@ class RideController extends Controller
             ]);
         }
 
+        $validated = $request->validate([
+            'reason' => ['required', 'string', Rule::in($isDriver ? self::DRIVER_CANCEL_REASONS : self::CLIENT_CANCEL_REASONS)],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
         $ride->update([
             'status' => 'cancelled',
             'cancelled_at' => now(),
+            'cancelled_by' => $isDriver ? 'driver' : 'client',
+            'cancellation_reason' => $validated['reason'],
+            'cancellation_note' => $validated['note'] ?? null,
         ]);
 
-        // El conductor queda libre de nuevo (mismo criterio que al completar
-        // una carrera) — si iba en camino, esto lo saca de "en carrera" en
-        // todos lados sin esperar a que recargue.
+        // Quien no canceló queda libre de nuevo si era el conductor (mismo
+        // criterio que al completar una carrera) — si iba en camino, esto lo
+        // saca de "en carrera" en todos lados sin esperar a que recargue.
         broadcast(new RideCancelled($ride))->toOthers();
 
-        $ride->driver->notify(new RideCancelledPushNotification($ride));
+        // A quien NO canceló, nunca a quien mandó la acción.
+        $recipient = $isDriver ? $ride->client : $ride->driver;
+        $recipient->notify(new RideCancelledPushNotification($ride));
 
         return redirect()->route('rides.index');
     }

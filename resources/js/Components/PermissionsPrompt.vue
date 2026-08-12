@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
+import { unlockAudioContext } from '@/Utils/liveAlert';
 
 // Aviso pedido explícito del usuario: tanto clientes como conductores deben
 // ver un recordatorio para activar ubicación y notificaciones si no las
@@ -70,8 +71,24 @@ function enableLocation() {
 }
 
 async function enableNotifications() {
-    const ok = await subscribeToPush(usePage().props.vapidPublicKey);
-    refreshNotifStatus();
+    // Pedido explícito del usuario: este clic es un gesto real, el momento
+    // justo para desbloquear el sonido del resto de los avisos en vivo de
+    // la app (sin esto, dependían de que cada aviso individual tuviera la
+    // suerte de un gesto fresco detrás, algo que casi nunca pasa).
+    unlockAudioContext();
+
+    let ok = false;
+    try {
+        ok = await subscribeToPush(usePage().props.vapidPublicKey);
+    } finally {
+        // Bug real reportado por el usuario: si algo de acá arriba fallaba
+        // sin que subscribeToPush() lo atrapara, el estado nunca se
+        // refrescaba y el aviso quedaba pegado en pantalla aunque el
+        // navegador ya hubiera concedido el permiso — este refresco corre
+        // pase lo que pase.
+        refreshNotifStatus();
+    }
+
     if (!ok && notifStatus.value !== 'denied') {
         // requestPermission() no siempre deja el valor en 'denied' al
         // primer rechazo en todos los navegadores — igual lo tratamos como

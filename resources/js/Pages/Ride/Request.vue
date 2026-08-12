@@ -224,6 +224,12 @@ const destinationAddress = ref('');
 // el mapa se recentra ahí — ver changeCity() más abajo.
 const mapCenter = ref(null);
 
+// Pedido explícito del usuario: "la caja del mapa... se ve muy extenso" —
+// arranca minimizado (más bajito) y se puede expandir si hace falta ver
+// mejor el recorrido; sigue siendo clickeable en los dos estados, solo
+// cambia el alto.
+const mapExpanded = ref(false);
+
 // Geocodificación inversa gratis, sin API key (OpenStreetMap Nominatim —
 // mismo criterio que OSRM para el trazado del recorrido, sección 9.3): para
 // que el campo Origen muestre una dirección legible en vez de dejarlo vacío
@@ -518,6 +524,7 @@ const form = useForm({
     passenger_count: 1,
     needs_trunk: false,
     payment_method: 'efectivo',
+    notes: '',
 });
 
 // Si "toda mi flota" no tiene a quién ofrecerle la carrera, el aviso sugiere
@@ -554,6 +561,10 @@ const scheduledTime = computed(() => {
     return `${String(hour24).padStart(2, '0')}:${scheduledMinute.value}`;
 });
 const roundTrip = ref(false);
+// Observación libre para el conductor (pedido explícito del usuario: "que
+// exista un campo que el cliente meta una observación que no sea
+// obligatoria") — nunca requerida.
+const scheduledNotes = ref('');
 // Forma de pago (pedido explícito del usuario): "efectivo" de default,
 // el cliente todavía no tenía ninguna forma de elegirla.
 const paymentMethod = ref('efectivo');
@@ -676,6 +687,7 @@ function submit() {
     form.scheduled_date = whenMode.value === 'scheduled' ? scheduledDate.value : '';
     form.scheduled_time = whenMode.value === 'scheduled' ? scheduledTime.value : '';
     form.round_trip = roundTrip.value;
+    form.notes = whenMode.value === 'scheduled' ? scheduledNotes.value.trim() || null : null;
     form.passenger_count = passengerCount.value;
     form.needs_trunk = needsTrunk.value;
     form.payment_method = paymentMethod.value;
@@ -784,6 +796,20 @@ function submit() {
                             <input type="checkbox" v-model="roundTrip" class="text-arka-primary rounded" />
                             <span class="text-sm text-arka-text">Es ida y vuelta</span>
                         </label>
+
+                        <!-- Observación libre (pedido explícito del usuario): algo que el
+                             conductor tenga que saber de antemano — nunca obligatoria. -->
+                        <div>
+                            <InputLabel value="Observación para el conductor (opcional)" />
+                            <textarea
+                                v-model="scheduledNotes"
+                                rows="2"
+                                maxlength="500"
+                                class="mt-1 block w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text placeholder-arka-text-muted shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                placeholder="Ej: el portón es el azul, llamar al llegar…"
+                            ></textarea>
+                            <InputError class="mt-1" :message="form.errors.notes" />
+                        </div>
                     </div>
                 </div>
 
@@ -933,7 +959,16 @@ function submit() {
                 <!-- Mapa: confirmación visual del recorrido, y una forma de ajustar el
                      destino a mano tocando el mapa (sección 9.3: Leaflet + OpenStreetMap). -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <h3 class="text-lg font-medium text-arka-text mb-1">Mapa</h3>
+                    <div class="flex items-center justify-between gap-3 mb-1">
+                        <h3 class="text-lg font-medium text-arka-text">Mapa</h3>
+                        <button
+                            type="button"
+                            class="text-sm text-arka-primary hover:text-arka-primary-bright shrink-0"
+                            @click="mapExpanded = !mapExpanded"
+                        >
+                            {{ mapExpanded ? 'Minimizar' : 'Expandir' }}
+                        </button>
+                    </div>
                     <p class="text-sm text-arka-text-muted mb-3">
                         También puede tocar el mapa para ajustar el destino a mano.
                     </p>
@@ -944,6 +979,7 @@ function submit() {
                         :route="routeCoords"
                         :clickable="true"
                         :auto-fit="false"
+                        :height="mapExpanded ? '420px' : '160px'"
                         @map-click="pickDestination"
                     />
 

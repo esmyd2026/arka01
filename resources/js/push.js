@@ -19,15 +19,27 @@ export function pushSupported() {
 export async function subscribeToPush(vapidPublicKey) {
     if (!pushSupported()) return false;
 
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return false;
+    try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return false;
 
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-    });
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
 
-    await window.axios.post(route('push-subscriptions.store'), subscription.toJSON());
-    return true;
+        await window.axios.post(route('push-subscriptions.store'), subscription.toJSON());
+        return true;
+    } catch (error) {
+        // Bug real reportado por el usuario: el navegador le concedía el
+        // permiso, pero si pushManager.subscribe() o el POST fallaban (ej.
+        // VAPID mal configurado, o ya estaba suscripto con otra llave), la
+        // excepción sin atrapar cortaba la función a mitad de camino — quien
+        // llamaba nunca llegaba a refrescar el estado, así que el aviso de
+        // "Activar notificaciones" se quedaba pegado en pantalla para
+        // siempre, aunque el permiso ya estuviera concedido de verdad.
+        console.warn('No se pudo completar la suscripción a notificaciones push.', error);
+        return false;
+    }
 }
