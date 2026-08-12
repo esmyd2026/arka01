@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import FleetMap from '@/Components/FleetMap.vue';
+import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 
 // Página pública (sección 8: "de solo lectura, sin cuenta ni instalación").
 // No usa AuthenticatedLayout a propósito: quien la abre no tiene sesión.
@@ -75,7 +76,14 @@ const mapMarkers = computed(() => {
 
     <div class="min-h-screen bg-arka-base flex flex-col">
         <header class="bg-arka-card border-b border-arka-text-muted/10 px-4 py-3">
-            <p class="text-arka-text font-semibold">Arka01 · Seguimiento en vivo</p>
+            <!-- Bug real reportado por el usuario (con captura de una pantalla
+                 parecida): las páginas públicas sin sesión no tenían ninguna
+                 salida hacia el resto de la app — acá se abre en un enlace
+                 nuevo, no hace falta perder el seguimiento en vivo. -->
+            <a href="/" target="_blank" rel="noopener" class="inline-block mb-1">
+                <ApplicationLogo size="h-6" />
+            </a>
+            <p class="text-arka-text font-semibold">Seguimiento en vivo</p>
             <p class="text-sm text-arka-text-muted">
                 Conductor: {{ current.driver_name }}
                 <span v-if="current.vehicle"> · {{ current.vehicle }}</span>

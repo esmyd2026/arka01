@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionContro
 use App\Http\Controllers\Admin\SupportTicketController;
 use App\Http\Controllers\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Admin\SystemEventController;
+use App\Http\Controllers\Admin\UserLocationsController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
 use App\Http\Controllers\Admin\WhatsAppSettingController;
 use App\Http\Controllers\CouponController;
@@ -155,6 +156,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/flota/{fleet}/invitaciones', [FleetInvitationController::class, 'store'])->name('fleet.invitations.store');
     Route::delete('/flota/invitaciones/{invitation}', [FleetInvitationController::class, 'destroy'])->name('fleet.invitations.destroy');
     Route::delete('/flota/miembros/{member}', [FleetMemberController::class, 'destroy'])->name('fleet.members.destroy');
+    // Pedido explícito del usuario: un conductor busca clientes y les manda
+    // una solicitud para unirse a su flota — dirección opuesta a la de
+    // siempre, ver FleetInvitationController::storeFromDriver().
+    Route::post('/flota-solicitudes', [FleetInvitationController::class, 'storeFromDriver'])->name('fleet-invitations.request');
 
     // "Referí a tu conductor" (pedido explícito del usuario): mandar la
     // invitación de verdad exige sesión de cliente — ver la ruta pública
@@ -163,6 +168,9 @@ Route::middleware('auth')->group(function () {
 
     // Mis clientes de confianza (lado conductor, sección 3.2 y 9.5-B).
     Route::get('/mis-clientes', [DriverInvitationController::class, 'index'])->name('driver.invitations.index');
+    // Buscador de clientes existentes (pedido explícito del usuario) — mismo
+    // criterio que fleet.search-drivers, del otro lado.
+    Route::get('/mis-clientes/buscar', [DriverInvitationController::class, 'searchClients'])->name('driver.clients.search');
     Route::post('/mis-clientes/invitaciones/{invitation}/aceptar', [DriverInvitationController::class, 'accept'])->name('driver.invitations.accept');
     Route::post('/mis-clientes/invitaciones/{invitation}/rechazar', [DriverInvitationController::class, 'reject'])->name('driver.invitations.reject');
     Route::post('/mis-clientes/{member}/salir', [DriverInvitationController::class, 'leave'])->name('driver.fleets.leave');
@@ -192,6 +200,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/carreras/{ride}/llegue', [RideController::class, 'arrived'])->name('rides.arrived');
     Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');
+    // Editar una carrera programada (pedido explícito del usuario: "si es
+    // que se equivocaron") — el cliente propone, el conductor confirma o
+    // rechaza, ver RideController::propose/confirm/rejectReschedule().
+    Route::post('/carreras/{ride}/reprogramar', [RideController::class, 'proposeReschedule'])->name('rides.reschedule.propose');
+    Route::post('/carreras/{ride}/reprogramar/confirmar', [RideController::class, 'confirmReschedule'])->name('rides.reschedule.confirm');
+    Route::post('/carreras/{ride}/reprogramar/rechazar', [RideController::class, 'rejectReschedule'])->name('rides.reschedule.reject');
     Route::post('/carreras/{ride}/completar', [RideController::class, 'complete'])->name('rides.complete');
     // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras).
     Route::post('/carreras/{ride}/mensajes', [RideMessageController::class, 'store'])->name('ride-messages.store');
@@ -427,6 +441,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // los conductores cercanos dónde conviene estar.
     Route::get('/operaciones', [AdminOperationsController::class, 'index'])->name('operations.index');
     Route::post('/operaciones/avisar-demanda', [AdminOperationsController::class, 'notifyNearby'])->name('operations.notify-demand');
+
+    // Registros por ubicación (pedido explícito del usuario: "ver de dónde
+    // se registran las personas, por su ubicación").
+    Route::get('/registros-por-ubicacion', [UserLocationsController::class, 'index'])->name('user-locations.index');
 
     // Verificación de identidad de conductores (sección 8 y 9.5-C).
     Route::get('/verificaciones', [DriverVerificationController::class, 'index'])->name('driver-verifications.index');

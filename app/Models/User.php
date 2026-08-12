@@ -47,6 +47,9 @@ class User extends Authenticatable
         'google_id',
         'avatar_path',
         'city_id',
+        'registration_lat',
+        'registration_lng',
+        'registration_neighborhood',
         'role',
         // Trazabilidad de referidos (pedido explícito del usuario): siempre
         // se pasa por RegisteredUserController::store() ya validado
@@ -95,6 +98,8 @@ class User extends Authenticatable
         'onboarding_completed_at' => 'datetime',
         'password' => 'hashed',
         'is_admin' => 'boolean',
+        'registration_lat' => 'decimal:7',
+        'registration_lng' => 'decimal:7',
     ];
 
     protected static function booted(): void

@@ -308,7 +308,17 @@ class RideRequestController extends Controller
         $scheduledAt = null;
 
         if ($isScheduled) {
-            $scheduledAt = Carbon::createFromFormat('Y-m-d H:i', "{$validated['scheduled_date']} {$validated['scheduled_time']}");
+            // Bug real reportado por el usuario: la fecha/hora que elige el
+            // cliente es SIEMPRE hora local de Ecuador, nunca UTC — sin la
+            // zona horaria explícita acá, Carbon caía a la del servidor
+            // (config('app.timezone'), que además tenía un bug propio de
+            // fondo, ver config/app.php), corriendo la hora guardada varias
+            // horas de más o de menos respecto a lo que el cliente escribió.
+            $scheduledAt = Carbon::createFromFormat(
+                'Y-m-d H:i',
+                "{$validated['scheduled_date']} {$validated['scheduled_time']}",
+                config('app.timezone')
+            );
 
             if ($scheduledAt->isPast()) {
                 throw ValidationException::withMessages([

@@ -178,6 +178,21 @@ onMounted(() => {
         router.reload({ only: ['ride'] });
     });
 
+    // El cliente propuso otro horario, o el conductor ya respondió a una
+    // propuesta (pedido explícito del usuario: editar una carrera
+    // programada) — refresca para que la otra parte vea el aviso sin
+    // recargar a mano.
+    fleetChannel.listen('.ride.reschedule-proposed', (e) => {
+        if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
+        router.reload({ only: ['ride'] });
+    });
+    fleetChannel.listen('.ride.reschedule-responded', (e) => {
+        if (e.ride_id !== props.ride.id) return;
+        playAttentionAlert();
+        router.reload({ only: ['ride'] });
+    });
+
     // Chat (sección 10 del roadmap de mejoras): canal PROPIO de esta carrera
     // puntual, no el de flota — ahí solo escuchan las dos partes de este
     // viaje, nadie más de la flota (ver routes/channels.php: `ride.{id}`).
@@ -270,6 +285,63 @@ async function cancelRide() {
     if (!(await confirmDialog(message, { danger: true, confirmLabel: 'Cancelar carrera' }))) return;
 
     router.post(route('rides.cancel', props.ride.id), {}, { preserveScroll: true });
+}
+
+// Editar una carrera programada (pedido explícito del usuario: "si es que
+// se equivocaron") — mismos tres <select> explícitos que Ride/Request.vue
+// (nada de reloj nativo, ver el bug real corregido ahí). No se aplica solo:
+// el conductor tiene que confirmarlo o rechazarlo (ver
+// RideController::propose/confirm/rejectReschedule()).
+const showRescheduleForm = ref(false);
+const todayDateString = new Date().toISOString().slice(0, 10);
+const rescheduleDate = ref('');
+const rescheduleHour = ref('');
+const rescheduleMinute = ref('');
+const reschedulePeriod = ref('AM');
+const RESCHEDULE_HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const RESCHEDULE_MINUTE_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
+const rescheduleError = ref('');
+const reschedulingRide = ref(false);
+
+function submitReschedule() {
+    if (!rescheduleDate.value || !rescheduleHour.value || rescheduleMinute.value === '') return;
+
+    let hour24 = Number(rescheduleHour.value) % 12;
+    if (reschedulePeriod.value === 'PM') hour24 += 12;
+
+    reschedulingRide.value = true;
+    rescheduleError.value = '';
+
+    router.post(
+        route('rides.reschedule.propose', props.ride.id),
+        {
+            scheduled_date: rescheduleDate.value,
+            scheduled_time: `${String(hour24).padStart(2, '0')}:${rescheduleMinute.value}`,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                showRescheduleForm.value = false;
+                rescheduleDate.value = '';
+                rescheduleHour.value = '';
+                rescheduleMinute.value = '';
+            },
+            onError: (errors) => {
+                rescheduleError.value = errors.scheduled_time ?? errors.scheduled_date ?? 'No se pudo mandar el nuevo horario.';
+            },
+            onFinish: () => (reschedulingRide.value = false),
+        }
+    );
+}
+
+function confirmReschedule() {
+    router.post(route('rides.reschedule.confirm', props.ride.id), {}, { preserveScroll: true });
+}
+
+async function rejectReschedule() {
+    if (!(await confirmDialog('¿Rechazar el nuevo horario? La carrera sigue en su horario original.'))) return;
+
+    router.post(route('rides.reschedule.reject', props.ride.id), {}, { preserveScroll: true });
 }
 
 // Bitácora automática (sección 8): cuánto duró el viaje, cuando ya terminó.
@@ -412,14 +484,99 @@ function submitReview() {
 
                 <!-- Carrera PROGRAMADA todavía sin arrancar (consideración agregada al
                      alcance: "ahora mismo" vs "programación") -->
-                <div v-if="ride.status === 'scheduled'" class="p-4 bg-arka-warning/15 border border-arka-warning/40 rounded-arka">
-                    <p class="font-semibold text-arka-warning">
-                        📅 Programada para {{ new Date(ride.ride_request?.scheduled_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) }}
-                    </p>
+                <div v-if="ride.status === 'scheduled'" class="p-4 bg-arka-warning/15 border border-arka-warning/40 rounded-arka space-y-3">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <p class="font-semibold text-arka-warning">
+                            📅 Programada para {{ new Date(ride.ride_request?.scheduled_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) }}
+                        </p>
+                        <!-- Pedido explícito del usuario: "que puedan editar una
+                             carrera programada si es que se equivocaron" — solo
+                             el cliente, y solo si no hay ya otro cambio esperando
+                             respuesta del conductor. -->
+                        <button
+                            v-if="!isDriver && !ride.pending_reschedule_at"
+                            type="button"
+                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                            @click="showRescheduleForm = !showRescheduleForm"
+                        >
+                            {{ showRescheduleForm ? 'Cancelar' : 'Editar horario' }}
+                        </button>
+                    </div>
                     <p v-if="ride.round_trip" class="text-sm text-arka-text-muted">Incluye ida y vuelta.</p>
-                    <p v-if="isDriver" class="mt-2 text-sm text-arka-text-muted">
+                    <p v-if="isDriver" class="text-sm text-arka-text-muted">
                         Todavía no cuenta como "ocupado" para su flota — arránquela cuando salga a buscar al cliente.
                     </p>
+
+                    <!-- Formulario para proponer otro horario (mismos tres
+                         <select> explícitos que al pedir la carrera, sin
+                         reloj nativo). No se aplica solo: el conductor tiene
+                         que confirmarlo. -->
+                    <div v-if="showRescheduleForm" class="pt-2 border-t border-arka-warning/30 space-y-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <InputLabel value="Nueva fecha" />
+                                <TextInput
+                                    type="date"
+                                    class="mt-1 block w-full"
+                                    :min="todayDateString"
+                                    v-model="rescheduleDate"
+                                />
+                            </div>
+                            <div>
+                                <InputLabel value="Nueva hora" />
+                                <div class="mt-1 grid grid-cols-3 gap-2">
+                                    <select
+                                        v-model="rescheduleHour"
+                                        aria-label="Hora"
+                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                    >
+                                        <option value="" disabled>Hora</option>
+                                        <option v-for="hour in RESCHEDULE_HOUR_OPTIONS" :key="hour" :value="hour">{{ hour }}</option>
+                                    </select>
+                                    <select
+                                        v-model="rescheduleMinute"
+                                        aria-label="Minutos"
+                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                    >
+                                        <option value="" disabled>Min.</option>
+                                        <option v-for="minute in RESCHEDULE_MINUTE_OPTIONS" :key="minute" :value="minute">{{ minute }}</option>
+                                    </select>
+                                    <select
+                                        v-model="reschedulePeriod"
+                                        aria-label="A. m. o p. m."
+                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                    >
+                                        <option value="AM">a. m.</option>
+                                        <option value="PM">p. m.</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <InputError :message="rescheduleError" />
+                        <PrimaryButton
+                            :disabled="reschedulingRide || !rescheduleDate || !rescheduleHour || rescheduleMinute === ''"
+                            @click="submitReschedule"
+                        >
+                            Mandar nuevo horario
+                        </PrimaryButton>
+                    </div>
+
+                    <!-- Cambio de horario esperando respuesta del conductor. -->
+                    <div v-if="ride.pending_reschedule_at" class="pt-2 border-t border-arka-warning/30">
+                        <p class="text-sm text-arka-text">
+                            <template v-if="isDriver">
+                                El cliente propuso cambiar el horario a
+                                <span class="font-medium">{{ new Date(ride.pending_reschedule_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) }}</span>.
+                            </template>
+                            <template v-else>
+                                Le mandó al conductor el nuevo horario propuesto (<span class="font-medium">{{ new Date(ride.pending_reschedule_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }) }}</span>) — esperando que lo confirme.
+                            </template>
+                        </p>
+                        <div v-if="isDriver" class="mt-2 flex gap-2">
+                            <PrimaryButton @click="confirmReschedule">Confirmar nuevo horario</PrimaryButton>
+                            <SecondaryButton @click="rejectReschedule">Rechazar</SecondaryButton>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Sector de origen/destino (consideración agregada al alcance): de
@@ -584,7 +741,10 @@ function submitReview() {
                 </div>
 
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka flex flex-wrap gap-3">
-                    <PrimaryButton v-if="ride.status === 'scheduled' && isDriver" @click="startRide">
+                    <PrimaryButton
+                        v-if="ride.status === 'scheduled' && isDriver && !ride.pending_reschedule_at"
+                        @click="startRide"
+                    >
                         Iniciar viaje
                     </PrimaryButton>
 

@@ -36,6 +36,7 @@ class Ride extends Model
         'picked_up_at',
         'completed_at',
         'cancelled_at',
+        'pending_reschedule_at',
     ];
 
     protected $casts = [
@@ -53,6 +54,7 @@ class Ride extends Model
         'picked_up_at' => 'datetime',
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'pending_reschedule_at' => 'datetime',
     ];
 
     /**
@@ -64,6 +66,16 @@ class Ride extends Model
     public function isScheduledAndNotStarted(): bool
     {
         return $this->status === 'scheduled';
+    }
+
+    /**
+     * true si el cliente propuso otro horario y todavía nadie (el
+     * conductor) lo confirmó ni lo rechazó — ver RideController::propose/
+     * confirm/rejectReschedule().
+     */
+    public function hasPendingReschedule(): bool
+    {
+        return $this->pending_reschedule_at !== null;
     }
 
     public function rideRequest(): BelongsTo

@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ResolveRegistrationNeighborhood;
 use App\Mail\WelcomeMail;
+use App\Models\City;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Rules\ValidPhoneNumberLocal;
+use App\Services\Haversine;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -80,6 +83,13 @@ class RegisteredUserController extends Controller
             // ShareProfileQr, o cualquier perfil público) y viaja oculto en el
             // formulario (Auth/Register.vue), nunca lo escribe la persona.
             'ref' => ['nullable', 'integer', 'exists:users,id'],
+            // Ubicación real del navegador al registrarse (pedido explícito
+            // del usuario: "ver de dónde se registran las personas, por su
+            // ubicación") — con su permiso (ver Register.vue), nunca
+            // obligatoria: si el navegador la niega o no la soporta, viaja
+            // vacía y el registro sigue igual.
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         // Pedido explícito del usuario ("la gente se pierde" entre iniciar
@@ -101,15 +111,28 @@ class RegisteredUserController extends Controller
             ]);
         }
 
+        $hasCoordinates = isset($validated['lat'], $validated['lng']);
+        $city = $hasCoordinates ? $this->nearestCity((float) $validated['lat'], (float) $validated['lng']) : null;
+
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'phone' => $phone,
             'password' => Hash::make($validated['password']),
             'referred_by_user_id' => $validated['ref'] ?? null,
+            'city_id' => $city?->id,
+            'registration_lat' => $hasCoordinates ? $validated['lat'] : null,
+            'registration_lng' => $hasCoordinates ? $validated['lng'] : null,
         ]);
 
         event(new Registered($user));
+
+        // El nombre del barrio/zona es informativo (panel admin) y depende
+        // de un servicio externo — se resuelve aparte, en cola, para no
+        // demorar ni arriesgar el registro por eso (ver la clase del job).
+        if ($hasCoordinates) {
+            ResolveRegistrationNeighborhood::dispatch($user->id, (float) $validated['lat'], (float) $validated['lng']);
+        }
 
         Log::info('Cuenta nueva registrada.', ['user_id' => $user->id, 'username' => $user->username, 'member_code' => $user->member_code]);
 
@@ -173,5 +196,24 @@ class RegisteredUserController extends Controller
         }
 
         return redirect(RouteServiceProvider::HOME);
+    }
+
+    /**
+     * Ciudad más cercana a la ubicación real que dio el navegador al
+     * registrarse (pedido explícito del usuario) — mismo cálculo de
+     * cercanía (Haversine) que ya usa OperationsController::notifyNearby()
+     * contra conductores, acá contra el catálogo de `cities` (que sí tiene
+     * lat/lng propio, a diferencia de `sectors`). Reemplaza directo al
+     * `city_id` que antes solo se completaba a mano en el perfil.
+     */
+    private function nearestCity(float $lat, float $lng): ?City
+    {
+        return City::query()
+            ->where('is_active', true)
+            ->whereNotNull('lat')
+            ->whereNotNull('lng')
+            ->get(['id', 'lat', 'lng'])
+            ->sortBy(fn (City $city) => Haversine::distanceKm($lat, $lng, (float) $city->lat, (float) $city->lng))
+            ->first();
     }
 }

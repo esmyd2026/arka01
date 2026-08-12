@@ -168,6 +168,17 @@ onMounted(() => {
         playAttentionAlert();
         router.reload({ only: ['scheduledRides', 'activeRides'] });
     });
+    // Cambio de horario propuesto/respondido en una carrera programada
+    // (pedido explícito del usuario: editar si se equivocaron) — "Programados"
+    // tiene que reflejarlo sin que nadie recargue a mano.
+    personal.listen('.ride.reschedule-proposed', () => {
+        playAttentionAlert();
+        router.reload({ only: ['scheduledRides'] });
+    });
+    personal.listen('.ride.reschedule-responded', () => {
+        playAttentionAlert();
+        router.reload({ only: ['scheduledRides'] });
+    });
     channels.push(personal);
 
     // Una por cada flota donde soy conductor activo: acá llegan las
@@ -378,8 +389,18 @@ function confirmRaiseOffer(id) {
                                     {{ formatScheduledAt(ride.ride_request?.scheduled_at) }}
                                     <span v-if="ride.round_trip" class="ms-1 text-xs text-arka-text-muted">· Ida y vuelta</span>
                                 </p>
+                                <!-- Pedido explícito del usuario: si el cliente
+                                     editó el horario, tiene que verse acá mismo,
+                                     no solo al entrar al detalle. -->
+                                <p v-if="ride.pending_reschedule_at" class="text-xs text-arka-warning">
+                                    ⏳ Cambio de horario pendiente de confirmar
+                                </p>
                             </div>
-                            <PrimaryButton v-if="ride.driver_user_id === userId" class="shrink-0" @click="startRide(ride.id)">
+                            <PrimaryButton
+                                v-if="ride.driver_user_id === userId && !ride.pending_reschedule_at"
+                                class="shrink-0"
+                                @click="startRide(ride.id)"
+                            >
                                 Iniciar viaje
                             </PrimaryButton>
                             <Link v-else :href="route('rides.show', ride.id)" class="text-arka-primary-bright text-sm shrink-0">

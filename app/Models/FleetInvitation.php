@@ -14,6 +14,7 @@ class FleetInvitation extends Model
         'fleet_id',
         'driver_user_id',
         'invited_by',
+        'initiated_by',
         'status',
         'message',
         'responded_at',
@@ -37,10 +38,30 @@ class FleetInvitation extends Model
     }
 
     /**
-     * El cliente que mandó la invitación.
+     * Quién mandó esto — el cliente (dirección 'client', el caso de siempre)
+     * o el propio conductor (dirección 'driver', pedido explícito del
+     * usuario: un conductor buscando clientes para pedirles unirse a su
+     * flota). Ver initiatedByDriver()/respondingPartyId() para quién le toca
+     * responder en cada caso.
      */
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by');
+    }
+
+    public function initiatedByDriver(): bool
+    {
+        return $this->initiated_by === 'driver';
+    }
+
+    /**
+     * A quién le toca aceptar o rechazar esto — el conductor si fue el
+     * cliente quien invitó (de siempre), o el cliente (dueño de la flota) si
+     * fue el conductor quien mandó la solicitud. Ver
+     * App\Policies\FleetInvitationPolicy::respond().
+     */
+    public function respondingPartyId(): int
+    {
+        return $this->initiatedByDriver() ? $this->fleet->owner_user_id : $this->driver_user_id;
     }
 }

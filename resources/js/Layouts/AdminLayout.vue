@@ -20,6 +20,7 @@ const sections = [
     { route: 'admin.referrals.index', match: 'admin.referrals.*', label: 'Referidos' },
     { route: 'admin.drivers.index', match: 'admin.drivers.*', label: 'Conductores' },
     { route: 'admin.clients.index', match: 'admin.clients.*', label: 'Clientes' },
+    { route: 'admin.user-locations.index', match: 'admin.user-locations.*', label: 'Registros por ubicación' },
     { route: 'admin.driver-tiers.index', match: 'admin.driver-tiers.*', label: 'Medallas' },
     { route: 'admin.operations.index', match: 'admin.operations.*', label: 'Operaciones' },
     { route: 'admin.driver-verifications.index', match: 'admin.driver-verifications.*', label: 'Verificaciones' },

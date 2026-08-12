@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -7,7 +7,7 @@ import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierLabel } from '@/Utils/tierBadge';
 
@@ -21,29 +21,19 @@ const props = defineProps({
     memberStats: { type: Object, required: true },
 });
 
-// "Referí a tu conductor" (pedido explícito del usuario): un enlace público
-// con el mismo invite_code que ya tiene el conductor, para recomendarlo a
-// otras personas — Web Share API si el navegador la soporta (celular), si no
-// se copia al portapapeles (mismo criterio que "Compartí tu código" del
-// inicio del conductor).
-const referredMemberId = ref(null);
-
-async function referDriver(member) {
+// "Referí a tu conductor" (pedido explícito del usuario, con una segunda
+// vuelta: "un botón bien intuitivo... que despliegue un link para enviar por
+// WhatsApp"): antes dependía de la Web Share API del navegador — en
+// computadora, la mayoría no la soporta, así que el botón solo copiaba al
+// portapapeles en silencio, sin ninguna señal clara de "mandalo por acá".
+// Ahora abre WhatsApp directo con el mensaje ya armado (mismo criterio que
+// "Compartir por WhatsApp" del propio perfil del conductor) — mismo
+// invite_code de siempre, no uno nuevo por referido.
+function whatsappReferralUrl(member) {
     const url = route('referrals.show', member.driver.driver_profile.invite_code);
-    const shareData = { title: `Viaje con ${member.driver.name} en Arka01`, url };
+    const text = `¡Hola! Le recomiendo a ${member.driver.name} como conductor de confianza en Arka01 🚗\n\nPuede agregarlo a su propia flota acá: ${url}`;
 
-    if (navigator.share) {
-        try {
-            await navigator.share(shareData);
-        } catch {
-            // El usuario cerró el panel de compartir sin elegir nada — no es un error.
-        }
-        return;
-    }
-
-    await navigator.clipboard.writeText(url);
-    referredMemberId.value = member.id;
-    setTimeout(() => (referredMemberId.value = null), 2000);
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
 // --- Buscador tipo red social (sección 3.2): nombre, teléfono o código de invitación ---
@@ -142,6 +132,22 @@ const invite = (driver) => {
 
 const cancelInvitation = (invitationId) => {
     router.delete(route('fleet.invitations.destroy', invitationId), { preserveScroll: true });
+    invitations.value = invitations.value.filter((i) => i.id !== invitationId);
+};
+
+// Pedido explícito del usuario: los conductores también pueden mandar la
+// solicitud (buscándolo desde Driver/Invitations.vue) — esta lista ya traía
+// esas filas (FleetController::show() no filtraba por dirección), pero
+// siempre mostraba "Cancelar" como si el cliente la hubiera mandado. Ahora
+// distingue: si la mandó el conductor, le toca al cliente Aceptar/Rechazar.
+const acceptFromDriver = (invitationId) => {
+    router.post(route('driver.invitations.accept', invitationId), {}, { preserveScroll: true });
+    invitations.value = invitations.value.filter((i) => i.id !== invitationId);
+};
+
+const rejectFromDriver = (invitationId) => {
+    router.post(route('driver.invitations.reject', invitationId), {}, { preserveScroll: true });
+    invitations.value = invitations.value.filter((i) => i.id !== invitationId);
 };
 
 const removeMember = async (memberId) => {
@@ -152,6 +158,34 @@ const removeMember = async (memberId) => {
 
 const memberCount = props.fleet.active_members?.length ?? 0;
 const atLimit = props.maxDriversPerFleet !== null && memberCount >= props.maxDriversPerFleet;
+
+// Copia local editable de las invitaciones pendientes (mismo criterio que
+// Driver/Invitations.vue): sin esto, una solicitud que manda un conductor
+// mientras el cliente ya tiene esta pantalla abierta no aparecía hasta
+// refrescar — el mismo problema en vivo ya reportado antes del lado
+// conductor (ver Dashboard.vue), ahora también del lado cliente.
+const invitations = ref([...(props.fleet.invitations ?? [])]);
+
+const userId = usePage().props.auth.user.id;
+let personalChannel = null;
+
+onMounted(() => {
+    personalChannel = window.Echo.private(`App.Models.User.${userId}`);
+    personalChannel.listen('.fleet-invitation.created', (e) => {
+        if (e.direction !== 'driver') return;
+
+        invitations.value.unshift({
+            id: e.id,
+            driver: { name: e.driver_name },
+            message: e.message,
+            initiated_by: 'driver',
+        });
+    });
+});
+
+onBeforeUnmount(() => {
+    window.Echo.leave(`App.Models.User.${userId}`);
+});
 </script>
 
 <template>
@@ -328,12 +362,18 @@ const atLimit = props.maxDriversPerFleet !== null && memberCount >= props.maxDri
                                 >
                                     Pedir carrera
                                 </Link>
-                                <SecondaryButton
+                                <a
                                     v-if="member.driver.driver_profile"
-                                    @click="referDriver(member)"
+                                    :href="whatsappReferralUrl(member)"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-arka-card border border-arka-text-muted/30 rounded-arka font-semibold text-xs text-arka-text uppercase tracking-widest shadow-sm hover:bg-arka-base focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150"
                                 >
-                                    {{ referredMemberId === member.id ? 'Enlace copiado' : 'Referir' }}
-                                </SecondaryButton>
+                                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
+                                    </svg>
+                                    Recomendar
+                                </a>
                                 <DangerButton @click="removeMember(member.id)">Sacar</DangerButton>
                             </div>
                         </li>
@@ -341,17 +381,35 @@ const atLimit = props.maxDriversPerFleet !== null && memberCount >= props.maxDri
                 </div>
 
                 <!-- Invitaciones pendientes de respuesta -->
-                <div v-if="fleet.invitations?.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                <div v-if="invitations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-4">Invitaciones pendientes</h3>
 
                     <ul class="divide-y divide-arka-text-muted/10">
                         <li
-                            v-for="invitation in fleet.invitations"
+                            v-for="invitation in invitations"
                             :key="invitation.id"
-                            class="py-3 flex items-center justify-between gap-4"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
-                            <p class="text-arka-text">{{ invitation.driver.name }}</p>
-                            <SecondaryButton @click="cancelInvitation(invitation.id)">Cancelar</SecondaryButton>
+                            <!-- El conductor mandó la solicitud: le toca al cliente responder. -->
+                            <template v-if="invitation.initiated_by === 'driver'">
+                                <div class="min-w-0">
+                                    <p class="text-arka-text">
+                                        <span class="font-medium">{{ invitation.driver.name }}</span>
+                                        quiere unirse a su flota
+                                    </p>
+                                    <p v-if="invitation.message" class="text-sm text-arka-text-muted">"{{ invitation.message }}"</p>
+                                </div>
+                                <div class="flex gap-2 shrink-0">
+                                    <PrimaryButton @click="acceptFromDriver(invitation.id)">Aceptar</PrimaryButton>
+                                    <SecondaryButton @click="rejectFromDriver(invitation.id)">Rechazar</SecondaryButton>
+                                </div>
+                            </template>
+
+                            <!-- Invitación mandada por el propio cliente: puede cancelarla. -->
+                            <template v-else>
+                                <p class="text-arka-text">{{ invitation.driver.name }}</p>
+                                <SecondaryButton @click="cancelInvitation(invitation.id)">Cancelar</SecondaryButton>
+                            </template>
                         </li>
                     </ul>
                 </div>

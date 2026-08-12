@@ -103,6 +103,22 @@ function invite() {
                     </Link>
                 </div>
             </template>
+
+            <!-- Bug real reportado por el usuario (con captura): esta pantalla
+                 no tenía ningún botón para volver — el logo de arriba lleva a
+                 "/", pero no se ve como una salida. Uno explícito, sobre todo
+                 útil después de "¡Listo!", que a un cliente ya logueado lo
+                 lleve directo a su cuenta en vez de por la portada pública. -->
+            <Link
+                :href="isLoggedIn ? route('dashboard') : '/'"
+                class="inline-flex items-center justify-center gap-1.5 text-sm text-arka-text-muted hover:text-arka-text pt-2"
+            >
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 19v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V19M4.5 10.5 12 4l7.5 6.5" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 9.5V19a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5" />
+                </svg>
+                {{ isLoggedIn ? 'Ir a mi cuenta' : 'Volver al inicio' }}
+            </Link>
         </div>
     </div>
 </template>

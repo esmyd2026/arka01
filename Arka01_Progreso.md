@@ -2520,6 +2520,89 @@ Pedido explícito del usuario: poder pasar de cliente a conductor (pidiendo los 
 
 ---
 
+### Bug real: pantallas públicas sin sesión sin ningún botón de vuelta
+
+El usuario mandó una captura de "Referí a tu conductor" (después de mandar la invitación, "¡Listo!...") — sin ningún botón que diga "volver al inicio", solo el logo chico de arriba sin verse clickeable.
+
+- **`Referral/Show.vue`**: se agregó un enlace explícito "Volver al inicio" (o "Ir a mi cuenta" si quien lo abre ya tiene sesión — lo manda directo a `/dashboard` en vez de por la portada pública) al final de la tarjeta, visible en todos los estados.
+- **`Public/RideTracking.vue`** (seguimiento en vivo compartible, mismo tipo de pantalla sin sesión): no tenía ni el logo — se le agregó uno arriba, que abre el inicio en una pestaña nueva para no perder el seguimiento en curso.
+- Se revisaron las demás pantallas sin `AuthenticatedLayout` (perfil público de un visitante sin cuenta, páginas legales, login/registro) — esas ya tenían su enlace de vuelta, no hacía falta tocarlas.
+
+### Tests
+No aplica — cambios puramente visuales en Vue. Build limpio, Pint limpio (sin cambios en PHP).
+
+---
+
+### Referir conductores por WhatsApp + solicitudes de flota en las dos direcciones
+
+Pedido explícito del usuario: compartir un conductor de la propia flota a un conocido por WhatsApp de forma más directa, y que además el conductor pueda buscar a un cliente existente y mandarle la solicitud de unirse a su flota (antes solo el cliente podía invitar).
+
+- **"Recomendar" por WhatsApp (`Fleet/Show.vue`)**: el botón "Referir" de cada conductor de la flota ya no depende de la Web Share API del navegador (en computadora casi nunca la soporta, y solo copiaba al portapapeles en silencio) — ahora abre WhatsApp directo (`wa.me`) con el mensaje y el enlace de invitación del conductor ya armados.
+- **`fleet_invitations.initiated_by`** (nuevo, `client`/`driver`): la misma tabla de invitaciones de siempre ahora sirve para las dos direcciones. `invited_by` pasa a significar "quién mandó esto" (cliente o conductor), y `driver_user_id` sigue siendo siempre el conductor de la relación, cambie quien cambie la dirección. `FleetInvitation::respondingPartyId()` resuelve a quién le toca responder (al conductor si invitó el cliente, de siempre; al cliente si la solicitud la mandó el conductor).
+- **`DriverInvitationController::searchClients()`** (nuevo, `GET /mis-clientes/buscar`): buscador de clientes existentes por nombre/teléfono/usuario/código de socio, mismo criterio que `FleetController::searchDrivers()` del otro lado — devuelve si el cliente ya es suyo, tiene una solicitud pendiente, o todavía no.
+- **`FleetInvitationController::storeFromDriver()`** (nuevo, `POST /flota-solicitudes`): el conductor manda la solicitud a un cliente puntual. Si el cliente todavía no tiene ninguna flota propia, se le crea la primera ahí mismo (mismo criterio que `ReferralController::store()`) — no hace falta que la tenga armada de antemano. Mismas reglas de cupo/duplicados/ya-es-miembro que la invitación de siempre, ahora resueltas siempre contra los datos reales de la flota (el cliente dueño), nunca contra quien esté mandando la petición en ese momento.
+- **`FleetInvitationPolicy::respond()`** ahora usa `respondingPartyId()` en vez de asumir siempre al conductor — así `accept`/`reject` (mismas rutas de siempre) funcionan para cualquiera de las dos direcciones sin duplicar controlador ni rutas.
+- **Aviso en vivo y push**: `FleetInvitationCreated` transmite al canal privado de quien tiene que responder (antes siempre era el conductor); `FleetInvitationPushNotification` manda un texto distinto según la dirección ("Un conductor quiere unirse a su flota" vs. "Nueva invitación a una flota"). `Fleet/Show.vue` ahora también escucha su canal personal en vivo (mismo patrón que ya tenía `Dashboard.vue` del lado conductor) — antes una solicitud nueva del conductor no aparecía hasta refrescar la pantalla.
+- **`Fleet/Show.vue`**: la lista de "Invitaciones pendientes" ya traía las solicitudes mandadas por un conductor (el filtro de `FleetController::show()` no distinguía dirección), pero siempre mostraba "Cancelar" como si el cliente la hubiera mandado él. Ahora distingue: si la mandó el conductor, el cliente ve "X quiere unirse a su flota" con Aceptar/Rechazar.
+- **`Driver/Invitations.vue`**: nueva tarjeta "Buscar un cliente" con el mismo patrón de buscador con debounce que ya usa `Fleet/Show.vue` del otro lado.
+
+### Tests
+`tests/Feature/Fleet/DriverInitiatedFleetInvitationTest.php` (nuevo, 8 tests): buscar clientes por nombre/teléfono/usuario, la búsqueda no trae conductores ni al propio conductor, marca "member" cuando ya es su cliente, mandar la solicitud crea la flota si el cliente no tenía ninguna, el cliente puede aceptar (queda el `FleetMember` con `added_by` correcto) y rechazar, el conductor no puede aceptar su propia solicitud, el conductor puede cancelarla. Suite completa: 653 tests OK, Pint limpio, build limpio.
+
+**Pendiente de tu parte**: la migración nueva (`initiated_by`) no se pudo correr en la base local — el MySQL de Laragon sigue caído. Corré `php artisan migrate` apenas lo levantes; en producción, `deploy.sh` ya la corre sola con `migrate --force`.
+
+---
+
+### Bug grave real: la hora de una carrera programada le llegaba corrida al conductor
+
+El usuario reportó, con capturas: pedía una carrera programada eligiendo "6:40 a. m." y en la tarjeta "Programados" del conductor aparecía "1:40 a. m." — 5 horas menos, justo la diferencia entre UTC y America/Guayaquil.
+
+- **Causa real**: `config/app.php` tenía la zona horaria **hardcodeada en `'UTC'`**, sin leer `env('APP_TIMEZONE')` — el `.env` sí tenía `APP_TIMEZONE=America/Guayaquil`, pero ese valor nunca se aplicaba en ningún lado de la app (era el stub por defecto de Laravel, sin tocar desde que se instaló). Esto hacía que `date_default_timezone_set()` fijara PHP en UTC siempre. Cuando `RideRequestController::store()` armaba la fecha/hora programada con `Carbon::createFromFormat('Y-m-d H:i', "...")` sin zona horaria explícita, la hora local que tipeaba el cliente ("06:40") quedaba **etiquetada como si fuera UTC** en vez de Guayaquil. Los dígitos guardados en la base nunca cambiaron (por eso el propio cliente no notaba nada raro al mirar su solicitud) — el error se revelaba recién cuando esa fecha viajaba hacia el conductor: Eloquent la serializa a ISO 8601 con "Z" (asumiendo que ya es UTC), y `new Date(iso).toLocaleString()` en el navegador la vuelve a convertir a hora local Ecuador, restando 5 horas de más sobre algo que ya estaba mal etiquetado desde el vamos.
+- **Corrección de raíz**: `config/app.php` ahora sí lee `env('APP_TIMEZONE', 'UTC')`. Además, `RideRequestController::store()` y el `proposeReschedule()` nuevo (ver abajo) pasan la zona horaria de forma explícita a `Carbon::createFromFormat()` (defensa extra, sin depender solo del default global).
+- **Dato importante para vos**: los datos ya guardados de `scheduled_at` se corrigen solos con este fix (los dígitos siempre fueron los correctos, solo estaban mal etiquetados) — no hace falta migrar nada ahí. Columnas basadas en `now()` (`created_at`, `responded_at`, etc.) no se ven afectadas en este entorno de desarrollo porque todavía no hay datos reales de producción acumulados con el bug viejo.
+- **De paso, pedido explícito del usuario**: se reemplazó el selector de hora tipo reloj nativo (`<input type="time">`, fácil de "tocar mal" arrastrando el dedo) por tres `<select>` explícitos — Hora (1-12), Minutos (de 5 en 5) y a. m./p. m. — en `Ride/Request.vue`, imposibles de fijar sin querer.
+
+### Tests
+`tests/Feature/Ride/RideRequestFlowTest.php` (+1): pide una carrera programada a las 06:40 y confirma que la hora local guardada sigue siendo 06:40 pero la representación UTC que de verdad viaja hacia el conductor es 11:40 (no la misma hora con una "Z" pegada encima) — se verificó a mano que este test SÍ fallaba antes del fix (revirtiendo `config/app.php` un momento) para confirmar que detecta el bug real. Suite completa: 654 tests OK, Pint limpio, build limpio.
+
+---
+
+### Editar una carrera programada + que el conductor la reconfirme
+
+Pedido explícito del usuario, en el mismo hilo del bug de arriba: poder editar una carrera programada si el cliente se equivocó de fecha/hora, y que esto le notifique al conductor para que la vuelva a aceptar (no debía quedar aceptada sola con el horario nuevo sin que el conductor lo confirme).
+
+- **`rides.pending_reschedule_at`** (nuevo, nullable): mismo criterio que la negociación de precio de la Fase 4 — el cambio propuesto por el cliente NO se aplica solo, queda acá hasta que el conductor lo confirme o lo rechace. Mientras tanto, `ride_requests.scheduled_at` (la fuente de verdad de siempre para la fecha/hora real) sigue con el valor original.
+- **`RideController::proposeReschedule()`** (cliente, solo mientras `status === 'scheduled'`): valida la nueva fecha/hora (misma validación y misma zona horaria explícita que al pedir la carrera) y la guarda en `pending_reschedule_at`, sin tocar todavía la fecha real.
+- **`RideController::confirmReschedule()`** (conductor): recién acá se copia el nuevo horario a `ride_requests.scheduled_at` de verdad, y se limpia `pending_reschedule_at`.
+- **`RideController::rejectReschedule()`** (conductor): limpia `pending_reschedule_at` sin aplicar nada — la carrera sigue en su horario original.
+- **El conductor no puede arrancar la carrera** (`rides.start`) mientras haya un cambio de horario esperando su respuesta — primero tiene que confirmarlo o rechazarlo.
+- **Aviso en vivo + push** en las dos direcciones (`RideRescheduleProposed`/`RideRescheduleResponded`, `RideReschedulePushNotification`/`RideRescheduleResponsePushNotification`): mismo criterio de canales que `RideStarted`/`RideCancelled` (canal de flota del conductor + canal personal de ambas partes), para que tanto `Ride/Show.vue` como la lista "Programados" de `Ride/Index.vue` se actualicen solas sin que nadie recargue la pantalla a mano.
+- **`Ride/Show.vue`**: en la tarjeta de "Programada para...", el cliente ahora tiene un botón "Editar horario" (mismos tres `<select>` que en el formulario de pedir carrera, sin reloj nativo) que abre el formulario para proponer un cambio; mientras hay un cambio pendiente, el conductor ve "El cliente propuso cambiar el horario a..." con botones Confirmar/Rechazar, y el cliente ve que está esperando respuesta.
+- **`Ride/Index.vue`**: la tarjeta "Programados" muestra un aviso "⏳ Cambio de horario pendiente de confirmar" y oculta el botón "Iniciar viaje" del conductor mientras tanto.
+
+### Tests
+`tests/Feature/Ride/RideRescheduleTest.php` (nuevo, 7 tests): el cliente propone un horario nuevo y no se aplica solo, el conductor puede confirmarlo (recién ahí cambia `scheduled_at` de verdad) o rechazarlo (queda el original), solo el cliente puede proponer, solo el conductor puede confirmar/rechazar, proponer una fecha pasada se rechaza, y no se puede arrancar la carrera con un cambio pendiente. Suite completa: 661 tests OK, Pint limpio, build limpio.
+
+**Pendiente de tu parte**: la migración nueva (`pending_reschedule_at`) tampoco se pudo correr en la base local — el MySQL de Laragon sigue caído desde hace varias pasadas. Corré `php artisan migrate` apenas lo levantes; en producción, `deploy.sh` ya la corre sola con `migrate --force`.
+
+---
+
+### Panel admin nuevo: registros por ubicación
+
+Pedido explícito del usuario: "¿podemos ver de dónde se registran las personas? pero por su ubicación?" — con una segunda vuelta pidiendo que se le pida la ubicación real al registrarse (no solo la ciudad que el usuario elegía a mano, después, en su perfil — dato opcional que la mayoría nunca completaba), guardarla, y que el admin pueda verla y segmentarla, con tabla y mapa.
+
+- **`users.registration_lat`/`registration_lng`** (nuevas, nullable): la coordenada real que dio el navegador al registrarse, con permiso — nunca obligatoria, si el navegador la niega o no la soporta el registro sigue igual. `Register.vue` la pide en silencio apenas se abre la pantalla (no es un paso más del asistente), con un aviso corto de para qué sirve, arriba del primer paso.
+- **Ciudad automática**: con esas coordenadas, `RegisteredUserController::store()` resuelve sola la ciudad más cercana del catálogo (`cities`, Haversine — mismo cálculo que ya usa `OperationsController::notifyNearby()` con conductores) y completa `users.city_id` — antes ese campo solo se llenaba si la persona lo elegía a mano en su perfil después, y la mayoría nunca lo tocaba.
+- **`users.registration_neighborhood`** (nueva, informativa): nombre de barrio/zona aproximado, resuelto en cola vía OpenStreetMap Nominatim (gratis, mismo criterio que el resto de mapas/rutas del proyecto — no depende de un proveedor pago) por `App\Jobs\ResolveRegistrationNeighborhood`. A propósito NO se fuerza a calzar contra el catálogo propio de `sectors` — esa tabla no tiene coordenadas (se arma a mano desde `/admin/zonas`, para elegir origen/destino al pedir una carrera), forzar el calce hubiera sido frágil. Si falla (servicio caído, timeout), queda registrado en `/admin/monitoreo` y no afecta el registro para nada.
+- **`Admin/UserLocations.vue`** (nuevo, `/admin/registros-por-ubicacion`): tabla de usuarios agrupados por ciudad (de mayor a menor, con barra proporcional — mismo patrón que "demanda por zona" en Operaciones) + mapa con Leaflet. **Decisión de diseño importante, no pedida explícitamente pero necesaria**: el mapa marca un pin por CIUDAD, nunca por usuario individual — mostrarle a un admin la coordenada exacta de cada cuenta (probablemente su casa) hubiera sido un problema de privacidad real, y la ciudad ya contesta la pregunta de "de dónde se registra la gente". También lista los barrios más frecuentes (el dato informativo de Nominatim) y cuántos usuarios dieron ubicación exacta vs. cuántos solo tienen ciudad elegida a mano.
+
+### Tests
+`tests/Feature/Auth/RegistrationTest.php` (+2): con permiso de ubicación, se guarda la coordenada y se resuelve la ciudad más cercana del catálogo (limpiándolo primero para que el resultado no dependa de qué tan cerca esté alguna ciudad real ya cargada); sin permiso, el registro sigue igual y no se dispara el job de barrio. `tests/Feature/Jobs/ResolveRegistrationNeighborhoodTest.php` (nuevo, 2 tests): guarda el barrio que devuelve Nominatim; si Nominatim falla, no revienta y queda registrado en Monitoreo. `tests/Feature/Admin/UserLocationsTest.php` (nuevo, 3 tests): un usuario normal no puede entrar, un admin ve los conteos agrupados por ciudad en orden descendente, las cuentas admin quedan afuera del conteo. Suite completa: 668 tests OK, Pint limpio, build limpio.
+
+**Pendiente de tu parte**: la migración nueva (`registration_lat`/`registration_lng`/`registration_neighborhood`) tampoco se pudo correr en la base local — mismo MySQL caído. Corré `php artisan migrate` apenas lo levantes. Además, esto suma otro job en cola (`ResolveRegistrationNeighborhood`) — necesita `php artisan queue:work` corriendo (mismo requisito que ya tenía `ExpireRideOffer` para la cascada de despacho de 30 seg., no es nuevo, pero si todavía no lo tenías corriendo en local, ahora hace más falta).
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

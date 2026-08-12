@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Jobs\ResolveRegistrationNeighborhood;
 use App\Mail\WelcomeMail;
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -87,6 +90,76 @@ class RegistrationTest extends TestCase
         $this->assertGreaterThanOrEqual(500, $user->member_code);
         $this->assertNotNull($user->phone_verified_at);
         $this->assertSame('+593991234567', $user->phone);
+    }
+
+    /**
+     * Pedido explícito del usuario: "ver de dónde se registran las personas,
+     * por su ubicación" — si el navegador dio permiso de ubicación, se
+     * guarda la coordenada real y se resuelve la ciudad más cercana del
+     * catálogo, sin que la persona tenga que elegirla a mano.
+     */
+    public function test_registration_with_location_permission_sets_the_nearest_city(): void
+    {
+        Bus::fake();
+
+        // El catálogo real de ciudades ya viene cargado desde las
+        // migraciones (sección "zonas del Ecuador") — se limpia acá para
+        // que la ciudad más cercana sea, sin ambigüedad, la que arma este
+        // test, sin depender de qué tan cerca esté alguna ciudad real.
+        City::query()->delete();
+        $quito = City::query()->create(['name' => 'Quito', 'province' => 'Pichincha', 'lat' => -0.1807, 'lng' => -78.4678, 'is_active' => true]);
+        City::query()->create(['name' => 'Guayaquil', 'province' => 'Guayas', 'lat' => -2.1894, 'lng' => -79.8891, 'is_active' => true]);
+
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Ubicado Cerca',
+            'email' => 'ubicado@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991112222',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+            'lat' => -0.19,
+            'lng' => -78.47,
+        ]);
+
+        $user = User::where('email', 'ubicado@example.com')->firstOrFail();
+
+        $this->assertSame($quito->id, $user->city_id);
+        $this->assertNotNull($user->registration_lat);
+        $this->assertNotNull($user->registration_lng);
+
+        Bus::assertDispatched(ResolveRegistrationNeighborhood::class, fn ($job) => $job->userId === $user->id);
+    }
+
+    /**
+     * Si el navegador niega o no soporta la ubicación, el registro sigue
+     * andando igual — nunca puede quedar bloqueado por un permiso que la
+     * persona puede rechazar.
+     */
+    public function test_registration_without_location_permission_leaves_city_unset(): void
+    {
+        Bus::fake();
+
+        City::query()->create(['name' => 'Quito', 'lat' => -0.1807, 'lng' => -78.4678, 'is_active' => true]);
+
+        $response = $this->post('/register', [
+            'account_type' => 'cliente',
+            'name' => 'Sin Ubicacion',
+            'email' => 'sinubicacion@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991113333',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertRedirect(RouteServiceProvider::HOME);
+
+        $user = User::where('email', 'sinubicacion@example.com')->firstOrFail();
+
+        $this->assertNull($user->city_id);
+        $this->assertNull($user->registration_lat);
+
+        Bus::assertNotDispatched(ResolveRegistrationNeighborhood::class);
     }
 
     /**

@@ -6,6 +6,8 @@ use App\Events\RideArrived;
 use App\Events\RideCancelled;
 use App\Events\RideCompleted;
 use App\Events\RidePickedUp;
+use App\Events\RideRescheduleProposed;
+use App\Events\RideRescheduleResponded;
 use App\Events\RideStarted;
 use App\Models\DriverProfile;
 use App\Models\FleetMember;
@@ -17,11 +19,14 @@ use App\Notifications\RideArrivedPushNotification;
 use App\Notifications\RideCancelledPushNotification;
 use App\Notifications\RideCompletedPushNotification;
 use App\Notifications\RidePickedUpPushNotification;
+use App\Notifications\RideReschedulePushNotification;
+use App\Notifications\RideRescheduleResponsePushNotification;
 use App\Notifications\RideStartedPushNotification;
 use App\Services\RideDispatchAdvancer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -263,6 +268,15 @@ class RideController extends Controller
             ]);
         }
 
+        // No se puede arrancar con un horario en disputa (pedido explícito
+        // del usuario, ver proposeReschedule()) — primero hay que
+        // confirmarlo o rechazarlo.
+        if ($ride->hasPendingReschedule()) {
+            throw ValidationException::withMessages([
+                'ride' => 'El cliente propuso otro horario — confirmalo o rechazalo antes de arrancar.',
+            ]);
+        }
+
         $ride->update([
             'status' => 'in_progress',
             'started_at' => now(),
@@ -438,5 +452,107 @@ class RideController extends Controller
         $ride->driver->notify(new RideCancelledPushNotification($ride));
 
         return redirect()->route('rides.index');
+    }
+
+    /**
+     * El cliente propone otro horario para una carrera programada que ya
+     * aceptó un conductor (pedido explícito del usuario: "que puedan editar
+     * una carrera programada si es que se equivocaron"). No se aplica
+     * sola — el conductor ya se comprometió al horario original, así que
+     * queda pendiente hasta que confirme o rechace el nuevo (mismo criterio
+     * que la negociación de precio, ver RideRequestController::counter()).
+     */
+    public function proposeReschedule(Request $request, Ride $ride): RedirectResponse
+    {
+        if ($ride->client_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($ride->status !== 'scheduled') {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta carrera no está programada.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'scheduled_date' => ['required', 'date_format:Y-m-d'],
+            'scheduled_time' => ['required', 'date_format:H:i'],
+        ]);
+
+        // Misma zona horaria explícita que RideRequestController::store() —
+        // ver el bug real corregido ahí (config/app.php tenía 'UTC'
+        // hardcodeado, corría la hora varias horas de más o de menos).
+        $proposedAt = Carbon::createFromFormat(
+            'Y-m-d H:i',
+            "{$validated['scheduled_date']} {$validated['scheduled_time']}",
+            config('app.timezone')
+        );
+
+        if ($proposedAt->isPast()) {
+            throw ValidationException::withMessages([
+                'scheduled_time' => 'La fecha y hora tiene que ser en el futuro.',
+            ]);
+        }
+
+        $ride->update(['pending_reschedule_at' => $proposedAt]);
+
+        broadcast(new RideRescheduleProposed($ride))->toOthers();
+
+        $ride->driver->notify(new RideReschedulePushNotification($ride));
+
+        return back()->with('status', 'Le mandamos el nuevo horario al conductor — queda a la espera de que lo confirme.');
+    }
+
+    /**
+     * El conductor confirma el nuevo horario propuesto por el cliente —
+     * recién acá se actualiza la fecha/hora real de la carrera
+     * (`ride_requests.scheduled_at`, la fuente de verdad de siempre, ver
+     * Ride::rideRequest()).
+     */
+    public function confirmReschedule(Request $request, Ride $ride): RedirectResponse
+    {
+        if ($ride->driver_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if (! $ride->hasPendingReschedule()) {
+            throw ValidationException::withMessages([
+                'ride' => 'No hay ningún cambio de horario pendiente.',
+            ]);
+        }
+
+        $ride->rideRequest->update(['scheduled_at' => $ride->pending_reschedule_at]);
+        $ride->update(['pending_reschedule_at' => null]);
+
+        broadcast(new RideRescheduleResponded($ride, true))->toOthers();
+
+        $ride->client->notify(new RideRescheduleResponsePushNotification($ride, true));
+
+        return back();
+    }
+
+    /**
+     * El conductor rechaza el nuevo horario propuesto — la carrera sigue en
+     * su horario original, sin tocar `ride_requests.scheduled_at`.
+     */
+    public function rejectReschedule(Request $request, Ride $ride): RedirectResponse
+    {
+        if ($ride->driver_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if (! $ride->hasPendingReschedule()) {
+            throw ValidationException::withMessages([
+                'ride' => 'No hay ningún cambio de horario pendiente.',
+            ]);
+        }
+
+        $ride->update(['pending_reschedule_at' => null]);
+
+        broadcast(new RideRescheduleResponded($ride, false))->toOthers();
+
+        $ride->client->notify(new RideRescheduleResponsePushNotification($ride, false));
+
+        return back();
     }
 }

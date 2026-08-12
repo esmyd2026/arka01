@@ -536,7 +536,23 @@ watch(
 const whenMode = ref(props.startScheduled ? 'scheduled' : 'now');
 const todayDateString = new Date().toISOString().slice(0, 10);
 const scheduledDate = ref('');
-const scheduledTime = ref('');
+// Bug real reportado por el usuario, con captura: el reloj nativo del
+// navegador (`<input type="time">`) confundía a la gente — pedía las 6:40
+// a. m. y terminaba mandando otra cosa sin darse cuenta, arrastrando dedos
+// sobre el selector tipo manecillas. Tres <select> explícitos (hora en
+// formato 12h, minutos, a. m./p. m.) son imposibles de "tocar mal" por
+// error — mismo criterio de claridad que el resto del formulario.
+const scheduledHour = ref('');
+const scheduledMinute = ref('');
+const scheduledPeriod = ref('AM');
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const MINUTE_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
+const scheduledTime = computed(() => {
+    if (!scheduledHour.value || scheduledMinute.value === '') return '';
+    let hour24 = Number(scheduledHour.value) % 12;
+    if (scheduledPeriod.value === 'PM') hour24 += 12;
+    return `${String(hour24).padStart(2, '0')}:${scheduledMinute.value}`;
+});
 const roundTrip = ref(false);
 // Forma de pago (pedido explícito del usuario): "efectivo" de default,
 // el cliente todavía no tenía ninguna forma de elegirla.
@@ -733,13 +749,33 @@ function submit() {
                                 <InputError class="mt-1" :message="form.errors.scheduled_date" />
                             </div>
                             <div>
-                                <InputLabel for="scheduled_time" value="Hora" />
-                                <TextInput
-                                    id="scheduled_time"
-                                    type="time"
-                                    class="mt-1 block w-full"
-                                    v-model="scheduledTime"
-                                />
+                                <InputLabel value="Hora" />
+                                <div class="mt-1 grid grid-cols-3 gap-2">
+                                    <select
+                                        v-model="scheduledHour"
+                                        aria-label="Hora"
+                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                    >
+                                        <option value="" disabled>Hora</option>
+                                        <option v-for="hour in HOUR_OPTIONS" :key="hour" :value="hour">{{ hour }}</option>
+                                    </select>
+                                    <select
+                                        v-model="scheduledMinute"
+                                        aria-label="Minutos"
+                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                    >
+                                        <option value="" disabled>Min.</option>
+                                        <option v-for="minute in MINUTE_OPTIONS" :key="minute" :value="minute">{{ minute }}</option>
+                                    </select>
+                                    <select
+                                        v-model="scheduledPeriod"
+                                        aria-label="A. m. o p. m."
+                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                    >
+                                        <option value="AM">a. m.</option>
+                                        <option value="PM">p. m.</option>
+                                    </select>
+                                </div>
                                 <InputError class="mt-1" :message="form.errors.scheduled_time" />
                             </div>
                         </div>

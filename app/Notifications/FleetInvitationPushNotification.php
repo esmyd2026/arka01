@@ -8,9 +8,11 @@ use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
 /**
- * Aviso push de "te invitaron a una flota" (sección 3.2 y 9.5), mismo
- * criterio que RideRequestedPushNotification: avisa aunque el conductor
- * tenga la app cerrada, el WebSocket (Reverb) solo cubre la pestaña abierta.
+ * Aviso push de "te invitaron a una flota" o "un conductor quiere unirse a
+ * tu flota" (sección 3.2 y 9.5, segunda dirección pedida explícitamente por
+ * el usuario) — mismo criterio que RideRequestedPushNotification: avisa
+ * aunque quien lo reciba tenga la app cerrada, el WebSocket (Reverb) solo
+ * cubre la pestaña abierta.
  */
 class FleetInvitationPushNotification extends Notification
 {
@@ -26,6 +28,15 @@ class FleetInvitationPushNotification extends Notification
 
     public function toWebPush($notifiable, $notification): WebPushMessage
     {
+        if ($this->invitation->initiatedByDriver()) {
+            return (new WebPushMessage)
+                ->title('Un conductor quiere unirse a su flota')
+                ->body("{$this->invitation->driver->name} le mandó una solicitud para unirse a su flota de confianza.")
+                ->icon('/icons/icon.svg')
+                ->data(['url' => "/flota/{$this->invitation->fleet_id}"])
+                ->action('Ver', 'view');
+        }
+
         $ownerName = $this->invitation->fleet->owner->name;
 
         return (new WebPushMessage)

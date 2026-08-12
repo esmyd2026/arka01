@@ -455,6 +455,42 @@ class RideRequestFlowTest extends TestCase
         ]);
     }
 
+    /**
+     * Bug real reportado por el usuario, grave: pedía las 06:40 y al
+     * conductor le llegaba "01:40" en la tarjeta de "Programados" — 5 horas
+     * menos, justo la diferencia entre UTC y America/Guayaquil. Causa real:
+     * `config/app.php` tenía la zona horaria hardcodeada en 'UTC' sin leer
+     * el `.env` (`APP_TIMEZONE=America/Guayaquil` nunca se aplicaba), así
+     * que la hora local que tipeaba el cliente quedaba mal etiquetada como
+     * UTC — al viajar hacia el conductor (serialización a ISO 8601 con "Z"
+     * + `new Date().toLocaleString()` en el navegador) esa etiqueta mala se
+     * traducía en una resta de 5 horas de más.
+     */
+    public function test_scheduled_time_is_interpreted_in_the_local_timezone_not_utc(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-16',
+            'scheduled_time' => '06:40',
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::firstOrFail();
+
+        // La hora local sigue siendo la que tipeó el cliente, sin correrse...
+        $this->assertSame('06:40', $rideRequest->scheduled_at->format('H:i'));
+        // ...y lo que de verdad viaja hacia el conductor (Inertia/broadcast
+        // serializan a UTC con "Z") tiene que ser 5 horas más tarde, no la
+        // misma hora con un "Z" pegado encima.
+        $this->assertSame('2026-01-16T11:40:00.000000Z', $rideRequest->scheduled_at->clone()->utc()->toJSON());
+    }
+
     public function test_scheduling_a_ride_in_the_past_is_rejected(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();

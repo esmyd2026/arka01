@@ -47,7 +47,28 @@ const form = useForm({
     password: '',
     password_confirmation: '',
     ref: referrerId || null,
+    lat: null,
+    lng: null,
 });
+
+// Pedido explícito del usuario: "ver de dónde se registran las personas,
+// por su ubicación" — se pide apenas se abre la pantalla, en silencio, para
+// que ya esté lista para cuando mande el formulario en el último paso (no
+// es un paso más del asistente, no agrega fricción). Si el navegador la
+// niega, no la soporta, o tarda demasiado, el registro sigue igual — nunca
+// bloquea nada (ver RegisteredUserController::store()).
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            form.lat = position.coords.latitude;
+            form.lng = position.coords.longitude;
+        },
+        () => {
+            // Denegada, no disponible, o timeout — no pasa nada, se registra igual.
+        },
+        { timeout: 8000, maximumAge: 300000 }
+    );
+}
 
 // Pedido explícito del usuario ("la gente se pierde" entre iniciar sesión y
 // crear cuenta): si el correo o el teléfono ya tienen cuenta (mensajes
@@ -216,6 +237,14 @@ const submit = () => {
                         <p class="text-xs text-arka-text-muted mt-0.5">Manejo mi propio vehículo y recibo carreras de mis clientes.</p>
                     </button>
                 </div>
+                <!-- Transparencia (pedido explícito del usuario: pedir la
+                     ubicación al registrarse) — el navegador va a mostrar su
+                     propio permiso nativo; esto solo explica para qué,
+                     nunca bloquea si lo rechaza. -->
+                <p class="mt-3 text-xs text-arka-text-muted">
+                    📍 Es posible que el navegador le pida acceso a su ubicación — nos ayuda a completar su ciudad
+                    automáticamente. Si prefiere no compartirla, puede seguir igual.
+                </p>
                 <InputError class="mt-2" :message="form.errors.account_type" />
             </div>
 
