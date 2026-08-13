@@ -280,16 +280,16 @@ onBeforeUnmount(() => {
                          búsqueda en silencio, invita a sumarlo a la
                          plataforma. -->
                     <div v-if="showNotRegisteredYet" class="mt-4 p-4 rounded-arka bg-arka-base/60">
-                        <p class="text-sm text-arka-text">
+                        <!--<p class="text-sm text-arka-text">
                             "{{ searchTerm }}" todavía no está registrado en Arka01.
                         </p>
                         <p class="mt-1 text-sm text-arka-text-muted">
                             Invítelo a sumarse — apenas cree su cuenta, lo va a poder agregar a su flota desde acá.
-                        </p>
+                        </p>-->
                         <div class="mt-3 flex flex-wrap gap-2">
-                            <SecondaryButton @click="shareInviteByWhatsApp">📲 Invitar por WhatsApp</SecondaryButton>
+                             <!--<SecondaryButton @click="shareInviteByWhatsApp">📲 Invitar por WhatsApp</SecondaryButton>-->
                             <SecondaryButton @click="shareInviteGeneric">
-                                {{ inviteLinkCopied ? 'Enlace copiado' : 'Compartir invitación' }}
+                                {{ inviteLinkCopied ? 'Enlace copiado' : 'Compartir invitación' }} <!-- AQUÍ DEBE IR EL ICONO DE COMPARTIR -->
                             </SecondaryButton>
                         </div>
                     </div>

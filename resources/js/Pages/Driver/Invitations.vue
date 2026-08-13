@@ -286,12 +286,12 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         </li>
                     </ul>
 
-                    <div v-if="showNoClientsFound" class="mt-4 p-4 rounded-arka bg-arka-base/60">
+                  <!--   <div v-if="showNoClientsFound" class="mt-4 p-4 rounded-arka bg-arka-base/60">
                         <p class="text-sm text-arka-text">"{{ searchTerm }}" no coincide con ningún cliente registrado.</p>
                         <p class="mt-1 text-sm text-arka-text-muted">
                             Puede invitarlo a sumarse a Arka01 con el botón de arriba.
                         </p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <!-- Invitaciones pendientes de responder -->
