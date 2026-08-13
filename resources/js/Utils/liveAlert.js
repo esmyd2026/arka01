@@ -85,6 +85,40 @@ export function playUpdateChime() {
     }
 }
 
+/**
+ * Nota + su octava por encima, apagándose más rápido — un solo `tone()`
+ * plano suena a pitido; sumarle este armónico agudo por encima es lo que le
+ * da el color de "campanita" en vez de "beep".
+ */
+function bellTone(ctx, frequency, startAt, durationSeconds, peakGain) {
+    tone(ctx, frequency, startAt, durationSeconds, peakGain);
+    tone(ctx, frequency * 2, startAt, durationSeconds * 0.35, peakGain * 0.25);
+}
+
+/**
+ * Aviso "el conductor avanzó la carrera" (pedido explícito del usuario: "el
+ * tono de los viajes en avión cuando van a hablar por el micrófono a dar
+ * indicaciones, que suena tulunnn") — dos notas descendentes tipo campanita
+ * de cabina, en vez del tono de atención (ese queda para cosas que sí
+ * exigen una respuesta, como una carrera nueva o una cancelación). Usado
+ * cuando arranca, cuando el conductor llega, cuando recoge al cliente y
+ * cuando se completa — informativo, no urgente.
+ */
+export function playCabinChime() {
+    try {
+        const ctx = context();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const now = ctx.currentTime;
+        bellTone(ctx, 1046.5, now, 0.35, 0.24); // Do6 ("tu")
+        bellTone(ctx, 783.99, now + 0.22, 0.55, 0.24); // Sol5 ("lunnn")
+    } catch {
+        // Política de autoplay del navegador u otro bloqueo: no rompemos el
+        // flujo, el aviso visual (toast/banner) sigue funcionando igual.
+    }
+}
+
 export function vibrateDevice(pattern = [200, 100, 200]) {
     if (navigator.vibrate) navigator.vibrate(pattern);
 }

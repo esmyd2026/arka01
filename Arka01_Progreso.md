@@ -2758,6 +2758,19 @@ Pedido explícito del usuario, con capturas de "Mis clientes de confianza" (lado
 
 ---
 
+### Campanita de cabina para los avances de una carrera, y el cliente dejó de enterarse en silencio
+
+Pedido explícito del usuario: cambiar el tono usado para avisar avances de una carrera por el de los aviones antes de un anuncio por el micrófono ("suena tulunnn"), y que ese aviso le suene de verdad al cliente cada vez que el conductor cambia el estado de la carrera — reportó que hoy "no tiene más que cambia el contenido en la pantalla, pero no algo más visual ni tono".
+
+- **`playCabinChime()`** (nuevo, `Utils/liveAlert.js`): dos notas descendentes tipo campanita (con un armónico agudo por encima de cada una que se apaga rápido, para que suene a campana y no a pitido plano) — mismo criterio "sutil, no de alarma" que ya pidió para el sonido de arranque de la app. Reemplaza al tono de atención en los 4 avances normales de una carrera (arrancó, el conductor llegó, recogió al cliente, se completó) tanto en `Ride/Show.vue` como en `Ride/Index.vue` — el tono de atención (más fuerte, con vibración) queda reservado para lo que sí exige reacción: una cancelación o una carrera nueva.
+- **Bug real encontrado investigando esto: `Ride/Index.vue` no tenía NINGÚN aviso para "ya llegué" ni "ya recogí al cliente".** Esos dos eventos solo estaban escuchados en `Ride/Show.vue` (el detalle de una carrera puntual) — si el cliente se quedaba mirando la lista de "Mis carreras" en vez de entrar al detalle, no se enteraba de nada cuando el conductor marcaba esos hitos: ni sonido, ni cambio visual, nada. Agregados los dos listeners que faltaban.
+- **Más visual, no solo sonido**: la lista "En curso" de `Ride/Index.vue` antes solo mostraba el nombre de la otra persona — ahora cada carrera trae una etiqueta corta debajo ("🔎 El conductor va en camino" / "📍 El conductor está esperando" / "🚗 En camino al destino"), así que el avance queda visible aunque no se haya escuchado el aviso. En `Ride/Show.vue` se agregó además un aviso fijo tipo toast (mismo patrón ya usado para mensajes de chat nuevos) que aparece arriba de todo sin importar el scroll cuando cambia el estado, y se apaga solo a los 6 segundos.
+
+### Tests
+Sin pruebas nuevas — cambios puramente de Vue/JS (sonido sintetizado, listeners de WebSocket ya cubiertos del lado backend por los tests existentes de `RideRequestFlowTest`, que no cambiaron). Suite completa: 713 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

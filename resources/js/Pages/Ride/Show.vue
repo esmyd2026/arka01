@@ -13,7 +13,7 @@ import TextInput from '@/Components/TextInput.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
-import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
+import { playAttentionAlert, playCabinChime, playUpdateChime } from '@/Utils/liveAlert';
 
 const props = defineProps({
     ride: { type: Object, required: true },
@@ -87,6 +87,22 @@ function dismissChatToast(scrollToChat = false) {
     if (scrollToChat) chatPanelEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// Pedido explícito del usuario: "el cliente no tiene más que solo cambian
+// el contenido en la pantalla, pero no algo más visual ni tono" — antes,
+// cuando el conductor arrancaba/llegaba/recogía/completaba la carrera, la
+// pantalla se refrescaba en silencio (los banners de más abajo ya muestran
+// el estado nuevo, pero solo si la otra parte los tiene a la vista en ese
+// momento). Mismo criterio que chatToast de acá arriba: un aviso fijo,
+// visible sin importar el scroll, que se apaga solo.
+const statusToast = ref(null);
+let statusToastTimer = null;
+
+function showStatusToast(message) {
+    statusToast.value = message;
+    clearTimeout(statusToastTimer);
+    statusToastTimer = setTimeout(() => (statusToast.value = null), 6000);
+}
+
 // Respuestas rápidas (pedido explícito del usuario): distintas según el rol,
 // un clic manda el mensaje tal cual — no hace falta escribirlo, pero el
 // campo de texto libre sigue disponible para lo que no calce en ninguna.
@@ -158,16 +174,25 @@ onMounted(() => {
 
     // El conductor arrancó esta carrera PROGRAMADA desde otra pestaña/sesión
     // (consideración agregada al alcance) — refresca el estado si esta
-    // pantalla ya estaba abierta desde antes.
+    // pantalla ya estaba abierta desde antes. Pedido explícito del usuario:
+    // estos 4 son avances normales de la carrera (arrancó/llegó/recogió/
+    // completó), no algo que exija una respuesta — suenan con la campanita
+    // de cabina en vez del tono de atención (ese queda para lo que sí
+    // necesita reacción: carrera nueva, cancelación), y muestran un aviso
+    // fijo (statusToast) para que se note incluso si no se tiene la
+    // pantalla mirando el banner de estado en ese instante.
     fleetChannel.listen('.ride.started', (e) => {
         if (e.ride_id !== props.ride.id) return;
-        playAttentionAlert();
+        playCabinChime();
+        showStatusToast('🚗 La carrera arrancó.');
         router.reload({ only: ['ride'] });
     });
 
     // El cliente canceló la carrera (pedido explícito del usuario) — si el
     // conductor ya iba en camino y tiene esta pantalla abierta, se entera al
-    // toque en vez de seguir manejando hacia algo que ya no existe.
+    // toque en vez de seguir manejando hacia algo que ya no existe. Se deja
+    // con el tono de atención (más notorio + vibración): a diferencia de los
+    // 4 de arriba, esto sí es una excepción que corta el viaje.
     fleetChannel.listen('.ride.cancelled', (e) => {
         if (e.ride_id !== props.ride.id) return;
         playAttentionAlert();
@@ -180,7 +205,8 @@ onMounted(() => {
     // listener, que sí existe para "iniciada" y "cancelada".
     fleetChannel.listen('.ride.completed', (e) => {
         if (e.ride_id !== props.ride.id) return;
-        playAttentionAlert();
+        playCabinChime();
+        showStatusToast('✅ La carrera se completó.');
         router.reload({ only: ['ride'] });
     });
 
@@ -189,13 +215,15 @@ onMounted(() => {
     // abierta vea el cambio de banner sin recargar a mano.
     fleetChannel.listen('.ride.arrived', (e) => {
         if (e.ride_id !== props.ride.id) return;
-        playAttentionAlert();
+        playCabinChime();
+        showStatusToast('📍 El conductor llegó al punto de encuentro.');
         router.reload({ only: ['ride'] });
     });
 
     fleetChannel.listen('.ride.picked_up', (e) => {
         if (e.ride_id !== props.ride.id) return;
-        playAttentionAlert();
+        playCabinChime();
+        showStatusToast('🚗 El conductor recogió al cliente, van en camino.');
         router.reload({ only: ['ride'] });
     });
 
@@ -532,6 +560,25 @@ function submitReview() {
                 >
                     ✕
                 </button>
+            </div>
+        </div>
+    </Teleport>
+
+    <!-- Aviso de cambio de estado (pedido explícito del usuario: "el cliente
+         no tiene más que solo cambian el contenido en la pantalla, pero no
+         algo más visual ni tono") — mismo patrón que el toast de chat de
+         arriba, con su propio ícono para distinguirlo de un mensaje. -->
+    <Teleport to="body">
+        <div v-if="statusToast" class="fixed top-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-96 z-50 cursor-pointer" @click="statusToast = null">
+            <div class="p-3 bg-arka-card border border-arka-primary/30 shadow-lg rounded-arka flex items-center gap-3">
+                <span class="h-8 w-8 rounded-full bg-arka-primary/15 flex items-center justify-center shrink-0">
+                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21Z" />
+                        <circle cx="12" cy="9.5" r="2.5" />
+                    </svg>
+                </span>
+                <p class="flex-1 text-sm font-medium text-arka-text">{{ statusToast }}</p>
+                <button type="button" class="text-arka-text-muted hover:text-arka-text shrink-0" @click.stop="statusToast = null">✕</button>
             </div>
         </div>
     </Teleport>

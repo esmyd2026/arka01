@@ -5,7 +5,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
+import { playAttentionAlert, playCabinChime, playUpdateChime } from '@/Utils/liveAlert';
 
 const props = defineProps({
     pendingRequestsAsClient: { type: Array, required: true },
@@ -25,6 +25,18 @@ function formatScheduledAt(iso) {
 
 function startRide(id) {
     router.post(route('rides.start', id), {}, { preserveScroll: true });
+}
+
+// Pedido explícito del usuario: "el cliente no tiene más que solo cambian
+// el contenido en la pantalla, pero no algo más visual" — esta lista solo
+// mostraba el nombre de la otra parte, sin ningún indicio de en qué punto
+// va la carrera (¿ya llegó el conductor? ¿ya recogió al cliente?). Mismo
+// dato que ya usa Ride/Show.vue (arrived_at/picked_up_at), acá como
+// etiqueta corta.
+function activeRideStatusLabel(ride) {
+    if (ride.picked_up_at) return '🚗 En camino al destino';
+    if (ride.arrived_at) return '📍 El conductor está esperando';
+    return '🔎 El conductor va en camino';
 }
 
 const userId = usePage().props.auth.user.id;
@@ -146,17 +158,20 @@ onMounted(() => {
     // Se completó una carrera propia (la haya completado yo u la otra
     // parte): "En curso" y "Historial" tienen que moverse solos, no
     // quedarse pegados hasta que alguien recargue la página a mano.
-    // Pedido explícito del usuario ("sigue el problema que no llega las
-    // notificaciones... debe existir un sonido fuerte... si es posible que
-    // vibre"): estos 3 son cambios de estado de una carrera real, no
-    // negociación previa — pasan de chime suave a alerta fuerte + vibración.
+    // Pedido explícito del usuario: este y los otros 3 de abajo
+    // (arrancó/llegó/recogió/completó) son avances normales de la carrera,
+    // no algo que exija una respuesta — usan la campanita de cabina en vez
+    // del tono de atención (ese queda para lo que sí necesita reacción,
+    // como una cancelación o una carrera nueva).
     personal.listen('.ride.completed', () => {
-        playAttentionAlert();
+        playCabinChime();
         router.reload({ only: ['activeRides', 'rideHistory'] });
     });
     // El cliente canceló una carrera ya aceptada (pedido explícito del
     // usuario) — mismo criterio que ".ride.completed": que "En curso"/
-    // "Programados" se actualicen solos para quien no la canceló.
+    // "Programados" se actualicen solos para quien no la canceló. Con el
+    // tono de atención + vibración: a diferencia de los demás, esto corta
+    // el viaje, no es un avance normal.
     personal.listen('.ride.cancelled', () => {
         playAttentionAlert();
         router.reload({ only: ['activeRides', 'scheduledRides', 'rideHistory'] });
@@ -165,8 +180,24 @@ onMounted(() => {
     // agregada al alcance) — pasa de "Programados" a "En curso" solo, sin
     // esperar a que alguien recargue la página.
     personal.listen('.ride.started', () => {
-        playAttentionAlert();
+        playCabinChime();
         router.reload({ only: ['scheduledRides', 'activeRides'] });
+    });
+    // Pedido explícito del usuario: "el cliente no tiene más que solo
+    // cambian el contenido en la pantalla, pero no algo más visual ni
+    // tono" — estos dos no tenían NINGÚN aviso acá (solo existían en
+    // Ride/Show.vue), así que quien se quedaba mirando esta lista en vez del
+    // detalle de la carrera no se enteraba de nada cuando el conductor
+    // marcaba "ya llegué" o "ya recogí al cliente". La etiqueta de estado de
+    // "En curso" (activeRideStatusLabel) ya refleja esto solo con recargar
+    // activeRides — acá solo faltaba el aviso.
+    personal.listen('.ride.arrived', () => {
+        playCabinChime();
+        router.reload({ only: ['activeRides'] });
+    });
+    personal.listen('.ride.picked_up', () => {
+        playCabinChime();
+        router.reload({ only: ['activeRides'] });
     });
     // Cambio de horario propuesto/respondido en una carrera programada
     // (pedido explícito del usuario: editar si se equivocaron) — "Programados"
@@ -371,11 +402,14 @@ function confirmRaiseOffer(id) {
                     <h3 class="text-lg font-medium text-arka-text mb-3">En curso</h3>
                     <ul class="divide-y divide-arka-text-muted/10">
                         <li v-for="ride in activeRides" :key="ride.id" class="py-3">
-                            <Link :href="route('rides.show', ride.id)" class="flex items-center justify-between">
-                                <span class="text-arka-text">
-                                    {{ ride.client.id === userId ? ride.driver.name : ride.client.name }}
+                            <Link :href="route('rides.show', ride.id)" class="flex items-center justify-between gap-3">
+                                <span class="min-w-0">
+                                    <span class="text-arka-text block truncate">
+                                        {{ ride.client.id === userId ? ride.driver.name : ride.client.name }}
+                                    </span>
+                                    <span class="text-xs text-arka-text-muted">{{ activeRideStatusLabel(ride) }}</span>
                                 </span>
-                                <span class="text-arka-primary-bright text-sm">Ver seguimiento &rarr;</span>
+                                <span class="text-arka-primary-bright text-sm shrink-0">Ver seguimiento &rarr;</span>
                             </Link>
                         </li>
                     </ul>
