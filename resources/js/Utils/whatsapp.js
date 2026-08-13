@@ -16,6 +16,29 @@ export function buildWhatsAppOptInUrl(businessNumber, userId) {
     return `https://wa.me/${businessNumber}?text=${encodeURIComponent(message)}`;
 }
 
+// Pedido explícito del usuario: "cuando manda a whatsapp está mandando
+// siempre a los whatsapp business y debería ser al normal en tal caso
+// primero" — en Android, si además del WhatsApp normal tiene instalado
+// WhatsApp Business, el enlace universal `wa.me` a veces lo termina abriendo
+// en Business (lo decide el sistema operativo, no esta app). Acá se fuerza
+// el paquete `com.whatsapp` (el normal) con un intent nativo de Android, con
+// el mismo link `wa.me` de siempre como respaldo si no lo tiene instalado.
+// Fuera de Android esta ambigüedad no existe (no hay "WhatsApp Business" de
+// escritorio/iOS en este flujo), así que ahí se abre el link de siempre tal
+// cual. Sin número de destino a propósito (mismo criterio que ya usaban
+// estos botones): abre el selector de contacto de WhatsApp, no le manda el
+// mensaje a nadie en particular.
+export function openWhatsAppChooser(message) {
+    const fallbackUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+    if (!/Android/i.test(navigator.userAgent)) {
+        window.open(fallbackUrl, '_blank');
+        return;
+    }
+
+    window.location.href = `intent://send?text=${encodeURIComponent(message)}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`;
+}
+
 // Sesión única por cuenta (pedido explícito del usuario): antes de "Pedir
 // código" en Auth/Login.vue, se ofrece escribirle primero al WhatsApp
 // oficial con esta frase exacta — abre la ventana de 24h, y

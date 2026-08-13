@@ -10,6 +10,7 @@ use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
+use App\Models\User;
 use App\Services\Haversine;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\Request;
@@ -57,6 +58,15 @@ class DashboardController extends Controller
                             && ($user->driverProfile?->isWithinRangeOf((float) $rideRequest->origin_lat, (float) $rideRequest->origin_lng) ?? true)))
                     ->count(),
                 'completed_rides' => Ride::query()->where('driver_user_id', $userId)->where('status', 'completed')->count(),
+                // Pedido explícito del usuario: "que le muestre también la
+                // cantidad de $ que ha hecho en el día y lo que lleva del
+                // mes" — mismo criterio que earnings_this_month, de abajo,
+                // solo que acotado al día de hoy.
+                'earnings_today' => (float) Ride::query()
+                    ->where('driver_user_id', $userId)
+                    ->where('status', 'completed')
+                    ->whereDate('completed_at', today())
+                    ->sum('price'),
                 'earnings_this_month' => (float) Ride::query()
                     ->where('driver_user_id', $userId)
                     ->where('status', 'completed')
@@ -124,7 +134,7 @@ class DashboardController extends Controller
                 ?? Fleet::query()->create(['owner_user_id' => $userId, 'name' => 'Mi flota']);
 
             $fleetDrivers = $this->fleetDriversFor($request, $fleet);
-            $nearbyDrivers = $this->nearbyDriversFor($request, $userId, $fleetDrivers->pluck('user_id'));
+            $nearbyDrivers = $this->nearbyDriversFor($request, $user, $fleetDrivers->pluck('user_id'));
             $targetFleetId = $fleet->id;
             $upcomingTrips = $this->upcomingTripsFor($userId, asDriver: false);
         }
@@ -324,25 +334,41 @@ class DashboardController extends Controller
     }
 
     /**
-     * "Conductores cerca" del inicio (consideración agregada al alcance): la
-     * misma red de respaldo del directorio público (sección 3.4), pero acá
-     * acotada a los realmente disponibles ahora mismo y sin volver a mostrar
-     * a quien ya integra la flota del cliente. Ordena por cercanía si el
-     * navegador ya compartió ubicación (`lat`/`lng` por query string, mismo
-     * patrón que `DriverDirectoryController`), si no por mejor calificados.
+     * "Conductores que quizás conozcas" del inicio (pedido explícito del
+     * usuario: "indicarle a los clientes que hay conductores cerca de donde
+     * viven... buscar datos que coincidan ya sea por las ubicaciones por
+     * rangos o buscar otra datos") — la misma red de respaldo del directorio
+     * público (sección 3.4), acotada a los realmente disponibles ahora mismo
+     * y sin volver a mostrar a quien ya integra la flota del cliente.
+     *
+     * Tres niveles de "qué tan cerca", de mejor a peor dato disponible:
+     * 1. Ubicación EN VIVO del navegador (`lat`/`lng` por query string, mismo
+     *    patrón que DriverDirectoryController) — la más precisa.
+     * 2. Si todavía no la compartió esta vez (recién entrando, antes de que
+     *    el `onMounted` de Dashboard.vue pida el permiso y recargue), se cae
+     *    a la ubicación que dio AL REGISTRARSE (`users.registration_lat/lng`,
+     *    si la dio) — más vieja, pero mejor que nada.
+     * 3. Sin ninguna coordenada del cliente: "otro dato que coincida" (pedido
+     *    explícito del usuario) — misma ciudad declarada (`users.city_id`),
+     *    y si tampoco hay eso, mejor calificados nomás.
      *
      * @return Collection<int, array>
      */
-    private function nearbyDriversFor(Request $request, int $userId, Collection $excludeDriverIds): Collection
+    private function nearbyDriversFor(Request $request, User $user, Collection $excludeDriverIds): Collection
     {
         $lat = $request->float('lat') ?: null;
         $lng = $request->float('lng') ?: null;
+
+        if ($lat === null && $lng === null && $user->registration_lat !== null && $user->registration_lng !== null) {
+            $lat = (float) $user->registration_lat;
+            $lng = (float) $user->registration_lng;
+        }
 
         $profiles = DriverProfile::query()
             ->where('is_public', true)
             ->where('is_available', true)
             ->where('verification_status', '!=', 'rejected')
-            ->where('user_id', '!=', $userId)
+            ->where('user_id', '!=', $user->id)
             ->whereNotIn('user_id', $excludeDriverIds)
             ->with('user')
             ->get();
@@ -354,17 +380,24 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('reviewee_user_id');
 
-        $pendingInvitationDriverIds = Fleet::query()->where('owner_user_id', $userId)->pluck('id')
+        $pendingInvitationDriverIds = Fleet::query()->where('owner_user_id', $user->id)->pluck('id')
             ->pipe(fn ($fleetIds) => FleetInvitation::query()
                 ->whereIn('fleet_id', $fleetIds)
                 ->where('status', 'pending')
                 ->pluck('driver_user_id'));
 
-        $entries = $profiles->map(function (DriverProfile $profile) use ($ratings, $lat, $lng, $pendingInvitationDriverIds) {
+        $entries = $profiles->map(function (DriverProfile $profile) use ($ratings, $lat, $lng, $pendingInvitationDriverIds, $user) {
             $rating = $ratings->get($profile->user_id);
             $distanceKm = ($lat !== null && $lng !== null && $profile->current_lat !== null)
                 ? Haversine::distanceKm($lat, $lng, (float) $profile->current_lat, (float) $profile->current_lng)
                 : null;
+
+            // "Otro dato que coincida" cuando no hay forma de calcular una
+            // distancia real (ninguno de los dos tiene coordenadas): misma
+            // ciudad declarada en el perfil.
+            $sameCity = $distanceKm === null
+                && $user->city_id !== null
+                && $profile->user->city_id === $user->city_id;
 
             return [
                 'user_id' => $profile->user_id,
@@ -373,13 +406,25 @@ class DashboardController extends Controller
                 'average_rating' => $rating ? round((float) $rating->avg_rating, 1) : null,
                 'review_count' => $rating->review_count ?? 0,
                 'distance_km' => $distanceKm,
+                'same_city' => $sameCity,
                 'already_invited' => $pendingInvitationDriverIds->contains($profile->user_id),
             ];
         });
 
-        $entries = $lat !== null
-            ? $entries->sortBy(fn ($e) => $e['distance_km'] ?? PHP_FLOAT_MAX)
-            : $entries->sortByDesc(fn ($e) => $e['average_rating'] ?? 0);
+        // Con distancia conocida (de cualquiera de los dos niveles de
+        // ubicación), la más cercana primero. Sin eso, misma ciudad gana
+        // sobre no saber nada; último criterio, mejor calificado.
+        $entries = $entries->sort(function ($a, $b) {
+            if ($a['distance_km'] !== null || $b['distance_km'] !== null) {
+                return ($a['distance_km'] ?? PHP_FLOAT_MAX) <=> ($b['distance_km'] ?? PHP_FLOAT_MAX);
+            }
+
+            if ($a['same_city'] !== $b['same_city']) {
+                return $b['same_city'] <=> $a['same_city'];
+            }
+
+            return ($b['average_rating'] ?? 0) <=> ($a['average_rating'] ?? 0);
+        });
 
         return $entries->take(8)->values();
     }

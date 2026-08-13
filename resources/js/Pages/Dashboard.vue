@@ -466,7 +466,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </svg>
                         </div>
 
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
                             <Link :href="route('driver.invitations.index')" class="text-center hover:opacity-80">
                                 <p class="text-2xl font-semibold text-arka-text">{{ driverStats.active_clients }}</p>
                                 <p class="text-xs text-arka-text-muted">Clientes en su flota</p>
@@ -482,9 +482,17 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 </p>
                                 <p class="text-xs text-arka-text-muted">Calificación</p>
                             </div>
+                            <!-- Pedido explícito del usuario: "que le muestre
+                                 también la cantidad de $ que ha hecho en el
+                                 día" — con un fondo suave para que resalte
+                                 como el dato "vivo" del día frente al del mes. -->
+                            <div class="text-center rounded-arka bg-arka-primary/10 py-1.5">
+                                <p class="text-2xl font-semibold text-arka-primary-bright">${{ driverStats.earnings_today.toFixed(2) }}</p>
+                                <p class="text-xs text-arka-text-muted">HOY</p>
+                            </div>
                             <div class="text-center">
                                 <p class="text-2xl font-semibold text-arka-primary-bright">${{ driverStats.earnings_this_month.toFixed(2) }}</p>
-                                <p class="text-xs text-arka-text-muted">Ganancias este mes</p>
+                                <p class="text-xs text-arka-text-muted">MES</p>
                             </div>
                         </div>
                     </div>
@@ -813,10 +821,12 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </div>
                     </div>
 
-                    <!-- Conductores cerca -->
+                    <!-- Conductores que quizás conozcas (pedido explícito del
+                         usuario: "indicarle a los clientes que hay
+                         conductores cerca de donde viven") -->
                     <div v-if="nearbyDrivers && nearbyDrivers.length" class="space-y-2">
                         <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Conductores cerca</h4>
+                            <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Conductores que quizás conozcas</h4>
                             <Link :href="route('directory.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
                                 Ver todos
                             </Link>
@@ -839,6 +849,12 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 </div>
                                 <p v-if="driver.distance_km != null" class="mt-2 text-xs text-arka-text-muted">
                                     A {{ driver.distance_km.toFixed(1) }} km de ti
+                                </p>
+                                <!-- "Otro dato que coincida" (pedido explícito del
+                                     usuario) cuando no hay forma de calcular la
+                                     distancia real: misma ciudad declarada. -->
+                                <p v-else-if="driver.same_city" class="mt-2 text-xs text-arka-text-muted">
+                                    En su misma ciudad
                                 </p>
                                 <p class="mt-0.5 text-xs text-arka-primary-bright">● Disponible</p>
                                 <Link

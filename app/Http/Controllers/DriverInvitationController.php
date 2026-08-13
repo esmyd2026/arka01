@@ -153,6 +153,7 @@ class DriverInvitationController extends Controller
         $clients = User::query()
             ->where('id', '!=', $driverId)
             ->where('role', 'cliente')
+            ->with('city')
             ->where(function ($query) use ($term, $memberCode) {
                 $query->where('name', 'like', "%{$term}%")
                     ->orWhere('phone', 'like', "%{$term}%")
@@ -198,7 +199,11 @@ class DriverInvitationController extends Controller
                 'user_id' => $client->id,
                 'name' => $client->name,
                 'avatar_url' => $client->avatar_url,
-                'phone' => $client->phone,
+                // Pedido explícito del usuario: "quitemos el número de
+                // teléfono y agreguemos mejor la ciudad" — un dato menos
+                // sensible, y más útil para decidir a quién mandarle la
+                // solicitud entre varios resultados parecidos.
+                'city' => $client->city?->name,
                 'username' => $client->username,
                 'member_code' => $client->member_code,
                 'average_rating' => $rating ? round((float) $rating->avg_rating, 1) : null,

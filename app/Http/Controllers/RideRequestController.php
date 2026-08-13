@@ -282,6 +282,10 @@ class RideRequestController extends Controller
             'destination_lng' => ['required', 'numeric', 'between:-180,180'],
             'destination_address' => ['nullable', 'string', 'max:255'],
             'destination_sector_id' => ['nullable', 'integer', 'exists:sectors,id'],
+            // Distancia real de manejo, la misma ruta que ya se dibuja en el
+            // mapa (OSRM) — nunca obligatoria, ver el chequeo de cordura más
+            // abajo antes de usarla en vez de la línea recta.
+            'route_distance_km' => ['nullable', 'numeric', 'min:0'],
             // Si no manda un monto propio, se usa el precio sugerido del sistema.
             'offered_price' => ['nullable', 'numeric', 'min:0.01'],
             // "Ahora mismo" (default) o "programada" (consideración agregada al
@@ -530,13 +534,30 @@ class RideRequestController extends Controller
             }
         }
 
-        $distanceKm = Haversine::distanceKm(
+        // Bug real confirmado (pedido explícito del usuario: "probá el mapa...
+        // en temas de km") — probando dos rutas reales de Guayaquil contra el
+        // mismo servidor OSRM que ya usa el mapa, la línea recta (Haversine)
+        // dio hasta un tercio de la distancia real de manejo en calles con
+        // curvas o sin conexión directa. El frontend ya traza esa ruta real
+        // (ver Utils/osrmRoute.js) — ahora manda también su distancia, y se
+        // usa esa en vez de la línea recta cuando parece razonable (nunca
+        // puede ser MENOR a la línea recta, la ruta real nunca es más corta
+        // que ir directo; y se descarta si es descabelladamente mayor, señal
+        // de una respuesta rara de OSRM en vez de confiar en cualquier cosa
+        // que mande el navegador). Si no llegó o no pasa el chequeo, cae de
+        // vuelta a Haversine — mismo criterio "gratis, sin key, con
+        // respaldo si el servicio externo falla" que el resto de la app.
+        $haversineKm = round(Haversine::distanceKm(
             (float) $validated['origin_lat'],
             (float) $validated['origin_lng'],
             (float) $validated['destination_lat'],
             (float) $validated['destination_lng'],
-        );
-        $distanceKm = round($distanceKm, 2);
+        ), 2);
+
+        $routeDistanceKm = $validated['route_distance_km'] ?? null;
+        $distanceKm = ($routeDistanceKm !== null && $routeDistanceKm >= $haversineKm * 0.95 && $routeDistanceKm <= $haversineKm * 5)
+            ? round((float) $routeDistanceKm, 2)
+            : $haversineKm;
 
         $ratePerKm = $this->referenceRatePerKm($fleet, $driverUserId);
         $suggestedPrice = PriceCalculator::suggestedPrice(

@@ -29,6 +29,14 @@ class PricingSettingController extends Controller
             'night_surcharge_percent' => ['required', 'integer', 'min:0', 'max:200'],
             'night_starts_at' => ['required', 'integer', 'min:0', 'max:23'],
             'night_ends_at' => ['required', 'integer', 'min:0', 'max:23'],
+            // Recargo de hora pico (pedido explícito del usuario: "subir un
+            // poco las tarifas en las horas pico"), dos franjas — mañana y
+            // tarde — mismo criterio que el nocturno de arriba.
+            'peak_surcharge_percent' => ['required', 'integer', 'min:0', 'max:200'],
+            'peak_morning_starts_at' => ['required', 'integer', 'min:0', 'max:23'],
+            'peak_morning_ends_at' => ['required', 'integer', 'min:0', 'max:23'],
+            'peak_evening_starts_at' => ['required', 'integer', 'min:0', 'max:23'],
+            'peak_evening_ends_at' => ['required', 'integer', 'min:0', 'max:23'],
             // Tarifa base mínima (pedido explícito del usuario): toda la
             // plataforma, no por conductor (eso ya existe como campo
             // opcional propio del conductor en su perfil, para tarifas MÁS

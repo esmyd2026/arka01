@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\PlatformFeedbackController as AdminPlatformFeedba
 use App\Http\Controllers\Admin\PricingSettingController;
 use App\Http\Controllers\Admin\RatingReasonController;
 use App\Http\Controllers\Admin\ReferralController as AdminReferralController;
+use App\Http\Controllers\Admin\RideController as AdminRideController;
 use App\Http\Controllers\Admin\SosAlertController as AdminSosAlertController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\SupportTicketController;
@@ -329,6 +330,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Eliminar una cuenta real y todo lo que le pertenece (pedido explícito
     // del usuario) — ver AdminUserProfileController::destroy().
     Route::delete('/usuarios/{user}', [AdminUserProfileController::class, 'destroy'])->name('users.destroy');
+
+    // Depurar carreras de prueba (pedido explícito del usuario): sueltas,
+    // programadas o de Expreso — todas son filas de `rides`. Ver
+    // Admin\RideController::destroy() para qué se lleva de encajada.
+    Route::get('/carreras', [AdminRideController::class, 'index'])->name('rides.index');
+    Route::delete('/carreras/{ride}', [AdminRideController::class, 'destroy'])->name('rides.destroy');
 
     Route::get('/suscripciones', [AdminSubscriptionController::class, 'index'])->name('subscriptions.index');
     Route::post('/suscripciones', [AdminSubscriptionController::class, 'store'])->name('subscriptions.store');

@@ -16,6 +16,14 @@ class PricingSetting extends Model
         'night_surcharge_percent',
         'night_starts_at',
         'night_ends_at',
+        // Recargo de hora pico (pedido explícito del usuario): dos franjas
+        // por día (mañana y tarde) — nunca se suma con el nocturno, ver
+        // App\Services\PriceCalculator::suggestedPrice().
+        'peak_surcharge_percent',
+        'peak_morning_starts_at',
+        'peak_morning_ends_at',
+        'peak_evening_starts_at',
+        'peak_evening_ends_at',
         'minimum_fare',
         // Ticket promedio por carrera (pedido explícito del usuario): valor
         // global que alimenta la proyección de ganancia mensual mostrada en

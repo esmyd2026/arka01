@@ -9,6 +9,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { openWhatsAppChooser } from '@/Utils/whatsapp';
 
 const props = defineProps({
     pendingInvitations: { type: Array, required: true },
@@ -32,35 +33,12 @@ const props = defineProps({
 // el propio conductor con su gente en vez de que un cliente lo recomiende.
 // Mismo criterio contra el link duplicado que ese otro botón: el texto NUNCA
 // lleva la URL adentro, se arma un solo string con el link al final.
-function inviteMessageText() {
-    return '¡Hola! Soy conductor en Arka01 y le invito a agregarme a su flota de confianza para pedirme sus viajes.';
-}
-
+// Pedido explícito del usuario: "el cuadro de invite solo deja un enlace y
+// que sea el de WhatsApp" — se sacó la alternativa de "Compartir invitación"
+// genérica, queda un único botón.
 function shareInviteByWhatsApp() {
-    const message = `${inviteMessageText()} Puede hacerlo acá: ${route('referrals.show', props.inviteCode)}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-}
-
-const inviteLinkCopied = ref(false);
-async function shareInviteGeneric() {
-    const shareData = {
-        title: 'Súmeme a su flota en Arka01',
-        text: inviteMessageText(),
-        url: route('referrals.show', props.inviteCode),
-    };
-
-    if (navigator.share) {
-        try {
-            await navigator.share(shareData);
-        } catch {
-            // Cerró el panel de compartir sin elegir nada — no es un error.
-        }
-        return;
-    }
-
-    await navigator.clipboard.writeText(`${inviteMessageText()} Puede hacerlo acá: ${route('referrals.show', props.inviteCode)}`);
-    inviteLinkCopied.value = true;
-    setTimeout(() => (inviteLinkCopied.value = false), 2000);
+    const message = `¡Hola! Soy conductor en Arka01 y le invito a agregarme a su flota de confianza para pedirme sus viajes. Puede hacerlo acá: ${route('referrals.show', props.inviteCode)}`;
+    openWhatsAppChooser(message);
 }
 
 // Pedido explícito del usuario: "los conductores que puedan mandar invitación
@@ -218,20 +196,23 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
         <div class="py-12">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- Invitar a un cliente (pedido explícito del usuario) — mismo
-                     link público de "Referí a tu conductor", ahora compartible
-                     directo por WhatsApp desde acá. -->
-                <div v-if="inviteCode" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <h3 class="text-lg font-medium text-arka-text">Invite a un cliente</h3>
-                    <p class="mt-1 text-sm text-arka-text-muted">
-                        Comparta su enlace — quien lo abra puede sumarlo a su flota de confianza con un toque, o crear
-                        su cuenta si todavía no tiene.
-                    </p>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <SecondaryButton @click="shareInviteByWhatsApp">📲 Invitar por WhatsApp</SecondaryButton>
-                        <SecondaryButton @click="shareInviteGeneric">
-                            {{ inviteLinkCopied ? 'Enlace copiado' : 'Compartir invitación' }}
-                        </SecondaryButton>
+                     link público de "Referí a tu conductor". Minimizada a
+                     propósito (pedido explícito del usuario: "que quede tipo
+                     minimizado, quiero que sea limpio") — un solo botón, sin
+                     texto de más. -->
+                <div v-if="inviteCode" class="p-4 bg-arka-card shadow rounded-arka flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-medium text-arka-text">Invite a un cliente</h3>
+                        <p class="text-xs text-arka-text-muted truncate">Compártale su enlace de flota.</p>
                     </div>
+                    <SecondaryButton class="gap-1.5 shrink-0" @click="shareInviteByWhatsApp">
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z"
+                            />
+                        </svg>
+                        WhatsApp
+                    </SecondaryButton>
                 </div>
 
                 <!-- Buscar un cliente existente y mandarle la solicitud (pedido
@@ -265,9 +246,10 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         {{ client.name }}
                                         <span v-if="client.member_code" class="text-xs text-arka-text-muted">#{{ client.member_code }}</span>
                                     </p>
-                                    <p class="text-sm text-arka-text-muted">
-                                        {{ client.phone }}
-                                        <span v-if="client.username">· @{{ client.username }}</span>
+                                    <p v-if="client.city || client.username" class="text-sm text-arka-text-muted">
+                                        <span v-if="client.city">{{ client.city }}</span>
+                                        <span v-if="client.city && client.username"> · </span>
+                                        <span v-if="client.username">@{{ client.username }}</span>
                                     </p>
                                     <p class="text-xs text-arka-text-muted">
                                         <span v-if="client.review_count > 0" class="text-arka-lime">★ {{ client.average_rating.toFixed(1) }}</span>
@@ -277,7 +259,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             </div>
 
                             <PrimaryButton v-if="client.status === 'not_invited'" class="sm:shrink-0" @click="requestClient(client)">
-                                Mandar solicitud
+                                Enviar solicitud
                             </PrimaryButton>
                             <span v-else-if="client.status === 'pending'" class="text-sm text-arka-lime sm:shrink-0">
                                 Solicitud enviada

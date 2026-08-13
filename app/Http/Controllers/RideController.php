@@ -22,6 +22,7 @@ use App\Notifications\RidePickedUpPushNotification;
 use App\Notifications\RideReschedulePushNotification;
 use App\Notifications\RideRescheduleResponsePushNotification;
 use App\Notifications\RideStartedPushNotification;
+use App\Services\Haversine;
 use App\Services\RideDispatchAdvancer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -57,6 +58,47 @@ class RideController extends Controller
         'Motivo de seguridad',
         'Otro motivo',
     ];
+
+    /**
+     * Pedido explícito del usuario: "validá que las acciones del conductor
+     * en una carrera... estén acorde a la ubicación de origen [o] destino" —
+     * un radio generoso a propósito. El GPS de un celular en una ciudad
+     * puede errar 100-300 m fácil, y el pin de origen/destino que puso el
+     * cliente puede caer del otro lado de la cuadra — la idea es agarrar un
+     * "marcó llegada estando a kilómetros de ahí" real, no trabar a un
+     * conductor de verdad por un margen de error normal.
+     */
+    private const RIDE_ACTION_LOCATION_TOLERANCE_KM = 1.5;
+
+    /**
+     * Pedido explícito del usuario: "validá que las acciones del
+     * conductor... estén acorde a la ubicación de origen [o] destino" — el
+     * frontend manda la posición fresca del navegador en el momento mismo
+     * del clic (`Ride/Show.vue`, no la `driver_profiles.current_lat/lng` en
+     * vivo, que solo se actualiza mientras el conductor está "disponible" y
+     * podría estar vieja). Sin coordenadas (el navegador la negó, no la
+     * soporta, o dio timeout) NO se bloquea la acción — mismo criterio
+     * "permisivo si falta el dato" que ya usa `DriverProfile::isWithinRangeOf()`
+     * en el resto de la app: mejor dejar pasar una acción real que trabar a
+     * un conductor por un permiso que puede rechazar.
+     */
+    private function assertNearRideLocation(Request $request, float $targetLat, float $targetLng, string $message): void
+    {
+        if (! $request->filled('lat') || ! $request->filled('lng')) {
+            return;
+        }
+
+        $validated = $request->validate([
+            'lat' => ['numeric', 'between:-90,90'],
+            'lng' => ['numeric', 'between:-180,180'],
+        ]);
+
+        $distanceKm = Haversine::distanceKm($targetLat, $targetLng, (float) $validated['lat'], (float) $validated['lng']);
+
+        if ($distanceKm > self::RIDE_ACTION_LOCATION_TOLERANCE_KM) {
+            throw ValidationException::withMessages(['ride' => $message]);
+        }
+    }
 
     /**
      * "Carreras" (ítem de la barra inferior, sección 9.9): solicitudes
@@ -338,6 +380,13 @@ class RideController extends Controller
             ]);
         }
 
+        $this->assertNearRideLocation(
+            $request,
+            (float) $ride->origin_lat,
+            (float) $ride->origin_lng,
+            'Parece que todavía no está en el punto de origen — inténtelo cuando esté más cerca.',
+        );
+
         $ride->update(['arrived_at' => now()]);
 
         broadcast(new RideArrived($ride))->toOthers();
@@ -372,6 +421,13 @@ class RideController extends Controller
             ]);
         }
 
+        $this->assertNearRideLocation(
+            $request,
+            (float) $ride->origin_lat,
+            (float) $ride->origin_lng,
+            'Parece que todavía no está en el punto de origen — inténtelo cuando esté más cerca.',
+        );
+
         $ride->update(['picked_up_at' => now()]);
 
         broadcast(new RidePickedUp($ride))->toOthers();
@@ -401,6 +457,13 @@ class RideController extends Controller
                 'ride' => 'Esta carrera ya no está en curso.',
             ]);
         }
+
+        $this->assertNearRideLocation(
+            $request,
+            (float) $ride->destination_lat,
+            (float) $ride->destination_lng,
+            'Parece que todavía no está en el destino — inténtelo cuando esté más cerca.',
+        );
 
         // Puntos por carrera completada (pedido explícito del usuario:
         // fidelizar el uso de la app — cada carrera pedida y cumplida por

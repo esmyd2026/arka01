@@ -2,6 +2,15 @@
 // sin API key — se mantiene Leaflet/OpenStreetMap en vez de Google Maps para
 // no generar costos. Compartido entre las pantallas que muestran un mapa con
 // origen y destino (Pedir carrera, Expresos, Rutas y Turismo).
+//
+// Bug real detectado (probado a mano con dos rutas de Guayaquil contra este
+// mismo servidor OSRM): el precio se calculaba con la distancia en línea
+// recta (Haversine), pero el mapa siempre mostró la ruta real manejando —
+// en una de las pruebas la ruta real dio 4.9 km contra 1.6 km en línea
+// recta, más del triple. Ahora se devuelve también `distanceKm` (de la
+// misma respuesta de OSRM, antes se descartaba) para que quien haga el
+// pedido de carrera pueda usar la distancia real, no la de línea recta —
+// ver Ride/Request.vue y RideRequestController::store().
 export async function fetchOsrmRoute(originLat, originLng, destinationLat, destinationLng) {
     try {
         // fetch() nativo, NO window.axios (bug real reportado, veía errores de
@@ -14,11 +23,15 @@ export async function fetchOsrmRoute(originLat, originLng, destinationLat, desti
         const url = `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destinationLng},${destinationLat}?overview=full&geometries=geojson`;
         const response = await fetch(url);
         const data = await response.json();
-        const coords = data?.routes?.[0]?.geometry?.coordinates ?? [];
-        return coords.map(([lng, lat]) => ({ lat, lng }));
+        const route = data?.routes?.[0];
+        const coords = (route?.geometry?.coordinates ?? []).map(([lng, lat]) => ({ lat, lng }));
+        const distanceKm = typeof route?.distance === 'number' ? route.distance / 1000 : null;
+
+        return { coords, distanceKm };
     } catch {
         // Si el servicio gratuito de ruteo no responde, no rompemos el flujo —
-        // simplemente no se ve la línea del recorrido.
-        return [];
+        // simplemente no se ve la línea del recorrido, y quien llama se queda
+        // sin distancia real (cae de vuelta a la línea recta que ya calculaba).
+        return { coords: [], distanceKm: null };
     }
 }

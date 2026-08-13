@@ -10,6 +10,7 @@ import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierLabel } from '@/Utils/tierBadge';
+import { openWhatsAppChooser } from '@/Utils/whatsapp';
 
 const props = defineProps({
     fleet: { type: Object, required: true },
@@ -96,7 +97,7 @@ function inviteMessageText() {
 
 function shareInviteByWhatsApp() {
     const message = `${inviteMessageText()} Regístrese acá: ${route('register')}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+    openWhatsAppChooser(message);
 }
 
 const inviteLinkCopied = ref(false);

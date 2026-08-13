@@ -14,6 +14,11 @@ const form = useForm({
     night_surcharge_percent: props.settings.night_surcharge_percent,
     night_starts_at: props.settings.night_starts_at,
     night_ends_at: props.settings.night_ends_at,
+    peak_surcharge_percent: props.settings.peak_surcharge_percent,
+    peak_morning_starts_at: props.settings.peak_morning_starts_at,
+    peak_morning_ends_at: props.settings.peak_morning_ends_at,
+    peak_evening_starts_at: props.settings.peak_evening_starts_at,
+    peak_evening_ends_at: props.settings.peak_evening_ends_at,
     minimum_fare: props.settings.minimum_fare,
     average_ticket_price: props.settings.average_ticket_price,
     driver_stale_after_minutes: props.settings.driver_stale_after_minutes,
@@ -33,8 +38,8 @@ const submit = () => {
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <p class="text-sm text-arka-text-muted mb-6">
                         Precio sugerido = distancia × tarifa del conductor, más un recargo cuando la carrera se pide
-                        dentro del horario nocturno (sección 5). Esto se aplica a toda la plataforma — no hace falta
-                        tocar código para ajustarlo.
+                        dentro del horario nocturno o de hora pico (sección 5) — nunca los dos juntos, solo uno a la
+                        vez. Esto se aplica a toda la plataforma — no hace falta tocar código para ajustarlo.
                     </p>
 
                     <form @submit.prevent="submit" class="space-y-4">
@@ -98,6 +103,58 @@ const submit = () => {
                         </div>
                         <p class="text-xs text-arka-text-muted">
                             Puede cruzar la medianoche: por ejemplo, empieza 20 y termina 6 cubre de 8pm a 6am.
+                        </p>
+
+                        <!-- Hora pico (pedido explícito del usuario: "subir un
+                             poco las tarifas en las horas pico") — dos franjas,
+                             mañana y tarde, mismo criterio que el nocturno de
+                             arriba. Nunca se suma con el nocturno. -->
+                        <div class="pt-2 border-t border-arka-text-muted/10">
+                            <InputLabel value="Recargo de hora pico (%)" />
+                            <TextInput
+                                type="number"
+                                min="0"
+                                max="200"
+                                class="mt-1 block w-full"
+                                v-model="form.peak_surcharge_percent"
+                            />
+                            <InputError class="mt-1" :message="form.errors.peak_surcharge_percent" />
+                        </div>
+
+                        <div>
+                            <p class="text-sm text-arka-text-muted mb-2">Franja de la mañana</p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel value="Empieza (hora, 0-23)" />
+                                    <TextInput type="number" min="0" max="23" class="mt-1 block w-full" v-model="form.peak_morning_starts_at" />
+                                    <InputError class="mt-1" :message="form.errors.peak_morning_starts_at" />
+                                </div>
+                                <div>
+                                    <InputLabel value="Termina (hora, 0-23)" />
+                                    <TextInput type="number" min="0" max="23" class="mt-1 block w-full" v-model="form.peak_morning_ends_at" />
+                                    <InputError class="mt-1" :message="form.errors.peak_morning_ends_at" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p class="text-sm text-arka-text-muted mb-2">Franja de la tarde</p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel value="Empieza (hora, 0-23)" />
+                                    <TextInput type="number" min="0" max="23" class="mt-1 block w-full" v-model="form.peak_evening_starts_at" />
+                                    <InputError class="mt-1" :message="form.errors.peak_evening_starts_at" />
+                                </div>
+                                <div>
+                                    <InputLabel value="Termina (hora, 0-23)" />
+                                    <TextInput type="number" min="0" max="23" class="mt-1 block w-full" v-model="form.peak_evening_ends_at" />
+                                    <InputError class="mt-1" :message="form.errors.peak_evening_ends_at" />
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-arka-text-muted">
+                            Valores de fábrica: 7-9am y 5-7pm, los horarios pico típicos de una ciudad — ajústelos si
+                            no calzan con la realidad local.
                         </p>
 
                         <div class="pt-2 border-t border-arka-text-muted/10">

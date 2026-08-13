@@ -268,8 +268,37 @@ const pickupEta = computed(() => {
     return etaBetween(driverLat.value, driverLng.value, Number(props.ride.origin_lat), Number(props.ride.origin_lng));
 });
 
-function complete() {
-    router.post(route('rides.complete', props.ride.id), {}, { preserveScroll: true });
+// Pedido explícito del usuario: "validá que las acciones del conductor...
+// estén acorde a la ubicación de origen [o] destino" — se manda la posición
+// FRESCA del navegador en el momento mismo del clic (no la que ya viaja en
+// vivo por WebSocket, que puede tener hasta ~15 seg. de desfase). Si el
+// navegador la niega, no la soporta o tarda más de 8 seg., se manda igual
+// sin coordenadas — el backend no bloquea la acción cuando faltan (ver
+// RideController::assertNearRideLocation()), nunca hay que dejar a un
+// conductor sin poder completar una carrera real por un permiso que puede
+// rechazar.
+function currentCoords() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            resolve({});
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+            () => resolve({}),
+            { timeout: 8000, maximumAge: 30000 }
+        );
+    });
+}
+
+const completing = ref(false);
+async function complete() {
+    completing.value = true;
+    const coords = await currentCoords();
+    router.post(route('rides.complete', props.ride.id), coords, {
+        preserveScroll: true,
+        onFinish: () => (completing.value = false),
+    });
 }
 
 const statusLabel = {
@@ -287,12 +316,24 @@ function startRide() {
 // usuario): el conductor los marca de a uno, en orden — cada botón
 // desaparece apenas se marca, sin bloquear "Marcar como completada" si se
 // los saltea.
-function markArrived() {
-    router.post(route('rides.arrived', props.ride.id), {}, { preserveScroll: true });
+const markingArrived = ref(false);
+async function markArrived() {
+    markingArrived.value = true;
+    const coords = await currentCoords();
+    router.post(route('rides.arrived', props.ride.id), coords, {
+        preserveScroll: true,
+        onFinish: () => (markingArrived.value = false),
+    });
 }
 
-function markPickedUp() {
-    router.post(route('rides.picked-up', props.ride.id), {}, { preserveScroll: true });
+const markingPickedUp = ref(false);
+async function markPickedUp() {
+    markingPickedUp.value = true;
+    const coords = await currentCoords();
+    router.post(route('rides.picked-up', props.ride.id), coords, {
+        preserveScroll: true,
+        onFinish: () => (markingPickedUp.value = false),
+    });
 }
 
 // Cancelar una carrera ya aceptada (pedido explícito del usuario): al
@@ -801,17 +842,25 @@ function submitReview() {
                          explícito del usuario): uno a la vez, en orden — ninguno
                          de los dos bloquea "Marcar como completada" si el
                          conductor se los saltea. -->
-                    <SecondaryButton v-if="ride.status === 'in_progress' && isDriver && !ride.arrived_at" @click="markArrived">
-                        📍 Ya llegué
+                    <SecondaryButton
+                        v-if="ride.status === 'in_progress' && isDriver && !ride.arrived_at"
+                        :disabled="markingArrived"
+                        @click="markArrived"
+                    >
+                        📍 {{ markingArrived ? 'Ubicando…' : 'Ya llegué' }}
                     </SecondaryButton>
-                    <SecondaryButton v-if="ride.status === 'in_progress' && isDriver && ride.arrived_at && !ride.picked_up_at" @click="markPickedUp">
-                        🧍 Ya recogí al cliente
+                    <SecondaryButton
+                        v-if="ride.status === 'in_progress' && isDriver && ride.arrived_at && !ride.picked_up_at"
+                        :disabled="markingPickedUp"
+                        @click="markPickedUp"
+                    >
+                        🧍 {{ markingPickedUp ? 'Ubicando…' : 'Ya recogí al cliente' }}
                     </SecondaryButton>
 
                     <!-- Pedido explícito del usuario: la carrera la finaliza
                          ÚNICAMENTE el conductor, ya no cualquiera de las dos partes. -->
-                    <PrimaryButton v-if="ride.status === 'in_progress' && isDriver" @click="complete">
-                        Marcar como completada
+                    <PrimaryButton v-if="ride.status === 'in_progress' && isDriver" :disabled="completing" @click="complete">
+                        {{ completing ? 'Ubicando…' : 'Marcar como completada' }}
                     </PrimaryButton>
                     <p v-if="ride.status === 'in_progress' && !isDriver" class="text-sm text-arka-text-muted">
                         Esperando que el conductor marque la carrera como completada.

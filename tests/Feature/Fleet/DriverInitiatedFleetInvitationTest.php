@@ -3,6 +3,7 @@
 namespace Tests\Feature\Fleet;
 
 use App\Events\FleetInvitationCreated;
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetInvitation;
@@ -39,6 +40,25 @@ class DriverInitiatedFleetInvitationTest extends TestCase
         $byUsername = $this->actingAs($driver)
             ->getJson(route('driver.clients.search', ['q' => $client->username]));
         $byUsername->assertJsonPath('clients.0.user_id', $client->id);
+    }
+
+    /**
+     * Pedido explícito del usuario: "quitemos el número de teléfono y
+     * agreguemos mejor la ciudad" en los resultados del buscador.
+     */
+    public function test_search_results_expose_the_clients_city_instead_of_their_phone(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $city = City::query()->create(['name' => 'Guayaquil', 'is_active' => true]);
+        $client = User::factory()->create(['name' => 'María Torres', 'city_id' => $city->id]);
+
+        $response = $this->actingAs($driver)
+            ->getJson(route('driver.clients.search', ['q' => 'María']));
+
+        $response->assertOk();
+        $response->assertJsonPath('clients.0.city', 'Guayaquil');
+        $response->assertJsonMissingPath('clients.0.phone');
     }
 
     public function test_search_only_returns_clients_not_drivers_or_the_searching_driver(): void

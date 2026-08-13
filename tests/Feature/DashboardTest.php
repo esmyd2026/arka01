@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetInvitation;
@@ -104,6 +105,64 @@ class DashboardTest extends TestCase
                 && ! collect($drivers)->contains('user_id', $fleetMember->id)
                 && ! collect($drivers)->contains('user_id', $client->id)
             )
+        );
+    }
+
+    /**
+     * Pedido explícito del usuario: "conductores que quizás conozcas...
+     * cerca de donde viven" — si el navegador todavía no compartió
+     * ubicación en vivo esta vez (recién entrando, antes del reload de
+     * onMounted), se usa la que dio al registrarse.
+     */
+    public function test_nearby_drivers_falls_back_to_the_clients_registration_location(): void
+    {
+        $client = User::factory()->create([
+            'registration_lat' => -0.1807,
+            'registration_lng' => -78.4678,
+        ]);
+
+        $publicDriver = User::factory()->create();
+        DriverProfile::factory()->for($publicDriver)->create([
+            'is_public' => true,
+            'is_available' => true,
+            'current_lat' => -0.19,
+            'current_lng' => -78.47,
+        ]);
+
+        // Sin lat/lng por query string, como si el navegador todavía no
+        // hubiera compartido ubicación en vivo esta vez.
+        $response = $this->actingAs($client)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('nearbyDrivers.0.user_id', $publicDriver->id)
+            ->where('nearbyDrivers.0.distance_km', fn ($km) => $km !== null)
+        );
+    }
+
+    /**
+     * Pedido explícito del usuario: "buscar otra datos [que coincidan]" —
+     * sin ninguna coordenada de ningún lado, la misma ciudad declarada
+     * también cuenta como una coincidencia real.
+     */
+    public function test_nearby_drivers_falls_back_to_the_same_city_when_no_coordinates_are_available(): void
+    {
+        $quito = City::query()->create(['name' => 'Quito', 'is_active' => true]);
+        $guayaquil = City::query()->create(['name' => 'Guayaquil', 'is_active' => true]);
+
+        $client = User::factory()->create(['city_id' => $quito->id]);
+
+        $sameCityDriver = User::factory()->create(['city_id' => $quito->id]);
+        DriverProfile::factory()->for($sameCityDriver)->create(['is_public' => true, 'is_available' => true]);
+
+        $otherCityDriver = User::factory()->create(['city_id' => $guayaquil->id]);
+        DriverProfile::factory()->for($otherCityDriver)->create(['is_public' => true, 'is_available' => true]);
+
+        $response = $this->actingAs($client)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('nearbyDrivers.0.user_id', $sameCityDriver->id)
+            ->where('nearbyDrivers.0.same_city', true)
+            ->where('nearbyDrivers.1.same_city', false)
         );
     }
 
@@ -231,6 +290,38 @@ class DashboardTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->where('inviteCode', $driverProfile->invite_code)
             ->where('earningsSparkline', fn ($sparkline) => count($sparkline) === 14)
+        );
+    }
+
+    /**
+     * Pedido explícito del usuario: "que le muestre también la cantidad de $
+     * que ha hecho en el día y lo que lleva del mes" — earnings_today debe
+     * sumar solo las carreras completadas hoy, sin arrastrar las de otros
+     * días del mismo mes.
+     */
+    public function test_driver_stats_report_earnings_today_separately_from_the_month(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        Ride::factory()->create([
+            'driver_user_id' => $driver->id,
+            'status' => 'completed',
+            'completed_at' => now(),
+            'price' => 15,
+        ]);
+        Ride::factory()->create([
+            'driver_user_id' => $driver->id,
+            'status' => 'completed',
+            'completed_at' => now()->subDays(5),
+            'price' => 20,
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('driverStats.earnings_today', 15)
+            ->where('driverStats.earnings_this_month', 35)
         );
     }
 

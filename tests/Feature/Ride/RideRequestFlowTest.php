@@ -293,6 +293,65 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
+     * Bug real confirmado por el usuario ("probá el mapa... en temas de
+     * km"): la línea recta (Haversine) podía dar bastante menos que la
+     * distancia real de manejo — ahora se usa la distancia real que manda
+     * el frontend (misma ruta que ya se ve en el mapa, OSRM) en vez de la
+     * línea recta, siempre que sea razonable.
+     */
+    public function test_a_reasonable_route_distance_is_used_instead_of_the_straight_line(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        // La línea recta entre estas dos coordenadas da ~4.17 km — 5.5 km
+        // de ruta real es perfectamente razonable para una calle con curvas.
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'route_distance_km' => 5.5,
+        ]);
+
+        $this->assertSame(5.5, (float) RideRequest::firstOrFail()->distance_km);
+    }
+
+    public function test_a_route_distance_shorter_than_the_straight_line_is_ignored(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        // Ninguna ruta real puede ser MÁS CORTA que la línea recta (~4.17 km
+        // acá) — un valor menor es señal de un dato raro, no de confiar.
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'route_distance_km' => 2.0,
+        ]);
+
+        $this->assertSame(4.17, (float) RideRequest::firstOrFail()->distance_km);
+    }
+
+    public function test_an_absurdly_large_route_distance_is_ignored(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'route_distance_km' => 500,
+        ]);
+
+        $this->assertSame(4.17, (float) RideRequest::firstOrFail()->distance_km);
+    }
+
+    /**
      * Forma de pago (pedido explícito del usuario): el cliente todavía no
      * podía elegirla — "efectivo" queda de default si no manda nada.
      */
@@ -855,6 +914,113 @@ class RideRequestFlowTest extends TestCase
         $this->actingAs($driver)->post(route('rides.picked-up', $ride))->assertSessionHasErrors('ride');
     }
 
+    /**
+     * Pedido explícito del usuario: "validá que las acciones del
+     * conductor... estén acorde a la ubicación de origen" — si el navegador
+     * manda coordenadas a kilómetros del origen real, se bloquea la acción.
+     */
+    public function test_marking_arrival_is_blocked_when_the_driver_is_far_from_the_origin(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => null,
+            'origin_lat' => -2.1962,
+            'origin_lng' => -79.8862,
+        ]);
+
+        // A varios kilómetros del origen (fuera de la tolerancia de 1.5 km).
+        $this->actingAs($driver)
+            ->post(route('rides.arrived', $ride), ['lat' => -2.1614, 'lng' => -79.8998])
+            ->assertSessionHasErrors('ride');
+
+        $this->assertNull($ride->fresh()->arrived_at);
+    }
+
+    /**
+     * El mismo chequeo, pero dentro del margen de tolerancia (deriva normal
+     * de GPS en ciudad) sí debe dejar pasar la acción.
+     */
+    public function test_marking_arrival_succeeds_when_the_driver_is_near_the_origin(): void
+    {
+        Event::fake([RideArrived::class]);
+        Notification::fake();
+
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => null,
+            'origin_lat' => -2.1962,
+            'origin_lng' => -79.8862,
+        ]);
+
+        // A pocos metros del origen (dentro de la tolerancia de 1.5 km).
+        $this->actingAs($driver)
+            ->post(route('rides.arrived', $ride), ['lat' => -2.1965, 'lng' => -79.8865])
+            ->assertRedirect();
+
+        $this->assertNotNull($ride->fresh()->arrived_at);
+    }
+
+    /**
+     * Diseño deliberadamente permisivo (misma lógica que
+     * DriverProfile::isWithinRangeOf() en el resto de la app): si el
+     * navegador no manda coordenadas (permiso denegado, no soportado,
+     * timeout), la acción NO se bloquea — nunca dejar a un conductor sin
+     * poder avanzar una carrera real por un permiso que puede rechazar.
+     */
+    public function test_marking_arrival_is_not_blocked_when_no_coordinates_are_sent(): void
+    {
+        Event::fake([RideArrived::class]);
+        Notification::fake();
+
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => null,
+            'origin_lat' => -2.1962,
+            'origin_lng' => -79.8862,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.arrived', $ride))->assertRedirect();
+
+        $this->assertNotNull($ride->fresh()->arrived_at);
+    }
+
+    public function test_marking_pickup_is_blocked_when_the_driver_is_far_from_the_origin(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'arrived_at' => now(),
+            'picked_up_at' => null,
+            'origin_lat' => -2.1962,
+            'origin_lng' => -79.8862,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.picked-up', $ride), ['lat' => -2.1614, 'lng' => -79.8998])
+            ->assertSessionHasErrors('ride');
+
+        $this->assertNull($ride->fresh()->picked_up_at);
+    }
+
     public function test_accepting_a_ride_request_copies_the_sectors_into_the_ride(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
@@ -1044,6 +1210,49 @@ class RideRequestFlowTest extends TestCase
         $this->actingAs($client)->post(route('rides.complete', $ride))->assertForbidden();
 
         $this->assertSame('in_progress', $ride->fresh()->status);
+    }
+
+    /**
+     * Pedido explícito del usuario: "...y la [acción] de terminar acorde al
+     * destino" — completar la carrera exige estar cerca del destino, no del
+     * origen.
+     */
+    public function test_completing_a_ride_is_blocked_when_the_driver_is_far_from_the_destination(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'destination_lat' => -2.1614,
+            'destination_lng' => -79.8998,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.complete', $ride), ['lat' => -2.1962, 'lng' => -79.8862])
+            ->assertSessionHasErrors('ride');
+
+        $this->assertSame('in_progress', $ride->fresh()->status);
+    }
+
+    public function test_completing_a_ride_succeeds_when_the_driver_is_near_the_destination(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'destination_lat' => -2.1614,
+            'destination_lng' => -79.8998,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.complete', $ride), ['lat' => -2.1616, 'lng' => -79.8999])
+            ->assertRedirect();
+
+        $this->assertSame('completed', $ride->fresh()->status);
     }
 
     /**

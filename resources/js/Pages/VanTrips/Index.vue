@@ -142,7 +142,7 @@ watch(
             return;
         }
 
-        routeCoords.value = await fetchOsrmRoute(originLat, originLng, destLat, destLng);
+        routeCoords.value = (await fetchOsrmRoute(originLat, originLng, destLat, destLng)).coords;
     }
 );
 

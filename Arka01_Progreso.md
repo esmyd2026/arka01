@@ -2686,6 +2686,78 @@ Pedido explícito del usuario, con captura del bug: la tarjeta "Invitaciones rec
 
 ---
 
+### Botones más compactos en el admin, e ícono de compartir en la invitación
+
+Pedido explícito del usuario, con capturas: los botones de acción de `Admin/Subscriptions.vue` (Ver perfil/Activar) se veían demasiado grandes para una tabla, y el botón "Compartir invitación" de `Fleet/Show.vue` pidió un ícono más claro (eligió entre dos opciones mostradas: flecha de reenvío o nodos conectados).
+
+- **`size="sm"` en los tres botones base** (`PrimaryButton.vue`/`SecondaryButton.vue`/`DangerButton.vue`, nueva prop, default `'md'` — 100% compatible con todo el uso existente): variante compacta, sin mayúsculas ni `tracking-widest`, pensada para columnas de acciones densas. Aplicado en `Admin/Subscriptions.vue` y `Admin/Drivers.vue`.
+- **Ícono de compartir en "Compartir invitación"** (`Fleet/Show.vue`): se usó el de nodos conectados (share-nodes), el que el usuario eligió de las dos opciones mostradas.
+
+### Tests
+Sin pruebas nuevas — cambio puramente visual/Vue, sin lógica de negocio. Suite completa sin regresiones.
+
+---
+
+### Tarjeta de perfil profesional para cliente y conductor
+
+Pedido explícito del usuario, con capturas: quería que el perfil (`Profile/Edit.vue`, `Driver/Profile.vue`) se viera "profesional", con el mismo estilo de tarjeta que ya se usa al compartir un referido (`Referral/Show.vue`) — avatar, nombre, y un mensaje tipo "sos parte de Arka01".
+
+- **Tarjeta "hero" nueva arriba de las dos pantallas de perfil**: mismo lenguaje visual que la tarjeta de referidos (avatar circular, franja con la identidad de Arka01), con nombre, usuario/código de socio, calificación promedio, una frase (distinta para cliente/conductor) y "Miembro desde [fecha de alta]". El formulario de edición de siempre queda debajo, sin cambios de fondo.
+
+### Tests
+Sin pruebas nuevas — cambio puramente visual/Vue, sobre datos que los controllers ya entregaban. Suite completa sin regresiones.
+
+---
+
+### Conductores cercanos, tarifa de hora pico, distancia real y ubicación validada en las acciones de carrera
+
+Pedido explícito del usuario, con cuatro partes juntas: (1) mostrarle al cliente conductores de su zona ("conductores que quizás conozcas"); (2) validar que las acciones del conductor en una carrera (llegué / recogí / completé) coincidan con su ubicación real; (3) revisar si el cálculo de km de la app coincide con el de Google Maps; (4) poder subir la tarifa en horas pico, configurable desde el admin.
+
+**1) "Conductores que quizás conozcas"**: ~90% de esto ya existía, sin nombre visible para el usuario, como `DashboardController::nearbyDriversFor()`. Se le agregó una cadena de 3 niveles en vez de depender solo de la geolocalización en vivo: (a) coordenadas del navegador si las mandó la pantalla, (b) si no, la ubicación capturada al registrarse (`users.registration_lat/lng`), (c) si ni el cliente ni ningún conductor candidato tienen ninguna coordenada, se cae a "misma ciudad" (`users.city_id` igual). El orden final es: distancia conocida primero (cualquiera de los niveles a/b), después misma ciudad, después mejor calificado. La sección del Dashboard pasó a llamarse "Conductores que quizás conozcas", con un aviso "En su misma ciudad" cuando aplica el nivel (c).
+
+**2) Ubicación validada en las acciones de la carrera** (`RideController`): nuevo método privado `assertNearRideLocation()`, usado en `arrived()`/`pickedUp()` (contra el origen) y `complete()` (contra el destino). Diseño deliberado, no una validación estricta:
+   - **Tolerancia de 1.5 km**, generosa a propósito — el GPS de un celular en ciudad puede errar 100-300 m fácil, y el pin de origen/destino que puso el cliente puede caer del otro lado de la cuadra. La idea es agarrar un "marcó que llegó estando a kilómetros de ahí" real, no trabar a un conductor por un margen de error normal.
+   - **Permisivo si no hay coordenadas** (mismo criterio que ya usa `DriverProfile::isWithinRangeOf()` en el resto de la app): si el navegador no las mandó (las negó, no las soporta, o dio timeout), la acción NO se bloquea. Un conductor real nunca debería quedar sin poder terminar una carrera por un permiso de ubicación que puede rechazar — el riesgo de trabar a alguien de verdad pesa más que el de un abuso puntual, que además de por sí es poco probable (el conductor ya tiene la carrera asignada).
+   - `Ride/Show.vue` captura la posición **fresca** del navegador (`getCurrentPosition`, no la que ya viaja en vivo por WebSocket, que puede tener hasta ~15 s de desfase) en el momento mismo del clic de los tres botones, con un estado "Ubicando…" mientras resuelve.
+
+**3) Mapa/km: se encontró un desvío real**, no solo se "probó" — la app ya trazaba la ruta real con OSRM en el mapa, pero calculaba el precio con la distancia en línea recta (Haversine), no con la del trazado. Verificado con coordenadas reales de Guayaquil contra el servidor de OSRM: Parque Centenario → Mall del Sol dio 4.15 km en línea recta contra 6.43 km de ruta real (55% de diferencia); otro par dio 1.57 km contra 4.93 km (más del triple). **Arreglado**: el frontend ahora manda también la distancia real que ya calculó OSRM para trazar el mapa (`route_distance_km`), y el backend la usa para el precio cuando es razonable (entre 0.95x y 5x la distancia en línea recta — si viene ausente, rara, o absurda, se sigue usando Haversine como respaldo).
+
+**4) Tarifa de hora pico, configurable desde el admin**: mismo patrón que el recargo nocturno que ya existía (`PricingSetting`, fila única), pero con dos franjas (mañana y tarde) en vez de una, y **mutuamente excluyente con el recargo nocturno** (nunca se suman — si algún día se solaparan por una configuración rara, gana el nocturno). Nuevos campos en `/admin/tarifas`: porcentaje de recargo y horario de inicio/fin para la franja de la mañana y la de la tarde (por defecto 15%, 7-9 y 17-19).
+
+### Tests
+`tests/Feature/DashboardTest.php` (+2): conductores cercanos caen a la ubicación de registro cuando no hay coordenadas en vivo, y a "misma ciudad" cuando tampoco hay ninguna ubicación. `tests/Feature/Ride/RideRequestFlowTest.php` (+8): marcar llegada/recogida/completada se bloquea si la ubicación mandada está lejos del origen/destino, se acepta si está cerca (dentro de la tolerancia), y no se bloquea si no se mandó ninguna ubicación; distancia de ruta razonable se usa para el precio, una más corta que la línea recta se ignora, una absurdamente larga también. `tests/Feature/Admin/AdminPricingMaintenanceTest.php` (+4): recargo de hora pico se aplica en la franja de la mañana, en la de la tarde, no se aplica fuera de esas franjas, y el nocturno gana si alguna vez se solapan. Suite completa: 705 tests OK, Pint limpio, build limpio.
+
+**Pendiente de tu parte**: la migración nueva (`peak_surcharge_percent` y las 4 columnas de horario en `pricing_settings`) tampoco se pudo correr en la base local — mismo MySQL caído, corré `php artisan migrate` apenas lo levantes.
+
+---
+
+### Borrar carreras de prueba desde el admin, y ganancias del día en el Inicio del conductor
+
+Pedido explícito del usuario: poder depurar carreras de prueba (sueltas, programadas o de Expreso) desde el panel admin, con todo lo relacionado recalculado correctamente (reseñas, conteos, puntos); y mostrarle al conductor, en el mismo indicador de Inicio, cuánto lleva ganado hoy además de lo que ya mostraba del mes.
+
+- **Nueva pantalla `/admin/carreras`** (`Admin\RideController`, sin controller ni pantalla previos para esto): listado paginado con buscador (nombre/teléfono de cliente o conductor) y filtro por estado, botón "Eliminar" por fila con confirmación (`confirmDialog`, modo "danger").
+- **Qué se borra y qué se recalcula al eliminar una carrera** — investigado antes de tocar nada, no a ciegas: las reseñas, incidentes de Expreso, alertas SOS y mensajes del chat de esa carrera **ya tenían `cascadeOnDelete()`** en su llave foránea a `rides.id` desde que se crearon esas tablas, así que se van solos. El promedio de calificación y el conteo de carreras de conductor/cliente **nunca quedan en una columna cacheada** — se calculan siempre al vuelo con una consulta (`reviewsReceived()->avg('rating')`, `Ride::where(...)->count()`), así que también quedan correctos solos, sin ningún código extra. Lo único que sí exige un ajuste manual son los **puntos del conductor** (`driver_profiles.total_points`): es un contador que solo suma en `RideController::complete()`, nunca se recalcula solo — al borrar una carrera completada se le resta lo que esa carrera le había dado (nunca queda negativo). La **solicitud** (`ride_requests`) que originó la carrera también se borra (si venía de un Expreso, se borra solo la solicitud de ese día puntual, nunca la ruta recurrente `ExpressRoute`). Un `VanTrip` de "Viajes en VAN" **no** genera fila en `rides` — queda fuera de esta pantalla a propósito, no tiene nada que borrar acá.
+- **Nueva entrada de nav admin** "Carreras", cerca del resto de mantenimiento operativo.
+- **Ganancias del día en el Inicio del conductor**: nuevo dato `earnings_today` (`DashboardController`, mismo criterio que `earnings_this_month` ya existente, acotado a `whereDate('completed_at', today())`). La grilla de indicadores pasó de 4 a 5 tarjetas, con la de "Ganancias hoy" resaltada con un fondo suave para que se note como el dato "vivo" del día frente al acumulado del mes — sin tocar el resto del diseño de esa tarjeta.
+
+### Tests
+`tests/Feature/Admin/AdminRideTest.php` (nuevo, 6): un usuario normal no puede listar ni borrar carreras; el listado filtra por estado; borrar una carrera completada se lleva sus reseñas y la solicitud, resta los puntos que había dado (sin afectar los de otra carrera del mismo conductor), y el conteo/promedio del conductor quedan correctos solos; los puntos nunca bajan de 0; una carrera programada (sin puntos) se puede borrar sin tocar `total_points`. `tests/Feature/DashboardTest.php` (+1): `earnings_today` suma solo lo de hoy, sin arrastrar carreras de otros días del mismo mes. Suite completa: 712 tests OK, Pint limpio, build limpio.
+
+---
+
+### Buscador de clientes más limpio, tarjeta de invitación minimizada, y WhatsApp normal antes que Business
+
+Pedido explícito del usuario, con capturas de "Mis clientes de confianza" (lado conductor): sacar el teléfono de los resultados del buscador y mostrar la ciudad en su lugar; texto del botón a "Enviar solicitud"; la tarjeta "Invite a un cliente" con un solo enlace (el de WhatsApp, con su ícono) y bien minimizada; y un aviso de que al mandar por WhatsApp a veces abre WhatsApp Business en vez del normal.
+
+- **Ciudad en vez de teléfono** en los resultados de `DriverInvitationController::searchClients()` — dato menos sensible y más útil para diferenciar resultados parecidos. El teléfono ya no viaja en esa respuesta.
+- **Tarjeta "Invite a un cliente" minimizada**: una sola fila con el título, una frase corta, y un único botón "WhatsApp" con el ícono de la app (mismo SVG que ya usaba "Recomendar" en `Fleet/Show.vue`, reutilizado para que todos los botones de WhatsApp de la app se vean iguales) — se sacó la alternativa de "Compartir invitación" genérica.
+- **Bug real: WhatsApp Business se abría en vez del WhatsApp normal.** En Android, cuando el celular tiene las dos apps instaladas, el enlace universal `wa.me` lo resuelve el sistema operativo — a veces "gana" Business aunque no sea la preferida. Nueva `openWhatsAppChooser()` (`Utils/whatsapp.js`): en Android arma un intent nativo que apunta directo al paquete `com.whatsapp` (el normal), con el mismo link `wa.me` de siempre como respaldo si esa app no está instalada; fuera de Android (donde esta ambigüedad no existe) sigue abriendo el link de siempre tal cual. Aplicado en los dos botones de la app que abren WhatsApp sin un número puntual (el de "Invite a un cliente" acá, y el de "Invitar por WhatsApp" de `Fleet/Show.vue` del lado cliente) — es el mismo patrón duplicado en los dos lados, así que se corrigió en los dos de una.
+
+### Tests
+`tests/Feature/Fleet/DriverInitiatedFleetInvitationTest.php` (+1): los resultados del buscador traen la ciudad del cliente y ya no traen su teléfono. Nada de PHP para la tarjeta minimizada ni para `openWhatsAppChooser()` (cambios puramente de Vue/JS, sin forma de probar la resolución de apps de Android desde un test). Suite completa: 713 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

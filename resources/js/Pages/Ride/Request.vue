@@ -438,14 +438,25 @@ function clearDestination() {
 // en cuanto hay origen y destino marcados — ver Utils/osrmRoute.js, mismo
 // mecanismo que usan Expresos y Rutas y Turismo. ---
 const routeCoords = ref([]);
+// Bug real confirmado (pedido explícito del usuario: "probá el mapa... en
+// temas de km"): probando dos rutas reales de Guayaquil contra este mismo
+// servidor OSRM, la línea recta (Haversine) dio hasta un tercio de la
+// distancia real de manejo en calles con curvas o sin conexión directa. Acá
+// se guarda la distancia REAL de la ruta que ya se dibuja en el mapa, para
+// usarla en el estimado y mandarla al backend — ver estimatedDistanceKm más
+// abajo y submit().
+const routeDistanceKm = ref(null);
 
 watch([originLat, originLng, destinationLat, destinationLng], async () => {
     if (originLat.value == null || destinationLat.value == null) {
         routeCoords.value = [];
+        routeDistanceKm.value = null;
         return;
     }
 
-    routeCoords.value = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+    const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+    routeCoords.value = route.coords;
+    routeDistanceKm.value = route.distanceKm;
 });
 
 // --- Precio sugerido (sección 5): distancia × tarifa de referencia. Es una
@@ -455,7 +466,11 @@ watch([originLat, originLng, destinationLat, destinationLng], async () => {
 // conductor puntual, así que se usa el promedio de tarifas de la flota.
 const estimatedDistanceKm = computed(() => {
     if (originLat.value == null || destinationLat.value == null) return null;
-    return distanceKm(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+    // Se prefiere la distancia REAL de manejo (OSRM, la misma ruta ya
+    // dibujada en el mapa) apenas está disponible — la línea recta queda
+    // solo como estimación de arranque mientras se calcula, o de respaldo
+    // si el servicio de ruteo no responde (ver fetchOsrmRoute()).
+    return routeDistanceKm.value ?? distanceKm(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
 });
 
 const referenceRatePerKm = computed(() => {
@@ -516,6 +531,11 @@ const form = useForm({
     destination_lng: null,
     destination_address: '',
     destination_sector_id: null,
+    // Distancia real de manejo (OSRM), no la línea recta — pedido explícito
+    // del usuario: "probá el mapa... en temas de km" (ver el bug real
+    // documentado arriba, en routeDistanceKm). El backend la usa si es
+    // razonable, y cae de vuelta a Haversine si no llegó o no cierra.
+    route_distance_km: null,
     offered_price: null,
     is_scheduled: false,
     scheduled_date: '',
@@ -682,6 +702,7 @@ function submit() {
     form.destination_lng = destinationLng.value;
     form.destination_address = destinationAddress.value;
     form.destination_sector_id = destinationSectorId.value;
+    form.route_distance_km = routeDistanceKm.value;
     form.offered_price = useCustomPrice.value ? customPrice.value : null;
     form.is_scheduled = whenMode.value === 'scheduled';
     form.scheduled_date = whenMode.value === 'scheduled' ? scheduledDate.value : '';

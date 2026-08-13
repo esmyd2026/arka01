@@ -35,6 +35,11 @@ class AdminPricingMaintenanceTest extends TestCase
             'night_surcharge_percent' => 35,
             'night_starts_at' => 21,
             'night_ends_at' => 5,
+            'peak_surcharge_percent' => 20,
+            'peak_morning_starts_at' => 7,
+            'peak_morning_ends_at' => 9,
+            'peak_evening_starts_at' => 17,
+            'peak_evening_ends_at' => 19,
             'minimum_fare' => 2.5,
             'average_ticket_price' => 3.5,
             'driver_stale_after_minutes' => 5,
@@ -44,6 +49,11 @@ class AdminPricingMaintenanceTest extends TestCase
             'night_surcharge_percent' => 35,
             'night_starts_at' => 21,
             'night_ends_at' => 5,
+            'peak_surcharge_percent' => 20,
+            'peak_morning_starts_at' => 7,
+            'peak_morning_ends_at' => 9,
+            'peak_evening_starts_at' => 17,
+            'peak_evening_ends_at' => 19,
             'minimum_fare' => 2.5,
             'average_ticket_price' => 3.5,
             'driver_stale_after_minutes' => 5,
@@ -63,6 +73,11 @@ class AdminPricingMaintenanceTest extends TestCase
             'night_surcharge_percent' => 20,
             'night_starts_at' => 20,
             'night_ends_at' => 6,
+            'peak_surcharge_percent' => 15,
+            'peak_morning_starts_at' => 7,
+            'peak_morning_ends_at' => 9,
+            'peak_evening_starts_at' => 17,
+            'peak_evening_ends_at' => 19,
             'minimum_fare' => 2,
             'average_ticket_price' => 3,
             'driver_stale_after_minutes' => 10,
@@ -99,6 +114,69 @@ class AdminPricingMaintenanceTest extends TestCase
         $this->assertTrue($result['is_night']);
         $this->assertEquals(10.0, $result['base']);
         $this->assertEquals(5.0, $result['night_surcharge']);
+        $this->assertEquals(15.0, $result['total']);
+    }
+
+    /**
+     * Pedido explícito del usuario: "subir un poco las tarifas en las horas
+     * pico" — dos franjas por día, mañana y tarde.
+     */
+    public function test_price_calculator_applies_the_peak_surcharge_in_the_morning_window(): void
+    {
+        PricingSetting::current()->update(['peak_surcharge_percent' => 20]);
+
+        $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 08:00:00'));
+
+        $this->assertTrue($result['is_peak']);
+        $this->assertFalse($result['is_night']);
+        $this->assertEquals(10.0, $result['base']);
+        $this->assertEquals(2.0, $result['peak_surcharge']);
+        $this->assertEquals(0.0, $result['night_surcharge']);
+        $this->assertEquals(12.0, $result['total']);
+    }
+
+    public function test_price_calculator_applies_the_peak_surcharge_in_the_evening_window(): void
+    {
+        PricingSetting::current()->update(['peak_surcharge_percent' => 20]);
+
+        $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 18:00:00'));
+
+        $this->assertTrue($result['is_peak']);
+        $this->assertEquals(12.0, $result['total']);
+    }
+
+    public function test_price_calculator_does_not_apply_the_peak_surcharge_outside_its_windows(): void
+    {
+        PricingSetting::current()->update(['peak_surcharge_percent' => 20]);
+
+        $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 12:00:00'));
+
+        $this->assertFalse($result['is_peak']);
+        $this->assertEquals(0.0, $result['peak_surcharge']);
+        $this->assertEquals(10.0, $result['total']);
+    }
+
+    /**
+     * Nocturno y pico nunca se suman — si por una configuración rara
+     * llegaran a solaparse, gana el nocturno.
+     */
+    public function test_the_night_surcharge_takes_priority_over_the_peak_surcharge_when_they_overlap(): void
+    {
+        PricingSetting::current()->update([
+            'night_surcharge_percent' => 50,
+            'peak_surcharge_percent' => 20,
+            'night_starts_at' => 6,
+            'night_ends_at' => 10,
+            'peak_morning_starts_at' => 7,
+            'peak_morning_ends_at' => 9,
+        ]);
+
+        $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 08:00:00'));
+
+        $this->assertTrue($result['is_night']);
+        $this->assertFalse($result['is_peak']);
+        $this->assertEquals(5.0, $result['night_surcharge']);
+        $this->assertEquals(0.0, $result['peak_surcharge']);
         $this->assertEquals(15.0, $result['total']);
     }
 }
