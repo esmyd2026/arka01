@@ -5,6 +5,7 @@ import SubscriptionSummary from './Partials/SubscriptionSummary.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import RatingStars from '@/Components/RatingStars.vue';
 import ShareProfileQr from '@/Components/ShareProfileQr.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -46,6 +47,11 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    // Tarjeta de perfil "profesional" (pedido explícito del usuario, mismo
+    // lenguaje visual que Referral/Show.vue) — su propia reputación, igual
+    // que ese conductor la mostraba.
+    averageRating: { type: Number, required: true },
+    reviewCount: { type: Number, required: true },
 });
 
 // Compartir mi perfil (pedido explícito del usuario, con captura de
@@ -95,6 +101,31 @@ async function switchToClient() {
 
         <div class="py-12">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <!-- Tarjeta de perfil (pedido explícito del usuario: "algo así
+                     profesional como en las tarjetas cuando se comparten
+                     referidos") — mismo lenguaje visual que Referral/Show.vue:
+                     avatar grande, nombre, reputación, y una frase que resuma
+                     qué es esta cuenta en Arka01. -->
+                <div class="max-w-sm mx-auto bg-arka-card shadow-md rounded-arka p-6 text-center space-y-3">
+                    <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl" />
+                    <div>
+                        <p class="text-lg font-semibold text-arka-text">{{ $page.props.auth.user.name }}</p>
+                        <p class="text-sm text-arka-text-muted">
+                            @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
+                        </p>
+                    </div>
+                    <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
+                    <p class="text-sm text-arka-primary-bright font-medium">🤝 Es parte del círculo de confianza de Arka01</p>
+                    <p class="text-sm text-arka-text-muted">
+                        Arme su flota de conductores de confianza y pida sus viajes dentro de ese círculo, sin
+                        comisión de la plataforma.
+                    </p>
+                    <p class="text-xs text-arka-text-muted">
+                        Miembro desde
+                        {{ new Date($page.props.auth.user.created_at).toLocaleDateString('es-EC', { dateStyle: 'long' }) }}
+                    </p>
+                </div>
+
                 <!-- Tarjetas sobre fondo de tarjeta (arka-card), consistente con el resto de la interfaz -->
                 <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
                     <UpdateProfileInformationForm
@@ -105,30 +136,19 @@ async function switchToClient() {
                     />
                 </div>
 
-                <!-- Cuenta (pedido explícito del usuario): usuario y código de
-                     socio siempre visibles acá, más los accesos que antes solo
-                     estaban en el menú desplegable del header. -->
+                <!-- Cuenta (pedido explícito del usuario): accesos que antes
+                     solo estaban en el menú desplegable del header, también
+                     acá. Usuario/código de socio ya se muestran arriba, en la
+                     tarjeta de perfil — sin repetirlos acá. -->
                 <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
                     <h2 class="text-lg font-medium text-arka-text">Cuenta</h2>
-
-                    <dl class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl text-sm">
-                        <div>
-                            <dt class="text-arka-text-muted">Su usuario</dt>
-                            <dd class="text-arka-text font-medium">@{{ $page.props.auth.user.username }}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-arka-text-muted">
-                                Código de socio
-                                <!-- Pedido explícito del usuario ("¿este código es el
-                                     mismo con el que me buscan?"): aclarado a
-                                     propósito — es un código distinto al del link de
-                                     invitación (ese es más largo, ver "Compartir mi
-                                     perfil" abajo). -->
-                                <span class="block text-xs">(con este lo encuentran en el buscador)</span>
-                            </dt>
-                            <dd class="text-arka-text font-medium">#{{ $page.props.auth.user.member_code }}</dd>
-                        </div>
-                    </dl>
+                    <!-- Pedido explícito del usuario ("¿este código es el mismo con
+                         el que me buscan?"): aclarado a propósito — el código de
+                         socio de arriba es distinto al del link de invitación (más
+                         largo, ver "Compartir mi perfil" abajo). -->
+                    <p class="mt-1 text-sm text-arka-text-muted">
+                        Con su código de socio (arriba) lo encuentran en el buscador de flotas.
+                    </p>
 
                     <!-- Verificar teléfono (pedido explícito del usuario: que el
                          cliente también pueda, no solo quedar bloqueado esperando

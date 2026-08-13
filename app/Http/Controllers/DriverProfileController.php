@@ -63,6 +63,11 @@ class DriverProfileController extends Controller
 
         return Inertia::render('Driver/Profile', [
             'driverProfile' => $request->user()->driverProfile,
+            // Pedido explícito del usuario: tarjeta de perfil "profesional"
+            // arriba de todo, mismo lenguaje visual que la tarjeta de "Te
+            // recomendaron viajar con..." (Referral/Show.vue).
+            'averageRating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
+            'reviewCount' => $user->reviewsReceived()->count(),
             // Catálogo fijo para el selector de "Tipo de vehículo" (pedido
             // explícito del usuario) — ver DriverProfile::vehicleTypes().
             'vehicleTypes' => DriverProfile::vehicleTypes(),

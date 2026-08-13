@@ -9,6 +9,8 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import Checkbox from '@/Components/Checkbox.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
+import RatingStars from '@/Components/RatingStars.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
@@ -53,6 +55,10 @@ const props = defineProps({
     // confidencialidad en las pantallas públicas — este dato reemplaza a la
     // foto y a la placa completa como lo que sí se muestra al cliente).
     vehicleTypes: { type: Object, required: true },
+    // Tarjeta de perfil "profesional" (pedido explícito del usuario, mismo
+    // lenguaje visual que Referral/Show.vue).
+    averageRating: { type: Number, required: true },
+    reviewCount: { type: Number, required: true },
 });
 
 const WHATSAPP_STATUS_LABEL = { active: 'Activa', expiring_soon: 'Próxima a vencer', expired: 'Expirada' };
@@ -274,6 +280,42 @@ const VERIFICATION_LABELS = {
 
         <div class="py-12">
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <!-- Tarjeta de perfil (pedido explícito del usuario: "algo así
+                     profesional como en las tarjetas cuando se comparten
+                     referidos") — mismo lenguaje visual que Referral/Show.vue,
+                     la misma tarjeta que ve un cliente cuando lo recomiendan. -->
+                <div class="max-w-sm mx-auto bg-arka-card shadow-md rounded-arka p-6 text-center space-y-3">
+                    <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl" />
+                    <div>
+                        <p class="text-lg font-semibold text-arka-text flex items-center justify-center gap-1.5">
+                            {{ $page.props.auth.user.name }}
+                            <span
+                                v-if="driverProfile?.verification_status === 'approved'"
+                                class="text-arka-primary-bright text-sm"
+                                title="Conductor verificado"
+                            >✓</span>
+                        </p>
+                        <p class="text-sm text-arka-text-muted">
+                            @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
+                        </p>
+                    </div>
+                    <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
+                    <p v-if="driverProfile?.vehicle_make" class="text-sm text-arka-text-muted">
+                        {{ driverProfile.vehicle_make }} {{ driverProfile.vehicle_model }}
+                    </p>
+                    <p class="text-sm text-arka-primary-bright font-medium">
+                        {{ driverProfile ? '🚗 Conductor en Arka01' : '🚗 Activando su perfil de conductor en Arka01' }}
+                    </p>
+                    <p class="text-sm text-arka-text-muted">
+                        Suma clientes de confianza y cobra sus viajes dentro de ese círculo, sin comisión de la
+                        plataforma.
+                    </p>
+                    <p class="text-xs text-arka-text-muted">
+                        Miembro desde
+                        {{ new Date($page.props.auth.user.created_at).toLocaleDateString('es-EC', { dateStyle: 'long' }) }}
+                    </p>
+                </div>
+
                 <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
                     <header class="mb-6">
                         <!-- Pedido explícito del usuario ("pasarme a conductor
@@ -296,20 +338,8 @@ const VERIFICATION_LABELS = {
                             cliente"). Complete estos datos para que otros clientes puedan invitarlo a sus flotas.
                         </p>
 
-                        <!-- Usuario y código de socio (pedido explícito del usuario):
-                             el que usan los clientes para encontrarlo en el buscador —
-                             distinto del código de invitación de más abajo, que es
-                             para el link directo. -->
-                        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                            <div>
-                                <dt class="text-arka-text-muted">Su usuario</dt>
-                                <dd class="text-arka-text font-medium">@{{ $page.props.auth.user.username }}</dd>
-                            </div>
-                            <div>
-                                <dt class="text-arka-text-muted">Código de socio <span class="block text-xs">(con este lo buscan)</span></dt>
-                                <dd class="text-arka-text font-medium">#{{ $page.props.auth.user.member_code }}</dd>
-                            </div>
-                        </dl>
+                        <!-- Usuario y código de socio: ya se muestran arriba, en la
+                             tarjeta de perfil — sin repetirlos acá. -->
 
                         <div v-if="!driverProfile?.deactivated_at" class="mt-4 flex flex-wrap gap-2">
                             <SecondaryButton v-if="canInstallApp" @click="installAppNow">Instalar app</SecondaryButton>

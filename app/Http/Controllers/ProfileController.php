@@ -30,6 +30,12 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
+            // Pedido explícito del usuario: una tarjeta de perfil "profesional"
+            // arriba de todo, mismo lenguaje visual que la tarjeta de "Te
+            // recomendaron viajar con..." (Referral/Show.vue) — necesita su
+            // propia reputación, igual que ese conductor la mostraba.
+            'averageRating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
+            'reviewCount' => $user->reviewsReceived()->count(),
             // Ciudad donde vive (consideración agregada al alcance): arranca
             // por defecto la solicitud de carrera en esa ciudad.
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),

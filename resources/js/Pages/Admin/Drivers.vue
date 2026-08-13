@@ -149,8 +149,10 @@ function reactivate(driver) {
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(d.registered_at) }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(d.last_active_at) }}</td>
                                     <td class="py-2">
-                                        <DangerButton v-if="!d.is_suspended" @click="suspend(d)">Suspender</DangerButton>
-                                        <PrimaryButton v-else @click="reactivate(d)">Reactivar</PrimaryButton>
+                                        <!-- Mismo criterio que Admin/Subscriptions.vue (pedido
+                                             explícito del usuario: botones más chicos en tablas). -->
+                                        <DangerButton v-if="!d.is_suspended" size="sm" @click="suspend(d)">Suspender</DangerButton>
+                                        <PrimaryButton v-else size="sm" @click="reactivate(d)">Reactivar</PrimaryButton>
                                     </td>
                                 </tr>
                             </tbody>

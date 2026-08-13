@@ -466,18 +466,23 @@ function clientPlanOf(user) {
                                         {{ new Date(user.updated_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
                                     </td>
                                     <td class="px-4 sm:px-6 py-3">
+                                        <!-- Pedido explícito del usuario ("mejorar esos estilos de
+                                             botones", con captura): los botones de tamaño normal se
+                                             veían pesados y repetitivos fila tras fila — acá alcanza
+                                             con la variante compacta (size="sm"), mismo color/semántica
+                                             pero a la escala de una tabla, no de una acción sola. -->
                                         <div class="flex items-center justify-end gap-2 flex-wrap">
                                             <Link
                                                 :href="route('admin.users.show', user.id)"
-                                                class="text-xs text-arka-primary hover:text-arka-primary-bright"
+                                                class="text-xs font-medium text-arka-primary hover:text-arka-primary-bright"
                                             >
                                                 Ver perfil
                                             </Link>
-                                            <PrimaryButton v-if="user.role !== 'admin'" @click="openActivation(user)">Activar</PrimaryButton>
-                                            <DangerButton v-if="driverPlanOf(user)" @click="expireSubscription(driverPlanOf(user).id)">
+                                            <PrimaryButton v-if="user.role !== 'admin'" size="sm" @click="openActivation(user)">Activar</PrimaryButton>
+                                            <DangerButton v-if="driverPlanOf(user)" size="sm" @click="expireSubscription(driverPlanOf(user).id)">
                                                 Baja
                                             </DangerButton>
-                                            <DangerButton v-if="clientPlanOf(user)" @click="expireSubscription(clientPlanOf(user).id)">
+                                            <DangerButton v-if="clientPlanOf(user)" size="sm" @click="expireSubscription(clientPlanOf(user).id)">
                                                 Baja
                                             </DangerButton>
                                         </div>
