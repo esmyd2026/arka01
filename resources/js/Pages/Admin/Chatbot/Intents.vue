@@ -249,7 +249,7 @@ async function removeKeyword(keyword) {
                                 <Checkbox v-model:checked="form.show_in_menu" /> Mostrar como botón del menú principal
                             </label>
                             <div v-if="form.show_in_menu">
-                                <InputLabel value="Texto del botón (ej: 🚗 Quiero ser conductor)" />
+                                <InputLabel value="Texto del botón (ej:  Quiero ser conductor)" />
                                 <TextInput class="mt-1 block w-full" v-model="form.menu_label" />
                             </div>
                             <div v-if="!ACTION_LABEL[intent.action]">

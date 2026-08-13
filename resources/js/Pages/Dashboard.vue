@@ -531,7 +531,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     </div>
 
                     <!-- Compartí tu código (consideración agregada al alcance): mismo
-                         invite_code que ya existe con QR en Mi perfil de conductor. -->
+                         invite_code que ya existe con QR en Mi perfil de conductor.
                     <div v-if="inviteCode" class="p-4 bg-arka-card shadow rounded-arka flex items-center justify-between gap-4">
                         <div class="min-w-0">
                             <p class="text-arka-text font-medium">Comparta su código</p>
@@ -541,7 +541,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <SecondaryButton class="shrink-0" @click="copyInviteCode">
                             {{ codeCopied ? 'Copiado' : 'Copiar' }}
                         </SecondaryButton>
-                    </div>
+                    </div>-->
 
                     <!-- Próximos viajes -->
                     <div v-if="upcomingTrips" class="space-y-2">

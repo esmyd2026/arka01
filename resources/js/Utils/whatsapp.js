@@ -12,7 +12,7 @@
 // (pedido explícito del usuario: "si el número es diferente, indicále").
 export function buildWhatsAppOptInUrl(businessNumber, userId) {
     if (!businessNumber) return null;
-    const message = `Buen día, inicio mi turno en Arka01 🚗 (ref:${userId})`;
+    const message = `Buen día, inicio mi turno en Arka01  (ref:${userId})`;
     return `https://wa.me/${businessNumber}?text=${encodeURIComponent(message)}`;
 }
 

@@ -31,7 +31,7 @@ const props = defineProps({
 // invite_code de siempre, no uno nuevo por referido.
 function whatsappReferralUrl(member) {
     const url = route('referrals.show', member.driver.driver_profile.invite_code);
-    const text = `¡Hola! Le recomiendo a ${member.driver.name} como conductor de confianza en Arka01 🚗\n\nPuede agregarlo a su propia flota acá: ${url}`;
+    const text = `¡Hola! Le recomiendo a ${member.driver.name} como conductor de confianza en Arka01 \n\nPuede agregarlo a su propia flota acá: ${url}`;
 
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
@@ -88,7 +88,7 @@ const showNotRegisteredYet = computed(
 // dos veces. Ahora el texto NUNCA lleva el link adentro: para wa.me se arma
 // un solo string con el link al final (una sola vez); para compartir
 // genérico, el link va solo en el campo `url`, nunca repetido en `text`.
-// También se sacó el emoji 🚗 (reportado como un ícono roto/"�" en algunos
+// También se sacó el emoji  (reportado como un ícono roto/"�" en algunos
 // teléfonos — no vale la pena el riesgo por un detalle cosmético).
 function inviteMessageText() {
     return '¡Hola! Le invito a unirse a Arka01, la app para armar su propia flota de conductores de confianza.';

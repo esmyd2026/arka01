@@ -116,7 +116,7 @@ const whatsappInviteUrl = computed(() => {
     const name = usePage().props.auth.user.name;
     const link = route('referrals.show', props.driverProfile.invite_code);
     const text =
-        `¡Hola! Soy ${name} y ya estoy en Arka01 🚗 — la app donde cada quien arma su propia ` +
+        `¡Hola! Soy ${name} y ya estoy en Arka01  — la app donde cada quien arma su propia ` +
         `flota de conductores de confianza, sin desconocidos.\n\n` +
         `Únase a Arka01 y regístreme en su flota para que me busque cuando necesite una carrera:\n${link}`;
 

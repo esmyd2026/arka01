@@ -516,7 +516,7 @@ function submitReview() {
                         <p class="text-sm text-arka-text-muted">Llegó al punto de encuentro, acérquese cuando pueda.</p>
                     </template>
                     <template v-else>
-                        <p class="font-semibold text-arka-primary-bright">🚗 Su conductor ya va en camino</p>
+                        <p class="font-semibold text-arka-primary-bright"> Su conductor ya va en camino</p>
                         <p v-if="pickupEta" class="text-sm text-arka-text-muted">
                             Está a {{ pickupEta.km.toFixed(1) }} km, llega en unos {{ pickupEta.minutes }} min.
                         </p>

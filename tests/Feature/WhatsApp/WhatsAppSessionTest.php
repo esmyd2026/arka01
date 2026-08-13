@@ -158,7 +158,7 @@ class WhatsAppSessionTest extends TestCase
                 'changes' => [[
                     'value' => ['messages' => [[
                         'from' => '593991234567',
-                        'text' => ['body' => "Buen día, inicio mi turno en Arka01 🚗 (ref:{$driver->id})"],
+                        'text' => ['body' => "Buen día, inicio mi turno en Arka01 (ref:{$driver->id})"],
                         'type' => 'text',
                     ]]],
                 ]],
@@ -187,7 +187,7 @@ class WhatsAppSessionTest extends TestCase
                 'changes' => [[
                     'value' => ['messages' => [[
                         'from' => '593991234567',
-                        'text' => ['body' => "Buen día, inicio mi turno en Arka01 🚗 (ref:{$driver->id})"],
+                        'text' => ['body' => "Buen día, inicio mi turno en Arka01  (ref:{$driver->id})"],
                         'type' => 'text',
                     ]]],
                 ]],
@@ -219,7 +219,7 @@ class WhatsAppSessionTest extends TestCase
                 'changes' => [[
                     'value' => ['messages' => [[
                         'from' => '593991234567',
-                        'text' => ['body' => "Buen día, inicio mi turno en Arka01 🚗 (ref:{$otherUser->id})"],
+                        'text' => ['body' => "Buen día, inicio mi turno en Arka01  (ref:{$otherUser->id})"],
                         'type' => 'text',
                     ]]],
                 ]],
@@ -248,7 +248,7 @@ class WhatsAppSessionTest extends TestCase
                 'changes' => [[
                     'value' => ['messages' => [[
                         'from' => '593991234567',
-                        'text' => ['body' => "Buen día, inicio mi turno en Arka01 🚗 (ref:{$phoneOwner->id})"],
+                        'text' => ['body' => "Buen día, inicio mi turno en Arka01  (ref:{$phoneOwner->id})"],
                         'type' => 'text',
                     ]]],
                 ]],
@@ -268,7 +268,7 @@ class WhatsAppSessionTest extends TestCase
                 'changes' => [[
                     'value' => ['messages' => [[
                         'from' => '593991234567',
-                        'text' => ['body' => 'Buen día, inicio mi turno en Arka01 🚗 (ref:999999)'],
+                        'text' => ['body' => 'Buen día, inicio mi turno en Arka01  (ref:999999)'],
                         'type' => 'text',
                     ]]],
                 ]],

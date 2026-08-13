@@ -96,7 +96,7 @@ class WhatsAppFreeformSender
             ? max(0, $rideRequest->current_offer_expires_at->getTimestamp() - now()->getTimestamp())
             : null;
 
-        $message = "🚗 ¡Carrera nueva de {$rideRequest->client->name}!\n"
+        $message = " ¡Carrera nueva de {$rideRequest->client->name}!\n"
             .'Recogida: '.($rideRequest->origin_address ?? 'ver en la app')."\n"
             .($distanceKm !== null ? "Distancia: {$distanceKm} km\n" : '')
             ."Valor aproximado: \${$rideRequest->current_offered_price}\n"

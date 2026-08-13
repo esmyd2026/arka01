@@ -61,7 +61,7 @@ return new class extends Migration
                 'Para eso usá el link "¿Olvidó su contraseña?" en la pantalla de inicio de sesión de Arka01 — te mandamos un correo para elegir una nueva.', null],
             ['INFORMACION_CLIENTE', 'Soy cliente', 'ambos', true, '👤 Soy cliente', 50,
                 "Como cliente armás tu \"flota de confianza\" de conductores e invitás a los que ya conocés, o pedís una carrera al directorio público. El precio se calcula por distancia × la tarifa de cada conductor, siempre visible antes de confirmar.\n\n¿Ya tenés cuenta o querés crear una?", null],
-            ['INFORMACION_CONDUCTOR', 'Quiero ser conductor', 'ambos', true, '🚗 Quiero ser conductor', 60,
+            ['INFORMACION_CONDUCTOR', 'Quiero ser conductor', 'ambos', true, ' Quiero ser conductor', 60,
                 "¡Perfecto! Como conductor recibís solicitudes de carrera de tus clientes de confianza y del directorio público, con tu propia tarifa por km. Hace falta activar tu perfil de conductor con tus datos de vehículo y subir tu licencia — un admin lo revisa antes de que aparezcas verificado.\n\nEscribime \"documentos\" si querés el detalle de qué necesitás subir, o creá tu cuenta desde arka01.com.", null],
             ['DOCUMENTOS_CONDUCTOR', 'Documentos de conductor', 'conductor', false, null, 70,
                 'Necesitás: foto de tu licencia de conducir y foto de tu vehículo, desde "Mi perfil de conductor" en la app. Un admin las revisa manualmente antes de que tu cuenta quede verificada — mientras tanto podés seguir recibiendo carreras con normalidad.', null],

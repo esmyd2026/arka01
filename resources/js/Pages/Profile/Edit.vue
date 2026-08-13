@@ -54,7 +54,7 @@ const props = defineProps({
 // foto y nombre solo, leyendo las etiquetas og:* de Profile/Show.vue (ver
 // PublicProfileController::show()).
 const whatsappShareUrl = computed(() => {
-    const text = `¡Hola! Soy ${usePage().props.auth.user.name} en Arka01 🚗\n\nMirá mi perfil:\n${props.profileUrl}`;
+    const text = `¡Hola! Soy ${usePage().props.auth.user.name} en Arka01 \n\nMirá mi perfil:\n${props.profileUrl}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 });
 
