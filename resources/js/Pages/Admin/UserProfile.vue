@@ -19,6 +19,7 @@ const props = defineProps({
     driverTier: { type: Object, default: null },
     clientPlan: { type: Object, default: null },
     fleetsOwned: { type: Array, required: true },
+    driverClients: { type: Array, required: true },
     averageRating: { type: Number, required: true },
     reviewCount: { type: Number, required: true },
     recentReviews: { type: Array, required: true },
@@ -72,6 +73,15 @@ const canDelete = computed(
 function destroyAccount() {
     if (!canDelete.value) return;
     deleteForm.delete(route('admin.users.destroy', props.profileUser.id));
+}
+
+// Pedido explícito del usuario: "ver el detalle de los clientes que tiene
+// cada conductor... y que pueda eliminarle" — mismo mecanismo que ya usa el
+// propio cliente para sacar a un conductor de su flota, disparado acá por
+// un admin.
+async function removeClient(member) {
+    if (!(await confirmDialog(`¿Sacar a ${member.client_name} de la flota de ${props.profileUser.name}?`, { danger: true }))) return;
+    router.delete(route('admin.users.remove-client', [props.profileUser.id, member.member_id]), { preserveScroll: true });
 }
 </script>
 
@@ -203,6 +213,43 @@ function destroyAccount() {
                         <p class="text-sm text-arka-text">Plan {{ driverPlan.plan_name }}</p>
                         <p class="text-xs text-arka-text-muted">{{ subscriptionLine(driverPlan) }}</p>
                     </div>
+                </div>
+
+                <!-- Clientes de este conductor (pedido explícito del usuario:
+                     "ver el detalle de los clientes que tiene cada
+                     conductor... y que pueda eliminarle"). -->
+                <div v-if="profileUser.driver_profile" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                    <h3 class="text-lg font-medium text-arka-text">Clientes de confianza ({{ driverClients.length }})</h3>
+                    <p v-if="!driverClients.length" class="text-sm text-arka-text-muted">
+                        Todavía no forma parte de ninguna flota.
+                    </p>
+                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                        <li
+                            v-for="member in driverClients"
+                            :key="member.member_id"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                            <div class="flex items-center gap-3 min-w-0">
+                                <UserAvatar :user="{ name: member.client_name, avatar_url: member.client_avatar_url }" size-class="h-11 w-11 text-sm shrink-0" />
+                                <div class="min-w-0">
+                                    <Link
+                                        :href="route('admin.users.show', member.client_id)"
+                                        class="text-arka-text font-medium hover:text-arka-primary-bright"
+                                    >
+                                        {{ member.client_name }}
+                                    </Link>
+                                    <p class="text-sm text-arka-text-muted">
+                                        {{ member.client_phone }} · Flota "{{ member.fleet_name }}"
+                                    </p>
+                                    <p class="text-xs text-arka-text-muted">
+                                        {{ member.rides_together_count }} carrera(s) completada(s) juntos · se unió el
+                                        {{ new Date(member.joined_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                                    </p>
+                                </div>
+                            </div>
+                            <DangerButton class="sm:shrink-0" @click="removeClient(member)">Sacar</DangerButton>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- Flotas, si es cliente -->

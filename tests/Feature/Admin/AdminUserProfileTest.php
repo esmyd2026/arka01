@@ -4,6 +4,7 @@ namespace Tests\Feature\Admin;
 
 use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\User;
@@ -196,6 +197,89 @@ class AdminUserProfileTest extends TestCase
 
         $this->actingAs($admin)
             ->patch(route('admin.users.update-points', $client), ['total_points' => 600])
+            ->assertNotFound();
+    }
+
+    /**
+     * Pedido explícito del usuario: "ver el detalle de los clientes que
+     * tiene cada conductor" desde el admin.
+     */
+    public function test_a_drivers_profile_lists_their_active_clients(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create(['name' => 'Mi flota']);
+        $member = FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $response = $this->actingAs($admin)->get(route('admin.users.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('driverClients', 1)
+            ->where('driverClients.0.member_id', $member->id)
+            ->where('driverClients.0.client_id', $client->id)
+            ->where('driverClients.0.fleet_name', 'Mi flota')
+        );
+    }
+
+    /**
+     * Pedido explícito del usuario: "que pueda eliminarle" — mismo
+     * mecanismo que ya usa el propio cliente (left_at, sin borrar la fila).
+     */
+    public function test_an_admin_can_remove_a_client_from_a_drivers_fleet(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $member = FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $response = $this->actingAs($admin)->delete(route('admin.users.remove-client', [$driver, $member]));
+
+        $response->assertRedirect();
+        $member->refresh();
+        $this->assertNotNull($member->left_at);
+        $this->assertSame('admin_removed', $member->left_reason);
+        $this->assertSame($admin->id, $member->removed_by);
+        $this->assertDatabaseHas('admin_audit_logs', ['action' => 'driver.client.remove']);
+    }
+
+    public function test_a_regular_user_cannot_remove_a_client_from_a_drivers_fleet(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $member = FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $this->actingAs($user)
+            ->delete(route('admin.users.remove-client', [$driver, $member]))
+            ->assertForbidden();
+
+        $this->assertNull($member->fresh()->left_at);
+    }
+
+    /**
+     * El `{member}` de la URL tiene que ser de verdad una flota de ESE
+     * conductor — sin este chequeo, se podría sacar por error a un cliente
+     * de otro conductor mandando el id equivocado.
+     */
+    public function test_cannot_remove_a_client_that_does_not_belong_to_the_given_driver(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $otherDriver = User::factory()->create();
+        DriverProfile::factory()->for($otherDriver)->create();
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $member = FleetMember::factory()->for($fleet)->for($otherDriver, 'driver')->create(['added_by' => $client->id]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.users.remove-client', [$driver, $member]))
             ->assertNotFound();
     }
 }

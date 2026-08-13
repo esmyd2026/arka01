@@ -256,7 +256,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         <li
                             v-for="client in searchResults"
                             :key="client.user_id"
-                            class="py-3 flex items-center justify-between gap-4"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="client" size-class="h-11 w-11 text-sm shrink-0" />
@@ -276,13 +276,13 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                 </div>
                             </div>
 
-                            <PrimaryButton v-if="client.status === 'not_invited'" @click="requestClient(client)">
+                            <PrimaryButton v-if="client.status === 'not_invited'" class="sm:shrink-0" @click="requestClient(client)">
                                 Mandar solicitud
                             </PrimaryButton>
-                            <span v-else-if="client.status === 'pending'" class="text-sm text-arka-lime">
+                            <span v-else-if="client.status === 'pending'" class="text-sm text-arka-lime sm:shrink-0">
                                 Solicitud enviada
                             </span>
-                            <span v-else class="text-sm text-arka-text-muted"> Ya es su cliente </span>
+                            <span v-else class="text-sm text-arka-text-muted sm:shrink-0"> Ya es su cliente </span>
                         </li>
                     </ul>
 
@@ -306,10 +306,15 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                     </p>
 
                     <ul v-else class="divide-y divide-arka-text-muted/10">
+                        <!-- Bug reportado por el usuario (con captura: nombre
+                             cortado y botón "Aceptar" superpuesto en móvil) —
+                             mismo arreglo ya aplicado en Fleet/Show.vue: sin
+                             apilar en pantallas angostas, los botones (shrink-0)
+                             le comían el ancho al bloque de nombre/datos. -->
                         <li
                             v-for="invitation in invitations"
                             :key="invitation.id"
-                            class="py-3 flex items-center justify-between gap-4"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="invitation.fleet.owner" size-class="h-12 w-12 text-base shrink-0" />
@@ -328,7 +333,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                 </div>
                             </div>
 
-                            <div class="flex gap-2 shrink-0">
+                            <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
                                 <PrimaryButton :disabled="atLimit" @click="accept(invitation.id)">
                                     Aceptar
                                 </PrimaryButton>
@@ -386,7 +391,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         <li
                             v-for="member in activeMemberships.data"
                             :key="member.id"
-                            class="py-3 flex items-center justify-between gap-4"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="member.fleet.owner" size-class="h-12 w-12 text-base shrink-0" />
@@ -413,7 +418,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                     </button>
                                 </div>
                             </div>
-                            <DangerButton class="shrink-0" @click="leave(member.id)">No es mi cliente</DangerButton>
+                            <DangerButton class="sm:shrink-0" @click="leave(member.id)">No es mi cliente</DangerButton>
                         </li>
                     </ul>
 

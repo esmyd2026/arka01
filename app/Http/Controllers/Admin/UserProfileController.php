@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\DriverTier;
 use App\Models\Fleet;
+use App\Models\FleetMember;
 use App\Models\Review;
+use App\Models\Ride;
 use App\Models\User;
 use App\Services\AdminAuditLogger;
 use App\Services\PlanLimits;
@@ -50,6 +52,37 @@ class UserProfileController extends Controller
                 ->get()
             : collect();
 
+        // Pedido explícito del usuario: "ver el detalle de los clientes que
+        // tiene cada conductor" desde el admin, y poder sacarlo — ver
+        // removeDriverClient() más abajo.
+        $driverClients = $user->isDriver()
+            ? FleetMember::query()
+                ->where('driver_user_id', $user->id)
+                ->whereNull('left_at')
+                ->with('fleet.owner')
+                ->get()
+                ->map(function (FleetMember $member) use ($user) {
+                    $client = $member->fleet->owner;
+
+                    return [
+                        'member_id' => $member->id,
+                        'client_id' => $client->id,
+                        'client_name' => $client->name,
+                        'client_avatar_url' => $client->avatar_url,
+                        'client_phone' => $client->phone,
+                        'fleet_name' => $member->fleet->name,
+                        'joined_at' => $member->joined_at,
+                        'rides_together_count' => Ride::query()
+                            ->where('driver_user_id', $user->id)
+                            ->where('client_user_id', $client->id)
+                            ->where('status', 'completed')
+                            ->count(),
+                    ];
+                })
+                ->sortByDesc('joined_at')
+                ->values()
+            : collect();
+
         return Inertia::render('Admin/UserProfile', [
             // locked_at está en User::$hidden por defecto (auditoría de
             // seguridad: no debe verlo cualquiera) — acá sí hace falta,
@@ -62,6 +95,7 @@ class UserProfileController extends Controller
             'driverTier' => $user->driverProfile ? DriverTier::forPoints($user->driverProfile->total_points)->toBadge() : null,
             'clientPlan' => $user->isClient() ? $this->planLimits->forClient($user) : null,
             'fleetsOwned' => $fleetsOwned,
+            'driverClients' => $driverClients,
             'averageRating' => $rating,
             'reviewCount' => $reviewCount,
             'recentReviews' => $recentReviews,
@@ -122,6 +156,45 @@ class UserProfileController extends Controller
         ]);
 
         return back()->with('status', 'Puntos actualizados.');
+    }
+
+    /**
+     * Saca a un cliente de la flota de un conductor (pedido explícito del
+     * usuario: "que pueda eliminarle") — mismo mecanismo que ya usa el
+     * propio cliente para sacar a un conductor (FleetMemberController::destroy()),
+     * disparado acá por un admin en vez del dueño de la flota. No se borra
+     * la fila: se cierra con `left_at` para conservar el historial de la
+     * relación (trazabilidad, sección 9.6).
+     */
+    public function removeDriverClient(Request $request, User $user, FleetMember $member): RedirectResponse
+    {
+        // El `{member}` tiene que ser de verdad una flota de ESTE conductor
+        // — sin este chequeo, alguien podría mandar el id de un miembro de
+        // otro conductor por la URL y sacarlo por error.
+        abort_unless($member->driver_user_id === $user->id && $member->isActive(), 404);
+
+        $clientUserId = $member->fleet->owner_user_id;
+
+        $member->update([
+            'left_at' => now(),
+            'left_reason' => 'admin_removed',
+            'removed_by' => $request->user()->id,
+        ]);
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.client.remove',
+            module: 'usuarios',
+            oldValue: ['fleet_member_id' => $member->id, 'driver_user_id' => $user->id, 'client_user_id' => $clientUserId],
+        );
+
+        Log::info('Cliente sacado de la flota de un conductor por un admin.', [
+            'admin_id' => $request->user()->id,
+            'driver_user_id' => $user->id,
+            'client_user_id' => $clientUserId,
+        ]);
+
+        return back()->with('status', 'Se sacó a ese cliente de la flota del conductor.');
     }
 
     /**

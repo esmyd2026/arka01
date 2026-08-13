@@ -2672,6 +2672,20 @@ Pedido explícito del usuario, con varias cosas juntas: que el sonido dependa de
 
 ---
 
+### Clientes de un conductor visibles (y eliminables) desde el admin, y bug de layout en móvil
+
+Pedido explícito del usuario, con captura del bug: la tarjeta "Invitaciones recibidas" (`Driver/Invitations.vue`) se veía rota en móvil (nombre cortado, botón "Aceptar" superpuesto) — mismo bug ya arreglado antes en otra pantalla, esta vez acá. Además pidió poder ver el detalle de los clientes de cada conductor desde el panel admin, y sacarlos desde ahí.
+
+- **Bug de layout en móvil, corregido**: mismo criterio que el arreglo ya aplicado en `Fleet/Show.vue` — la fila era `flex items-center` sin apilar en pantallas angostas, y los botones (`shrink-0`) le comían el ancho al bloque de nombre/datos. Se corrigieron las **tres** listas de `Driver/Invitations.vue` que tenían el mismo problema (no solo la de la captura): "Buscar un cliente", "Invitaciones recibidas" y "Flotas a las que pertenecés" — todas pasan a `flex-col sm:flex-row`, con los botones en `sm:shrink-0` (no `shrink-0` a secas) para que puedan wrappear en mobile.
+- **`Admin/UserProfileController::show()`**: nueva sección `driverClients` — cuando el usuario visto es conductor, lista sus clientes activos (flota, cuántas carreras hicieron juntos, desde cuándo), mismo patrón de tarjeta que el resto de esa pantalla.
+- **`Admin/UserProfileController::removeDriverClient()`** (nuevo, `DELETE /admin/usuarios/{user}/clientes/{member}`): saca a un cliente de la flota de un conductor — mismo mecanismo que ya usa el propio cliente para sacar a un conductor (`FleetMemberController::destroy()`, cierra con `left_at`/`left_reason`, nunca borra la fila), disparado acá por un admin. Valida que el `{member}` sea de verdad de ESE conductor (evita sacar por error al cliente equivocado si se manda un id que no corresponde), y queda registrado en la auditoría admin (`admin_audit_logs`, acción `driver.client.remove`).
+- **`Admin/UserProfile.vue`**: nueva tarjeta "Clientes de confianza" en el perfil de un conductor, con botón "Sacar" por cliente (confirmación antes de ejecutar).
+
+### Tests
+`tests/Feature/Admin/AdminUserProfileTest.php` (+4): el perfil de un conductor lista sus clientes activos, un admin puede sacar a un cliente de la flota de un conductor (queda registrado en la auditoría), un usuario normal no puede, y no se puede sacar a un cliente que en realidad es de OTRO conductor (id que no corresponde). Nada de PHP para el arreglo de layout móvil (cambio puramente de Vue). Suite completa: 690 tests OK, Pint limpio, build limpio.
+
+---
+
 ## Qué falta (roadmap, sección 12 del alcance)
 
 | Fase | Alcance | Estado |

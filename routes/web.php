@@ -322,6 +322,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Ajuste manual de puntos de un conductor (pedido explícito del usuario)
     // — ver Admin\UserProfileController::updatePoints().
     Route::patch('/usuarios/{user}/puntos', [AdminUserProfileController::class, 'updatePoints'])->name('users.update-points');
+    // Pedido explícito del usuario: ver el detalle de los clientes de un
+    // conductor desde el admin, y poder sacarlo de esa flota — ver
+    // AdminUserProfileController::removeDriverClient().
+    Route::delete('/usuarios/{user}/clientes/{member}', [AdminUserProfileController::class, 'removeDriverClient'])->name('users.remove-client');
     // Eliminar una cuenta real y todo lo que le pertenece (pedido explícito
     // del usuario) — ver AdminUserProfileController::destroy().
     Route::delete('/usuarios/{user}', [AdminUserProfileController::class, 'destroy'])->name('users.destroy');
