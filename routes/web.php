@@ -273,6 +273,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/expresos/{route}/compartidos', [ExpressRouteCompanionController::class, 'store'])->name('express-companions.store');
     Route::post('/compartidos/{companion}/aceptar', [ExpressRouteCompanionController::class, 'accept'])->name('express-companions.accept');
     Route::post('/compartidos/{companion}/rechazar', [ExpressRouteCompanionController::class, 'reject'])->name('express-companions.reject');
+    Route::post('/compartidos/{companion}/confirmar-conductor', [ExpressRouteCompanionController::class, 'driverAccept'])->name('express-companions.driver-accept');
+    Route::post('/compartidos/{companion}/rechazar-conductor', [ExpressRouteCompanionController::class, 'driverReject'])->name('express-companions.driver-reject');
     Route::post('/compartidos/{companion}/salir', [ExpressRouteCompanionController::class, 'leave'])->name('express-companions.leave');
 
     // Nuevo servicio para conductores tipo VAN/buseta/microbús/turístico

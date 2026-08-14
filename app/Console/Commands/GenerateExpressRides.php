@@ -7,6 +7,7 @@ use App\Models\ExpressRoute;
 use App\Models\Fleet;
 use App\Models\RidePriceOffer;
 use App\Models\RideRequest;
+use App\Notifications\RideRequestedPushNotification;
 use App\Services\Haversine;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -63,6 +64,7 @@ class GenerateExpressRides extends Command
             );
 
             broadcast(new RideRequested($rideRequest));
+            $route->assignedDriver->notify(new RideRequestedPushNotification($rideRequest));
 
             $generated++;
 
@@ -84,6 +86,7 @@ class GenerateExpressRides extends Command
                 );
 
                 broadcast(new RideRequested($returnRideRequest));
+                $route->assignedDriver->notify(new RideRequestedPushNotification($returnRideRequest));
 
                 $generated++;
             }
@@ -93,7 +96,10 @@ class GenerateExpressRides extends Command
             // mismo conductor — el precio de cada una es la parte proporcional
             // (ExpressRoute::pricePerPerson()), el precio pactado con el
             // conductor no cambia, solo se reparte entre más gente.
-            foreach ($route->companions()->where('status', 'accepted')->get() as $companion) {
+            foreach ($route->companions()
+                ->where('status', 'accepted')
+                ->where('driver_approval_status', 'accepted')
+                ->get() as $companion) {
                 $companionOriginLat = (float) ($companion->origin_lat ?? $route->origin_lat);
                 $companionOriginLng = (float) ($companion->origin_lng ?? $route->origin_lng);
                 $companionOriginAddress = $companion->origin_address ?? $route->origin_address;
@@ -115,6 +121,7 @@ class GenerateExpressRides extends Command
                 );
 
                 broadcast(new RideRequested($companionRideRequest));
+                $route->assignedDriver->notify(new RideRequestedPushNotification($companionRideRequest));
 
                 if ($route->is_round_trip && $route->return_time) {
                     $companionReturnRideRequest = $this->generateFor(
@@ -131,6 +138,7 @@ class GenerateExpressRides extends Command
                     );
 
                     broadcast(new RideRequested($companionReturnRideRequest));
+                    $route->assignedDriver->notify(new RideRequestedPushNotification($companionReturnRideRequest));
                 }
             }
         }
@@ -171,8 +179,9 @@ class GenerateExpressRides extends Command
         // y vuelta (pedido explícito del usuario): las dos carreras del día
         // pactan el mismo precio, cada una es una "carrera" completa aparte.
         $price = $route->share_enabled ? $route->pricePerPerson() : (float) $route->offered_price;
+        $scheduledAt = $today->copy()->setTimeFromTimeString($atTime);
 
-        return DB::transaction(function () use ($route, $fleet, $clientUserId, $originLat, $originLng, $originAddress, $destinationLat, $destinationLng, $destinationAddress, $distanceKm, $price, $today, $atTime) {
+        return DB::transaction(function () use ($route, $fleet, $clientUserId, $originLat, $originLng, $originAddress, $destinationLat, $destinationLng, $destinationAddress, $distanceKm, $price, $scheduledAt) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
                 'express_route_id' => $route->id,
@@ -189,7 +198,19 @@ class GenerateExpressRides extends Command
                 'current_offered_price' => $price,
                 'negotiation_round' => 0,
                 'last_offer_made_by' => 'client',
-                'requested_at' => $today->copy()->setTimeFromTimeString($atTime),
+                // Se conserva la hora pactada también en requested_at por
+                // compatibilidad con el historial existente; scheduled_at es
+                // ahora la fuente explícita para agenda y recordatorios.
+                'requested_at' => $scheduledAt,
+                // Una ejecución de Expreso es una carrera programada, no una
+                // solicitud "para ahora" creada a las 05:00. Al aceptarla se
+                // convierte en Ride scheduled y entra automáticamente al
+                // recordatorio de 15–20 minutos ya existente.
+                'is_scheduled' => true,
+                'scheduled_at' => $scheduledAt,
+                'passenger_count' => 1,
+                'needs_trunk' => false,
+                'notes' => "Expreso: {$route->name}",
             ]);
 
             RidePriceOffer::query()->create([

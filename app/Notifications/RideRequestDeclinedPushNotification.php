@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\RideRequest;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -13,8 +15,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * ni en vivo ni push. Recomienda ampliar la búsqueda en vez de dejarlo
  * adivinar qué pasó.
  */
-class RideRequestDeclinedPushNotification extends Notification
+class RideRequestDeclinedPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly RideRequest $rideRequest, private readonly string $driverName) {}
 
     /**

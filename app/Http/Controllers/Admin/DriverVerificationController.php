@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\DriverProfile;
+use App\Notifications\DriverVerificationResultPushNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -42,6 +43,8 @@ class DriverVerificationController extends Controller
             'verified_by' => $request->user()->id,
         ]);
 
+        $driverProfile->user->notify(new DriverVerificationResultPushNotification($driverProfile, true));
+
         return back()->with('status', 'Conductor verificado.');
     }
 
@@ -61,6 +64,8 @@ class DriverVerificationController extends Controller
             'verification_rejection_reason' => $validated['reason'],
             'verified_at' => null,
         ]);
+
+        $driverProfile->user->notify(new DriverVerificationResultPushNotification($driverProfile, false));
 
         return back()->with('status', 'Verificación rechazada.');
     }

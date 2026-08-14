@@ -196,6 +196,7 @@ onMounted(() => {
     fleetChannel.listen('.ride.cancelled', (e) => {
         if (e.ride_id !== props.ride.id) return;
         playAttentionAlert();
+        showStatusToast('⚠️ La otra parte canceló la carrera.');
         router.reload({ only: ['ride'] });
     });
 
@@ -234,11 +235,13 @@ onMounted(() => {
     fleetChannel.listen('.ride.reschedule-proposed', (e) => {
         if (e.ride_id !== props.ride.id) return;
         playAttentionAlert();
+        showStatusToast('📅 Se propuso un nuevo horario para la carrera.');
         router.reload({ only: ['ride'] });
     });
     fleetChannel.listen('.ride.reschedule-responded', (e) => {
         if (e.ride_id !== props.ride.id) return;
         playAttentionAlert();
+        showStatusToast(e.confirmed ? '✅ El conductor confirmó el nuevo horario.' : '⚠️ El conductor rechazó el nuevo horario.');
         router.reload({ only: ['ride'] });
     });
 

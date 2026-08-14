@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
-import { pushSupported, subscribeToPush } from '@/push.js';
+import { pushSubscriptionStatus, subscribeToPush } from '@/push.js';
 import { unlockAudioContext } from '@/Utils/liveAlert';
 
 // Aviso pedido explícito del usuario: tanto clientes como conductores deben
@@ -46,18 +46,18 @@ async function refreshGeoStatus() {
     }
 }
 
-function refreshNotifStatus() {
-    notifStatus.value = pushSupported() ? Notification.permission : 'unsupported';
+async function refreshNotifStatus() {
+    notifStatus.value = await pushSubscriptionStatus();
 }
 
-onMounted(() => {
+onMounted(async () => {
     readDismissed();
     refreshGeoStatus();
-    refreshNotifStatus();
+    await refreshNotifStatus();
 });
 
 const needsGeo = computed(() => geoStatus.value === 'prompt' || geoStatus.value === 'denied');
-const needsNotif = computed(() => notifStatus.value === 'default' || notifStatus.value === 'denied');
+const needsNotif = computed(() => ['default', 'denied', 'unsubscribed'].includes(notifStatus.value));
 const visible = computed(() => !dismissed.value && (needsGeo.value || needsNotif.value));
 
 function enableLocation() {
@@ -86,15 +86,10 @@ async function enableNotifications() {
         // refrescaba y el aviso quedaba pegado en pantalla aunque el
         // navegador ya hubiera concedido el permiso — este refresco corre
         // pase lo que pase.
-        refreshNotifStatus();
+        await refreshNotifStatus();
     }
 
-    if (!ok && notifStatus.value !== 'denied') {
-        // requestPermission() no siempre deja el valor en 'denied' al
-        // primer rechazo en todos los navegadores — igual lo tratamos como
-        // "no se pudo" para no repetir el pedido en bucle.
-        notifStatus.value = 'denied';
-    }
+    if (!ok) notifStatus.value = 'unsubscribed';
 }
 
 function dismiss() {
@@ -126,14 +121,15 @@ function dismiss() {
         <p v-if="needsNotif" class="text-arka-text-muted flex items-center flex-wrap gap-x-1.5">
             🔔 Sin notificaciones activas, puede no enterarse de solicitudes o avisos aunque no tenga la app abierta.
             <button
-                v-if="notifStatus === 'default'"
+                v-if="notifStatus === 'default' || notifStatus === 'unsubscribed'"
                 type="button"
                 class="text-arka-warning hover:opacity-80 font-medium underline"
                 @click="enableNotifications"
             >
                 Activar notificaciones
             </button>
-            <span v-else>Están bloqueadas en su navegador — revise los permisos del sitio para habilitarlas.</span>
+            <span v-else-if="notifStatus === 'denied'">Están bloqueadas en su navegador — revise los permisos del sitio para habilitarlas.</span>
+            <span v-else>No se pudo crear la suscripción en este navegador. Revise la conexión e inténtelo otra vez.</span>
         </p>
     </div>
 </template>

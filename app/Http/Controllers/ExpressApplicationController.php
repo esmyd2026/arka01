@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\ExpressApplication;
 use App\Models\ExpressRoute;
+use App\Notifications\ExpressApplicationResultPushNotification;
+use App\Notifications\ExpressCompanionApprovalPushNotification;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -85,6 +87,12 @@ class ExpressApplicationController extends Controller
             ]);
         }
 
+        $rejectedApplications = $route->applications()
+            ->where('id', '!=', $application->id)
+            ->where('status', 'pending')
+            ->with('driver')
+            ->get();
+
         DB::transaction(function () use ($application, $route) {
             $application->update(['status' => 'accepted', 'responded_at' => now()]);
 
@@ -98,7 +106,25 @@ class ExpressApplicationController extends Controller
                 'assigned_driver_user_id' => $application->driver_user_id,
                 'assigned_at' => now(),
             ]);
+
+            // Quienes ya habían sido aceptados por el dueño necesitan ahora
+            // la confirmación operativa del conductor recién asignado.
+            $route->companions()
+                ->where('status', 'accepted')
+                ->update(['driver_approval_status' => 'pending']);
         });
+
+        $application->driver->notify(new ExpressApplicationResultPushNotification($application, true));
+        foreach ($rejectedApplications as $rejectedApplication) {
+            $rejectedApplication->driver->notify(new ExpressApplicationResultPushNotification($rejectedApplication, false));
+        }
+
+        $route->companions()
+            ->where('status', 'accepted')
+            ->where('driver_approval_status', 'pending')
+            ->with('passenger')
+            ->get()
+            ->each(fn ($companion) => $application->driver->notify(new ExpressCompanionApprovalPushNotification($companion, 'review')));
 
         return back()->with('status', 'Postulación aceptada. El Expreso ya está activo.');
     }

@@ -106,7 +106,13 @@ class ExpressRoute extends Model
 
     public function acceptedCompanionsCount(): int
     {
-        return $this->companions()->where('status', 'accepted')->count();
+        $companions = $this->companions()->where('status', 'accepted');
+
+        if ($this->assigned_driver_user_id) {
+            $companions->where('driver_approval_status', 'accepted');
+        }
+
+        return $companions->count();
     }
 
     /**
@@ -144,5 +150,26 @@ class ExpressRoute extends Model
     public function runsOn(Carbon $date): bool
     {
         return in_array($date->dayOfWeek, $this->days_of_week, true);
+    }
+
+    /** Próxima salida real (ida o vuelta) desde el momento indicado. */
+    public function nextRunAt(Carbon $from): ?Carbon
+    {
+        for ($offset = 0; $offset <= 7; $offset++) {
+            $date = $from->copy()->addDays($offset);
+            if (! $this->runsOn($date)) {
+                continue;
+            }
+
+            $times = array_filter([$this->departure_time, $this->is_round_trip ? $this->return_time : null]);
+            foreach ($times as $time) {
+                $candidate = $date->copy()->startOfDay()->setTimeFromTimeString($time);
+                if ($candidate->greaterThan($from)) {
+                    return $candidate;
+                }
+            }
+        }
+
+        return null;
     }
 }

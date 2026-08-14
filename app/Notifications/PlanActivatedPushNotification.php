@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Subscription;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -16,8 +18,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * dispara — activación manual del admin, aprobación de un comprobante, y
  * el auto-activado de un plan/promo en $0.
  */
-class PlanActivatedPushNotification extends Notification
+class PlanActivatedPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly Subscription $subscription) {}
 
     /**

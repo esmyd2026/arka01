@@ -14,6 +14,7 @@ import { confirmDialog } from '@/Utils/confirmDialog';
 const props = defineProps({
     expressRoute: { type: Object, required: true },
     isOwner: { type: Boolean, required: true },
+    isAssignedDriver: { type: Boolean, required: true },
     myApplication: { type: Object, default: null },
     myCompanionRequest: { type: Object, default: null },
 });
@@ -31,6 +32,14 @@ function acceptCompanion(companionId) {
 
 function rejectCompanion(companionId) {
     router.post(route('express-companions.reject', companionId), {}, { preserveScroll: true });
+}
+
+function driverAcceptCompanion(companionId) {
+    router.post(route('express-companions.driver-accept', companionId), {}, { preserveScroll: true });
+}
+
+function driverRejectCompanion(companionId) {
+    router.post(route('express-companions.driver-reject', companionId), {}, { preserveScroll: true });
 }
 
 async function leaveShared() {
@@ -217,6 +226,32 @@ function submitIncident() {
                     <ul class="divide-y divide-arka-text-muted/10">
                         <li v-for="c in expressRoute.companions.filter((c) => c.status === 'accepted')" :key="c.id" class="py-2 text-sm text-arka-text">
                             {{ c.passenger.name }}
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- El dueño confirma confianza; el conductor confirma que el
+                     desvío, horario y cupo son operativamente posibles. -->
+                <div
+                    v-if="isAssignedDriver && expressRoute.companions.some((c) => c.status === 'accepted' && c.driver_approval_status === 'pending')"
+                    class="p-4 sm:p-6 bg-arka-warning/10 border border-arka-warning/40 rounded-arka"
+                >
+                    <h3 class="text-lg font-medium text-arka-warning mb-2">Acompañantes por confirmar</h3>
+                    <p class="text-sm text-arka-text-muted mb-4">Revise el punto de recogida y confirme únicamente si puede incluirlo en este Expreso.</p>
+                    <ul class="divide-y divide-arka-text-muted/10">
+                        <li
+                            v-for="c in expressRoute.companions.filter((c) => c.status === 'accepted' && c.driver_approval_status === 'pending')"
+                            :key="c.id"
+                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                            <div>
+                                <p class="text-arka-text font-medium">{{ c.passenger.name }}</p>
+                                <p class="text-sm text-arka-text-muted">{{ c.origin_address || expressRoute.origin_address }} → {{ c.destination_address || expressRoute.destination_address }}</p>
+                            </div>
+                            <div class="flex gap-2 shrink-0">
+                                <PrimaryButton @click="driverAcceptCompanion(c.id)">Sí puedo llevarlo</PrimaryButton>
+                                <SecondaryButton @click="driverRejectCompanion(c.id)">No puedo</SecondaryButton>
+                            </div>
                         </li>
                     </ul>
                 </div>

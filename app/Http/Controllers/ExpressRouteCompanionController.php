@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ExpressRoute;
 use App\Models\ExpressRouteCompanion;
+use App\Notifications\ExpressCompanionApprovalPushNotification;
 use App\Services\Haversine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -144,9 +145,19 @@ class ExpressRouteCompanionController extends Controller
             ]);
         }
 
-        $companion->update(['status' => 'accepted', 'responded_at' => now()]);
+        $companion->update([
+            'status' => 'accepted',
+            'responded_at' => now(),
+            'driver_approval_status' => $route->assigned_driver_user_id ? 'pending' : null,
+        ]);
 
-        return back()->with('status', 'Acompañante aceptado.');
+        if ($route->assignedDriver) {
+            $route->assignedDriver->notify(new ExpressCompanionApprovalPushNotification($companion, 'review'));
+        }
+
+        return back()->with('status', $route->assigned_driver_user_id
+            ? 'Aprobado por usted. Falta la confirmación del conductor.'
+            : 'Acompañante aceptado. El conductor lo confirmará cuando se asigne.');
     }
 
     public function reject(Request $request, ExpressRouteCompanion $companion): RedirectResponse
@@ -177,5 +188,46 @@ class ExpressRouteCompanionController extends Controller
         $companion->update(['status' => 'left', 'responded_at' => now()]);
 
         return back()->with('status', 'Te bajaste del Expreso compartido.');
+    }
+
+    /** El conductor asignado confirma que puede realizar el desvío/cupo. */
+    public function driverAccept(Request $request, ExpressRouteCompanion $companion): RedirectResponse
+    {
+        $this->authorizeDriverDecision($request, $companion);
+
+        $companion->update([
+            'driver_approval_status' => 'accepted',
+            'driver_responded_at' => now(),
+        ]);
+
+        $companion->passenger->notify(new ExpressCompanionApprovalPushNotification($companion, 'accepted'));
+
+        return back()->with('status', 'Acompañante confirmado para este Expreso.');
+    }
+
+    public function driverReject(Request $request, ExpressRouteCompanion $companion): RedirectResponse
+    {
+        $this->authorizeDriverDecision($request, $companion);
+
+        $companion->update([
+            'status' => 'rejected',
+            'driver_approval_status' => 'rejected',
+            'driver_responded_at' => now(),
+        ]);
+
+        $companion->passenger->notify(new ExpressCompanionApprovalPushNotification($companion, 'rejected'));
+
+        return back()->with('status', 'Acompañante rechazado; no se incluirá en las carreras.');
+    }
+
+    private function authorizeDriverDecision(Request $request, ExpressRouteCompanion $companion): void
+    {
+        abort_unless($companion->route->assigned_driver_user_id === $request->user()->id, 403);
+
+        if ($companion->status !== 'accepted' || $companion->driver_approval_status !== 'pending') {
+            throw ValidationException::withMessages([
+                'companion' => 'Este acompañante ya no está esperando su decisión.',
+            ]);
+        }
     }
 }

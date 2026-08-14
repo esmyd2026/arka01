@@ -115,7 +115,6 @@ onMounted(() => {
     // pasa directo al detalle de esa carrera en vez de quedarse mirando la
     // lista — ahí es donde puede seguir la ubicación en vivo y chatear.
     personal.listen('.ride-request.accepted', (e) => {
-        playUpdateChime();
         router.visit(route('rides.show', e.ride_id));
     });
     personal.listen('.ride-request.countered', (e) => {
@@ -164,7 +163,7 @@ onMounted(() => {
     // del tono de atención (ese queda para lo que sí necesita reacción,
     // como una cancelación o una carrera nueva).
     personal.listen('.ride.completed', () => {
-        playCabinChime();
+        if (!isClient) playCabinChime();
         router.reload({ only: ['activeRides', 'rideHistory'] });
     });
     // El cliente canceló una carrera ya aceptada (pedido explícito del
@@ -173,14 +172,14 @@ onMounted(() => {
     // tono de atención + vibración: a diferencia de los demás, esto corta
     // el viaje, no es un avance normal.
     personal.listen('.ride.cancelled', () => {
-        playAttentionAlert();
+        if (!isClient) playAttentionAlert();
         router.reload({ only: ['activeRides', 'scheduledRides', 'rideHistory'] });
     });
     // El conductor arrancó una carrera que venía PROGRAMADA (consideración
     // agregada al alcance) — pasa de "Programados" a "En curso" solo, sin
     // esperar a que alguien recargue la página.
     personal.listen('.ride.started', () => {
-        playCabinChime();
+        if (!isClient) playCabinChime();
         router.reload({ only: ['scheduledRides', 'activeRides'] });
     });
     // Pedido explícito del usuario: "el cliente no tiene más que solo
@@ -192,11 +191,11 @@ onMounted(() => {
     // "En curso" (activeRideStatusLabel) ya refleja esto solo con recargar
     // activeRides — acá solo faltaba el aviso.
     personal.listen('.ride.arrived', () => {
-        playCabinChime();
+        if (!isClient) playCabinChime();
         router.reload({ only: ['activeRides'] });
     });
     personal.listen('.ride.picked_up', () => {
-        playCabinChime();
+        if (!isClient) playCabinChime();
         router.reload({ only: ['activeRides'] });
     });
     // Cambio de horario propuesto/respondido en una carrera programada
@@ -207,7 +206,7 @@ onMounted(() => {
         router.reload({ only: ['scheduledRides'] });
     });
     personal.listen('.ride.reschedule-responded', () => {
-        playAttentionAlert();
+        if (!isClient) playAttentionAlert();
         router.reload({ only: ['scheduledRides'] });
     });
     // Recordatorio de 15-20 min antes de una carrera programada (pedido

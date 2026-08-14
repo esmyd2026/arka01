@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\RideRequest;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -13,8 +15,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * respondió a tiempo — avisa al cliente para que suba la oferta o cambie de
  * bolsa (mi flota / público / ambos) en vez de quedarse esperando en silencio.
  */
-class RideRequestExpiredPushNotification extends Notification
+class RideRequestExpiredPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly RideRequest $rideRequest) {}
 
     /**

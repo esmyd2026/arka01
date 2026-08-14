@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Ride;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -11,8 +13,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * Aviso push al cliente de que el conductor confirmó o rechazó el cambio de
  * horario que propuso (pedido explícito del usuario).
  */
-class RideRescheduleResponsePushNotification extends Notification
+class RideRescheduleResponsePushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly Ride $ride, private readonly bool $confirmed) {}
 
     /**

@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Ride;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -12,8 +14,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * carrera programada (pedido explícito del usuario) — necesita confirmarlo
  * o rechazarlo, no queda aplicado solo.
  */
-class RideReschedulePushNotification extends Notification
+class RideReschedulePushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly Ride $ride) {}
 
     /**

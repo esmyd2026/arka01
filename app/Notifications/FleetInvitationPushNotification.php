@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\FleetInvitation;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -14,8 +16,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * aunque quien lo reciba tenga la app cerrada, el WebSocket (Reverb) solo
  * cubre la pestaña abierta.
  */
-class FleetInvitationPushNotification extends Notification
+class FleetInvitationPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly FleetInvitation $invitation) {}
 
     /**

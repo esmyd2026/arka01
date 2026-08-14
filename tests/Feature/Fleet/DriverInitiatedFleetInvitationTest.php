@@ -9,8 +9,10 @@ use App\Models\Fleet;
 use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\User;
+use App\Notifications\FleetInvitationRespondedPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -118,6 +120,7 @@ class DriverInitiatedFleetInvitationTest extends TestCase
 
     public function test_client_can_accept_a_driver_initiated_request(): void
     {
+        Notification::fake();
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create();
         $client = User::factory()->create();
@@ -137,10 +140,12 @@ class DriverInitiatedFleetInvitationTest extends TestCase
                 ->whereNull('left_at')
                 ->exists()
         );
+        Notification::assertSentTo($driver, FleetInvitationRespondedPushNotification::class);
     }
 
     public function test_client_can_reject_a_driver_initiated_request(): void
     {
+        Notification::fake();
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create();
         $client = User::factory()->create();
@@ -154,6 +159,7 @@ class DriverInitiatedFleetInvitationTest extends TestCase
 
         $this->assertDatabaseHas('fleet_invitations', ['id' => $invitation->id, 'status' => 'rejected']);
         $this->assertDatabaseMissing('fleet_members', ['driver_user_id' => $driver->id]);
+        Notification::assertSentTo($driver, FleetInvitationRespondedPushNotification::class);
     }
 
     /**

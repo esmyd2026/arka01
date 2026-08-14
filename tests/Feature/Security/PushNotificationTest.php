@@ -42,6 +42,21 @@ class PushNotificationTest extends TestCase
         ]);
     }
 
+    public function test_a_push_subscription_rejects_an_invalid_or_oversized_endpoint(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson(route('push-subscriptions.store'), [
+            'endpoint' => 'not-a-valid-url',
+            'keys' => ['p256dh' => 'p256dh-key', 'auth' => 'auth-key'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('endpoint');
+
+        $this->actingAs($user)->postJson(route('push-subscriptions.store'), [
+            'endpoint' => 'https://push.example/'.str_repeat('a', 2100),
+            'keys' => ['p256dh' => 'p256dh-key', 'auth' => 'auth-key'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('endpoint');
+    }
+
     public function test_requesting_a_ride_notifies_the_directed_driver(): void
     {
         Notification::fake();

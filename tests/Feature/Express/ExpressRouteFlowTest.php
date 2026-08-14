@@ -14,8 +14,11 @@ use App\Models\RideRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Notifications\ExpressApplicationResultPushNotification;
+use App\Notifications\RideRequestedPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -405,6 +408,7 @@ class ExpressRouteFlowTest extends TestCase
 
     public function test_client_accepting_an_application_activates_the_route_and_rejects_the_rest(): void
     {
+        Notification::fake();
         [$client, $driverA, $fleet] = $this->clientWithFleetDriver();
         $driverB = User::factory()->create();
         FleetMember::factory()->for($fleet)->for($driverB, 'driver')->create(['added_by' => $client->id]);
@@ -436,6 +440,58 @@ class ExpressRouteFlowTest extends TestCase
         $this->assertSame($driverA->id, $route->assigned_driver_user_id);
         $this->assertSame('accepted', $applicationA->fresh()->status);
         $this->assertSame('rejected', $applicationB->fresh()->status);
+        Notification::assertSentTo($driverA, ExpressApplicationResultPushNotification::class);
+        Notification::assertSentTo($driverB, ExpressApplicationResultPushNotification::class);
+    }
+
+    public function test_an_assigned_driver_has_a_persistent_express_panel(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $route = ExpressRoute::query()->create([
+            'client_user_id' => $client->id,
+            'assigned_driver_user_id' => $driver->id,
+            'name' => 'Trabajo diario',
+            'origin_lat' => -0.18, 'origin_lng' => -78.46,
+            'destination_lat' => -0.2, 'destination_lng' => -78.5,
+            'days_of_week' => [1, 2, 3, 4, 5],
+            'departure_time' => '07:00',
+            'offered_price' => 5,
+            'status' => 'active',
+            'assigned_at' => now(),
+        ]);
+
+        $this->actingAs($driver)->get(route('express-routes.available'))
+            ->assertInertia(fn ($page) => $page
+                ->has('assignedRoutes', 1)
+                ->where('assignedRoutes.0.id', $route->id)
+                ->where('assignedRoutes.0.client.id', $client->id)
+                ->whereNot('assignedRoutes.0.next_run_at', null));
+    }
+
+    public function test_generated_express_request_is_scheduled_and_notifies_the_driver(): void
+    {
+        Notification::fake();
+        Carbon::setTestNow(Carbon::parse('2026-08-03 05:00:00')); // lunes
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $route = ExpressRoute::query()->create([
+            'client_user_id' => $client->id,
+            'assigned_driver_user_id' => $driver->id,
+            'name' => 'Trabajo diario',
+            'origin_lat' => -0.18, 'origin_lng' => -78.46,
+            'destination_lat' => -0.2, 'destination_lng' => -78.5,
+            'days_of_week' => [1],
+            'departure_time' => '07:00',
+            'offered_price' => 5,
+            'status' => 'active',
+            'assigned_at' => now(),
+        ]);
+
+        $this->artisan(GenerateExpressRides::class)->assertSuccessful();
+
+        $request = RideRequest::where('express_route_id', $route->id)->firstOrFail();
+        $this->assertTrue($request->is_scheduled);
+        $this->assertSame('2026-08-03 07:00:00', $request->scheduled_at->format('Y-m-d H:i:s'));
+        Notification::assertSentTo($driver, RideRequestedPushNotification::class);
     }
 
     public function test_a_driver_can_withdraw_their_own_pending_application(): void

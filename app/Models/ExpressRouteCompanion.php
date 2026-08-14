@@ -24,8 +24,10 @@ class ExpressRouteCompanion extends Model
         'destination_lng',
         'destination_address',
         'status',
+        'driver_approval_status',
         'requested_at',
         'responded_at',
+        'driver_responded_at',
     ];
 
     protected $casts = [
@@ -35,6 +37,7 @@ class ExpressRouteCompanion extends Model
         'destination_lng' => 'decimal:7',
         'requested_at' => 'datetime',
         'responded_at' => 'datetime',
+        'driver_responded_at' => 'datetime',
     ];
 
     public function route(): BelongsTo

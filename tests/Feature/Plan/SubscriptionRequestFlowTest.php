@@ -11,6 +11,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
 use App\Notifications\PlanActivatedPushNotification;
+use App\Notifications\SubscriptionRequestRejectedPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
@@ -125,6 +126,7 @@ class SubscriptionRequestFlowTest extends TestCase
 
     public function test_admin_rejecting_a_request_does_not_activate_anything(): void
     {
+        Notification::fake();
         $admin = User::factory()->create(['is_admin' => true]);
         $user = User::factory()->create();
         $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
@@ -142,6 +144,7 @@ class SubscriptionRequestFlowTest extends TestCase
 
         $this->assertSame('rejected', $subscriptionRequest->fresh()->status);
         $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+        Notification::assertSentTo($user, SubscriptionRequestRejectedPushNotification::class);
     }
 
     /**

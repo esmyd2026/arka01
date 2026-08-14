@@ -8,6 +8,7 @@ use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\User;
+use App\Notifications\FleetInvitationRespondedPushNotification;
 use App\Services\DriverCategory;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
@@ -315,6 +316,11 @@ class DriverInvitationController extends Controller
             'joined_at' => now(),
         ]);
 
+        // Quien inició la relación necesita conocer la respuesta aunque no
+        // tenga la app abierta. Hasta ahora solo se avisaba al destinatario
+        // cuando nacía la invitación, pero el resultado quedaba silencioso.
+        $invitation->inviter->notify(new FleetInvitationRespondedPushNotification($invitation, true));
+
         return back();
     }
 
@@ -336,6 +342,8 @@ class DriverInvitationController extends Controller
             'status' => 'rejected',
             'responded_at' => now(),
         ]);
+
+        $invitation->inviter->notify(new FleetInvitationRespondedPushNotification($invitation, false));
 
         return back();
     }

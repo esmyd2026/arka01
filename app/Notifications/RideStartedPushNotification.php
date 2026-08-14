@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Ride;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -13,8 +15,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * la solicitud pasa mucho antes, en el momento de programarla — este es el
  * que de verdad importa, cuando el conductor arranca a buscarlo.
  */
-class RideStartedPushNotification extends Notification
+class RideStartedPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly Ride $ride) {}
 
     /**

@@ -8,6 +8,7 @@ use App\Models\SubscriptionChange;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
+use App\Notifications\SubscriptionRequestRejectedPushNotification;
 use App\Services\SubscriptionActivator;
 use App\Services\SubscriptionPlanEligibility;
 use Illuminate\Database\Eloquent\Builder;
@@ -243,6 +244,11 @@ class SubscriptionController extends Controller
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+
+        // La aprobación ya avisa mediante SubscriptionActivator. El rechazo
+        // también debe llegar fuera de la pestaña para que el usuario pueda
+        // corregir el comprobante sin descubrirlo días después.
+        $subscriptionRequest->user->notify(new SubscriptionRequestRejectedPushNotification($subscriptionRequest));
 
         Log::info('Pedido de plan rechazado.', [
             'subscription_request_id' => $subscriptionRequest->id,

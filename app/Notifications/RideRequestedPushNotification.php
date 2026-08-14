@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\RideRequest;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -12,8 +14,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * que el conductor se entere aunque tenga la app cerrada o en segundo plano
  * — el WebSocket (Reverb) solo avisa si la pestaña sigue abierta.
  */
-class RideRequestedPushNotification extends Notification
+class RideRequestedPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly RideRequest $rideRequest) {}
 
     /**

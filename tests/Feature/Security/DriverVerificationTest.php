@@ -4,8 +4,10 @@ namespace Tests\Feature\Security;
 
 use App\Models\DriverProfile;
 use App\Models\User;
+use App\Notifications\DriverVerificationResultPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -88,6 +90,7 @@ class DriverVerificationTest extends TestCase
 
     public function test_an_admin_can_approve_a_pending_verification(): void
     {
+        Notification::fake();
         $admin = User::factory()->create(['is_admin' => true]);
         $driver = User::factory()->create();
         $profile = DriverProfile::factory()->for($driver)->create([
@@ -101,10 +104,12 @@ class DriverVerificationTest extends TestCase
 
         $this->assertSame('approved', $profile->fresh()->verification_status);
         $this->assertSame($admin->id, $profile->fresh()->verified_by);
+        Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
     }
 
     public function test_an_admin_can_reject_a_pending_verification(): void
     {
+        Notification::fake();
         $admin = User::factory()->create(['is_admin' => true]);
         $driver = User::factory()->create();
         $profile = DriverProfile::factory()->for($driver)->create([
@@ -118,6 +123,7 @@ class DriverVerificationTest extends TestCase
 
         $this->assertSame('rejected', $profile->fresh()->verification_status);
         $this->assertSame('Foto de licencia borrosa.', $profile->fresh()->verification_rejection_reason);
+        Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
     }
 
     /**

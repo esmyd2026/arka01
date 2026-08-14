@@ -234,6 +234,7 @@ class ExpressRouteController extends Controller
             // URLs — llamar a la prop igual lo taparía dentro del componente.
             'expressRoute' => $route,
             'isOwner' => $request->user()->id === $route->client_user_id,
+            'isAssignedDriver' => $request->user()->id === $route->assigned_driver_user_id,
             'myApplication' => $route->applications->firstWhere('driver_user_id', $request->user()->id),
             'myCompanionRequest' => $route->companions->firstWhere('passenger_user_id', $request->user()->id),
         ]);
@@ -360,9 +361,36 @@ class ExpressRouteController extends Controller
 
         $myApplications = $request->user()->expressApplications()->pluck('status', 'express_route_id');
 
+        // El conductor necesita un panel persistente después de ser elegido;
+        // antes el Expreso desaparecía de "disponibles" y no quedaba ningún
+        // lugar para ver agenda, pasajeros o carreras generadas.
+        $assignedRoutes = ExpressRoute::query()
+            ->where('assigned_driver_user_id', $request->user()->id)
+            ->whereIn('status', ['active', 'paused'])
+            ->with([
+                'client',
+                'conditions',
+                'companions' => fn ($query) => $query
+                    ->where('status', 'accepted')
+                    ->with('passenger'),
+                'rideRequests' => fn ($query) => $query
+                    ->where('scheduled_at', '>=', now()->subDay())
+                    ->with(['client', 'ride'])
+                    ->orderBy('scheduled_at'),
+            ])
+            ->orderBy('departure_time')
+            ->get()
+            ->each(function (ExpressRoute $route) {
+                $route->next_run_at = $route->nextRunAt(now())?->toIso8601String();
+                $route->pending_companion_approvals_count = $route->companions
+                    ->where('driver_approval_status', 'pending')
+                    ->count();
+            });
+
         return Inertia::render('Express/Available', [
             'routes' => $routes,
             'myApplications' => $myApplications,
+            'assignedRoutes' => $assignedRoutes,
             // Pedido explícito del usuario ("no sé a quién le aparece un
             // Expreso"): con esto la pantalla puede explicar POR QUÉ está
             // vacía, en vez de un genérico "no hay nada" — no es lo mismo no

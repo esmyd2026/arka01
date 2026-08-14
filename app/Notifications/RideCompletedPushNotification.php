@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Ride;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -13,8 +15,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * la marcó como completada — para que se entere y pueda cerrarla (marcar el
  * pago) aunque tenga la app cerrada, mismo criterio que las demás push.
  */
-class RideCompletedPushNotification extends Notification
+class RideCompletedPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly Ride $ride) {}
 
     /**

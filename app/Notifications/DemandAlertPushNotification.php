@@ -2,6 +2,8 @@
 
 namespace App\Notifications;
 
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -13,8 +15,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * El mensaje se arma distinto según si el conductor es o no de la flota que
  * tiene la demanda, por eso viaja ya armado en vez de reconstruirse acá.
  */
-class DemandAlertPushNotification extends Notification
+class DemandAlertPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(public readonly string $sectorName, public readonly bool $fromOwnFleet) {}
 
     /**

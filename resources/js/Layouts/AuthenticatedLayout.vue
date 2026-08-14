@@ -13,7 +13,7 @@ import HelpTip from '@/Components/HelpTip.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
-import { playIncomingRideAlert, unlockAudioContext } from '@/Utils/liveAlert';
+import { playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime, unlockAudioContext } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -218,26 +218,53 @@ onMounted(() => {
 // escuchan este evento en su canal personal (ver sus propios comentarios)
 // para no sonar/mostrar todo dos veces.
 let incomingRideChannel = null;
+let clientRideChannel = null;
+let clientRideAlertTimer = null;
+const clientRideAlert = ref(null);
+
+function showClientRideAlert(message, rideId, sound = 'update') {
+    // En Carreras y en su detalle ya existen avisos específicos con más
+    // contexto. El aviso global cubre Dashboard, Flotas, Perfil y cualquier
+    // otra pantalla sin duplicar sonido cuando el cliente ya está mirando.
+    if (route().current('rides.show')) return;
+
+    if (sound === 'attention') playAttentionAlert();
+    else if (sound === 'cabin') playCabinChime();
+    else playUpdateChime();
+
+    clientRideAlert.value = { message, rideId };
+    clearTimeout(clientRideAlertTimer);
+    clientRideAlertTimer = setTimeout(() => (clientRideAlert.value = null), 9000);
+}
 
 onMounted(() => {
-    if (!showDriverNav.value) return;
-
     const userId = usePage().props.auth.user.id;
-    incomingRideChannel = window.Echo.private(`App.Models.User.${userId}`);
-    incomingRideChannel.listen('.ride-request.created', (e) => {
-        playIncomingRideAlert();
-        pushIncomingRideRequest(e);
-    });
-    // Bug real reportado con capturas (dos conductores viendo el mismo modal
-    // a la vez, uno con "0 seg." pegado para siempre): cuando el despacho
-    // secuencial pasa al siguiente candidato (se acabaron los 30 seg., o el
-    // conductor la descartó desde OTRA pestaña/dispositivo), el backend
-    // avisa con este mismo evento que ya usaba Ride/Index.vue — acá faltaba
-    // escucharlo, así que el modal se quedaba pegado y encima dejaba
-    // aceptar/descartar una solicitud que ya no era suya (403 del servidor).
-    incomingRideChannel.listen('.ride-request.cancelled', (e) => {
-        dismissIncomingRideRequest(e.ride_request_id);
-    });
+
+    if (showDriverNav.value) {
+        incomingRideChannel = window.Echo.private(`App.Models.User.${userId}`);
+        incomingRideChannel.listen('.ride-request.created', (e) => {
+            playIncomingRideAlert();
+            pushIncomingRideRequest(e);
+        });
+        incomingRideChannel.listen('.ride-request.cancelled', (e) => {
+            dismissIncomingRideRequest(e.ride_request_id);
+        });
+    }
+
+    if (showClientNav.value) {
+        clientRideChannel = window.Echo.private(`App.Models.User.${userId}`);
+        clientRideChannel.listen('.ride-request.accepted', (e) => showClientRideAlert(`🚗 ${e.driver_name} aceptó su carrera.`, e.ride_id));
+        clientRideChannel.listen('.ride.started', (e) => showClientRideAlert('🚗 Su conductor ya va en camino.', e.ride_id, 'cabin'));
+        clientRideChannel.listen('.ride.arrived', (e) => showClientRideAlert('📍 Su conductor llegó y lo está esperando.', e.ride_id, 'cabin'));
+        clientRideChannel.listen('.ride.picked_up', (e) => showClientRideAlert('▶️ Su viaje comenzó hacia el destino.', e.ride_id, 'cabin'));
+        clientRideChannel.listen('.ride.completed', (e) => showClientRideAlert('✅ La carrera se completó. Revise el pago y la calificación.', e.ride_id, 'cabin'));
+        clientRideChannel.listen('.ride.cancelled', (e) => showClientRideAlert('⚠️ El conductor canceló la carrera.', e.ride_id, 'attention'));
+        clientRideChannel.listen('.ride.reschedule-responded', (e) => showClientRideAlert(
+            e.confirmed ? '📅 El conductor confirmó el nuevo horario.' : '⚠️ El conductor rechazó el nuevo horario.',
+            e.ride_id,
+            'attention'
+        ));
+    }
 });
 
 onBeforeUnmount(() => {
@@ -245,11 +272,25 @@ onBeforeUnmount(() => {
         incomingRideChannel.stopListening('.ride-request.created');
         incomingRideChannel.stopListening('.ride-request.cancelled');
     }
+    if (clientRideChannel) {
+        window.Echo.leave(`App.Models.User.${usePage().props.auth.user.id}`);
+    }
+    clearTimeout(clientRideAlertTimer);
 });
 </script>
 
 <template>
     <div class="min-h-screen bg-arka-base">
+        <button
+            v-if="clientRideAlert"
+            type="button"
+            class="fixed top-4 left-1/2 -translate-x-1/2 z-[1700] w-[calc(100%-2rem)] max-w-md p-4 rounded-arka bg-arka-card border border-arka-primary/50 shadow-2xl text-left"
+            @click="router.visit(route('rides.show', clientRideAlert.rideId))"
+        >
+            <span class="block text-sm font-semibold text-arka-text">Cambio en su carrera</span>
+            <span class="block mt-1 text-sm text-arka-text-muted">{{ clientRideAlert.message }}</span>
+            <span class="block mt-2 text-xs font-medium text-arka-primary">Tocar para abrir la carrera</span>
+        </button>
         <nav class="bg-arka-card border-b border-arka-text-muted/10">
             <!-- Primary Navigation Menu -->
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

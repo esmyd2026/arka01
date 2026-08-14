@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Ride;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -14,8 +16,10 @@ use NotificationChannels\WebPush\WebPushMessage;
  * entere aunque tenga la app cerrada, mismo patrón que las demás
  * notificaciones de esta carrera (RideArrivedPushNotification, etc.).
  */
-class RidePickedUpPushNotification extends Notification
+class RidePickedUpPushNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(private readonly Ride $ride) {}
 
     /**

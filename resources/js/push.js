@@ -13,20 +13,61 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export function pushSupported() {
-    return 'serviceWorker' in navigator && 'PushManager' in window;
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+function applicationServerKeysMatch(subscription, expectedKey) {
+    const currentKey = subscription.options?.applicationServerKey;
+    if (!currentKey) return false;
+
+    const currentBytes = new Uint8Array(currentKey);
+    return currentBytes.length === expectedKey.length
+        && currentBytes.every((byte, index) => byte === expectedKey[index]);
+}
+
+// El permiso del navegador y una suscripción push activa son dos cosas
+// distintas. Un permiso "granted" sin endpoint (por una llave VAPID rotada,
+// datos borrados o un POST fallido) no puede mostrarse como "todo listo".
+export async function pushSubscriptionStatus() {
+    if (!pushSupported()) return 'unsupported';
+    if (Notification.permission !== 'granted') return Notification.permission;
+
+    try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (!registration) return 'unsubscribed';
+
+        return (await registration.pushManager.getSubscription()) ? 'subscribed' : 'unsubscribed';
+    } catch (error) {
+        console.warn('No se pudo comprobar la suscripción push.', error);
+        return 'unsubscribed';
+    }
 }
 
 export async function subscribeToPush(vapidPublicKey) {
-    if (!pushSupported()) return false;
+    if (!pushSupported() || !vapidPublicKey) return false;
+
+    let subscription = null;
 
     try {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') return false;
 
         const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({
+        const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+        subscription = await registration.pushManager.getSubscription();
+
+        // Si se rotaron las llaves VAPID, el navegador conserva el endpoint
+        // anterior y subscribe() lanza InvalidStateError. Se reemplaza solo
+        // cuando la llave realmente cambió; si sigue igual, se reutiliza y se
+        // vuelve a sincronizar con el backend por si la BD fue restaurada.
+        if (subscription && !applicationServerKeysMatch(subscription, applicationServerKey)) {
+            await subscription.unsubscribe();
+            subscription = null;
+        }
+
+        subscription ??= await registration.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+            applicationServerKey,
         });
 
         await window.axios.post(route('push-subscriptions.store'), subscription.toJSON());
@@ -40,6 +81,10 @@ export async function subscribeToPush(vapidPublicKey) {
         // "Activar notificaciones" se quedaba pegado en pantalla para
         // siempre, aunque el permiso ya estuviera concedido de verdad.
         console.warn('No se pudo completar la suscripción a notificaciones push.', error);
+        // Un endpoint que no pudo sincronizarse con el backend no recibirá
+        // avisos. Se elimina para que el estado sea honesto y el siguiente
+        // intento pueda crear y guardar uno nuevo limpiamente.
+        await subscription?.unsubscribe().catch(() => {});
         return false;
     }
 }

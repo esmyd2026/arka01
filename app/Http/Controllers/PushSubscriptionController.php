@@ -16,9 +16,12 @@ class PushSubscriptionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'endpoint' => ['required', 'string'],
-            'keys.p256dh' => ['required', 'string'],
-            'keys.auth' => ['required', 'string'],
+            // Límites defensivos: estos datos vienen del navegador, pero no
+            // conviene dejar que un cliente manual mande megabytes a columnas
+            // pensadas para credenciales Web Push.
+            'endpoint' => ['required', 'url:http,https', 'max:2048'],
+            'keys.p256dh' => ['required', 'string', 'max:512'],
+            'keys.auth' => ['required', 'string', 'max:255'],
         ]);
 
         $request->user()->updatePushSubscription(
@@ -32,7 +35,7 @@ class PushSubscriptionController extends Controller
 
     public function destroy(Request $request): JsonResponse
     {
-        $endpoint = $request->validate(['endpoint' => ['required', 'string']])['endpoint'];
+        $endpoint = $request->validate(['endpoint' => ['required', 'url:http,https', 'max:2048']])['endpoint'];
 
         $request->user()->deletePushSubscription($endpoint);
 

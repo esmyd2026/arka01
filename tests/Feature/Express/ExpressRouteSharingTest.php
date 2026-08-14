@@ -9,8 +9,10 @@ use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Notifications\ExpressCompanionApprovalPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -186,6 +188,54 @@ class ExpressRouteSharingTest extends TestCase
         $this->assertSame('accepted', $companion->fresh()->status);
     }
 
+    public function test_an_active_express_requires_the_assigned_driver_to_confirm_a_companion(): void
+    {
+        Notification::fake();
+        [$owner, $driver] = $this->clientWithFleetDriver();
+        $route = $this->shareableRoute($owner, [
+            'status' => 'active',
+            'assigned_driver_user_id' => $driver->id,
+            'assigned_at' => now(),
+        ]);
+        $passenger = User::factory()->create();
+        $companion = ExpressRouteCompanion::query()->create([
+            'express_route_id' => $route->id,
+            'passenger_user_id' => $passenger->id,
+            'status' => 'pending',
+            'requested_at' => now(),
+        ]);
+
+        $this->actingAs($owner)->post(route('express-companions.accept', $companion))->assertRedirect();
+        $this->assertSame('pending', $companion->fresh()->driver_approval_status);
+        Notification::assertSentTo($driver, ExpressCompanionApprovalPushNotification::class);
+
+        $this->actingAs($driver)->post(route('express-companions.driver-accept', $companion))->assertRedirect();
+        $this->assertSame('accepted', $companion->fresh()->driver_approval_status);
+        Notification::assertSentTo($passenger, ExpressCompanionApprovalPushNotification::class);
+    }
+
+    public function test_a_different_driver_cannot_decide_about_an_express_companion(): void
+    {
+        [$owner, $driver] = $this->clientWithFleetDriver();
+        $route = $this->shareableRoute($owner, [
+            'status' => 'active',
+            'assigned_driver_user_id' => $driver->id,
+            'assigned_at' => now(),
+        ]);
+        $companion = ExpressRouteCompanion::query()->create([
+            'express_route_id' => $route->id,
+            'passenger_user_id' => User::factory()->create()->id,
+            'status' => 'accepted',
+            'driver_approval_status' => 'pending',
+            'requested_at' => now(),
+        ]);
+
+        $stranger = User::factory()->create();
+        $this->actingAs($stranger)
+            ->post(route('express-companions.driver-accept', $companion))
+            ->assertForbidden();
+    }
+
     public function test_a_stranger_cannot_accept_a_companion_request_on_someone_elses_route(): void
     {
         [$owner] = $this->clientWithFleetDriver();
@@ -234,6 +284,7 @@ class ExpressRouteSharingTest extends TestCase
             'express_route_id' => $route->id,
             'passenger_user_id' => $companion->id,
             'status' => 'accepted',
+            'driver_approval_status' => 'accepted',
             'requested_at' => now(),
             'responded_at' => now(),
         ]);
@@ -260,6 +311,7 @@ class ExpressRouteSharingTest extends TestCase
             'express_route_id' => $route->id,
             'passenger_user_id' => $companion->id,
             'status' => 'accepted',
+            'driver_approval_status' => 'accepted',
             'requested_at' => now(),
             'responded_at' => now(),
         ]);
