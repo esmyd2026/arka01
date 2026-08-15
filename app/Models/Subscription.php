@@ -19,6 +19,8 @@ class Subscription extends Model
         'custom_max_clients',
         'custom_max_fleets',
         'custom_max_drivers_per_fleet',
+        'custom_max_cooperatives',
+        'custom_max_units',
         'activated_by',
         'note',
     ];

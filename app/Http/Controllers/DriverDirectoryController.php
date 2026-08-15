@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
+use App\Models\FleetMember;
 use App\Models\Review;
 use App\Services\Haversine;
 use App\Services\PlanLimits;
@@ -59,7 +60,11 @@ class DriverDirectoryController extends Controller
             // sentido que siga apareciendo en el directorio como "no
             // disponible ahora", tiene que desaparecer del todo.
             ->whereNull('deactivated_at')
-            ->with('user')
+            ->when($request->input('type') === 'independent', fn ($query) => $query->where('driver_type', 'independent'))
+            ->when($request->input('type') === 'public_transport', fn ($query) => $query->where('driver_type', 'public_transport'))
+            ->when($request->input('type') === 'cooperative', fn ($query) => $query->whereHas('user.cooperativeDriverMemberships', fn ($membership) => $membership
+                ->where('status', 'accepted')->whereNull('ended_at')))
+            ->with('user.cooperativeDriverMemberships.cooperative')
             ->get();
 
         $userIds = $driverProfiles->pluck('user_id');
@@ -83,6 +88,12 @@ class DriverDirectoryController extends Controller
 
         $activeDriverIds = $fleet->activeMembers()->pluck('driver_user_id');
         $pendingDriverIds = $fleet->invitations()->where('status', 'pending')->pluck('driver_user_id');
+        $clientCounts = FleetMember::query()
+            ->whereIn('driver_user_id', $userIds)
+            ->whereNull('left_at')
+            ->selectRaw('driver_user_id, count(*) as aggregate')
+            ->groupBy('driver_user_id')
+            ->pluck('aggregate', 'driver_user_id');
 
         $ratings = Review::query()
             ->whereIn('reviewee_user_id', $userIds)
@@ -94,8 +105,10 @@ class DriverDirectoryController extends Controller
         $entries = $driverProfiles
             // Un cliente no se ve a sí mismo en el directorio aunque también sea conductor.
             ->reject(fn (DriverProfile $profile) => $profile->user_id === $request->user()->id)
-            ->map(function (DriverProfile $profile) use ($ratings, $lat, $lng, $activeDriverIds, $pendingDriverIds) {
+            ->map(function (DriverProfile $profile) use ($ratings, $lat, $lng, $activeDriverIds, $pendingDriverIds, $clientCounts) {
                 $rating = $ratings->get($profile->user_id);
+                $cooperative = $profile->user->cooperativeDriverMemberships
+                    ->first(fn ($membership) => $membership->status === 'accepted' && $membership->ended_at === null)?->cooperative;
 
                 $distanceKm = ($lat !== null && $lng !== null && $profile->current_lat !== null)
                     ? Haversine::distanceKm($lat, $lng, (float) $profile->current_lat, (float) $profile->current_lng)
@@ -128,6 +141,10 @@ class DriverDirectoryController extends Controller
                     // solo el propio conductor y un admin la ven. El tipo de
                     // vehículo (SUV, sedán, etc.) es lo que la reemplaza acá.
                     'vehicle_type' => $profile->vehicleTypeLabel(),
+                    'trust_label' => $profile->verification_status === 'approved' ? $profile->trust_label : null,
+                    'driver_type' => $profile->driver_type,
+                    'cooperative' => $cooperative ? ['id' => $cooperative->id, 'name' => $cooperative->name] : null,
+                    'clients_count' => (int) ($clientCounts[$profile->user_id] ?? 0),
                     // Medalla por puntos (pedido explícito del usuario): se
                     // usa abajo para filtrar (solo Oro para arriba entra al
                     // directorio, además del plan que ya se filtró en el
@@ -173,6 +190,7 @@ class DriverDirectoryController extends Controller
         return Inertia::render('Directory/Index', [
             'drivers' => $paginated,
             'targetFleetId' => $fleet->id,
+            'filters' => ['type' => $request->input('type')],
         ]);
     }
 }

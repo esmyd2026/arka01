@@ -21,6 +21,7 @@ const props = defineProps({
 // estas listas tienen que recalcularse con los datos nuevos en ese momento.
 const driverPlans = computed(() => props.plans.filter((p) => p.owner_type === 'driver'));
 const clientPlans = computed(() => props.plans.filter((p) => p.owner_type === 'client'));
+const cooperativePlans = computed(() => props.plans.filter((p) => p.owner_type === 'cooperative'));
 
 const editingId = ref(null);
 const creatingFor = ref(null); // 'driver' | 'client' | null
@@ -42,6 +43,8 @@ const blankForm = (ownerType) => ({
     express_enabled: true,
     max_fleets: '',
     max_drivers_per_fleet: '',
+    max_cooperatives: '',
+    max_units: '',
     is_active: true,
     sort_order: 0,
 });
@@ -65,6 +68,8 @@ function startEdit(plan) {
     form.express_enabled = plan.express_enabled;
     form.max_fleets = plan.max_fleets ?? '';
     form.max_drivers_per_fleet = plan.max_drivers_per_fleet ?? '';
+    form.max_cooperatives = plan.max_cooperatives ?? '';
+    form.max_units = plan.max_units ?? '';
     form.is_active = plan.is_active;
     form.sort_order = plan.sort_order;
 }
@@ -108,11 +113,11 @@ async function destroyPlan(plan) {
     <AdminLayout title="Catálogo de planes">
         <div class="py-12">
             <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-                <template v-for="(list, ownerType) in { driver: driverPlans, client: clientPlans }" :key="ownerType">
+                <template v-for="(list, ownerType) in { driver: driverPlans, client: clientPlans, cooperative: cooperativePlans }" :key="ownerType">
                     <div class="bg-arka-card shadow rounded-arka">
                         <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
                             <h3 class="text-lg font-medium text-arka-text">
-                                Planes de {{ ownerType === 'driver' ? 'conductor' : 'cliente' }}
+                                Planes de {{ ownerType === 'driver' ? 'conductor' : ownerType === 'client' ? 'cliente' : 'cooperativa' }}
                             </h3>
                             <PrimaryButton @click="startCreate(ownerType)">Nuevo plan</PrimaryButton>
                         </div>
@@ -139,8 +144,11 @@ async function destroyPlan(plan) {
                                                     · ~{{ plan.estimated_monthly_rides }} carreras/mes (~${{ projectedEarnings(plan.estimated_monthly_rides) }})
                                                 </span>
                                             </template>
+                                            <template v-else-if="ownerType === 'client'">
+                                                {{ plan.max_fleets }} flota(s) · {{ plan.max_drivers_per_fleet }} conductores/flota · {{ plan.max_cooperatives ?? 'sin límite' }} cooperativas
+                                            </template>
                                             <template v-else>
-                                                {{ plan.max_fleets }} flota(s) · {{ plan.max_drivers_per_fleet }} conductores/flota
+                                                {{ plan.max_units ?? 'sin límite' }} unidades/conductores
                                             </template>
                                             <span class="text-xs"> · {{ plan.subscriptions_count }} suscriptor(es) histórico(s)</span>
                                         </p>
@@ -186,7 +194,7 @@ async function destroyPlan(plan) {
                                                 </p>
                                             </div>
                                         </template>
-                                        <template v-else>
+                                        <template v-else-if="ownerType === 'client'">
                                             <div>
                                                 <InputLabel value="Máx. flotas" />
                                                 <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_fleets" />
@@ -194,6 +202,16 @@ async function destroyPlan(plan) {
                                             <div>
                                                 <InputLabel value="Máx. conductores por flota" />
                                                 <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_drivers_per_fleet" />
+                                            </div>
+                                            <div>
+                                                <InputLabel value="Máx. cooperativas en la red" />
+                                                <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_cooperatives" />
+                                            </div>
+                                        </template>
+                                        <template v-else>
+                                            <div>
+                                                <InputLabel value="Máx. unidades/conductores (vacío = sin límite)" />
+                                                <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_units" />
                                             </div>
                                         </template>
                                     </div>
@@ -262,7 +280,7 @@ async function destroyPlan(plan) {
                                             </p>
                                         </div>
                                     </template>
-                                    <template v-else>
+                                    <template v-else-if="ownerType === 'client'">
                                         <div>
                                             <InputLabel value="Máx. flotas" />
                                             <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_fleets" required />
@@ -270,6 +288,16 @@ async function destroyPlan(plan) {
                                         <div>
                                             <InputLabel value="Máx. conductores por flota" />
                                             <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_drivers_per_fleet" required />
+                                        </div>
+                                        <div>
+                                            <InputLabel value="Máx. cooperativas en la red" />
+                                            <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_cooperatives" />
+                                        </div>
+                                    </template>
+                                    <template v-else>
+                                        <div>
+                                            <InputLabel value="Máx. unidades/conductores (vacío = sin límite)" />
+                                            <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_units" />
                                         </div>
                                     </template>
                                 </div>

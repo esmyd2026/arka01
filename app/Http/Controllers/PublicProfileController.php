@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FleetMember;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -28,7 +29,12 @@ class PublicProfileController extends Controller
      */
     public function show(Request $request, User $user): Response|View
     {
-        $user->load('driverProfile');
+        $user->load(['driverProfile', 'cooperativeDriverMemberships.cooperative']);
+        $activeCooperative = $user->cooperativeDriverMemberships
+            ->first(fn ($membership) => $membership->status === 'accepted' && $membership->ended_at === null)?->cooperative;
+        $fleetClientsCount = $user->driverProfile
+            ? FleetMember::query()->where('driver_user_id', $user->id)->whereNull('left_at')->count()
+            : 0;
 
         $profileUrl = route('profiles.show', $user->id);
 
@@ -88,6 +94,10 @@ class PublicProfileController extends Controller
                     'accepts_cash' => $user->driverProfile->accepts_cash,
                     'accepts_transfer' => $user->driverProfile->accepts_transfer,
                     'verification_status' => $user->driverProfile->verification_status,
+                    'driver_type' => $user->driverProfile->driver_type,
+                    'trust_label' => $user->driverProfile->verification_status === 'approved' ? $user->driverProfile->trust_label : null,
+                    'cooperative' => $activeCooperative ? ['id' => $activeCooperative->id, 'name' => $activeCooperative->name] : null,
+                    'clients_count' => $fleetClientsCount,
                 ] : null,
             ],
             // Pedido explícito del usuario: para el código QR/enlace de

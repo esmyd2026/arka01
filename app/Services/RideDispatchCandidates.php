@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Cooperative;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\Ride;
@@ -19,6 +20,53 @@ use Illuminate\Support\Collection;
  */
 class RideDispatchCandidates
 {
+    /**
+     * Conductores aceptados de una cooperativa, disponibles primero y luego
+     * por cercanía al punto de recogida. Los no disponibles quedan fuera de
+     * la oferta automática, pero continúan visibles en el panel operativo.
+     *
+     * @return array<int, int>
+     */
+    public static function forCooperative(
+        Cooperative $cooperative,
+        float $originLat,
+        float $originLng,
+        int $passengerCount = 1,
+        bool $needsTrunk = false,
+    ): array {
+        $busyDriverIds = Ride::query()->where('status', 'in_progress')->pluck('driver_user_id');
+
+        return $cooperative->activeDriverMemberships()
+            ->with('driver.driverProfile')
+            ->get()
+            ->map(fn ($membership) => $membership->driver)
+            ->filter(function (User $driver) use ($busyDriverIds, $originLat, $originLng, $passengerCount, $needsTrunk) {
+                $profile = $driver->driverProfile;
+
+                return $profile
+                    && $profile->driver_type === 'public_transport'
+                    && $profile->verification_status === 'approved'
+                    && $profile->is_available
+                    && ! $profile->isSuspended()
+                    && $profile->isReachable($driver->hasActiveWhatsAppSession())
+                    && ! $busyDriverIds->contains($driver->id)
+                    && $profile->isWithinRangeOf($originLat, $originLng)
+                    && $profile->passenger_capacity >= $passengerCount
+                    && (! $needsTrunk || $profile->has_trunk);
+            })
+            ->sortBy(fn (User $driver) => $driver->driverProfile->current_lat !== null && $driver->driverProfile->current_lng !== null
+                ? Haversine::distanceKm(
+                    $originLat,
+                    $originLng,
+                    (float) $driver->driverProfile->current_lat,
+                    (float) $driver->driverProfile->current_lng,
+                )
+                : PHP_FLOAT_MAX)
+            ->pluck('id')
+            ->values()
+            ->all();
+    }
+
     /**
      * Reúne los conductores de la "bolsa" elegida (mi flota / público /
      * ambos), sin filtrar todavía por elegibilidad — forPool() y

@@ -6,6 +6,8 @@ use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -75,6 +77,8 @@ class NavigationRolesTest extends TestCase
      */
     public function test_a_fleet_owner_can_switch_to_the_driver_role(): void
     {
+        Storage::fake('local');
+        Storage::fake('public');
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
 
@@ -92,6 +96,10 @@ class NavigationRolesTest extends TestCase
                 'passenger_capacity' => 4,
                 'has_trunk' => true,
                 'rate_per_km' => 0.4,
+                'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
+                'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
+                'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
+                'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
             ])
             ->assertSessionHasNoErrors();
 

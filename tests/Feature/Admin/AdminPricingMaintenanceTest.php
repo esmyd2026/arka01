@@ -112,9 +112,12 @@ class AdminPricingMaintenanceTest extends TestCase
         $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 22:00:00'));
 
         $this->assertTrue($result['is_night']);
-        $this->assertEquals(10.0, $result['base']);
-        $this->assertEquals(5.0, $result['night_surcharge']);
-        $this->assertEquals(15.0, $result['total']);
+        // Pedido explícito del usuario ("súbele siempre... a los km 800
+        // metros más"): 10.0 km pedidos + 0.8 km de margen = 10.8 km reales
+        // de base — ver PriceCalculator::DISTANCE_PADDING_KM.
+        $this->assertEquals(10.8, $result['base']);
+        $this->assertEquals(5.4, $result['night_surcharge']);
+        $this->assertEquals(16.2, $result['total']);
     }
 
     /**
@@ -129,10 +132,11 @@ class AdminPricingMaintenanceTest extends TestCase
 
         $this->assertTrue($result['is_peak']);
         $this->assertFalse($result['is_night']);
-        $this->assertEquals(10.0, $result['base']);
-        $this->assertEquals(2.0, $result['peak_surcharge']);
+        // Ídem margen de 800 m de arriba.
+        $this->assertEquals(10.8, $result['base']);
+        $this->assertEquals(2.16, $result['peak_surcharge']);
         $this->assertEquals(0.0, $result['night_surcharge']);
-        $this->assertEquals(12.0, $result['total']);
+        $this->assertEquals(12.96, $result['total']);
     }
 
     public function test_price_calculator_applies_the_peak_surcharge_in_the_evening_window(): void
@@ -142,7 +146,7 @@ class AdminPricingMaintenanceTest extends TestCase
         $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 18:00:00'));
 
         $this->assertTrue($result['is_peak']);
-        $this->assertEquals(12.0, $result['total']);
+        $this->assertEquals(12.96, $result['total']);
     }
 
     public function test_price_calculator_does_not_apply_the_peak_surcharge_outside_its_windows(): void
@@ -153,7 +157,8 @@ class AdminPricingMaintenanceTest extends TestCase
 
         $this->assertFalse($result['is_peak']);
         $this->assertEquals(0.0, $result['peak_surcharge']);
-        $this->assertEquals(10.0, $result['total']);
+        // El margen de 800 m se suma siempre, aunque no haya recargo.
+        $this->assertEquals(10.8, $result['total']);
     }
 
     /**
@@ -175,8 +180,22 @@ class AdminPricingMaintenanceTest extends TestCase
 
         $this->assertTrue($result['is_night']);
         $this->assertFalse($result['is_peak']);
-        $this->assertEquals(5.0, $result['night_surcharge']);
+        $this->assertEquals(5.4, $result['night_surcharge']);
         $this->assertEquals(0.0, $result['peak_surcharge']);
-        $this->assertEquals(15.0, $result['total']);
+        $this->assertEquals(16.2, $result['total']);
+    }
+
+    /**
+     * Pedido explícito del usuario: "súbele siempre a cada carrera... a los
+     * km 800 metros más" — un margen fijo sobre TODA carrera, sin depender
+     * de hora pico ni nocturna, para cubrir desvíos de ruta reales e
+     * imprecisión del pin de origen/destino.
+     */
+    public function test_price_calculator_always_pads_the_distance_by_800_meters(): void
+    {
+        $result = PriceCalculator::suggestedPrice(4.0, 1.0, Carbon::parse('2026-01-15 12:00:00'));
+
+        $this->assertEquals(4.8, $result['base']);
+        $this->assertEquals(4.8, $result['total']);
     }
 }

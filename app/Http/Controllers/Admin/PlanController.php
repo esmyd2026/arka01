@@ -62,7 +62,7 @@ class PlanController extends Controller
      */
     public function destroy(SubscriptionPlan $plan): RedirectResponse
     {
-        if ($plan->code === 'gratis') {
+        if ($plan->code === 'gratis' || ($plan->owner_type === 'cooperative' && $plan->code === 'basico')) {
             throw ValidationException::withMessages([
                 'plan' => 'El plan Gratis no se puede eliminar: es la base a la que cae cualquiera sin suscripción.',
             ]);
@@ -85,7 +85,7 @@ class PlanController extends Controller
     private function validatePlan(Request $request, ?SubscriptionPlan $plan = null): array
     {
         $validated = $request->validate([
-            'owner_type' => ['required', Rule::in(['driver', 'client'])],
+            'owner_type' => ['required', Rule::in(['driver', 'client', 'cooperative'])],
             'code' => [
                 'required', 'string', 'max:50', 'alpha_dash',
                 Rule::unique('subscription_plans', 'code')
@@ -103,6 +103,8 @@ class PlanController extends Controller
             'express_enabled' => ['boolean'],
             'max_fleets' => ['nullable', 'integer', 'min:0'],
             'max_drivers_per_fleet' => ['nullable', 'integer', 'min:0'],
+            'max_cooperatives' => ['nullable', 'integer', 'min:0'],
+            'max_units' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],
         ]);

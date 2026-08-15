@@ -14,6 +14,10 @@ class RideRequest extends Model
 
     protected $fillable = [
         'fleet_id',
+        'cooperative_id',
+        'cooperative_assignment_status',
+        'cooperative_candidate_ids',
+        'cooperative_offer_expires_at',
         'express_route_id',
         'client_user_id',
         'driver_user_id',
@@ -61,6 +65,8 @@ class RideRequest extends Model
         'round_trip' => 'boolean',
         'offer_candidate_ids' => 'array',
         'current_offer_expires_at' => 'datetime',
+        'cooperative_candidate_ids' => 'array',
+        'cooperative_offer_expires_at' => 'datetime',
         'passenger_count' => 'integer',
         'needs_trunk' => 'boolean',
     ];
@@ -68,6 +74,11 @@ class RideRequest extends Model
     public function fleet(): BelongsTo
     {
         return $this->belongsTo(Fleet::class);
+    }
+
+    public function cooperative(): BelongsTo
+    {
+        return $this->belongsTo(Cooperative::class);
     }
 
     /**

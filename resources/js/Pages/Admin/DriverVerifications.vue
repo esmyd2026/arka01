@@ -36,10 +36,7 @@ function confirmReject(id) {
     );
 }
 
-// Detalle de imágenes (pedido explícito del usuario: "debe ser posible
-// visualizar el detalle de todas las imágenes cargadas") — la miniatura de la
-// lista es chica para leer una licencia o una placa con confianza.
-const viewingImage = ref(null);
+const viewingDocument = ref(null);
 </script>
 
 <template>
@@ -49,8 +46,8 @@ const viewingImage = ref(null);
         <div class="py-12">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <p class="text-sm text-arka-text-muted">
-                    Licencia y foto del vehículo pendientes de revisión (sección 8 y 9.5-C). Al aprobar, el conductor
-                    muestra la insignia "Conductor verificado" en su perfil público.
+                    Cédula, licencia, antecedentes penales y fotografía de perfil pendientes de revisión. Al aprobar,
+                    el conductor muestra la insignia correspondiente a su tipo en el perfil público.
                 </p>
 
                 <p v-if="!pending.length" class="text-sm text-arka-text-muted">No hay verificaciones pendientes.</p>
@@ -73,32 +70,30 @@ const viewingImage = ref(null);
                             <span v-if="profile.vehicle_plate"> · Placa {{ profile.vehicle_plate }}</span>
                         </p>
 
-                        <div class="grid grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <button
+                                v-if="profile.identity_document_url"
+                                type="button"
+                                class="rounded-arka border border-arka-text-muted/20 p-3 text-left text-sm font-medium text-arka-primary hover:bg-arka-primary/10"
+                                @click="viewingDocument = { url: profile.identity_document_url, label: 'Cédula de identidad' }"
+                            >
+                                Ver cédula
+                            </button>
                             <button
                                 v-if="profile.license_photo_url"
                                 type="button"
-                                class="block"
-                                title="Ver licencia completa"
-                                @click="viewingImage = { url: profile.license_photo_url, label: 'Licencia' }"
+                                class="rounded-arka border border-arka-text-muted/20 p-3 text-left text-sm font-medium text-arka-primary hover:bg-arka-primary/10"
+                                @click="viewingDocument = { url: profile.license_photo_url, label: 'Licencia de conducir' }"
                             >
-                                <img
-                                    :src="profile.license_photo_url"
-                                    alt="Licencia"
-                                    class="h-32 w-full object-cover rounded-arka hover:opacity-80 transition"
-                                />
+                                Ver licencia
                             </button>
                             <button
-                                v-if="profile.vehicle_photo_url"
+                                v-if="profile.police_record_url"
                                 type="button"
-                                class="block"
-                                title="Ver foto del vehículo completa"
-                                @click="viewingImage = { url: profile.vehicle_photo_url, label: 'Vehículo' }"
+                                class="rounded-arka border border-arka-text-muted/20 p-3 text-left text-sm font-medium text-arka-primary hover:bg-arka-primary/10"
+                                @click="viewingDocument = { url: profile.police_record_url, label: 'Antecedentes penales' }"
                             >
-                                <img
-                                    :src="profile.vehicle_photo_url"
-                                    alt="Vehículo"
-                                    class="h-32 w-full object-cover rounded-arka hover:opacity-80 transition"
-                                />
+                                Ver antecedentes
                             </button>
                         </div>
 
@@ -123,13 +118,12 @@ const viewingImage = ref(null);
             </div>
         </div>
 
-        <!-- Imagen completa, sin recortar (pedido explícito del usuario). -->
-        <Modal :show="viewingImage !== null" max-width="lg" @close="viewingImage = null">
-            <div v-if="viewingImage" class="p-6 space-y-4">
-                <h3 class="text-lg font-medium text-arka-text">{{ viewingImage.label }}</h3>
-                <img :src="viewingImage.url" :alt="viewingImage.label" class="w-full max-h-[70vh] object-contain rounded-arka border border-arka-text-muted/20 bg-arka-base" />
+        <Modal :show="viewingDocument !== null" max-width="lg" @close="viewingDocument = null">
+            <div v-if="viewingDocument" class="p-6 space-y-4">
+                <h3 class="text-lg font-medium text-arka-text">{{ viewingDocument.label }}</h3>
+                <iframe :src="viewingDocument.url" :title="viewingDocument.label" class="h-[70vh] w-full rounded-arka border border-arka-text-muted/20 bg-white" />
                 <div class="flex justify-end">
-                    <SecondaryButton @click="viewingImage = null">Cerrar</SecondaryButton>
+                    <SecondaryButton @click="viewingDocument = null">Cerrar</SecondaryButton>
                 </div>
             </div>
         </Modal>

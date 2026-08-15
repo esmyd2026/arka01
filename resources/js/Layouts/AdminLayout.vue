@@ -12,6 +12,7 @@ defineProps({
 });
 
 const sections = [
+    { route: 'admin.cooperatives.index', match: 'admin.cooperatives.*', label: 'Cooperativas' },
     // Depurar carreras de prueba (pedido explícito del usuario) — cerca del
     // resto de mantenimiento operativo, antes que Suscripciones.
     { route: 'admin.rides.index', match: 'admin.rides.*', label: 'Carreras' },

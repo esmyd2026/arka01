@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class WhatsAppSetting extends Model
 {
+    use HasFactory;
+
     // Eloquent adivinaría "whats_app_settings" (separa "WhatsApp" en dos
     // palabras) — la migración usa el nombre real de la integración, sin el
     // guion bajo de más.

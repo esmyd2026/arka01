@@ -91,6 +91,8 @@ class RideRequested implements ShouldBroadcast
             // actual sin otra consulta — mismo criterio que
             // negotiating_driver_name/declined_driver_name en otros eventos.
             'driver_name' => $this->rideRequest->driver?->name,
+            'cooperative_id' => $this->rideRequest->cooperative_id,
+            'cooperative_name' => $this->rideRequest->cooperative?->name,
             'origin_address' => $this->rideRequest->origin_address,
             'origin_sector' => $this->rideRequest->originSector ? ['name' => $this->rideRequest->originSector->name] : null,
             'destination_address' => $this->rideRequest->destination_address,

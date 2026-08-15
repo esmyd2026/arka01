@@ -100,8 +100,13 @@ class User extends Authenticatable
         'password' => 'hashed',
         'password_set_at' => 'datetime',
         'is_admin' => 'boolean',
-        'registration_lat' => 'decimal:7',
-        'registration_lng' => 'decimal:7',
+        // Auditoría de seguridad: bajado de 7 a 4 decimales (~11 metros en
+        // vez de ~1 metro) — ver la migración
+        // reduce_registration_location_precision_on_users_table. Alcanza de
+        // sobra para el respaldo de "conductores cerca" (nivel de barrio/
+        // ciudad), sin poder ubicar la vivienda exacta de nadie.
+        'registration_lat' => 'decimal:4',
+        'registration_lng' => 'decimal:4',
     ];
 
     protected static function booted(): void
@@ -127,7 +132,9 @@ class User extends Authenticatable
         // cubre (recalcula 'conductor'/'cliente' según corresponda).
         static::saving(function (User $user) {
             if ($user->isDirty('is_admin')) {
-                $user->role = $user->is_admin ? 'admin' : ($user->isDriver() ? 'conductor' : 'cliente');
+                $user->role = $user->is_admin
+                    ? 'admin'
+                    : ($user->isCooperative() ? 'cooperativa' : ($user->isDriver() ? 'conductor' : 'cliente'));
             }
         });
     }
@@ -281,6 +288,24 @@ class User extends Authenticatable
     public function driverProfile(): HasOne
     {
         return $this->hasOne(DriverProfile::class);
+    }
+
+    /** Perfil organizacional cuando la cuenta pertenece a una cooperativa. */
+    public function cooperative(): HasOne
+    {
+        return $this->hasOne(Cooperative::class);
+    }
+
+    /** Invitaciones y vínculos de esta cuenta conductora con cooperativas. */
+    public function cooperativeDriverMemberships(): HasMany
+    {
+        return $this->hasMany(CooperativeDriverMembership::class, 'driver_user_id');
+    }
+
+    /** Cooperativas guardadas por esta cuenta cliente. */
+    public function clientCooperativeLinks(): HasMany
+    {
+        return $this->hasMany(ClientCooperative::class, 'client_user_id');
     }
 
     /**
@@ -442,7 +467,12 @@ class User extends Authenticatable
      */
     public function isClient(): bool
     {
-        return ! $this->is_admin && ! $this->isDriver();
+        return ! $this->is_admin && ! $this->isCooperative() && ! $this->isDriver();
+    }
+
+    public function isCooperative(): bool
+    {
+        return $this->cooperative()->exists();
     }
 
     public function isAdmin(): bool

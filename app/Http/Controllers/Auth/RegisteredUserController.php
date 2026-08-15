@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ResolveRegistrationNeighborhood;
 use App\Mail\WelcomeMail;
 use App\Models\City;
+use App\Models\Cooperative;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Rules\ValidPhoneNumberLocal;
@@ -58,7 +59,7 @@ class RegisteredUserController extends Controller
             // se persiste en `users`: la fuente de verdad del rol sigue siendo
             // `isDriver()`/`isClient()` (sección 3.1), esto es solo para decidir
             // el siguiente paso de la guía.
-            'account_type' => ['required', 'string', Rule::in(['cliente', 'conductor'])],
+            'account_type' => ['required', 'string', Rule::in(['cliente', 'conductor', 'cooperativa'])],
             'name' => ['required', 'string', 'max:255'],
             // Sin 'unique:' acá a propósito: el correo duplicado se valida a
             // mano más abajo (mismo criterio que el teléfono), con un
@@ -190,6 +191,18 @@ class RegisteredUserController extends Controller
         if ($validated['account_type'] === 'conductor') {
             return redirect()->route('driver.profile.edit')
                 ->with('status', '¡Cuenta creada! Ahora complete los datos de su vehículo para empezar a recibir carreras.');
+        }
+
+        if ($validated['account_type'] === 'cooperativa') {
+            Cooperative::query()->create([
+                'user_id' => $user->id,
+                'phone' => $user->phone,
+                'email' => $user->email,
+                'city_id' => $user->city_id,
+            ]);
+
+            return redirect()->route('cooperative.profile.edit')
+                ->with('status', '¡Cuenta creada! Complete y envíe la documentación de la cooperativa para validación.');
         }
 
         // Pedido explícito del usuario ("que se una a su flota"): si vino del

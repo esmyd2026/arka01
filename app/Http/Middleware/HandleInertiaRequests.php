@@ -43,6 +43,7 @@ class HandleInertiaRequests extends Middleware
                 // exclusividad en FleetController/DriverProfileController).
                 'isDriver' => $user?->isDriver() ?? false,
                 'isClient' => $user?->isClient() ?? false,
+                'isCooperative' => $user?->isCooperative() ?? false,
                 'hasFleet' => $user ? $user->fleets()->exists() : false,
                 // Para la insignia compacta "★4.5" del propio usuario en el
                 // menú de cuenta (sección 3.6) — mismo criterio que el perfil
@@ -55,6 +56,7 @@ class HandleInertiaRequests extends Middleware
                 'plans' => $user ? [
                     'driver' => $user->isDriver() ? $this->planLimits->forDriver($user)['plan_name'] : null,
                     'client' => $user->isClient() ? $this->planLimits->forClient($user)['plan_name'] : null,
+                    'cooperative' => $user->isCooperative() ? $this->planLimits->forCooperative($user)['plan_name'] : null,
                 ] : null,
                 // Pedido explícito del usuario: "que el conductor sepa
                 // también en cuál está" — la insignia de verificado depende

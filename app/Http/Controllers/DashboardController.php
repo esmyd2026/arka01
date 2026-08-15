@@ -13,6 +13,7 @@ use App\Models\RideRequest;
 use App\Models\User;
 use App\Services\Haversine;
 use App\Services\WhatsAppConfig;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -25,9 +26,13 @@ use Inertia\Response;
  */
 class DashboardController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
+
+        if ($user->isCooperative()) {
+            return redirect()->route('cooperative.dashboard');
+        }
         $userId = $user->id;
 
         $driverStats = null;

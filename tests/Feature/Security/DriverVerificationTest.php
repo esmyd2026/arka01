@@ -12,8 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
- * Verificación visible antes de subir (sección 8): un conductor sube foto de
- * licencia y vehículo, y un admin las aprueba o rechaza (sección 9.5-C).
+ * Verificación documental: cédula, licencia, antecedentes y foto de perfil.
  */
 class DriverVerificationTest extends TestCase
 {
@@ -21,9 +20,7 @@ class DriverVerificationTest extends TestCase
 
     public function test_uploading_documents_stores_them_and_resets_verification_to_pending(): void
     {
-        // Disco privado para la licencia (documento de identidad), público
-        // para la foto del vehículo (auditoría de seguridad — sí se muestra
-        // en el directorio/perfil público, a propósito).
+        // Todos los documentos viven en privado; solo el avatar es público.
         Storage::fake('local');
         Storage::fake('public');
 
@@ -44,16 +41,20 @@ class DriverVerificationTest extends TestCase
             'passenger_capacity' => 4,
             'has_trunk' => true,
             'rate_per_km' => 0.5,
+            'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
+            'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
             'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
-            'vehicle_photo' => UploadedFile::fake()->image('vehiculo.jpg'),
+            'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
         ]);
 
         $response->assertRedirect();
 
         $profile = $driver->driverProfile()->first();
         $this->assertSame('pending', $profile->verification_status);
+        Storage::disk('local')->assertExists($profile->identity_document_path);
         Storage::disk('local')->assertExists($profile->license_photo_path);
-        Storage::disk('public')->assertExists($profile->vehicle_photo_path);
+        Storage::disk('local')->assertExists($profile->police_record_path);
+        Storage::disk('public')->assertExists($driver->fresh()->avatar_path);
     }
 
     /**
@@ -65,7 +66,7 @@ class DriverVerificationTest extends TestCase
      * admin (que exige license_photo_path no nulo) porque no había nada que
      * revisar. Ahora el estado sin documentos es null, no 'pending'.
      */
-    public function test_saving_the_profile_for_the_first_time_without_photos_does_not_mark_it_pending(): void
+    public function test_saving_the_profile_for_the_first_time_requires_verification_documents(): void
     {
         $driver = User::factory()->create();
 
@@ -80,12 +81,9 @@ class DriverVerificationTest extends TestCase
             'passenger_capacity' => 4,
             'has_trunk' => true,
             'rate_per_km' => 0.5,
-        ])->assertSessionHasNoErrors();
+        ])->assertSessionHasErrors('identity_document');
 
-        $profile = $driver->driverProfile()->first();
-        $this->assertNull($profile->verification_status);
-        $this->assertNull($profile->license_photo_path);
-        $this->assertTrue($profile->canUploadDocuments());
+        $this->assertNull($driver->driverProfile()->first());
     }
 
     public function test_an_admin_can_approve_a_pending_verification(): void
@@ -157,7 +155,9 @@ class DriverVerificationTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create([
             'verification_status' => 'pending',
+            'identity_document_path' => 'driver-documents/cedula.jpg',
             'license_photo_path' => 'driver-documents/example.jpg',
+            'police_record_path' => 'driver-documents/record.pdf',
         ]);
 
         $this->actingAs($driver)->post(route('driver.profile.update'), [
@@ -186,10 +186,13 @@ class DriverVerificationTest extends TestCase
         Storage::fake('local');
 
         $driver = User::factory()->create();
+        $driver->forceFill(['avatar_path' => 'https://example.com/avatar.jpg'])->save();
         DriverProfile::factory()->for($driver)->create([
             'verification_status' => 'rejected',
             'verification_rejection_reason' => 'Foto borrosa.',
+            'identity_document_path' => 'driver-documents/cedula.jpg',
             'license_photo_path' => 'driver-documents/example.jpg',
+            'police_record_path' => 'driver-documents/record.pdf',
         ]);
 
         $this->actingAs($driver)->post(route('driver.profile.update'), [

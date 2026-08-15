@@ -19,12 +19,18 @@ class DriverProfile extends Model
     protected $appends = [
         'license_photo_url',
         'vehicle_photo_url',
+        'identity_document_url',
+        'police_record_url',
+        'trust_label',
     ];
 
     protected $fillable = [
         'user_id',
+        'driver_type',
         'license_number',
         'license_photo_path',
+        'identity_document_path',
+        'police_record_path',
         'vehicle_make',
         'vehicle_model',
         'vehicle_color',
@@ -95,7 +101,7 @@ class DriverProfile extends Model
         static::deleted(function (DriverProfile $profile) {
             $user = User::find($profile->user_id);
             if ($user) {
-                $user->role = $user->is_admin ? 'admin' : 'cliente';
+                $user->role = $user->is_admin ? 'admin' : ($user->isCooperative() ? 'cooperativa' : 'cliente');
                 $user->save();
             }
         });
@@ -129,6 +135,38 @@ class DriverProfile extends Model
     public function getVehiclePhotoUrlAttribute(): ?string
     {
         return $this->vehicle_photo_path ? Storage::disk('public')->url($this->vehicle_photo_path) : null;
+    }
+
+    public function getIdentityDocumentUrlAttribute(): ?string
+    {
+        return $this->identity_document_path
+            ? route('driver-profile.document', ['user' => $this->user_id, 'type' => 'identity'])
+            : null;
+    }
+
+    public function getPoliceRecordUrlAttribute(): ?string
+    {
+        return $this->police_record_path
+            ? route('driver-profile.document', ['user' => $this->user_id, 'type' => 'police-record'])
+            : null;
+    }
+
+    public function getTrustLabelAttribute(): string
+    {
+        return $this->driver_type === 'public_transport'
+            ? 'Transporte Público Verificado'
+            : 'Conductor Independiente Verificado';
+    }
+
+    /** El vínculo activo aceptado; para el MVP un conductor opera con una cooperativa. */
+    public function cooperativeMembership(): ?CooperativeDriverMembership
+    {
+        return CooperativeDriverMembership::query()
+            ->where('driver_user_id', $this->user_id)
+            ->where('status', 'accepted')
+            ->whereNull('ended_at')
+            ->with('cooperative')
+            ->first();
     }
 
     /**

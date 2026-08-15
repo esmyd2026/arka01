@@ -153,8 +153,11 @@ const form = useForm({
     accepts_cash: props.driverProfile?.accepts_cash ?? true,
     accepts_transfer: props.driverProfile?.accepts_transfer ?? false,
     is_public: props.driverProfile?.is_public ?? false,
+    driver_type: props.driverProfile?.driver_type ?? 'independent',
+    profile_photo: null,
+    identity_document: null,
     license_photo: null,
-    vehicle_photo: null,
+    police_record: null,
 });
 
 // Si el color ya guardado no está en la lista fija (ej. dato viejo cargado
@@ -222,9 +225,9 @@ const statusItems = computed(() => {
             : p.verification_status === 'rejected'
               ? `Su verificación fue rechazada${p.verification_rejection_reason ? `: "${p.verification_rejection_reason}"` : ''} — corrija eso y vuelva a subir sus fotos más abajo.`
               : p.verification_status == null
-                ? 'Todavía no subió sus documentos — suba una foto de su licencia y del vehículo más abajo.'
+                ? 'Todavía no subió sus documentos — complete la cédula, licencia, antecedente penal y foto de perfil más abajo.'
                 : p.verification_status !== 'approved'
-                  ? `Su verificación está "${VERIFICATION_LABELS[p.verification_status]}" — suba una foto de su licencia y del vehículo más abajo.`
+                  ? `Su verificación está "${VERIFICATION_LABELS[p.verification_status]}" — revise los documentos obligatorios más abajo.`
                   : 'Ya está verificado, pero su plan actual no incluye la insignia — hace falta un plan superior.',
     });
 
@@ -641,8 +644,8 @@ const VERIFICATION_LABELS = {
                             <InputError class="mt-2" :message="form.errors.max_request_distance_km" />
                         </div>
 
-                        <!-- Verificación visible antes de subir (sección 8): foto de la
-                             licencia y del vehículo, revisadas por un admin. -->
+                        <!-- Verificación de identidad: los documentos son privados y
+                             solo pueden verlos el conductor y un administrador. -->
                         <div class="space-y-4 border-t border-arka-text-muted/10 pt-4">
                             <div class="flex items-center justify-between">
                                 <InputLabel value="Verificación" />
@@ -674,22 +677,88 @@ const VERIFICATION_LABELS = {
                                  revisión", no se puede subir una foto nueva — recién se
                                  habilita de nuevo si se rechaza. -->
                             <p v-if="driverProfile?.verification_status === 'pending'" class="text-sm text-arka-warning bg-arka-warning/10 p-3 rounded-arka">
-                                Su documentación está en revisión — no puede subir fotos nuevas hasta que un admin la revise.
+                                Su documentación está en revisión — no puede reemplazar archivos hasta que un administrador la revise.
                             </p>
+
+                            <div>
+                                <InputLabel value="Tipo de conductor" />
+                                <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <label
+                                        v-for="option in [
+                                            { value: 'independent', title: 'Conductor independiente', detail: 'Trabaja por cuenta propia.' },
+                                            { value: 'public_transport', title: 'Transporte público', detail: 'Puede ser invitado por una cooperativa verificada.' },
+                                        ]"
+                                        :key="option.value"
+                                        class="cursor-pointer rounded-arka border p-3 transition"
+                                        :class="form.driver_type === option.value ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20 bg-arka-surface'"
+                                    >
+                                        <input v-model="form.driver_type" type="radio" :value="option.value" class="sr-only" />
+                                        <span class="block text-sm font-semibold text-arka-text">{{ option.title }}</span>
+                                        <span class="mt-1 block text-xs text-arka-text-muted">{{ option.detail }}</span>
+                                    </label>
+                                </div>
+                                <InputError class="mt-2" :message="form.errors.driver_type" />
+                                <div v-if="form.driver_type === 'public_transport'" class="mt-3 rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-3">
+                                    <p class="text-sm font-semibold text-arka-primary-bright">Beneficios de ser Transporte Público Verificado</p>
+                                    <ul class="mt-2 grid list-inside list-disc gap-1 text-xs text-arka-text-muted sm:grid-cols-2">
+                                        <li>Mayor visibilidad y prioridad en búsquedas</li>
+                                        <li>Etiqueta de confianza ante clientes</li>
+                                        <li>Mayor credibilidad dentro de Arka01</li>
+                                        <li>Posibilidad de pertenecer a cooperativas verificadas</li>
+                                    </ul>
+                                </div>
+                            </div>
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <InputLabel for="license_photo" value="Foto de su licencia" />
+                                    <InputLabel for="profile_photo" value="Fotografía de perfil" />
                                     <img
-                                        v-if="driverProfile?.license_photo_url"
-                                        :src="driverProfile.license_photo_url"
-                                        class="mt-1 h-24 w-full object-cover rounded-arka"
-                                        alt="Licencia actual"
+                                        v-if="$page.props.auth.user.avatar_url"
+                                        :src="$page.props.auth.user.avatar_url"
+                                        class="mt-1 h-24 w-full rounded-arka object-cover"
+                                        alt="Foto de perfil actual"
                                     />
+                                    <input
+                                        id="profile_photo"
+                                        type="file"
+                                        accept="image/*"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base"
+                                        @input="form.profile_photo = $event.target.files[0]"
+                                    />
+                                    <InputError class="mt-2" :message="form.errors.profile_photo" />
+                                </div>
+
+                                <div>
+                                    <InputLabel for="identity_document" value="Cédula de identidad" />
+                                    <a
+                                        v-if="driverProfile?.identity_document_url"
+                                        :href="driverProfile.identity_document_url"
+                                        target="_blank"
+                                        class="mt-2 block text-sm font-medium text-arka-primary-bright hover:underline"
+                                    >Ver documento actual</a>
+                                    <input
+                                        id="identity_document"
+                                        type="file"
+                                        accept="image/*,application/pdf"
+                                        :disabled="driverProfile?.verification_status === 'pending'"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base disabled:opacity-50"
+                                        @input="form.identity_document = $event.target.files[0]"
+                                    />
+                                    <InputError class="mt-2" :message="form.errors.identity_document" />
+                                </div>
+
+                                <div>
+                                    <InputLabel for="license_photo" value="Licencia de conducir" />
+                                    <a
+                                        v-if="driverProfile?.license_photo_url"
+                                        :href="driverProfile.license_photo_url"
+                                        target="_blank"
+                                        class="mt-2 block text-sm font-medium text-arka-primary-bright hover:underline"
+                                    >Ver documento actual</a>
                                     <input
                                         id="license_photo"
                                         type="file"
-                                        accept="image/*"
+                                        accept="image/*,application/pdf"
                                         :disabled="driverProfile?.verification_status === 'pending'"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
                                         @input="form.license_photo = $event.target.files[0]"
@@ -698,24 +767,25 @@ const VERIFICATION_LABELS = {
                                 </div>
 
                                 <div>
-                                    <InputLabel for="vehicle_photo" value="Foto del vehículo" />
-                                    <img
-                                        v-if="driverProfile?.vehicle_photo_url"
-                                        :src="driverProfile.vehicle_photo_url"
-                                        class="mt-1 h-24 w-full object-cover rounded-arka"
-                                        alt="Vehículo actual"
-                                    />
+                                    <InputLabel for="police_record" value="Certificado de antecedentes penales" />
+                                    <a
+                                        v-if="driverProfile?.police_record_url"
+                                        :href="driverProfile.police_record_url"
+                                        target="_blank"
+                                        class="mt-2 block text-sm font-medium text-arka-primary-bright hover:underline"
+                                    >Ver documento actual</a>
                                     <input
-                                        id="vehicle_photo"
+                                        id="police_record"
                                         type="file"
-                                        accept="image/*"
+                                        accept="image/*,application/pdf"
                                         :disabled="driverProfile?.verification_status === 'pending'"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
-                                        @input="form.vehicle_photo = $event.target.files[0]"
+                                        @input="form.police_record = $event.target.files[0]"
                                     />
-                                    <InputError class="mt-2" :message="form.errors.vehicle_photo" />
+                                    <InputError class="mt-2" :message="form.errors.police_record" />
                                 </div>
                             </div>
+                            <p class="text-xs text-arka-text-muted">No solicitamos fotografía del vehículo. Los datos técnicos del auto se validan en el perfil.</p>
                         </div>
 
                         <div>

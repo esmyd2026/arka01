@@ -11,6 +11,8 @@ use App\Events\RideRequestPriceRaised;
 use App\Jobs\ExpireRideOffer;
 use App\Jobs\ExpireWaitingRideRequest;
 use App\Models\City;
+use App\Models\ClientCooperative;
+use App\Models\Cooperative;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
@@ -19,6 +21,7 @@ use App\Models\Ride;
 use App\Models\RidePriceOffer;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Notifications\CooperativeRideAssignedPushNotification;
 use App\Notifications\RideAcceptedPushNotification;
 use App\Notifications\RideRequestDeclinedPushNotification;
 use App\Notifications\RideRequestedPushNotification;
@@ -74,7 +77,7 @@ class RideRequestController extends Controller
         // conductor que entrara por URL directa se terminaba provisionando
         // una flota propia solo por pisar esta pantalla (resolveFleet() la
         // crea sola si no existe).
-        if ($request->user()->isDriver()) {
+        if (! $request->user()->isClient()) {
             return redirect()->route('dashboard')->with('status', self::SINGLE_ROLE_MESSAGE);
         }
 
@@ -156,6 +159,13 @@ class RideRequestController extends Controller
             // origen+destino guardados a propósito, con alias opcional —
             // distinto de frequentPlaces (direcciones sueltas, automáticas).
             'savedRoutes' => $request->user()->savedRoutes()->latest()->get(),
+            'cooperatives' => Cooperative::query()
+                ->where('status', 'approved')
+                ->whereNull('suspended_at')
+                ->whereHas('clientLinks', fn ($query) => $query->where('client_user_id', $request->user()->id))
+                ->withCount('activeDriverMemberships')
+                ->orderBy('name')
+                ->get(['id', 'name', 'logo_path', 'response_timeout_seconds']),
         ]);
     }
 
@@ -267,12 +277,13 @@ class RideRequestController extends Controller
     {
         // Mismo criterio que create() — cada cuenta es cliente o conductor,
         // nunca las dos (sección 3.1).
-        if ($request->user()->isDriver()) {
+        if (! $request->user()->isClient()) {
             throw ValidationException::withMessages(['driver_user_id' => self::SINGLE_ROLE_MESSAGE]);
         }
 
         $validated = $request->validate([
             'fleet_id' => ['nullable', 'integer', 'exists:fleets,id'],
+            'cooperative_id' => ['nullable', 'integer', 'exists:cooperatives,id'],
             'driver_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'origin_lat' => ['required', 'numeric', 'between:-90,90'],
             'origin_lng' => ['required', 'numeric', 'between:-180,180'],
@@ -353,8 +364,28 @@ class RideRequestController extends Controller
         }
 
         $fleet = $this->resolveFleet($request, $validated['fleet_id'] ?? null);
+        $cooperative = null;
 
-        if (! empty($validated['driver_user_id'])) {
+        if (! empty($validated['cooperative_id'])) {
+            $cooperative = Cooperative::query()->findOrFail($validated['cooperative_id']);
+            $isLinked = ClientCooperative::query()
+                ->where('client_user_id', $request->user()->id)
+                ->where('cooperative_id', $cooperative->id)
+                ->exists();
+
+            if (! $isLinked || ! $cooperative->isApproved()) {
+                throw ValidationException::withMessages([
+                    'cooperative_id' => 'La cooperativa no pertenece a su red o todavía no está habilitada.',
+                ]);
+            }
+
+            // La cooperativa administra la asignación; el cliente no puede
+            // combinarla con un conductor puntual o con otra bolsa.
+            $validated['driver_user_id'] = null;
+            $validated['dispatch_pool'] = null;
+        }
+
+        if (! $cooperative && ! empty($validated['driver_user_id'])) {
             $isActiveMember = $fleet->activeMembers()
                 ->where('driver_user_id', $validated['driver_user_id'])
                 ->exists();
@@ -480,7 +511,34 @@ class RideRequestController extends Controller
         $currentOfferExpiresAt = null;
         $requestStatus = 'pending';
 
-        if (! $driverUserId && ! $isScheduled) {
+        $cooperativeCandidateIds = [];
+        $cooperativeOfferExpiresAt = null;
+        $cooperativeAssignmentStatus = null;
+
+        if ($cooperative) {
+            $cooperativeAssignmentStatus = 'pending_assignment';
+
+            if (! $isScheduled) {
+                $candidateIds = RideDispatchCandidates::forCooperative(
+                    $cooperative,
+                    (float) $validated['origin_lat'],
+                    (float) $validated['origin_lng'],
+                    $passengerCount,
+                    $needsTrunk,
+                );
+
+                if (! empty($candidateIds)) {
+                    $driverUserId = array_shift($candidateIds);
+                    $offerCandidateIds = $candidateIds;
+                    $cooperativeCandidateIds = $candidateIds;
+                    $dispatchPool = 'cooperative';
+                    $timeoutSeconds = max(15, min(300, (int) $cooperative->response_timeout_seconds));
+                    $currentOfferExpiresAt = now()->addSeconds($timeoutSeconds);
+                    $cooperativeOfferExpiresAt = $currentOfferExpiresAt;
+                    $cooperativeAssignmentStatus = 'awaiting_driver';
+                }
+            }
+        } elseif (! $driverUserId && ! $isScheduled) {
             $dispatchPool = $validated['dispatch_pool'] ?? 'fleet';
 
             $candidateIds = RideDispatchCandidates::forPool(
@@ -584,9 +642,14 @@ class RideRequestController extends Controller
         $rideRequest = DB::transaction(function () use (
             $validated, $fleet, $request, $distanceKm, $offeredPrice, $isScheduled, $scheduledAt,
             $driverUserId, $dispatchPool, $offerCandidateIds, $currentOfferExpiresAt, $needsTrunk, $passengerCount, $requestStatus,
+            $cooperative, $cooperativeCandidateIds, $cooperativeOfferExpiresAt, $cooperativeAssignmentStatus,
         ) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
+                'cooperative_id' => $cooperative?->id,
+                'cooperative_assignment_status' => $cooperativeAssignmentStatus,
+                'cooperative_candidate_ids' => $cooperativeCandidateIds ?: null,
+                'cooperative_offer_expires_at' => $cooperativeOfferExpiresAt,
                 'client_user_id' => $request->user()->id,
                 'driver_user_id' => $driverUserId,
                 'origin_lat' => $validated['origin_lat'],
@@ -627,6 +690,7 @@ class RideRequestController extends Controller
         Log::info('Carrera solicitada.', [
             'ride_request_id' => $rideRequest->id,
             'fleet_id' => $fleet->id,
+            'cooperative_id' => $cooperative?->id,
             'client_user_id' => $rideRequest->client_user_id,
             'driver_user_id' => $rideRequest->driver_user_id,
             'distance_km' => $distanceKm,
@@ -647,8 +711,18 @@ class RideRequestController extends Controller
             return redirect()->route('rides.index');
         }
 
+        // Si todavía no hay una unidad disponible, la solicitud queda en el
+        // panel de la cooperativa para asignación manual. No se emite una
+        // alerta vacía a conductores ajenos.
+        if ($rideRequest->cooperative_id && ! $rideRequest->driver_user_id) {
+            return redirect()->route('rides.index');
+        }
+
         broadcast(new RideRequested($rideRequest))->toOthers();
         $this->notifyDriversOfNewRequest($rideRequest, $fleet);
+        if ($rideRequest->cooperative_id && $rideRequest->driver_user_id) {
+            $rideRequest->client->notify(new CooperativeRideAssignedPushNotification($rideRequest));
+        }
 
         // Despacho secuencial estilo Uber (pedido explícito del usuario): si
         // este candidato no responde en 30 segundos, ExpireRideOffer pasa al
@@ -843,6 +917,8 @@ class RideRequestController extends Controller
                 'status' => 'accepted',
                 'accepted_by' => $driverId,
                 'responded_at' => now(),
+                'cooperative_assignment_status' => $locked->cooperative_id ? 'accepted' : $locked->cooperative_assignment_status,
+                'cooperative_offer_expires_at' => null,
             ]);
 
             return $ride;

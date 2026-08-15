@@ -77,6 +77,23 @@ class PlanLimits
             'plan_sort_order' => $plan->sort_order,
             'max_fleets' => $subscription?->custom_max_fleets ?? $plan->max_fleets,
             'max_drivers_per_fleet' => $subscription?->custom_max_drivers_per_fleet ?? $plan->max_drivers_per_fleet,
+            'max_cooperatives' => $subscription?->custom_max_cooperatives ?? $plan->max_cooperatives,
+            'subscription_status' => $subscription?->status,
+            'expires_at' => $subscription?->expires_at?->toIso8601String(),
+        ];
+    }
+
+    /** Límites parametrizables del plan de una cooperativa. */
+    public function forCooperative(User $user): array
+    {
+        $subscription = $user->activeSubscription('cooperative');
+        $plan = $subscription?->plan ?? $this->freePlan('cooperative');
+
+        return [
+            'plan_code' => $plan->code,
+            'plan_name' => $plan->name,
+            'plan_sort_order' => $plan->sort_order,
+            'max_units' => $subscription?->custom_max_units ?? $plan->max_units,
             'subscription_status' => $subscription?->status,
             'expires_at' => $subscription?->expires_at?->toIso8601String(),
         ];
@@ -84,9 +101,11 @@ class PlanLimits
 
     private function freePlan(string $ownerType): SubscriptionPlan
     {
+        $baseCode = $ownerType === 'cooperative' ? 'basico' : 'gratis';
+
         return SubscriptionPlan::query()
             ->where('owner_type', $ownerType)
-            ->where('code', 'gratis')
+            ->where('code', $baseCode)
             ->firstOrFail();
     }
 }

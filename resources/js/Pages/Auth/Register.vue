@@ -31,7 +31,7 @@ const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.la
 // con ?tipo=cliente — ya declaró la intención en ese botón, no hace falta
 // volver a preguntarle el tipo de cuenta en el primer paso.
 const preselectedAccountType = new URLSearchParams(window.location.search).get('tipo');
-const validPreselection = ['cliente', 'conductor'].includes(preselectedAccountType) ? preselectedAccountType : '';
+const validPreselection = ['cliente', 'conductor', 'cooperativa'].includes(preselectedAccountType) ? preselectedAccountType : '';
 
 // Trazabilidad de referidos (pedido explícito del usuario): quién compartió
 // el enlace que trajo a esta cuenta nueva — viaja oculto en el formulario,
@@ -227,7 +227,7 @@ const submit = () => {
                  primero, antes que cualquier otro dato). -->
             <div v-if="STEPS[currentStep] === 'account_type'">
                 <InputLabel value="¿Qué tipo de cuenta necesita?" />
-                <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <button
                         type="button"
                         class="p-4 rounded-arka border-2 text-start transition"
@@ -254,6 +254,19 @@ const submit = () => {
                         </svg>
                         <p class="font-medium text-arka-text">Conductor</p>
                         <p class="text-xs text-arka-text-muted mt-0.5">Manejo mi propio vehículo y recibo carreras de mis clientes.</p>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="p-4 rounded-arka border-2 text-start transition"
+                        :class="form.account_type === 'cooperativa' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20 hover:border-arka-text-muted/40'"
+                        @click="form.account_type = 'cooperativa'"
+                    >
+                        <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V8l7-4 7 4v13M9 12h2m2 0h2m-6 4h2m2 0h2" />
+                        </svg>
+                        <p class="font-medium text-arka-text">Cooperativa</p>
+                        <p class="text-xs text-arka-text-muted mt-0.5">Registro una organización de transporte y administro sus conductores.</p>
                     </button>
                 </div>
                 <!-- Transparencia (pedido explícito del usuario: pedir la

@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ChatbotIntentController;
 use App\Http\Controllers\Admin\ChatbotSettingController;
 use App\Http\Controllers\Admin\ChatbotUnrecognizedController;
 use App\Http\Controllers\Admin\ClientController as AdminClientController;
+use App\Http\Controllers\Admin\CooperativeController as AdminCooperativeController;
 use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Admin\DriverTierController;
@@ -28,6 +29,11 @@ use App\Http\Controllers\Admin\SystemEventController;
 use App\Http\Controllers\Admin\UserLocationsController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
 use App\Http\Controllers\Admin\WhatsAppSettingController;
+use App\Http\Controllers\CooperativeDashboardController;
+use App\Http\Controllers\CooperativeDirectoryController;
+use App\Http\Controllers\CooperativeDriverController;
+use App\Http\Controllers\CooperativeProfileController;
+use App\Http\Controllers\CooperativeRideAssignmentController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DriverDirectoryController;
@@ -122,6 +128,31 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Perfil y documentos privados de la cuenta Cooperativa. El registro
+    // crea la cuenta base; este formulario completa la postulación legal.
+    Route::middleware('cooperative')->group(function () {
+        Route::get('/cooperativa', [CooperativeDashboardController::class, 'index'])->name('cooperative.dashboard');
+        Route::get('/cooperativa/perfil', [CooperativeProfileController::class, 'edit'])->name('cooperative.profile.edit');
+        Route::post('/cooperativa/perfil', [CooperativeProfileController::class, 'update'])->name('cooperative.profile.update');
+        Route::get('/cooperativa/conductores', [CooperativeDriverController::class, 'index'])->name('cooperative.drivers.index');
+        Route::get('/cooperativa/conductores/buscar', [CooperativeDriverController::class, 'search'])->name('cooperative.drivers.search');
+        Route::post('/cooperativa/conductores/invitar', [CooperativeDriverController::class, 'invite'])->name('cooperative.drivers.invite');
+        Route::post('/cooperativa/conductores/{membership}/suspender', [CooperativeDriverController::class, 'suspend'])->name('cooperative.drivers.suspend');
+        Route::post('/cooperativa/conductores/{membership}/reactivar', [CooperativeDriverController::class, 'reactivate'])->name('cooperative.drivers.reactivate');
+        Route::delete('/cooperativa/conductores/{membership}', [CooperativeDriverController::class, 'remove'])->name('cooperative.drivers.remove');
+        Route::post('/cooperativa/solicitudes/{rideRequest}/asignar', [CooperativeRideAssignmentController::class, 'assign'])->name('cooperative.rides.assign');
+    });
+    Route::get('/cooperativas/documentos/{document}', [CooperativeProfileController::class, 'document'])->name('cooperative.documents.show');
+
+    // Directorio visible para cuentas de la plataforma y red del cliente.
+    Route::get('/cooperativas', [CooperativeDirectoryController::class, 'index'])->name('cooperatives.index');
+    Route::post('/cooperativas/{cooperative}/agregar', [CooperativeDirectoryController::class, 'attach'])->name('cooperatives.attach');
+    Route::delete('/cooperativas/{cooperative}/retirar', [CooperativeDirectoryController::class, 'detach'])->name('cooperatives.detach');
+
+    // El conductor siempre decide si acepta o rechaza el vínculo.
+    Route::get('/cooperativas/invitaciones', [CooperativeDriverController::class, 'invitations'])->name('cooperative-driver-invitations.index');
+    Route::post('/cooperativas/invitaciones/{membership}/responder', [CooperativeDriverController::class, 'respond'])->name('cooperative-driver-invitations.respond');
+
     // "Convertirme en conductor" / editar mi perfil de conductor (sección 9.5-B).
     Route::get('/driver/profile', [DriverProfileController::class, 'edit'])->name('driver.profile.edit');
     Route::post('/driver/profile', [DriverProfileController::class, 'update'])->name('driver.profile.update');
@@ -129,6 +160,9 @@ Route::middleware('auth')->group(function () {
     // este endpoint la sirve solo al propio conductor o a un admin (ver
     // DriverProfileController::licensePhoto()).
     Route::get('/driver/profile/{user}/licencia', [DriverProfileController::class, 'licensePhoto'])->name('driver-profile.license-photo');
+    Route::get('/driver/profile/{user}/documentos/{type}', [DriverProfileController::class, 'document'])
+        ->whereIn('type', ['identity', 'license', 'police-record'])
+        ->name('driver-profile.document');
     // Pasar de conductor a cliente y volver (pedido explícito del usuario) —
     // ver DriverProfileController::deactivate()/reactivate().
     Route::post('/driver/profile/pasar-a-cliente', [DriverProfileController::class, 'deactivate'])->name('driver.profile.deactivate');
@@ -153,7 +187,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/flota/solicitudes', [RideRequestController::class, 'store'])->middleware('throttle:10,1')->name('ride-requests.store');
 
     Route::get('/flota/{fleet}', [FleetController::class, 'show'])->name('fleet.show');
-    Route::get('/flota/{fleet}/buscar-conductores', [FleetController::class, 'searchDrivers'])->name('fleet.search-drivers');
+    // Auditoría de seguridad: buscador en vivo (debounce de 300ms del lado
+    // del navegador, ver Fleet/Show.vue) que devuelve nombre/teléfono/ciudad
+    // de otros usuarios — sin límite del lado del servidor, un script podía
+    // barrer nombres/teléfonos reales probando términos de búsqueda uno
+    // atrás de otro. 30/min deja de sobra margen para escribir a mano.
+    Route::get('/flota/{fleet}/buscar-conductores', [FleetController::class, 'searchDrivers'])
+        ->middleware('throttle:30,1')
+        ->name('fleet.search-drivers');
     Route::post('/flota/{fleet}/invitaciones', [FleetInvitationController::class, 'store'])->name('fleet.invitations.store');
     Route::delete('/flota/invitaciones/{invitation}', [FleetInvitationController::class, 'destroy'])->name('fleet.invitations.destroy');
     Route::delete('/flota/miembros/{member}', [FleetMemberController::class, 'destroy'])->name('fleet.members.destroy');
@@ -170,8 +211,11 @@ Route::middleware('auth')->group(function () {
     // Mis clientes de confianza (lado conductor, sección 3.2 y 9.5-B).
     Route::get('/mis-clientes', [DriverInvitationController::class, 'index'])->name('driver.invitations.index');
     // Buscador de clientes existentes (pedido explícito del usuario) — mismo
-    // criterio que fleet.search-drivers, del otro lado.
-    Route::get('/mis-clientes/buscar', [DriverInvitationController::class, 'searchClients'])->name('driver.clients.search');
+    // criterio que fleet.search-drivers, del otro lado, mismo límite de
+    // auditoría de seguridad.
+    Route::get('/mis-clientes/buscar', [DriverInvitationController::class, 'searchClients'])
+        ->middleware('throttle:30,1')
+        ->name('driver.clients.search');
     Route::post('/mis-clientes/invitaciones/{invitation}/aceptar', [DriverInvitationController::class, 'accept'])->name('driver.invitations.accept');
     Route::post('/mis-clientes/invitaciones/{invitation}/rechazar', [DriverInvitationController::class, 'reject'])->name('driver.invitations.reject');
     Route::post('/mis-clientes/{member}/salir', [DriverInvitationController::class, 'leave'])->name('driver.fleets.leave');
@@ -317,6 +361,14 @@ Route::middleware('auth')->group(function () {
 // mantenimiento del catálogo de planes y de las tarifas, e indicadores
 // básicos — todo acotado a usuarios con is_admin.
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/cooperativas', [AdminCooperativeController::class, 'index'])->name('cooperatives.index');
+    Route::get('/cooperativas/{cooperative}', [AdminCooperativeController::class, 'show'])->name('cooperatives.show');
+    Route::post('/cooperativas/{cooperative}/revisar', [AdminCooperativeController::class, 'markInReview'])->name('cooperatives.review');
+    Route::post('/cooperativas/{cooperative}/aprobar', [AdminCooperativeController::class, 'approve'])->name('cooperatives.approve');
+    Route::post('/cooperativas/{cooperative}/rechazar', [AdminCooperativeController::class, 'reject'])->name('cooperatives.reject');
+    Route::post('/cooperativas/{cooperative}/suspender', [AdminCooperativeController::class, 'suspend'])->name('cooperatives.suspend');
+    Route::post('/cooperativas/{cooperative}/reactivar', [AdminCooperativeController::class, 'reactivate'])->name('cooperatives.reactivate');
+    Route::post('/cooperativas/documentos/{document}/revisar', [AdminCooperativeController::class, 'reviewDocument'])->name('cooperative-documents.review');
     // Perfil completo de un usuario (pedido explícito del usuario): toda la
     // información relevante de un conductor o cliente en una sola pantalla,
     // sin tener que navegar entre suscripciones/verificaciones/flotas.
@@ -511,5 +563,9 @@ Route::get('/referir/{driverProfile:invite_code}', [ReferralController::class, '
 // controlador ya manda solo los campos pensados para verse en público (ver
 // PublicProfileController::show()), nunca datos sensibles.
 Route::get('/perfil/{user}', [PublicProfileController::class, 'show'])->name('profiles.show');
+
+// Perfil público de una cooperativa aprobada. Una cooperativa pendiente solo
+// puede previsualizarlo con su propia sesión; un admin también puede verlo.
+Route::get('/cooperativas/{cooperative}', [CooperativeDirectoryController::class, 'show'])->name('cooperatives.show');
 
 require __DIR__.'/auth.php';

@@ -4,12 +4,19 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import RatingStars from '@/Components/RatingStars.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
 const props = defineProps({
     drivers: { type: Object, required: true },
     targetFleetId: { type: Number, required: true },
+    filters: { type: Object, default: () => ({}) },
 });
+const typeFilter = ref(props.filters.type ?? 'all');
+
+function applyTypeFilter() {
+    router.get(route('directory.index'), typeFilter.value === 'all' ? {} : { type: typeFilter.value }, { preserveState: true, preserveScroll: true });
+}
 
 // Pedido explícito del usuario: "Pedir una carrera" es una acción del lado
 // cliente.
@@ -56,6 +63,16 @@ function invite(driver) {
                     3.4). Si la experiencia es buena, invítelo a su flota de confianza.
                 </p>
 
+                <div class="rounded-arka bg-arka-card p-4 shadow">
+                    <label for="driver_type_filter" class="text-xs font-medium uppercase tracking-wide text-arka-text-muted">Tipo de conductor</label>
+                    <select id="driver_type_filter" v-model="typeFilter" class="mt-2 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-sm text-arka-text" @change="applyTypeFilter">
+                        <option value="all">Todos los conductores verificados</option>
+                        <option value="independent">Independientes verificados</option>
+                        <option value="public_transport">Transporte público verificado</option>
+                        <option value="cooperative">Conductores de cooperativas</option>
+                    </select>
+                </div>
+
                 <!-- Estado vacío con CTA claro, no una pantalla en blanco (sección 9.10) -->
                 <div v-if="!drivers.data.length" class="p-6 bg-arka-card shadow rounded-arka text-center">
                     <p class="text-arka-text-muted">Todavía no hay conductores públicos para mostrar.</p>
@@ -90,6 +107,11 @@ function invite(driver) {
                                         readonly
                                     />
                                 </div>
+                                <p v-if="driver.trust_label" class="mt-1 text-xs font-medium text-arka-primary-bright">✓ {{ driver.trust_label }}</p>
+                                <p v-if="driver.cooperative" class="mt-1 text-xs text-arka-text-muted">
+                                    Afiliado a <Link :href="route('cooperatives.show', driver.cooperative.id)" class="text-arka-primary hover:underline">{{ driver.cooperative.name }}</Link>
+                                </p>
+                                <p class="mt-1 text-xs text-arka-text-muted">{{ driver.clients_count }} cliente{{ driver.clients_count === 1 ? '' : 's' }} lo tienen agregado</p>
                                 <p class="mt-1 text-sm text-arka-text-muted">
                                     ${{ driver.rate_per_km }}/km
                                     <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>

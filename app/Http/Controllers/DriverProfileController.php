@@ -45,6 +45,7 @@ class DriverProfileController extends Controller
     public function edit(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
+        abort_if($user->isCooperative(), 403);
 
         // Avisos de carrera nueva por WhatsApp (pedido explícito del
         // usuario): la pantalla usa esto para mostrar el estado de la
@@ -105,6 +106,7 @@ class DriverProfileController extends Controller
     public function update(Request $request): RedirectResponse
     {
         $user = $request->user();
+        abort_if($user->isCooperative(), 403);
 
         // Único bloqueo real que queda para cambiar de rol: un viaje en
         // curso. Cambiar de cliente a conductor a mitad de una carrera
@@ -129,6 +131,7 @@ class DriverProfileController extends Controller
             // deja en blanco, no se toca lo que ya tenía.
             'country_code' => ['nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
             'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
+            'driver_type' => ['sometimes', 'required', 'string', Rule::in(['independent', 'public_transport'])],
             'license_number' => ['required', 'string', 'max:50'],
             // Datos del vehículo, TODOS obligatorios (pedido explícito del
             // usuario): hacen falta para que un cliente pueda filtrar por
@@ -163,8 +166,10 @@ class DriverProfileController extends Controller
             // Verificación visible antes de subir a un conductor público que no
             // se conoce (sección 8): foto del conductor y de la placa/vehículo.
             // Un admin las revisa después desde /admin/verificaciones.
-            'license_photo' => ['nullable', 'image', 'max:4096'],
-            'vehicle_photo' => ['nullable', 'image', 'max:4096'],
+            'profile_photo' => ['nullable', 'image', 'max:4096'],
+            'identity_document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            'license_photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            'police_record' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
         ], [
             'minimum_fare.max' => 'La plataforma no permite superar $'.number_format($adminMinimumFare, 2).' como tarifa mínima de una carrera (tope general definido en /admin/tarifas). Puede dejarla en blanco o poner una menor.',
         ]);
@@ -228,16 +233,62 @@ class DriverProfileController extends Controller
 
         $existingProfile = $request->user()->driverProfile;
         $reviewedDocuments = false;
+        $isSubmittingVerification = ! $existingProfile
+            || $request->hasFile('identity_document')
+            || $request->hasFile('license_photo')
+            || $request->hasFile('police_record');
+
+        if ($isSubmittingVerification) {
+            foreach ([
+                'identity_document' => 'identity_document_path',
+                'license_photo' => 'license_photo_path',
+                'police_record' => 'police_record_path',
+            ] as $input => $pathField) {
+                if (! $request->hasFile($input) && blank($existingProfile?->{$pathField})) {
+                    throw ValidationException::withMessages([
+                        $input => 'Este documento es obligatorio para solicitar la verificación.',
+                    ]);
+                }
+            }
+        }
 
         // Pedido explícito del usuario: mientras la documentación está "en
         // revisión", no se puede subir una foto nueva — recién se habilita de
         // nuevo si un admin la rechaza (ahí sí hace falta corregir y volver a
         // subir) o si todavía no había ninguna.
-        if (($request->hasFile('license_photo') || $request->hasFile('vehicle_photo'))
+        if (($request->hasFile('identity_document') || $request->hasFile('license_photo') || $request->hasFile('police_record'))
             && $existingProfile && ! $existingProfile->canUploadDocuments()) {
             throw ValidationException::withMessages([
                 'license_photo' => 'Su documentación está en revisión — no se puede volver a subir hasta que un admin la revise.',
             ]);
+        }
+
+        if ($isSubmittingVerification && ! $user->avatar_path && ! $request->hasFile('profile_photo')) {
+            throw ValidationException::withMessages([
+                'profile_photo' => 'La fotografía de perfil es obligatoria para verificar a un conductor.',
+            ]);
+        }
+
+        if ($request->hasFile('profile_photo')) {
+            if ($user->avatar_path && ! str_starts_with($user->avatar_path, 'http')) {
+                Storage::disk('public')->delete($user->avatar_path);
+            }
+            $user->forceFill(['avatar_path' => $request->file('profile_photo')->store('avatars', 'public')])->save();
+        }
+        unset($validated['profile_photo']);
+
+        foreach ([
+            'identity_document' => 'identity_document_path',
+            'police_record' => 'police_record_path',
+        ] as $input => $pathField) {
+            if ($request->hasFile($input)) {
+                if ($existingProfile?->{$pathField}) {
+                    Storage::disk('local')->delete($existingProfile->{$pathField});
+                }
+                $validated[$pathField] = $request->file($input)->store('driver-documents', 'local');
+                $reviewedDocuments = true;
+            }
+            unset($validated[$input]);
         }
 
         if ($request->hasFile('license_photo')) {
@@ -257,15 +308,6 @@ class DriverProfileController extends Controller
             $reviewedDocuments = true;
         }
         unset($validated['license_photo']);
-
-        if ($request->hasFile('vehicle_photo')) {
-            if ($existingProfile?->vehicle_photo_path) {
-                Storage::disk('public')->delete($existingProfile->vehicle_photo_path);
-            }
-            $validated['vehicle_photo_path'] = $request->file('vehicle_photo')->store('driver-documents', 'public');
-            $reviewedDocuments = true;
-        }
-        unset($validated['vehicle_photo']);
 
         // Cambiar los documentos vuelve a poner la verificación en revisión —
         // lo que un admin ya había aprobado (o rechazado) era sobre la foto
@@ -357,6 +399,23 @@ class DriverProfileController extends Controller
         abort_unless($request->user()->id === $user->id || $request->user()->isAdmin(), 403);
 
         $path = $user->driverProfile?->license_photo_path;
+        abort_if(blank($path), 404);
+
+        return Storage::disk('local')->response($path);
+    }
+
+    /** Sirve cédula, licencia o récord policial desde almacenamiento privado. */
+    public function document(Request $request, User $user, string $type): \Symfony\Component\HttpFoundation\Response
+    {
+        abort_unless($request->user()->id === $user->id || $request->user()->isAdmin(), 403);
+
+        $path = match ($type) {
+            'identity' => $user->driverProfile?->identity_document_path,
+            'license' => $user->driverProfile?->license_photo_path,
+            'police-record' => $user->driverProfile?->police_record_path,
+            default => null,
+        };
+
         abort_if(blank($path), 404);
 
         return Storage::disk('local')->response($path);

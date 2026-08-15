@@ -48,6 +48,8 @@ const props = defineProps({
     // origen+destino guardados a propósito, con alias opcional — distinto de
     // frequentPlaces (direcciones sueltas, automáticas).
     savedRoutes: { type: Array, default: () => [] },
+    // Cooperativas verificadas que el cliente agregó previamente a su red.
+    cooperatives: { type: Array, default: () => [] },
 });
 
 // De dónde elegir conductor (consideración agregada al alcance): mi flota
@@ -199,6 +201,11 @@ const preselectableIds = new Set([...props.fleetDrivers, ...props.publicDrivers]
 const selectedDriverId = ref(
     props.preselectedDriverId && preselectableIds.has(props.preselectedDriverId) ? props.preselectedDriverId : WHOLE_FLEET
 );
+const selectedCooperativeId = ref(null);
+
+watch(selectedCooperativeId, (value) => {
+    if (value) selectedDriverId.value = WHOLE_FLEET;
+});
 
 // Menos vueltas para pedir una carrera (pedido explícito del usuario, a
 // partir de un mockup acordado antes de tocar esto): "¿Cuántos van?" y la
@@ -464,13 +471,23 @@ watch([originLat, originLng, destinationLat, destinationLng], async () => {
 // realmente queda registrado lo calcula el backend (puede variar un poco por
 // el recargo horario). Si se manda "a toda la flota", todavía no hay un
 // conductor puntual, así que se usa el promedio de tarifas de la flota.
+// Pedido explícito del usuario: "súbele siempre a cada carrera... a los km
+// 800 metros más" — el backend ya suma este margen antes de calcular el
+// precio (ver App\Services\PriceCalculator::DISTANCE_PADDING_KM). Se replica
+// acá SOLO para este estimado (nunca para `routeDistanceKm`, que es lo que
+// se manda al backend como distancia real de la ruta) — así el desglose "X
+// km × $Y/km" que ve el cliente coincide con lo que de verdad se le va a
+// cobrar, en vez de quedar corto.
+const DISTANCE_PADDING_KM = 0.8;
+
 const estimatedDistanceKm = computed(() => {
     if (originLat.value == null || destinationLat.value == null) return null;
     // Se prefiere la distancia REAL de manejo (OSRM, la misma ruta ya
     // dibujada en el mapa) apenas está disponible — la línea recta queda
     // solo como estimación de arranque mientras se calcula, o de respaldo
     // si el servicio de ruteo no responde (ver fetchOsrmRoute()).
-    return routeDistanceKm.value ?? distanceKm(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+    const realKm = routeDistanceKm.value ?? distanceKm(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+    return realKm + DISTANCE_PADDING_KM;
 });
 
 const referenceRatePerKm = computed(() => {
@@ -521,6 +538,7 @@ const customPrice = ref(null);
 
 const form = useForm({
     fleet_id: props.fleet.id,
+    cooperative_id: null,
     driver_user_id: WHOLE_FLEET,
     dispatch_pool: null,
     origin_lat: null,
@@ -688,12 +706,13 @@ function changeFleet(fleetId) {
 
 function submit() {
     form.fleet_id = props.fleet.id;
-    form.driver_user_id = selectedDriverId.value;
+    form.cooperative_id = selectedCooperativeId.value;
+    form.driver_user_id = selectedCooperativeId.value ? null : selectedDriverId.value;
     // Despacho secuencial estilo Uber (pedido explícito del usuario): solo
     // aplica cuando no se dirige a un conductor puntual — el backend arma la
     // bolsa de candidatos (mi flota / público / ambos) y va ofreciéndoles la
     // carrera de a uno, empezando por el más cercano.
-    form.dispatch_pool = selectedDriverId.value === WHOLE_FLEET ? sourceMode.value : null;
+    form.dispatch_pool = selectedCooperativeId.value ? null : (selectedDriverId.value === WHOLE_FLEET ? sourceMode.value : null);
     form.origin_lat = originLat.value;
     form.origin_lng = originLng.value;
     form.origin_address = originAddress.value;
@@ -1086,7 +1105,26 @@ function submit() {
                         </PrimaryButton>
                     </div>
 
+                    <div v-if="cooperatives.length" class="mb-4 rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-3">
+                        <InputLabel for="cooperative_id" value="Solicitar a una cooperativa de mi red" />
+                        <select
+                            id="cooperative_id"
+                            v-model="selectedCooperativeId"
+                            class="mt-2 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-sm text-arka-text"
+                        >
+                            <option :value="null">No usar cooperativa</option>
+                            <option v-for="cooperative in cooperatives" :key="cooperative.id" :value="cooperative.id">
+                                {{ cooperative.name }} · {{ cooperative.active_driver_memberships_count }} unidades
+                            </option>
+                        </select>
+                        <p class="mt-2 text-xs text-arka-text-muted">
+                            La cooperativa asignará una unidad verificada. Si no responde a tiempo, la oferta pasa automáticamente a la siguiente.
+                        </p>
+                        <InputError class="mt-2" :message="form.errors.cooperative_id" />
+                    </div>
+
                     <label
+                        v-if="!selectedCooperativeId"
                         class="flex items-center gap-3 p-3 rounded-arka border cursor-pointer mb-2"
                         :class="selectedDriverId === WHOLE_FLEET ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20'"
                     >
@@ -1095,12 +1133,12 @@ function submit() {
                           <!--(se le ofrece primero al más cercano; si no responde en 30 seg. pasa al siguiente · recomendado) -->
                     </label>
 
-                    <p v-if="!driversWithDistance.length && visibleDrivers.length" class="text-sm text-arka-text-muted py-3">
+                    <p v-if="!selectedCooperativeId && !driversWithDistance.length && visibleDrivers.length" class="text-sm text-arka-text-muted py-3">
                         Ningún conductor de acá tiene lugar para {{ passengerCount }} pasajero(s){{ needsTrunk ? ' con cajuela' : '' }} ahora mismo.
                         Pruebe bajar la cantidad de pasajeros, sacar el filtro de cajuela, o mire el
                         <a :href="route('directory.index')" class="text-arka-primary hover:text-arka-primary-bright">directorio público</a>.
                     </p>
-                    <p v-else-if="!driversWithDistance.length" class="text-sm text-arka-text-muted py-3">
+                    <p v-else-if="!selectedCooperativeId && !driversWithDistance.length" class="text-sm text-arka-text-muted py-3">
                         Todavía no tiene conductores acá.
                         <a :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">Vaya a Mi Flota para invitar a alguno</a>
                         o mire el
@@ -1116,7 +1154,7 @@ function submit() {
                          mostraba en pantalla. Ahora se ve, con la misma
                          recomendación de ampliar la búsqueda — y abre el picker de
                          abajo solo, para que la sugerencia sirva de algo. -->
-                    <p v-if="form.errors.driver_user_id" class="text-sm text-arka-danger py-3">
+                    <p v-if="!selectedCooperativeId && form.errors.driver_user_id" class="text-sm text-arka-danger py-3">
                         {{ form.errors.driver_user_id }}
                         <span v-if="selectedDriverId === WHOLE_FLEET">
                             Pruebe con
@@ -1132,6 +1170,7 @@ function submit() {
                          gran mayoría de los pedidos, no hace falta escrollear la
                          lista completa para descartarla cada vez. -->
                     <button
+                        v-if="!selectedCooperativeId"
                         type="button"
                         class="w-full flex items-center justify-between gap-2 p-3 rounded-arka border border-arka-text-muted/20 text-start hover:border-arka-primary/50"
                         @click="showDriverPicker = !showDriverPicker"
@@ -1145,7 +1184,7 @@ function submit() {
                         </svg>
                     </button>
 
-                    <div v-if="showDriverPicker" class="mt-3 space-y-3">
+                    <div v-if="!selectedCooperativeId && showDriverPicker" class="mt-3 space-y-3">
                         <div class="flex items-center justify-between flex-wrap gap-2">
                             <!-- De mi flota / del directorio público / ambos (consideración
                                  agregada al alcance). -->

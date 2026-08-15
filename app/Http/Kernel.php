@@ -6,6 +6,7 @@ use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\EncryptCookies;
 use App\Http\Middleware\EnsurePhoneIsVerified;
 use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\EnsureUserIsCooperative;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\LogRequestContext;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
@@ -91,6 +92,7 @@ class Kernel extends HttpKernel
      */
     protected $middlewareAliases = [
         'admin' => EnsureUserIsAdmin::class,
+        'cooperative' => EnsureUserIsCooperative::class,
         'auth' => Authenticate::class,
         'auth.basic' => AuthenticateWithBasicAuth::class,
         'auth.session' => AuthenticateSession::class,

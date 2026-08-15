@@ -8,6 +8,8 @@ use App\Models\FleetMember;
 use App\Models\Ride;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -115,6 +117,8 @@ class RoleSwitchingTest extends TestCase
 
     public function test_a_client_with_a_fleet_can_become_a_driver_and_the_fleet_stays_intact(): void
     {
+        Storage::fake('local');
+        Storage::fake('public');
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $otherDriver = User::factory()->create();
@@ -122,7 +126,12 @@ class RoleSwitchingTest extends TestCase
         FleetMember::factory()->for($fleet)->for($otherDriver, 'driver')->create(['added_by' => $client->id]);
 
         $this->actingAs($client)
-            ->post(route('driver.profile.update'), $this->validVehiclePayload())
+            ->post(route('driver.profile.update'), array_merge($this->validVehiclePayload(), [
+                'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
+                'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
+                'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
+                'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+            ]))
             ->assertSessionHasNoErrors();
 
         $this->assertTrue($client->fresh()->isDriver());

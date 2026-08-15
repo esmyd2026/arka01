@@ -160,9 +160,17 @@ function removeCondition(index) {
 // la plataforma como piso. Lo que realmente se termina exigiendo lo valida
 // el backend con este mismo cálculo (PriceCalculator), esto es solo para
 // orientar antes de mandar el formulario.
+// Pedido explícito del usuario: "súbele siempre a cada carrera... a los km
+// 800 metros más" — el backend ya lo suma antes de calcular el estimado real
+// (ver ExpressRouteController::suggestedPrice() → PriceCalculator::DISTANCE_PADDING_KM).
+// Se replica acá para que "Precio estimado" y "no puede ser menor a la mitad
+// de eso" coincidan con el piso que de verdad valida el backend — si no, un
+// precio que acá se ve válido podría rechazarse igual al mandar el formulario.
+const DISTANCE_PADDING_KM = 0.8;
+
 const estimatedDistanceKm = computed(() => {
     if (form.origin_lat == null || form.destination_lat == null) return null;
-    return distanceKm(form.origin_lat, form.origin_lng, form.destination_lat, form.destination_lng);
+    return distanceKm(form.origin_lat, form.origin_lng, form.destination_lat, form.destination_lng) + DISTANCE_PADDING_KM;
 });
 
 const rawEstimatedPrice = computed(() => {

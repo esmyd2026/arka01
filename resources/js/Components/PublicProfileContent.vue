@@ -65,8 +65,15 @@ defineProps({
                 <span v-if="profileUser.driver_profile.accepts_transfer">transferencia</span>
             </p>
             <p v-if="profileUser.driver_profile.verification_status === 'approved'" class="text-arka-primary-bright">
-                ✓ Conductor verificado
+                ✓ {{ profileUser.driver_profile.trust_label || 'Conductor verificado' }}
             </p>
+            <p v-if="profileUser.driver_profile.cooperative">
+                Cooperativa:
+                <Link :href="route('cooperatives.show', profileUser.driver_profile.cooperative.id)" class="text-arka-primary hover:underline">
+                    {{ profileUser.driver_profile.cooperative.name }}
+                </Link>
+            </p>
+            <p>{{ profileUser.driver_profile.clients_count }} cliente{{ profileUser.driver_profile.clients_count === 1 ? '' : 's' }} lo tienen agregado en su flota</p>
 
             <!-- Pedido explícito del usuario: elegir un conductor (acá,
                  abriendo su perfil) tiene que ofrecer pedirle una carrera

@@ -162,8 +162,10 @@ class ExpressRouteFlowTest extends TestCase
         [$client, $driver] = $this->clientWithFleetDriver();
         DriverProfile::factory()->for($driver)->create(['rate_per_km' => 1]);
 
-        // origen/destino separados ~2.4km — a $1/km, el estimado ronda los $2.40,
-        // el piso real (50%) ronda el $1.20 — $1.50 cae en el medio.
+        // origen/destino separados ~2.4km + el margen fijo de 800m que suma
+        // PriceCalculator (pedido explícito del usuario) — a $1/km, el
+        // estimado ronda los $3.20, el piso real (50%) ronda el $1.60 — $2.00
+        // cae en el medio.
         $response = $this->actingAs($client)->post(route('express-routes.store'), [
             'name' => 'Turno mañana',
             'origin_lat' => -0.1807,
@@ -172,11 +174,11 @@ class ExpressRouteFlowTest extends TestCase
             'destination_lng' => -78.4800,
             'days_of_week' => [1],
             'departure_time' => '07:30',
-            'offered_price' => 1.5,
+            'offered_price' => 2.0,
         ]);
 
         $response->assertRedirect();
-        $this->assertDatabaseHas('express_routes', ['client_user_id' => $client->id, 'offered_price' => 1.5]);
+        $this->assertDatabaseHas('express_routes', ['client_user_id' => $client->id, 'offered_price' => 2.0]);
     }
 
     // Ida y vuelta (pedido explícito del usuario): una segunda hora, de vuelta.

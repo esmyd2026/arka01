@@ -9,6 +9,8 @@ use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\RideDispatchCandidates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -50,10 +52,17 @@ class VehicleCapacityTest extends TestCase
 
     public function test_completing_every_vehicle_field_succeeds(): void
     {
+        Storage::fake('local');
+        Storage::fake('public');
         $driver = User::factory()->create();
 
         $this->actingAs($driver)
-            ->post(route('driver.profile.update'), $this->validVehiclePayload())
+            ->post(route('driver.profile.update'), array_merge($this->validVehiclePayload(), [
+                'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
+                'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
+                'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
+                'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+            ]))
             ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('driver_profiles', [

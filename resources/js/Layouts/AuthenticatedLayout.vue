@@ -59,6 +59,7 @@ const hasRoute = (name) => route().has(name);
 const isAdmin = computed(() => usePage().props.auth.user.is_admin);
 const showClientNav = computed(() => usePage().props.auth.isClient);
 const showDriverNav = computed(() => !isAdmin.value && usePage().props.auth.isDriver);
+const showCooperativeNav = computed(() => !isAdmin.value && usePage().props.auth.isCooperative);
 
 // Notificaciones push (sección 9.2 y 9.5): se activan a pedido del usuario
 // desde el menú de cuenta, nunca con un permiso pedido de entrada.
@@ -116,6 +117,24 @@ const canBecomeOrIsDriver = computed(() => !isAdmin.value);
 // que ya no reutiliza este array (divergencia que ya existía antes de esto).
 const quickLinks = computed(() =>
     [
+        {
+            route: 'cooperative.dashboard',
+            label: 'Panel de cooperativa',
+            cooperativeOnly: true,
+            help: 'Revise solicitudes, conductores vinculados y el estado operativo de su cooperativa.',
+        },
+        {
+            route: 'cooperative.drivers.index',
+            label: 'Conductores de la cooperativa',
+            cooperativeOnly: true,
+            help: 'Invite, suspenda o retire conductores. Cada conductor debe aceptar su vínculo.',
+        },
+        {
+            route: 'cooperatives.index',
+            label: 'Cooperativas verificadas',
+            clientOnly: true,
+            help: 'Busque organizaciones aprobadas y agréguelas a su red de confianza.',
+        },
         {
             route: 'ride-requests.create',
             label: 'Pedir una carrera',
@@ -196,6 +215,8 @@ const quickLinks = computed(() =>
             hasRoute(item.route) &&
             (!item.clientOnly || showClientNav.value) &&
             (!item.driverOnly || showDriverNav.value) &&
+            (!item.cooperativeOnly || showCooperativeNav.value) &&
+            (!showCooperativeNav.value || item.cooperativeOnly) &&
             (!item.hideIfCommittedClient || canBecomeOrIsDriver.value)
     )
 );
@@ -253,6 +274,11 @@ onMounted(() => {
 
     if (showClientNav.value) {
         clientRideChannel = window.Echo.private(`App.Models.User.${userId}`);
+        clientRideChannel.listen('.ride-request.created', (e) => {
+            if (e.cooperative_id && e.driver_name && !route().current('rides.index')) {
+                showClientRideAlert(`🚕 ${e.cooperative_name || 'La cooperativa'} asignó a ${e.driver_name}.`, null, 'attention');
+            }
+        });
         clientRideChannel.listen('.ride-request.accepted', (e) => showClientRideAlert(`🚗 ${e.driver_name} aceptó su carrera.`, e.ride_id));
         clientRideChannel.listen('.ride.started', (e) => showClientRideAlert('🚗 Su conductor ya va en camino.', e.ride_id, 'cabin'));
         clientRideChannel.listen('.ride.arrived', (e) => showClientRideAlert('📍 Su conductor llegó y lo está esperando.', e.ride_id, 'cabin'));
@@ -285,11 +311,11 @@ onBeforeUnmount(() => {
             v-if="clientRideAlert"
             type="button"
             class="fixed top-4 left-1/2 -translate-x-1/2 z-[1700] w-[calc(100%-2rem)] max-w-md p-4 rounded-arka bg-arka-card border border-arka-primary/50 shadow-2xl text-left"
-            @click="router.visit(route('rides.show', clientRideAlert.rideId))"
+            @click="router.visit(clientRideAlert.rideId ? route('rides.show', clientRideAlert.rideId) : route('rides.index'))"
         >
             <span class="block text-sm font-semibold text-arka-text">Cambio en su carrera</span>
             <span class="block mt-1 text-sm text-arka-text-muted">{{ clientRideAlert.message }}</span>
-            <span class="block mt-2 text-xs font-medium text-arka-primary">Tocar para abrir la carrera</span>
+            <span class="block mt-2 text-xs font-medium text-arka-primary">Tocar para abrir carreras</span>
         </button>
         <nav class="bg-arka-card border-b border-arka-text-muted/10">
             <!-- Primary Navigation Menu -->
@@ -309,6 +335,14 @@ onBeforeUnmount(() => {
                          app), centrada para aprovechar el ancho del header. -->
                     <div class="hidden sm:flex justify-center">
                         <div class="flex items-center gap-1 bg-arka-base/60 rounded-full p-1">
+                            <Link
+                                v-if="hasRoute('cooperative.dashboard') && showCooperativeNav"
+                                :href="route('cooperative.dashboard')"
+                                class="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition"
+                                :class="route().current('cooperative.*') ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted hover:text-arka-text'"
+                            >
+                                Cooperativa
+                            </Link>
                             <Link
                                 v-if="hasRoute('fleet.index') && showClientNav"
                                 :href="route('fleet.index')"
@@ -338,7 +372,7 @@ onBeforeUnmount(() => {
                                 Mis clientes
                             </Link>
                             <Link
-                                v-if="hasRoute('rides.index') && !isAdmin"
+                                v-if="hasRoute('rides.index') && !isAdmin && !showCooperativeNav"
                                 :href="route('rides.index')"
                                 class="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition"
                                 :class="
@@ -497,6 +531,12 @@ onBeforeUnmount(() => {
                                              (mismo criterio que el perfil público, Profile/Show.vue). -->
                                         <div class="flex flex-wrap items-center gap-1.5">
                                             <span
+                                                v-if="showCooperativeNav"
+                                                class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-arka-primary/15 text-arka-primary-bright"
+                                            >
+                                                Cooperativa
+                                            </span>
+                                            <span
                                                 v-if="isAdmin"
                                                 class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-arka-warning/15 text-arka-warning"
                                             >
@@ -525,7 +565,7 @@ onBeforeUnmount(() => {
                                         <!-- Plan vigente de cada rol activo, de un vistazo
                                              (consideración agregada al alcance). -->
                                         <div
-                                            v-if="$page.props.auth.plans?.driver || $page.props.auth.plans?.client"
+                                            v-if="$page.props.auth.plans?.driver || $page.props.auth.plans?.client || $page.props.auth.plans?.cooperative"
                                             class="mt-2 text-xs text-arka-text-muted space-y-0.5"
                                         >
                                             <p v-if="$page.props.auth.plans.driver">
@@ -533,6 +573,9 @@ onBeforeUnmount(() => {
                                             </p>
                                             <p v-if="$page.props.auth.plans.client">
                                                 Plan cliente: <span class="text-arka-text">{{ $page.props.auth.plans.client }}</span>
+                                            </p>
+                                            <p v-if="$page.props.auth.plans.cooperative">
+                                                Plan cooperativa: <span class="text-arka-text">{{ $page.props.auth.plans.cooperative }}</span>
                                             </p>
                                             <!-- Pedido explícito del usuario: que el conductor sepa
                                                  también en cuál está, no solo los clientes que lo ven
@@ -552,7 +595,7 @@ onBeforeUnmount(() => {
                                          conductor, planes, directorio y contactos ya están en
                                          "Accesos rápidos" (FAB / grilla de puntos); repetirlos
                                          acá era la misma opción en dos menús distintos. -->
-                                    <DropdownLink :href="route('profile.edit')"> Mi perfil </DropdownLink>
+                                    <DropdownLink :href="showCooperativeNav ? route('cooperative.profile.edit') : route('profile.edit')"> Mi perfil </DropdownLink>
                                     <DropdownLink :href="route('profile.edit') + '#suscripcion'"> Ver mi suscripción </DropdownLink>
                                     <DropdownLink
                                         v-if="hasRoute('profiles.show')"
@@ -580,7 +623,7 @@ onBeforeUnmount(() => {
                                          un botón acá mismo — de cliente pasa al formulario que ya
                                          pide los requisitos (vehículo, licencia); de conductor,
                                          pausa el perfil sin borrar nada, listo para reactivar. -->
-                                    <DropdownLink v-if="!isAdmin && !showDriverNav" :href="route('driver.profile.edit')">
+                                    <DropdownLink v-if="!isAdmin && !showDriverNav && !showCooperativeNav" :href="route('driver.profile.edit')">
                                         Pasarme a conductor
                                     </DropdownLink>
                                     <button
@@ -684,7 +727,7 @@ onBeforeUnmount(() => {
             <!-- Tabs a la derecha del botón central. -->
             <div class="flex-1 flex items-stretch">
                 <Link
-                    v-if="hasRoute('rides.index') && !isAdmin"
+                    v-if="hasRoute('rides.index') && !isAdmin && !showCooperativeNav"
                     :href="route('rides.index')"
                     class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
                     :class="
@@ -721,7 +764,7 @@ onBeforeUnmount(() => {
                 </Link>
 
                 <Link
-                    :href="route('profile.edit')"
+                    :href="showCooperativeNav ? route('cooperative.profile.edit') : route('profile.edit')"
                     class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
                     :class="route().current('profile.*') ? 'text-arka-primary' : 'text-arka-text-muted'"
                 >

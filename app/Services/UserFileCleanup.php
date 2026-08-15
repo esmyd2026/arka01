@@ -27,8 +27,14 @@ class UserFileCleanup
         }
 
         if ($user->driverProfile) {
+            if ($user->driverProfile->identity_document_path) {
+                Storage::disk('local')->delete($user->driverProfile->identity_document_path);
+            }
             if ($user->driverProfile->license_photo_path) {
                 Storage::disk('local')->delete($user->driverProfile->license_photo_path);
+            }
+            if ($user->driverProfile->police_record_path) {
+                Storage::disk('local')->delete($user->driverProfile->police_record_path);
             }
             if ($user->driverProfile->vehicle_photo_path) {
                 Storage::disk('public')->delete($user->driverProfile->vehicle_photo_path);

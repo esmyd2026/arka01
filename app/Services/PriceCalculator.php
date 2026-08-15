@@ -8,6 +8,24 @@ use Carbon\Carbon;
 class PriceCalculator
 {
     /**
+     * Pedido explícito del usuario: "súbele siempre a cada carrera... a los
+     * km 800 metros más" — un margen fijo que se suma a la distancia ANTES
+     * de calcular el precio, en toda carrera pedida por un cliente (ahora
+     * mismo, programada, o el piso de precio de un Expreso — ver
+     * ExpressRouteController::suggestedPrice(), que llama a este mismo
+     * método). Cubre desvíos reales de ruta, imprecisión del pin de
+     * origen/destino y el tramo de acercamiento del conductor, sin que el
+     * conductor tenga que pelear por eso carrera por carrera.
+     *
+     * A propósito NO se suma a `distance_km` guardado ni al que se le
+     * muestra al cliente/conductor como "distancia del viaje" (eso sigue
+     * siendo la distancia real, para no mentirle a nadie en pantalla ni
+     * mover el umbral de puntos del conductor en RideController::complete())
+     * — el margen queda encapsulado acá adentro, solo afecta el precio.
+     */
+    private const DISTANCE_PADDING_KM = 0.8;
+
+    /**
      * Precio sugerido = distancia × tarifa del conductor × factor horario
      * (sección 5 del alcance). Devuelve el desglose completo (no solo el
      * total) porque el documento pide que el cálculo se muestre siempre
@@ -21,12 +39,18 @@ class PriceCalculator
      * configuración, gana el nocturno, ya que suele ser el recargo más
      * alto de los dos).
      *
+     * El margen de DISTANCE_PADDING_KM se suma PRIMERO, así que el recargo
+     * nocturno/pico (que se calcula como % de `$base`, más abajo) ya queda
+     * aplicado sobre la distancia con margen incluido — nada de sumarlo
+     * aparte ni de tocar esa lógica.
+     *
      * @return array{base: float, night_surcharge: float, peak_surcharge: float, total: float, is_night: bool, is_peak: bool}
      */
     public static function suggestedPrice(float $distanceKm, float $ratePerKm, ?Carbon $at = null, ?float $driverMinimumFare = null): array
     {
         $at ??= now();
         $settings = PricingSetting::current();
+        $distanceKm += self::DISTANCE_PADDING_KM;
 
         // Tarifa base mínima (pedido explícito del usuario, editable desde
         // /admin/tarifas): una carrera corta no puede salir tan barata que no

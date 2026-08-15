@@ -104,11 +104,13 @@ onMounted(() => {
     personal.listen('.ride-request.created', (e) => {
         const req = myPending.value.find((r) => r.id === e.id);
         if (req) {
+            const assignedNow = e.cooperative_id && e.driver_user_id && req.driver_user_id !== e.driver_user_id;
             req.status = e.status;
             req.driver_user_id = e.driver_user_id;
             req.driver = e.driver_name ? { name: e.driver_name } : null;
             req.current_offered_price = e.current_offered_price;
             req.current_offer_expires_at = e.current_offer_expires_at;
+            if (assignedNow) playAttentionAlert();
         }
     });
     // Pedido explícito del usuario: apenas el conductor acepta, el cliente

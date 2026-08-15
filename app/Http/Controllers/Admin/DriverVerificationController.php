@@ -12,7 +12,7 @@ use Inertia\Response;
 
 /**
  * Verificación de identidad de conductores (sección 9.5-C): aprobar o
- * rechazar la licencia y la foto del vehículo antes de que el conductor
+ * rechazar la cédula, licencia y certificado de antecedentes antes de que el conductor
  * pueda aparecer como "verificado" en su perfil público (sección 8).
  */
 class DriverVerificationController extends Controller
@@ -26,7 +26,9 @@ class DriverVerificationController extends Controller
             // manual, no un listado que un usuario final recorra).
             'pending' => DriverProfile::query()
                 ->where('verification_status', 'pending')
+                ->whereNotNull('identity_document_path')
                 ->whereNotNull('license_photo_path')
+                ->whereNotNull('police_record_path')
                 ->with('user')
                 ->latest('updated_at')
                 ->limit(200)

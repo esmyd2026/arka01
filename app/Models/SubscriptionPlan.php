@@ -32,6 +32,8 @@ class SubscriptionPlan extends Model
         'express_enabled',
         'max_fleets',
         'max_drivers_per_fleet',
+        'max_cooperatives',
+        'max_units',
         'is_active',
         'sort_order',
     ];
@@ -60,5 +62,10 @@ class SubscriptionPlan extends Model
     public function isForClients(): bool
     {
         return $this->owner_type === 'client';
+    }
+
+    public function isForCooperatives(): bool
+    {
+        return $this->owner_type === 'cooperative';
     }
 }

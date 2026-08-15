@@ -8,6 +8,7 @@ use App\Events\RideRequestExpired;
 use App\Jobs\ExpireRideOffer;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Notifications\CooperativeRideAssignedPushNotification;
 use App\Notifications\RideRequestedPushNotification;
 use App\Notifications\RideRequestExpiredPushNotification;
 use Illuminate\Support\Facades\DB;
@@ -24,8 +25,8 @@ class RideDispatchAdvancer
 {
     /**
      * @param  int|null  $expectedCurrentDriverId  si se pasa, no hace nada si
-     *                                              la solicitud ya avanzó desde que se encoló este chequeo
-     *                                              (protege contra una carrera entre el Job y una respuesta real).
+     *                                             la solicitud ya avanzó desde que se encoló este chequeo
+     *                                             (protege contra una carrera entre el Job y una respuesta real).
      */
     public static function advanceOrExpire(int $rideRequestId, ?int $expectedCurrentDriverId = null): void
     {
@@ -54,7 +55,12 @@ class RideDispatchAdvancer
             while (! empty($remaining)) {
                 $candidateId = array_shift($remaining);
 
-                if (RideDispatchCandidates::isStillEligible(
+                $belongsToCooperative = ! $rideRequest->cooperative_id || $rideRequest->cooperative
+                    ->activeDriverMemberships()
+                    ->where('driver_user_id', $candidateId)
+                    ->exists();
+
+                if ($belongsToCooperative && RideDispatchCandidates::isStillEligible(
                     $candidateId,
                     (float) $rideRequest->origin_lat,
                     (float) $rideRequest->origin_lng,
@@ -72,15 +78,27 @@ class RideDispatchAdvancer
             }
 
             if ($nextDriverId === null) {
-                $rideRequest->update(['status' => 'expired', 'responded_at' => now()]);
+                $rideRequest->update([
+                    'status' => 'expired',
+                    'responded_at' => now(),
+                    'cooperative_assignment_status' => $rideRequest->cooperative_id ? 'unassigned' : $rideRequest->cooperative_assignment_status,
+                    'cooperative_offer_expires_at' => null,
+                ]);
 
                 return ['type' => 'expired', 'rideRequest' => $rideRequest, 'previousDriverId' => $previousDriverId];
             }
 
+            $timeoutSeconds = $rideRequest->cooperative_id
+                ? max(15, min(300, (int) ($rideRequest->cooperative?->response_timeout_seconds ?? 30)))
+                : 30;
+
             $rideRequest->update([
                 'driver_user_id' => $nextDriverId,
                 'offer_candidate_ids' => $remaining,
-                'current_offer_expires_at' => now()->addSeconds(30),
+                'current_offer_expires_at' => now()->addSeconds($timeoutSeconds),
+                'cooperative_assignment_status' => $rideRequest->cooperative_id ? 'awaiting_driver' : $rideRequest->cooperative_assignment_status,
+                'cooperative_candidate_ids' => $rideRequest->cooperative_id ? ($remaining ?: null) : $rideRequest->cooperative_candidate_ids,
+                'cooperative_offer_expires_at' => $rideRequest->cooperative_id ? now()->addSeconds($timeoutSeconds) : $rideRequest->cooperative_offer_expires_at,
             ]);
 
             return ['type' => 'advanced', 'rideRequest' => $rideRequest->fresh(), 'previousDriverId' => $previousDriverId];
@@ -144,6 +162,9 @@ class RideDispatchAdvancer
 
         $nextDriver = User::find($rideRequest->driver_user_id);
         $nextDriver?->notify(new RideRequestedPushNotification($rideRequest));
+        if ($rideRequest->cooperative_id) {
+            $rideRequest->client->notify(new CooperativeRideAssignedPushNotification($rideRequest));
+        }
         // Mismo aviso por WhatsApp que al crear la solicitud (pedido
         // explícito del usuario), ahora para el siguiente candidato de la
         // bolsa — ver WhatsAppFreeformSender::sendNewRideAlert().
