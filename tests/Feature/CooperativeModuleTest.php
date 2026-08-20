@@ -8,9 +8,11 @@ use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\RideRequest;
 use App\Models\User;
+use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Notification;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CooperativeModuleTest extends TestCase
@@ -64,6 +66,32 @@ class CooperativeModuleTest extends TestCase
 
         $this->assertSame('accepted', $membership->fresh()->status);
         $this->assertSame('public_transport', $driver->driverProfile->fresh()->driver_type);
+    }
+
+    public function test_cooperative_profile_can_be_saved_as_an_incomplete_draft(): void
+    {
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)->post(route('cooperative.profile.update'), [
+            'name' => 'Cooperativa Amazonas',
+            'main_address' => 'La Alborada, Guayaquil, Ecuador',
+            'stand_lat' => -2.1450000,
+            'stand_lng' => -79.8950000,
+            'declared_driver_count' => 3,
+            'declared_unit_count' => 3,
+            'response_timeout_seconds' => 30,
+            'automatic_assignment_enabled' => true,
+            'manual_assignment_timeout_seconds' => 30,
+            // Cobertura, horario y documentos todavía incompletos a propósito.
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $cooperative->refresh();
+        $this->assertSame('Cooperativa Amazonas', $cooperative->name);
+        $this->assertSame('La Alborada, Guayaquil, Ecuador', $cooperative->main_address);
+        $this->assertSame('-2.1450000', $cooperative->stand_lat);
+        $this->assertNull($cooperative->geographic_coverage);
+        $this->assertNull($cooperative->submitted_at);
     }
 
     public function test_a_client_can_request_a_ride_from_an_attached_cooperative(): void
@@ -135,5 +163,21 @@ class CooperativeModuleTest extends TestCase
         ])->assertSessionHasErrors('cooperative_id');
 
         $this->assertDatabaseCount('ride_requests', 0);
+    }
+
+    public function test_public_cooperative_profile_aggregates_its_drivers_rides_and_reviews(): void
+    {
+        $this->seed(DemoDataSeeder::class);
+        $cooperative = Cooperative::query()->where('name', 'Cooperativa Amazonas')->firstOrFail();
+
+        $this->get(route('cooperatives.show', $cooperative))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Cooperative/Show')
+                ->where('reputation.client_count', 2)
+                ->where('reputation.completed_rides', 57)
+                ->where('reputation.review_count', 57)
+                ->has('drivers', 3)
+                ->has('reviews', 20));
     }
 }

@@ -10,6 +10,28 @@ window.axios = axios;
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 /**
+ * Sesión vencida en un pedido "de fondo" (pedido explícito del usuario, caso
+ * real: el chat de una carrera mostraba "No se pudo mandar el mensaje" — un
+ * error genérico que no explicaba que la sesión había vencido). Los pedidos
+ * de Inertia (navegar de pantalla) ya tienen su propio arreglo para esto
+ * (App\Exceptions\Handler::render(), evita el iframe atrapado de Inertia en
+ * un 419) — pero un `window.axios.post()` directo (chat, buscador de
+ * conductores en Mis flotas, ping de ubicación del conductor) nunca pasa por
+ * ahí. Sin esto, cualquiera de esos pedidos de fondo fallaba con un mensaje
+ * confuso en vez de explicar la causa real y ofrecer la salida obvia.
+ */
+window.axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 419) {
+            alert('Su sesión expiró. Se va a recargar la página para que vuelva a entrar.');
+            window.location.reload();
+        }
+        return Promise.reject(error);
+    }
+);
+
+/**
  * Echo expone una API para suscribirse a canales y escuchar eventos que
  * Laravel transmite por WebSocket. Acá se conecta contra nuestro propio
  * servidor Reverb (self-hosted, sección 9.1/9.8 del alcance).

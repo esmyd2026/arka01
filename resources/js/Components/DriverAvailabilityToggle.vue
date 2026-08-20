@@ -161,10 +161,24 @@ function toggle() {
     if (available.value) {
         startWatching();
     } else {
-        // Mandamos un último ping con is_available:false para que la flota
-        // deje de verlo como disponible de inmediato. Si el GPS falla justo
-        // ahora, usamos la última posición conocida en vez de no mandar nada
-        // (el backend exige lat/lng — ver el comentario de lastKnownPosition).
+        // Bug real reportado por el usuario ("le aparece desconectado y al
+        // cliente le aparece activo"): `stopWatching()` recién corta
+        // `watchId` DENTRO del callback de `getCurrentPosition()` de acá
+        // abajo, que es async y puede tardar. Mientras tanto, el
+        // `watchPosition()` de ANTES seguía escuchando — si el GPS del
+        // navegador disparaba una posición nueva justo en esa ventana,
+        // `handlePosition()` mandaba OTRO ping con `is_available:true` de
+        // por medio, que podía llegar al backend después del de apagado
+        // (no hay ningún orden garantizado entre dos pedidos). El backend
+        // guarda tal cual lo último que le llega — quedaba "disponible" en
+        // la base aunque la pantalla del conductor ya dijera lo contrario.
+        // Cortando el watch ACÁ, sincrónico, antes de pedir la posición
+        // fresca para el último ping, no queda ninguna ventana donde pueda
+        // colarse otro ping de encendido.
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
         navigator.geolocation?.getCurrentPosition(
             (position) => stopWatching(position),
             () => stopWatching(lastKnownPosition)

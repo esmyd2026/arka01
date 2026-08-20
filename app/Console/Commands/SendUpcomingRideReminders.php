@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Events\RideReminderDue;
 use App\Models\Ride;
 use App\Notifications\RideScheduledReminderPushNotification;
+use App\Services\WhatsAppFreeformSender;
 use Illuminate\Console\Command;
 
 /**
@@ -38,6 +39,7 @@ class SendUpcomingRideReminders extends Command
             broadcast(new RideReminderDue($ride));
 
             $ride->driver->notify(new RideScheduledReminderPushNotification($ride));
+            WhatsAppFreeformSender::sendScheduledRideReminder($ride->driver, $ride);
         }
 
         if ($upcoming->isNotEmpty()) {

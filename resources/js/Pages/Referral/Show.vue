@@ -37,7 +37,7 @@ function invite() {
 <template>
     <Head :title="`${driver.name} lo invita a Arka01`" />
 
-    <div class="min-h-screen bg-arka-base flex flex-col items-center justify-center px-4 py-12">
+    <div class="arka-app-background min-h-screen flex flex-col items-center justify-center px-4 py-12">
         <Link href="/" class="mb-6">
             <ApplicationLogo size="h-8" />
         </Link>

@@ -9,7 +9,7 @@ import { Link } from '@inertiajs/vue3';
          contraseña): panel de marca a la izquierda en escritorio (oculto en
          móvil, donde alcanza con el logo chico arriba de la tarjeta) y el
          formulario a la derecha. -->
-    <div class="min-h-screen flex bg-arka-base">
+    <div class="arka-app-background min-h-screen flex">
         <AuthBrandingPanel />
 
         <div class="flex-1 flex flex-col justify-center items-center px-6 py-12">

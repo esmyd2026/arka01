@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\CooperativeDriverMembership;
+use App\Models\DriverActivitySession;
+use App\Models\Ride;
+use App\Models\RideRequest;
 use App\Models\User;
 use App\Notifications\CooperativeDriverInvitationPushNotification;
 use App\Notifications\CooperativeDriverResponsePushNotification;
@@ -31,6 +34,71 @@ class CooperativeDriverController extends Controller
                 ->latest()
                 ->get(),
             'planLimits' => $this->planLimits->forCooperative($request->user()),
+        ]);
+    }
+
+    public function show(Request $request, CooperativeDriverMembership $membership): Response
+    {
+        $this->assertOwned($request, $membership);
+        $membership->load('driver.driverProfile');
+        $driver = $membership->driver;
+        $cooperativeId = $membership->cooperative_id;
+
+        $rides = Ride::query()
+            ->where('driver_user_id', $driver->id)
+            ->whereHas('rideRequest', fn ($query) => $query->where('cooperative_id', $cooperativeId));
+        $completed = (clone $rides)->where('status', 'completed');
+        $now = now();
+
+        $period = function ($query, $start) use ($now) {
+            return (clone $query)->whereBetween('completed_at', [$start, $now]);
+        };
+
+        $activitySessions = DriverActivitySession::query()
+            ->where('driver_user_id', $driver->id)
+            ->orderBy('started_at')
+            ->get();
+        $activeMinutes = function ($start = null) use ($activitySessions, $now): int {
+            return (int) round($activitySessions->sum(function ($session) use ($start, $now) {
+                $from = $start && $session->started_at->lt($start) ? $start->copy() : $session->started_at;
+                $to = $session->ended_at ?? $session->last_seen_at ?? $now;
+
+                return $to->gt($from) ? $from->diffInSeconds($to) : 0;
+            }) / 60);
+        };
+
+        $history = (clone $rides)->with('client:id,name')
+            ->latest()->paginate(15)->through(fn (Ride $ride) => [
+                'id' => $ride->id,
+                'client' => $ride->client?->name ?? 'Cliente',
+                'origin' => $ride->origin_address,
+                'destination' => $ride->destination_address,
+                'distance_km' => (float) $ride->distance_km,
+                'price' => (float) $ride->price,
+                'status' => $ride->status,
+                'payment_method' => $ride->payment_method,
+                'date' => ($ride->completed_at ?? $ride->cancelled_at ?? $ride->created_at)?->toIso8601String(),
+            ]);
+
+        return Inertia::render('Cooperative/DriverShow', [
+            'membership' => $membership,
+            'summary' => [
+                'rides_today' => $period($completed, $now->copy()->startOfDay())->count(),
+                'rides_month' => $period($completed, $now->copy()->startOfMonth())->count(),
+                'assigned_total' => RideRequest::query()->where('cooperative_id', $cooperativeId)->where('driver_user_id', $driver->id)->count(),
+                'completed_total' => (clone $completed)->count(),
+                'cancelled_total' => (clone $rides)->where('status', 'cancelled')->count(),
+                'earnings_today' => (float) $period($completed, $now->copy()->startOfDay())->sum('price'),
+                'earnings_week' => (float) $period($completed, $now->copy()->startOfWeek())->sum('price'),
+                'earnings_month' => (float) $period($completed, $now->copy()->startOfMonth())->sum('price'),
+                'earnings_total' => (float) (clone $completed)->sum('price'),
+                'active_minutes_today' => $activeMinutes($now->copy()->startOfDay()),
+                'active_minutes_week' => $activeMinutes($now->copy()->startOfWeek()),
+                'active_minutes_month' => $activeMinutes($now->copy()->startOfMonth()),
+                'active_minutes_total' => $activeMinutes(),
+                'activity_tracking_since' => $activitySessions->first()?->started_at?->toIso8601String(),
+            ],
+            'rides' => $history,
         ]);
     }
 

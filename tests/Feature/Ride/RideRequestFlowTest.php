@@ -153,6 +153,71 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
+     * Rediseño UX (pedido explícito del usuario, guiado por
+     * ARKA01_Rediseno_UX_Flujo_Carreras.md): si se llega desde el buscador
+     * "¿A dónde vas?" de Inicio, el destino ya viene elegido — la pantalla
+     * tiene que recibirlo pre-llenado para arrancar directo en "Elige tu
+     * conductor" sin volver a pedirlo.
+     */
+    public function test_the_request_screen_exposes_a_prefilled_destination_from_query_params(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create', [
+            'destination_lat' => -2.15,
+            'destination_lng' => -79.90,
+            'destination_address' => 'Mall del Sol',
+        ]));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('initialDestination.lat', -2.15)
+            ->where('initialDestination.lng', -79.90)
+            ->where('initialDestination.address', 'Mall del Sol')
+        );
+    }
+
+    public function test_the_request_screen_has_no_prefilled_destination_without_query_params(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page->where('initialDestination', null));
+    }
+
+    /**
+     * Documento formal de ajuste UX (sección 13): si el buscador de Inicio
+     * ya sabía la ubicación en vivo del cliente, se manda de una vez como
+     * origen — esta pantalla no debería volver a pedir geolocalización para
+     * algo que ya se resolvió.
+     */
+    public function test_the_request_screen_exposes_a_prefilled_origin_from_query_params(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create', [
+            'origin_lat' => -2.14,
+            'origin_lng' => -79.89,
+            'origin_address' => 'Mi ubicación',
+        ]));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('initialOrigin.lat', -2.14)
+            ->where('initialOrigin.lng', -79.89)
+            ->where('initialOrigin.address', 'Mi ubicación')
+        );
+    }
+
+    public function test_the_request_screen_has_no_prefilled_origin_without_query_params(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page->where('initialOrigin', null));
+    }
+
+    /**
      * Pedido explícito del usuario: "guardá las que ya ha realizado para que
      * aparezcan como favoritas" — direcciones que el cliente ya usó antes
      * (de origen o de destino), la más repetida primero.
@@ -173,6 +238,7 @@ class RideRequestFlowTest extends TestCase
             'destination_address' => 'Trabajo',
             'destination_lat' => -2.20,
             'destination_lng' => -79.88,
+            'status' => 'accepted',
         ]);
 
         RideRequest::factory()->create([
@@ -185,6 +251,7 @@ class RideRequestFlowTest extends TestCase
             'destination_address' => 'Casa',
             'destination_lat' => -2.15,
             'destination_lng' => -79.90,
+            'status' => 'accepted',
         ]);
 
         // Un tercer viaje solo de "Casa" a un lugar sin nombre, para que
@@ -197,6 +264,7 @@ class RideRequestFlowTest extends TestCase
             'origin_lat' => -2.15,
             'origin_lng' => -79.90,
             'destination_address' => null,
+            'status' => 'accepted',
         ]);
 
         $response = $this->actingAs($client)->get(route('ride-requests.create'));
@@ -224,6 +292,7 @@ class RideRequestFlowTest extends TestCase
             'driver_user_id' => $driver->id,
             'origin_address' => null,
             'destination_address' => null,
+            'status' => 'accepted',
         ]);
 
         $response = $this->actingAs($client)->get(route('ride-requests.create'));
@@ -484,6 +553,42 @@ class RideRequestFlowTest extends TestCase
             'is_scheduled' => false,
             'scheduled_at' => null,
         ]);
+    }
+
+    public function test_an_active_immediate_request_blocks_another_immediate_request_and_other_pages(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $payload = [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807, 'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000, 'destination_lng' => -78.5000,
+            'is_scheduled' => false,
+        ];
+
+        $this->actingAs($client)->post(route('ride-requests.store'), $payload)->assertSessionHasNoErrors();
+        $this->actingAs($client)->post(route('ride-requests.store'), $payload)->assertSessionHasErrors('ride');
+        $this->actingAs($client)->get(route('profile.edit'))->assertRedirect(route('rides.index'));
+        $this->assertDatabaseCount('ride_requests', 1);
+    }
+
+    public function test_an_active_immediate_request_does_not_block_a_future_scheduled_request(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $base = [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807, 'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000, 'destination_lng' => -78.5000,
+        ];
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [...$base, 'is_scheduled' => false]);
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            ...$base,
+            'is_scheduled' => true,
+            'scheduled_date' => '2026-01-16',
+            'scheduled_time' => '08:00',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('ride_requests', 2);
     }
 
     /**

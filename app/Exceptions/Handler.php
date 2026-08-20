@@ -5,7 +5,9 @@ namespace App\Exceptions;
 use App\Services\SystemEventLogger;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -78,5 +80,39 @@ class Handler extends ExceptionHandler
                 // si está configurado, en Sentry.
             }
         });
+    }
+
+    /**
+     * Bug real reportado por el usuario ("el botón Volver al inicio no hace
+     * nada"): Inertia muestra CUALQUIER respuesta que no sea una página
+     * Inertia válida (como la pantalla 419 de resources/views/errors/,
+     * renderizada en HTML normal) adentro de un `<iframe sandbox="allow-
+     * scripts">` — sin `allow-top-navigation`, así que ni con
+     * `target="_top"` el navegador deja navegar la ventana real desde ese
+     * enlace; el clic no hace nada porque el propio navegador lo bloquea,
+     * no por nada que la app pudiera controlar del lado del botón. La forma
+     * correcta (documentada por Inertia) es no dejar que un 419 llegue a
+     * mostrarse ahí: se responde con un redirect normal, que Inertia sigue
+     * como una navegación más — vuelve a la página anterior (y si la sesión
+     * también quedó inválida, de ahí sigue derecho al login solo, sin CSRF
+     * de por medio porque es un GET).
+     */
+    public function render($request, Throwable $e)
+    {
+        if ($e instanceof TokenMismatchException && $request->header('X-Inertia')) {
+            return back()->with('status', 'La página expiró — vuelva a intentarlo.');
+        }
+
+        // Una página HTML de error dentro de una visita Inertia termina en
+        // su visor aislado, donde el navegador bloquea la navegación del
+        // botón "Volver al inicio". Esta respuesta especial ordena a
+        // Inertia navegar la ventana real y evita que el usuario quede preso
+        // en el error, aunque haya llegado desde una redirección encadenada.
+        if (($e instanceof NotFoundHttpException || $e instanceof ModelNotFoundException)
+            && $request->header('X-Inertia')) {
+            return Inertia::location(url('/'));
+        }
+
+        return parent::render($request, $e);
     }
 }

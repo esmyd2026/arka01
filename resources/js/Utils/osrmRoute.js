@@ -26,12 +26,17 @@ export async function fetchOsrmRoute(originLat, originLng, destinationLat, desti
         const route = data?.routes?.[0];
         const coords = (route?.geometry?.coordinates ?? []).map(([lng, lat]) => ({ lat, lng }));
         const distanceKm = typeof route?.distance === 'number' ? route.distance / 1000 : null;
+        // Duración real de manejo que ya trae la misma respuesta de OSRM (antes
+        // se descartaba) — más precisa que estimarla con una velocidad
+        // promedio fija (ver Utils/eta.js), porque ya tiene en cuenta el tipo
+        // de vía real del recorrido.
+        const durationMin = typeof route?.duration === 'number' ? route.duration / 60 : null;
 
-        return { coords, distanceKm };
+        return { coords, distanceKm, durationMin };
     } catch {
         // Si el servicio gratuito de ruteo no responde, no rompemos el flujo —
         // simplemente no se ve la línea del recorrido, y quien llama se queda
         // sin distancia real (cae de vuelta a la línea recta que ya calculaba).
-        return { coords: [], distanceKm: null };
+        return { coords: [], distanceKm: null, durationMin: null };
     }
 }

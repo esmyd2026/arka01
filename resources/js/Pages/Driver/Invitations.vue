@@ -224,12 +224,18 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         invite primero.
                     </p>
 
-                    <InputLabel value="Nombre, teléfono, usuario o código de socio" class="mt-4" />
+                    <!-- Pedido explícito del usuario ("manejar la privacidad...
+                         limitemos la búsqueda por código nada más, porque
+                         chocarían con millones de personas"): antes buscaba
+                         también por nombre, y con una base grande de
+                         usuarios eso da resultados ambiguos entre
+                         desconocidos con el mismo nombre. -->
+                    <InputLabel value="Código de socio" class="mt-4" />
                     <TextInput
                         v-model="searchTerm"
                         type="text"
                         class="mt-1 block w-full"
-                        placeholder="Ej: María Torres, 09..., mtorres o 512"
+                        placeholder="Ej: 512"
                         @input="runSearch"
                     />
 

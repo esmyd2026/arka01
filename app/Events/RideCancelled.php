@@ -6,7 +6,7 @@ use App\Models\FleetMember;
 use App\Models\Ride;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -18,7 +18,7 @@ use Illuminate\Queue\SerializesModels;
  * canal personal de ambas partes para que Ride/Index.vue y Ride/Show.vue se
  * actualicen en vivo sin depender de un canal de flota compartido.
  */
-class RideCancelled implements ShouldBroadcast
+class RideCancelled implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -40,6 +40,7 @@ class RideCancelled implements ShouldBroadcast
 
         $channels[] = new PrivateChannel("App.Models.User.{$this->ride->client_user_id}");
         $channels[] = new PrivateChannel("App.Models.User.{$this->ride->driver_user_id}");
+        $channels[] = new PrivateChannel("ride.{$this->ride->id}");
 
         return $channels;
     }

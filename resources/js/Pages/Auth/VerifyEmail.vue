@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { resetStartupSplash } from '@/Utils/startupSplash';
 
 const props = defineProps({
     status: {
@@ -42,6 +43,7 @@ const verificationLinkSent = computed(() => props.status === 'verification-link-
                     :href="route('logout')"
                     method="post"
                     as="button"
+                    @click="resetStartupSplash"
                     class="underline text-sm text-arka-text-muted hover:text-arka-text rounded-arka focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-arka-card focus:ring-arka-primary"
                     >Cerrar sesión</Link
                 >

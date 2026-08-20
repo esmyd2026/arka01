@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -50,20 +51,24 @@ class CooperativeProfileController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:150'],
-            'legal_name' => ['required', 'string', 'max:200'],
-            'ruc' => ['required', 'digits:13', Rule::unique('cooperatives', 'ruc')->ignore($cooperative->id)],
-            'main_address' => ['required', 'string', 'max:255'],
-            'city_id' => ['required', 'integer', 'exists:cities,id'],
-            'province' => ['required', 'string', 'max:100'],
-            'phone' => ['required', 'string', 'max:30'],
-            'email' => ['required', 'email', 'max:255'],
-            'legal_representative' => ['required', 'string', 'max:150'],
+            'name' => ['nullable', 'string', 'max:150'],
+            'legal_name' => ['nullable', 'string', 'max:200'],
+            'ruc' => ['nullable', 'digits:13', Rule::unique('cooperatives', 'ruc')->ignore($cooperative->id)],
+            'main_address' => ['nullable', 'string', 'max:255'],
+            'stand_lat' => ['nullable', 'required_with:stand_lng', 'numeric', 'between:-90,90'],
+            'stand_lng' => ['nullable', 'required_with:stand_lat', 'numeric', 'between:-180,180'],
+            'city_id' => ['nullable', 'integer', 'exists:cities,id'],
+            'province' => ['nullable', 'string', 'max:100'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'legal_representative' => ['nullable', 'string', 'max:150'],
             'declared_driver_count' => ['required', 'integer', 'min:0', 'max:100000'],
             'declared_unit_count' => ['required', 'integer', 'min:0', 'max:100000'],
-            'geographic_coverage' => ['required', 'string', 'max:2000'],
-            'operating_hours' => ['required', 'string', 'max:1000'],
+            'geographic_coverage' => ['nullable', 'string', 'max:2000'],
+            'operating_hours' => ['nullable', 'string', 'max:1000'],
             'response_timeout_seconds' => ['required', 'integer', Rule::in([15, 30, 60])],
+            'automatic_assignment_enabled' => ['required', 'boolean'],
+            'manual_assignment_timeout_seconds' => ['required', 'integer', Rule::in([30])],
             'logo' => ['nullable', 'image', 'max:4096'],
             'ruc_document' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
             'legal_appointment_document' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
@@ -80,16 +85,7 @@ class CooperativeProfileController extends Controller
             'operating_permit' => 'operating_permit_document',
         ];
 
-        foreach ($fieldByType as $type => $field) {
-            if (! $request->hasFile($field) && ! $cooperative->documents->contains('type', $type)) {
-                throw ValidationException::withMessages([$field => 'Este documento es obligatorio para enviar la cooperativa a validación.']);
-            }
-        }
-
-        $documentChanged = collect($fieldByType)->contains(fn ($field) => $request->hasFile($field))
-            || $request->hasFile('other_documents');
-
-        DB::transaction(function () use ($request, $cooperative, $validated, $fieldByType, $documentChanged) {
+        DB::transaction(function () use ($request, $cooperative, $validated, $fieldByType) {
             $data = collect($validated)->except([
                 'logo',
                 ...array_values($fieldByType),
@@ -101,17 +97,6 @@ class CooperativeProfileController extends Controller
                     Storage::disk('public')->delete($cooperative->logo_path);
                 }
                 $data['logo_path'] = $request->file('logo')->store('cooperatives/logos', 'public');
-            }
-
-            // Toda presentación inicial, corrección rechazada o cambio legal
-            // posterior a una aprobación vuelve a la cola de validación.
-            $data['status'] = 'pending';
-            $data['submitted_at'] = now();
-            $data['reviewed_at'] = null;
-            $data['reviewed_by'] = null;
-            $data['suspended_at'] = null;
-            if ($documentChanged || $cooperative->status !== 'approved') {
-                $data['rejection_reason'] = null;
             }
 
             $cooperative->forceFill($data)->save();
@@ -127,7 +112,57 @@ class CooperativeProfileController extends Controller
             }
         });
 
+        return back()->with('status', 'Datos guardados correctamente. Puede continuar completándolos después.');
+    }
+
+    /** Valida el perfil ya guardado y recién entonces lo envía a administración. */
+    public function submitForReview(Request $request): RedirectResponse
+    {
+        $cooperative = $request->user()->cooperative()->with('documents')->firstOrFail();
+        abort_if($cooperative->status === 'in_review', 422, 'La documentación ya está en revisión.');
+
+        Validator::make($cooperative->toArray(), [
+            'name' => ['required', 'string', 'max:150'], 'legal_name' => ['required', 'string', 'max:200'],
+            'ruc' => ['required', 'digits:13'], 'main_address' => ['required', 'string'],
+            'stand_lat' => ['required', 'numeric'], 'stand_lng' => ['required', 'numeric'],
+            'city_id' => ['required'], 'province' => ['required'], 'phone' => ['required'],
+            'email' => ['required', 'email'], 'legal_representative' => ['required'],
+            'geographic_coverage' => ['required'], 'operating_hours' => ['required'],
+        ])->validate();
+
+        foreach (self::REQUIRED_DOCUMENTS as $type => $label) {
+            if (! $cooperative->documents->contains('type', $type)) {
+                throw ValidationException::withMessages(["{$type}_document" => "Falta cargar: {$label}."]);
+            }
+        }
+
+        $cooperative->forceFill([
+            'status' => 'pending', 'submitted_at' => now(), 'reviewed_at' => null,
+            'reviewed_by' => null, 'suspended_at' => null, 'rejection_reason' => null,
+        ])->save();
+
         return back()->with('status', 'Información enviada. La cooperativa quedó pendiente de validación.');
+    }
+
+    /** Guarda el logo sin obligar a reenviar documentos ni datos legales. */
+    public function updateLogo(Request $request): RedirectResponse
+    {
+        $cooperative = $request->user()->cooperative()->firstOrFail();
+        $validated = $request->validate(['logo' => ['required', 'image', 'max:4096']]);
+        $newPath = $validated['logo']->store('cooperatives/logos', 'public');
+
+        if (! $newPath) {
+            throw ValidationException::withMessages(['logo' => 'No se pudo guardar el logo. Inténtelo nuevamente.']);
+        }
+
+        $previousPath = $cooperative->logo_path;
+        $cooperative->forceFill(['logo_path' => $newPath])->save();
+
+        if ($previousPath && $previousPath !== $newPath) {
+            Storage::disk('public')->delete($previousPath);
+        }
+
+        return back()->with('status', 'Logo actualizado correctamente.');
     }
 
     public function document(Request $request, CooperativeDocument $document): SymfonyResponse

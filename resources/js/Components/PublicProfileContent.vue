@@ -31,6 +31,14 @@ defineProps({
             <span v-if="isDriver" class="px-3 py-1 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
                 Conductor
             </span>
+            <Link
+                v-if="isDriver && profileUser.driver_profile?.cooperative"
+                :href="route('cooperatives.show', profileUser.driver_profile.cooperative.id)"
+                class="inline-flex items-center gap-1.5 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright hover:border-arka-primary/60"
+            >
+                <span aria-hidden="true">◉</span>
+                Conductor de {{ profileUser.driver_profile.cooperative.name }}
+            </Link>
             <span
                 v-if="reviewCount > 0"
                 class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-arka-lime/15 text-arka-lime"
@@ -66,12 +74,6 @@ defineProps({
             </p>
             <p v-if="profileUser.driver_profile.verification_status === 'approved'" class="text-arka-primary-bright">
                 ✓ {{ profileUser.driver_profile.trust_label || 'Conductor verificado' }}
-            </p>
-            <p v-if="profileUser.driver_profile.cooperative">
-                Cooperativa:
-                <Link :href="route('cooperatives.show', profileUser.driver_profile.cooperative.id)" class="text-arka-primary hover:underline">
-                    {{ profileUser.driver_profile.cooperative.name }}
-                </Link>
             </p>
             <p>{{ profileUser.driver_profile.clients_count }} cliente{{ profileUser.driver_profile.clients_count === 1 ? '' : 's' }} lo tienen agregado en su flota</p>
 

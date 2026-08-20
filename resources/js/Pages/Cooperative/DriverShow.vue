@@ -1,0 +1,81 @@
+<script setup>
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
+import { Head, Link } from '@inertiajs/vue3';
+
+const props = defineProps({
+    membership: { type: Object, required: true },
+    summary: { type: Object, required: true },
+    rides: { type: Object, required: true },
+});
+
+const money = (value) => new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(value || 0);
+const hours = (minutes) => `${Math.floor((minutes || 0) / 60)} h ${Math.round((minutes || 0) % 60)} min`;
+const date = (value) => value ? new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
+const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progress: 'En curso', scheduled: 'Programada' };
+</script>
+
+<template>
+    <Head :title="`Perfil de ${membership.driver.name}`" />
+    <AuthenticatedLayout>
+        <template #header>
+            <div class="flex items-center gap-3">
+                <Link :href="route('cooperative.drivers.index')" class="grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/20 text-arka-text-muted hover:text-arka-primary" aria-label="Volver">←</Link>
+                <h2 class="text-lg font-semibold text-arka-text">Detalle del conductor</h2>
+            </div>
+        </template>
+
+        <div class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+            <section class="overflow-hidden rounded-2xl border border-arka-primary/15 bg-arka-card shadow-xl">
+                <div class="h-1 bg-gradient-to-r from-arka-primary to-emerald-300"></div>
+                <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+                    <UserAvatar :user="membership.driver" size-class="h-16 w-16 text-lg shrink-0" />
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h1 class="text-xl font-bold text-arka-text">{{ membership.driver.name }}</h1>
+                            <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="membership.driver.driver_profile?.is_available ? 'bg-emerald-400/15 text-emerald-300' : 'bg-slate-400/10 text-arka-text-muted'">{{ membership.driver.driver_profile?.is_available ? 'Disponible ahora' : 'Desconectado' }}</span>
+                        </div>
+                        <p class="mt-1 text-sm text-arka-text-muted">{{ membership.driver.member_code }} · {{ membership.driver.driver_profile?.vehicle_brand }} {{ membership.driver.driver_profile?.vehicle_model }} · {{ membership.driver.driver_profile?.vehicle_plate || 'Sin placa' }}</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <article class="rounded-2xl bg-arka-card p-4"><p class="text-xs uppercase tracking-wider text-arka-text-muted">Ingresos hoy</p><p class="mt-2 text-2xl font-bold text-arka-primary">{{ money(summary.earnings_today) }}</p><p class="mt-1 text-xs text-arka-text-muted">{{ summary.rides_today }} carreras</p></article>
+                <article class="rounded-2xl bg-arka-card p-4"><p class="text-xs uppercase tracking-wider text-arka-text-muted">Esta semana</p><p class="mt-2 text-2xl font-bold text-arka-text">{{ money(summary.earnings_week) }}</p><p class="mt-1 text-xs text-arka-text-muted">{{ hours(summary.active_minutes_week) }} activo</p></article>
+                <article class="rounded-2xl bg-arka-card p-4"><p class="text-xs uppercase tracking-wider text-arka-text-muted">Este mes</p><p class="mt-2 text-2xl font-bold text-arka-text">{{ money(summary.earnings_month) }}</p><p class="mt-1 text-xs text-arka-text-muted">{{ summary.rides_month }} carreras</p></article>
+                <article class="rounded-2xl bg-arka-card p-4"><p class="text-xs uppercase tracking-wider text-arka-text-muted">Histórico</p><p class="mt-2 text-2xl font-bold text-arka-text">{{ money(summary.earnings_total) }}</p><p class="mt-1 text-xs text-arka-text-muted">{{ summary.completed_total }} completadas</p></article>
+            </section>
+
+            <section class="grid gap-5 lg:grid-cols-[1.25fr_.75fr]">
+                <article class="rounded-2xl bg-arka-card p-5">
+                    <div class="flex items-center justify-between"><div><p class="text-xs uppercase tracking-widest text-arka-primary">Rendimiento</p><h2 class="mt-1 font-semibold text-arka-text">Resumen operativo</h2></div><span class="text-xs text-arka-text-muted">Datos de esta cooperativa</span></div>
+                    <div class="mt-5 grid grid-cols-3 gap-3 text-center">
+                        <div class="rounded-xl bg-black/10 p-3"><p class="text-xl font-bold text-arka-text">{{ summary.assigned_total }}</p><p class="text-xs text-arka-text-muted">Asignadas</p></div>
+                        <div class="rounded-xl bg-black/10 p-3"><p class="text-xl font-bold text-emerald-300">{{ summary.completed_total }}</p><p class="text-xs text-arka-text-muted">Completadas</p></div>
+                        <div class="rounded-xl bg-black/10 p-3"><p class="text-xl font-bold text-rose-300">{{ summary.cancelled_total }}</p><p class="text-xs text-arka-text-muted">Canceladas</p></div>
+                    </div>
+                </article>
+                <article class="rounded-2xl bg-arka-card p-5">
+                    <p class="text-xs uppercase tracking-widest text-arka-primary">Tiempo conectado</p>
+                    <p class="mt-3 text-3xl font-bold text-arka-text">{{ hours(summary.active_minutes_month) }}</p>
+                    <p class="text-xs text-arka-text-muted">durante este mes · {{ hours(summary.active_minutes_today) }} hoy</p>
+                    <p v-if="!summary.activity_tracking_since" class="mt-4 rounded-xl bg-amber-400/10 p-3 text-xs text-amber-200">El registro preciso de sesiones comienza con esta actualización.</p>
+                    <p v-else class="mt-4 text-xs text-arka-text-muted">Registrado desde {{ date(summary.activity_tracking_since) }} · histórico {{ hours(summary.active_minutes_total) }}</p>
+                </article>
+            </section>
+
+            <section class="rounded-2xl bg-arka-card">
+                <div class="border-b border-arka-text-muted/10 p-5"><p class="text-xs uppercase tracking-widest text-arka-primary">Historial</p><h2 class="mt-1 font-semibold text-arka-text">Carreras e ingresos individuales</h2></div>
+                <p v-if="!rides.data.length" class="p-6 text-sm text-arka-text-muted">Este conductor todavía no registra carreras con la cooperativa.</p>
+                <div v-else class="divide-y divide-arka-text-muted/10">
+                    <article v-for="ride in rides.data" :key="ride.id" class="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-arka-text">{{ ride.client }}</p><span class="rounded-full px-2 py-0.5 text-[11px]" :class="ride.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : ride.status === 'cancelled' ? 'bg-rose-400/10 text-rose-300' : 'bg-sky-400/10 text-sky-300'">{{ statusLabel[ride.status] || ride.status }}</span></div><p class="mt-1 truncate text-sm text-arka-text-muted">{{ ride.origin }} → {{ ride.destination }}</p><p class="mt-1 text-xs text-arka-text-muted">{{ date(ride.date) }} · {{ ride.distance_km }} km · {{ ride.payment_method }}</p></div>
+                        <p class="text-lg font-bold" :class="ride.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-primary'">{{ money(ride.price) }}</p>
+                    </article>
+                </div>
+                <div v-if="rides.links.length > 3" class="flex flex-wrap gap-2 border-t border-arka-text-muted/10 p-4"><Link v-for="link in rides.links" :key="link.label" :href="link.url || '#'" v-html="link.label" class="rounded-lg px-3 py-1.5 text-xs" :class="link.active ? 'bg-arka-primary text-black' : 'bg-black/10 text-arka-text-muted'" /></div>
+            </section>
+        </div>
+    </AuthenticatedLayout>
+</template>

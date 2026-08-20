@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Providers\RouteServiceProvider;
+use App\Services\DriverActivityTracker;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,8 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
+    public function __construct(private readonly DriverActivityTracker $activityTracker) {}
+
     /**
      * Display the login view.
      */
@@ -63,6 +66,7 @@ class AuthenticatedSessionController extends Controller
         $user = $request->user();
         if ($user?->isDriver() && $user->driverProfile->is_available) {
             $user->driverProfile->update(['is_available' => false]);
+            $this->activityTracker->close($user->id, now());
             broadcast(new DriverLocationUpdated($user->driverProfile));
             // Pedido explícito del usuario: avisarle por WhatsApp que se
             // desconectó (mismo criterio que el toggle "Activarme" en

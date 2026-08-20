@@ -37,6 +37,7 @@ class RideRescheduleResponded implements ShouldBroadcast
 
         $channels[] = new PrivateChannel("App.Models.User.{$this->ride->client_user_id}");
         $channels[] = new PrivateChannel("App.Models.User.{$this->ride->driver_user_id}");
+        $channels[] = new PrivateChannel("ride.{$this->ride->id}");
 
         return $channels;
     }

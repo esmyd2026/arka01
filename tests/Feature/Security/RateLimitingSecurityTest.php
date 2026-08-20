@@ -9,13 +9,17 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Auditoría de seguridad. Los dos buscadores en vivo que devuelven nombre/
- * teléfono/ciudad de otros usuarios (`fleet.search-drivers`,
- * `driver.clients.search`) no tenían límite del lado del servidor — un
- * script podía barrer resultados probando términos uno atrás de otro más
- * rápido de lo que cualquier persona escribiendo a mano podría. Se les
- * agregó `throttle:30,1` (ver routes/web.php) — de sobra para el buscador
- * con debounce del frontend, corta a un script.
+ * Auditoría de seguridad. Los dos buscadores en vivo que devuelven datos de
+ * otros usuarios (`fleet.search-drivers`, `driver.clients.search`) no tenían
+ * límite del lado del servidor — un script podía barrer resultados probando
+ * términos uno atrás de otro más rápido de lo que cualquier persona
+ * escribiendo a mano podría. Se les agregó `throttle:30,1` (ver
+ * routes/web.php) — de sobra para el buscador con debounce del frontend,
+ * corta a un script. (Después, por pedido explícito del usuario, ambos
+ * buscadores además pasaron a filtrar SOLO por código de socio/invitación,
+ * ver FleetInvitationFlowTest y DriverInitiatedFleetInvitationTest — el
+ * límite de acá sigue siendo necesario igual, un código de 3-4 dígitos
+ * también se puede barrer por fuerza bruta sin este throttle.)
  *
  * (La auditoría original apuntaba a `/api/users/search` y
  * `/api/users/{user}/profile` — esas rutas no existen en esta app, que no

@@ -40,12 +40,18 @@ function formatDate(value) {
 // solo cada 20 seg., suficiente para algo que no necesita latencia de
 // segundos como sí la necesita el conductor pidiendo/recibiendo una carrera.
 let poll = null;
+const refreshAvailableDrivers = () => {
+    if (document.hidden) return;
+    router.reload({ only: ['availableDrivers'], preserveScroll: true, preserveState: true });
+};
 onMounted(() => {
-    poll = setInterval(() => {
-        router.reload({ only: ['availableDrivers'], preserveScroll: true, preserveState: true });
-    }, 20000);
+    poll = setInterval(refreshAvailableDrivers, 20000);
+    document.addEventListener('visibilitychange', refreshAvailableDrivers);
 });
-onBeforeUnmount(() => clearInterval(poll));
+onBeforeUnmount(() => {
+    clearInterval(poll);
+    document.removeEventListener('visibilitychange', refreshAvailableDrivers);
+});
 
 async function suspend(driver) {
     if (!(await confirmDialog(`¿Suspender a ${driver.name}? No va a poder conectarse ni recibir carreras hasta que lo reactives.`, { danger: true, confirmLabel: 'Suspender' }))) return;

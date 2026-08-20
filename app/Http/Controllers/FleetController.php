@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\DriverProfile;
+use App\Models\ClientCooperative;
+use App\Models\Cooperative;
 use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\FleetMember;
@@ -11,7 +13,7 @@ use App\Models\Ride;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,9 +27,14 @@ class FleetController extends Controller
 
     /**
      * Lista de flotas del cliente (sección 3.2, 9.5-A y multi-flota de la
-     * sección 7.3). En el plan Gratis es una sola, pero el plan Multi-flota
-     * permite tener varias — de ahí que esta pantalla sea un listado y no
-     * vaya directo al detalle.
+     * sección 7.3). Pedido explícito del usuario ("que no vaya un paso
+     * más... que ahí ya salga su flota, y los botones de agregar los
+     * acomodes por ahí"): antes esta pantalla era solo un resumen por flota
+     * que llevaba a show() para ver/agregar conductores — ahora trae el
+     * roster completo de cada una de una (mismo cálculo que antes vivía
+     * SOLO en show(), extraído a fleetDetails() para no duplicarlo). En el
+     * plan Gratis (el caso más común) es una sola flota, así que la
+     * pantalla completa queda armada sin ningún clic de por medio.
      */
     public function index(Request $request): Response|RedirectResponse
     {
@@ -39,7 +46,6 @@ class FleetController extends Controller
 
         $fleets = Fleet::query()
             ->where('owner_user_id', $request->user()->id)
-            ->withCount('activeMembers')
             ->orderBy('id')
             ->get();
 
@@ -47,20 +53,46 @@ class FleetController extends Controller
         // todavía no tiene ninguna flota, se la creamos automáticamente para
         // no pedirle un paso extra de "crear flota" la primera vez.
         if ($fleets->isEmpty()) {
-            $fleet = Fleet::query()->create([
-                'owner_user_id' => $request->user()->id,
-                'name' => 'Mi flota',
+            $fleets = collect([
+                Fleet::query()->create([
+                    'owner_user_id' => $request->user()->id,
+                    'name' => 'Mi flota',
+                ]),
             ]);
-            $fleet->loadCount('activeMembers');
-            $fleets = collect([$fleet]);
         }
 
+        $attachedCooperativeIds = ClientCooperative::query()
+            ->where('client_user_id', $request->user()->id)
+            ->pluck('cooperative_id');
+
         return Inertia::render('Fleet/List', [
-            'fleets' => $fleets,
+            // El cupo de flotas es siempre chico (1 en el plan Gratis, un
+            // puñado en Multi-flota) — cargar el roster completo de cada una
+            // acá mismo no es un problema de escala real, y es justo lo que
+            // hace falta para que esta pantalla ya no dependa de show().
+            'fleets' => $fleets->map(fn (Fleet $fleet) => $this->fleetDetails($fleet)),
             // null = sin límite de flotas.
             'maxFleets' => $limits['max_fleets'],
+            'maxDriversPerFleet' => $limits['max_drivers_per_fleet'],
             'planCode' => $limits['plan_code'],
             'planName' => $limits['plan_name'],
+            // Cooperativas son una red del cliente (compartida entre sus flotas),
+            // no conductores buscables por código. Se muestran separadas para
+            // evitar que el buscador de invitaciones parezca servir para ambas cosas.
+            'cooperatives' => Cooperative::query()
+                ->where('status', 'approved')
+                ->whereNull('suspended_at')
+                ->withCount('activeDriverMemberships')
+                ->orderBy('name')
+                ->get(['id', 'name', 'logo_path', 'main_address', 'stand_lat', 'stand_lng'])
+                ->map(fn (Cooperative $cooperative) => [
+                    'id' => $cooperative->id,
+                    'name' => $cooperative->name,
+                    'logo_url' => $cooperative->logo_url,
+                    'main_address' => $cooperative->main_address,
+                    'active_drivers' => $cooperative->active_driver_memberships_count,
+                    'is_attached' => $attachedCooperativeIds->contains($cooperative->id),
+                ]),
         ]);
     }
 
@@ -97,23 +129,43 @@ class FleetController extends Controller
 
     /**
      * Detalle de una flota puntual: sus conductores activos, invitaciones
-     * pendientes y el buscador para invitar a más (sección 3.2).
+     * pendientes y el buscador para invitar a más (sección 3.2). Desde el
+     * rediseño de "Mis flotas" ya no es el camino normal (index() muestra
+     * esto mismo de una para cada flota) — se deja como respaldo por si algo
+     * llega a enlazar directo a una flota puntual.
      */
     public function show(Request $request, Fleet $fleet): Response
     {
         $this->authorize('view', $fleet);
 
+        $limits = $this->planLimits->forClient($request->user());
+        $details = $this->fleetDetails($fleet);
+
+        return Inertia::render('Fleet/Show', [
+            'fleet' => $details['fleet'],
+            // null = sin límite de conductores por flota.
+            'maxDriversPerFleet' => $limits['max_drivers_per_fleet'],
+            'memberStats' => $details['memberStats'],
+        ]);
+    }
+
+    /**
+     * Roster completo de una flota (conductores activos, invitaciones
+     * pendientes, y las mismas estadísticas por conductor que ya calculaba
+     * searchDrivers() — calificación, carreras completadas, categoría,
+     * clientes activos). Compartido entre index() (una vez por cada flota
+     * del cliente) y show() (respaldo de una sola), para no calcular esto
+     * dos veces.
+     *
+     * @return array{fleet: Fleet, memberStats: Collection}
+     */
+    private function fleetDetails(Fleet $fleet): array
+    {
         $fleet->load([
             'activeMembers.driver.driverProfile',
             'invitations' => fn ($query) => $query->where('status', 'pending')->with('driver'),
         ]);
 
-        $limits = $this->planLimits->forClient($request->user());
-
-        // Pedido explícito del usuario: el roster "Conductores en tu flota"
-        // mostraba mucho menos que el buscador de arriba (solo teléfono y
-        // tarifa) — mismos datos acá (calificación, cantidad de carreras,
-        // categoría), mismo cálculo que searchDrivers().
         $driverIds = $fleet->activeMembers->pluck('driver_user_id');
 
         $ratings = Review::query()
@@ -160,20 +212,18 @@ class FleetController extends Controller
             ]];
         });
 
-        return Inertia::render('Fleet/Show', [
-            'fleet' => $fleet,
-            // null = sin límite de conductores por flota.
-            'maxDriversPerFleet' => $limits['max_drivers_per_fleet'],
-            'memberStats' => $memberStats,
-        ]);
+        return ['fleet' => $fleet, 'memberStats' => $memberStats];
     }
 
     /**
-     * Búsqueda tipo red social de conductores para invitar a esta flota
-     * puntual (sección 3.2): por nombre, teléfono, código de invitación del
-     * conductor, o el usuario/código de socio de la persona (consideración
-     * agregada al alcance — buscable para agregar a alguien a la flota).
-     * Devuelve JSON porque se consume desde un buscador con resultados en vivo.
+     * Búsqueda de conductores para invitar a esta flota puntual (sección
+     * 3.2), SOLO por código de socio o código de invitación (pedido
+     * explícito del usuario, con una captura real de varias personas de
+     * apellido "Cedeño" saliendo juntas en una búsqueda por nombre: "por
+     * código nada más, porque chocarían con millones de personas" — buscar
+     * por nombre/teléfono no da un resultado preciso con una base grande de
+     * usuarios, y además exponía el teléfono de desconocidos). Devuelve JSON
+     * porque se consume desde un buscador con resultados en vivo.
      */
     public function searchDrivers(Request $request, Fleet $fleet)
     {
@@ -195,12 +245,8 @@ class FleetController extends Controller
             // la cuenta está operando como cliente ahora mismo.
             ->whereNull('deactivated_at')
             ->where(function ($query) use ($term, $memberCode) {
-                $query->whereHas('user', function ($query) use ($term, $memberCode) {
-                    $query->where('name', 'like', "%{$term}%")
-                        ->orWhere('phone', 'like', "%{$term}%")
-                        ->orWhere('username', Str::lower($term))
-                        ->when($memberCode, fn ($query) => $query->orWhere('member_code', $memberCode));
-                })->orWhere('invite_code', strtoupper($term));
+                $query->when($memberCode, fn ($query) => $query->whereHas('user', fn ($query) => $query->where('member_code', $memberCode)))
+                    ->orWhere('invite_code', strtoupper($term));
             })
             ->limit(10)
             ->get();
@@ -239,7 +285,9 @@ class FleetController extends Controller
                 'user_id' => $driver->user_id,
                 'name' => $driver->user->name,
                 'avatar_url' => $driver->user->avatar_url,
-                'phone' => $driver->user->phone,
+                // Pedido explícito del usuario ("manejar la privacidad"):
+                // sin teléfono acá — ya no hace falta como referencia visual
+                // ahora que la búsqueda es por código exacto, no por nombre.
                 'username' => $driver->user->username,
                 'member_code' => $driver->user->member_code,
                 'invite_code' => $driver->invite_code,

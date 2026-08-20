@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\CooperativeRideUpdated;
 use App\Events\RideRequestAccepted;
 use App\Events\RideRequestCancelled;
 use App\Events\RideRequestCountered;
@@ -10,6 +11,7 @@ use App\Events\RideRequested;
 use App\Events\RideRequestPriceRaised;
 use App\Jobs\ExpireRideOffer;
 use App\Jobs\ExpireWaitingRideRequest;
+use App\Jobs\FallbackCooperativeAssignment;
 use App\Models\City;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
@@ -22,9 +24,11 @@ use App\Models\RidePriceOffer;
 use App\Models\RideRequest;
 use App\Models\User;
 use App\Notifications\CooperativeRideAssignedPushNotification;
+use App\Notifications\CooperativeRideRequestedPushNotification;
 use App\Notifications\RideAcceptedPushNotification;
 use App\Notifications\RideRequestDeclinedPushNotification;
 use App\Notifications\RideRequestedPushNotification;
+use App\Services\FrequentPlaces;
 use App\Services\Haversine;
 use App\Services\PlanLimits;
 use App\Services\PriceCalculator;
@@ -154,7 +158,26 @@ class RideRequestController extends Controller
             // cliente ya usó antes (de origen o de destino, da igual — "casa"
             // puede ser origen un día y destino al otro), para no tener que
             // volver a escribirlas/buscarlas cada vez.
-            'frequentPlaces' => $this->frequentPlacesFor($request->user()->id),
+            'frequentPlaces' => FrequentPlaces::forClient($request->user()->id),
+            // Rediseño UX (pedido explícito del usuario): si se llega desde el
+            // buscador "¿A dónde vas?" de Inicio, el destino ya viene elegido
+            // — la pantalla arranca directo en el paso de elegir conductor,
+            // sin volver a pedirlo acá.
+            'initialDestination' => $request->filled('destination_lat') && $request->filled('destination_lng') ? [
+                'lat' => (float) $request->query('destination_lat'),
+                'lng' => (float) $request->query('destination_lng'),
+                'address' => (string) $request->query('destination_address', ''),
+            ] : null,
+            // Pedido explícito del usuario (documento formal de ajuste UX,
+            // sección 13): si el buscador de Inicio ya sabía la ubicación en
+            // vivo del cliente, se manda de una vez como origen — evita que
+            // esta pantalla vuelva a pedir geolocalización por su cuenta
+            // (ver Ride/Request.vue, onMounted) cuando ya se resolvió antes.
+            'initialOrigin' => $request->filled('origin_lat') && $request->filled('origin_lng') ? [
+                'lat' => (float) $request->query('origin_lat'),
+                'lng' => (float) $request->query('origin_lng'),
+                'address' => (string) $request->query('origin_address', ''),
+            ] : null,
             // "Mis rutas" (pedido explícito del usuario): pares completos de
             // origen+destino guardados a propósito, con alias opcional —
             // distinto de frequentPlaces (direcciones sueltas, automáticas).
@@ -163,45 +186,25 @@ class RideRequestController extends Controller
                 ->where('status', 'approved')
                 ->whereNull('suspended_at')
                 ->whereHas('clientLinks', fn ($query) => $query->where('client_user_id', $request->user()->id))
+                ->with('activeDriverMemberships.driver.driverProfile')
                 ->withCount('activeDriverMemberships')
                 ->orderBy('name')
-                ->get(['id', 'name', 'logo_path', 'response_timeout_seconds']),
+                ->get(['id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng'])
+                ->map(function ($cooperative) use ($request) {
+                    $lat = $request->query('origin_lat');
+                    $lng = $request->query('origin_lng');
+                    $cooperative->distance_km = $lat && $lng && $cooperative->stand_lat && $cooperative->stand_lng
+                        ? round(Haversine::distanceKm((float) $lat, (float) $lng, (float) $cooperative->stand_lat, (float) $cooperative->stand_lng), 1)
+                        : null;
+                    $cooperative->average_rate_per_km = round((float) $cooperative->activeDriverMemberships
+                        ->pluck('driver.driverProfile.rate_per_km')->filter()->avg(), 2);
+
+                    return $cooperative;
+                })->sortBy(fn ($cooperative) => $cooperative->distance_km ?? PHP_FLOAT_MAX)->values(),
+            'preselectedCooperativeId' => $request->filled('cooperativa')
+                ? (int) $request->query('cooperativa')
+                : null,
         ]);
-    }
-
-    /**
-     * @return array<int, array{address: string, lat: float, lng: float, sector_id: int|null}>
-     */
-    private function frequentPlacesFor(int $clientUserId): array
-    {
-        // Últimas 50 solicitudes alcanzan de sobra para detectar lugares
-        // frecuentes sin escanear el historial completo de un cliente muy
-        // activo — no hace falta más para esto.
-        $recent = RideRequest::query()
-            ->where('client_user_id', $clientUserId)
-            ->latest()
-            ->limit(50)
-            ->get(['origin_address', 'origin_lat', 'origin_lng', 'origin_sector_id', 'destination_address', 'destination_lat', 'destination_lng', 'destination_sector_id']);
-
-        $places = collect();
-
-        foreach ($recent as $r) {
-            if (filled($r->origin_address)) {
-                $places->push(['address' => $r->origin_address, 'lat' => (float) $r->origin_lat, 'lng' => (float) $r->origin_lng, 'sector_id' => $r->origin_sector_id]);
-            }
-
-            if (filled($r->destination_address)) {
-                $places->push(['address' => $r->destination_address, 'lat' => (float) $r->destination_lat, 'lng' => (float) $r->destination_lng, 'sector_id' => $r->destination_sector_id]);
-            }
-        }
-
-        return $places
-            ->groupBy('address')
-            ->map(fn ($group) => array_merge($group->first(), ['count' => $group->count()]))
-            ->sortByDesc('count')
-            ->take(6)
-            ->values()
-            ->all();
     }
 
     /**
@@ -219,6 +222,11 @@ class RideRequestController extends Controller
         return [
             'user_id' => $driver->id,
             'name' => $driver->name,
+            // Foto de perfil (pedido explícito del usuario, con mockup de
+            // referencia): esta función arma el array a mano en vez de
+            // serializar el modelo completo, así que `avatar_url` (que User
+            // agrega solo vía $appends en el resto de la app) no llegaba acá.
+            'avatar_url' => $driver->avatar_url,
             'rate_per_km' => $profile?->rate_per_km,
             // Pedido explícito del usuario: si este conductor declaró su
             // propia tarifa mínima (y no supera la de la plataforma), el
@@ -337,6 +345,27 @@ class RideRequestController extends Controller
         $passengerCount = (int) ($validated['passenger_count'] ?? 1);
 
         $isScheduled = (bool) ($validated['is_scheduled'] ?? false);
+
+        // Una inmediata pendiente o en curso bloquea otra inmediata. Las
+        // programadas no participan en este bloqueo: son reservas futuras y
+        // el cliente puede seguir pidiendo transporte para ahora.
+        if (! $isScheduled) {
+            $hasImmediateRequest = RideRequest::query()
+                ->where('client_user_id', $request->user()->id)
+                ->where('is_scheduled', false)
+                ->whereIn('status', ['pending', 'negotiating', 'waiting'])
+                ->exists();
+            $hasImmediateRide = Ride::query()
+                ->where('client_user_id', $request->user()->id)
+                ->where('status', 'in_progress')
+                ->exists();
+
+            if ($hasImmediateRequest || $hasImmediateRide) {
+                throw ValidationException::withMessages([
+                    'ride' => 'Ya tiene una carrera inmediata activa. Debe finalizarla o cancelarla antes de solicitar otra.',
+                ]);
+            }
+        }
         $scheduledAt = null;
 
         if ($isScheduled) {
@@ -516,9 +545,9 @@ class RideRequestController extends Controller
         $cooperativeAssignmentStatus = null;
 
         if ($cooperative) {
-            $cooperativeAssignmentStatus = 'pending_assignment';
+            $cooperativeAssignmentStatus = $cooperative->automatic_assignment_enabled ? 'pending_assignment' : 'awaiting_operator';
 
-            if (! $isScheduled) {
+            if (! $isScheduled && $cooperative->automatic_assignment_enabled) {
                 $candidateIds = RideDispatchCandidates::forCooperative(
                     $cooperative,
                     (float) $validated['origin_lat'],
@@ -617,7 +646,12 @@ class RideRequestController extends Controller
             ? round((float) $routeDistanceKm, 2)
             : $haversineKm;
 
-        $ratePerKm = $this->referenceRatePerKm($fleet, $driverUserId);
+        $ratePerKm = $cooperative
+            ? (float) DriverProfile::query()
+                ->whereIn('user_id', $cooperative->activeDriverMemberships()->pluck('driver_user_id'))
+                ->whereNotNull('rate_per_km')
+                ->avg('rate_per_km')
+            : $this->referenceRatePerKm($fleet, $driverUserId);
         $suggestedPrice = PriceCalculator::suggestedPrice(
             $distanceKm,
             $ratePerKm,
@@ -697,6 +731,11 @@ class RideRequestController extends Controller
             'offered_price' => $offeredPrice,
         ]);
 
+        if ($rideRequest->cooperative_id) {
+            broadcast(new CooperativeRideUpdated($rideRequest, 'created'));
+            $rideRequest->cooperative->user->notify(new CooperativeRideRequestedPushNotification($rideRequest));
+        }
+
         if ($rideRequest->status === 'waiting') {
             // Lista de espera (pedido explícito del usuario): todavía no hay
             // a quién avisarle — se revisa sola apenas alguien se desocupe
@@ -715,6 +754,11 @@ class RideRequestController extends Controller
         // panel de la cooperativa para asignación manual. No se emite una
         // alerta vacía a conductores ajenos.
         if ($rideRequest->cooperative_id && ! $rideRequest->driver_user_id) {
+            if (! $rideRequest->is_scheduled) {
+                FallbackCooperativeAssignment::dispatch($rideRequest->id)
+                    ->delay(now()->addSeconds((int) ($cooperative->manual_assignment_timeout_seconds ?? 30)));
+            }
+
             return redirect()->route('rides.index');
         }
 

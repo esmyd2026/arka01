@@ -42,6 +42,13 @@ export default {
                     'text-muted': '#93ada2', // texto secundario
                     warning: '#fbbf24',
                     danger: '#f87171',
+                    // Blanco cálido (pedido explícito del usuario, con
+                    // bosquejo de referencia): SOLO para la tarjeta de
+                    // búsqueda de Inicio, que flota sobre el mapa oscuro —
+                    // un contraste puntual "cálido", no un cambio del tema
+                    // oscuro fijo de toda la app (sección 9.9, sigue vigente
+                    // en el resto de la interfaz).
+                    cream: '#FAF6EE',
                 },
             },
             // Radios consistentes en toda la interfaz (10-14px, sección 9.9).

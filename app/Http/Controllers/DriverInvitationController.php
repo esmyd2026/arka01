@@ -16,7 +16,6 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -132,8 +131,11 @@ class DriverInvitationController extends Controller
     /**
      * Pedido explícito del usuario: "los conductores que puedan mandar
      * invitación mediante un buscador de clientes que existen" — mismo
-     * criterio que FleetController::searchDrivers() (nombre, teléfono,
-     * usuario o código de socio), del otro lado. Devuelve JSON, se consume
+     * criterio que FleetController::searchDrivers(), del otro lado: SOLO
+     * por código de socio (pedido explícito del usuario: "limitemos la
+     * búsqueda por código nada más, porque chocarían con millones de
+     * personas" — con una base grande de usuarios, buscar por nombre da
+     * resultados ambiguos entre desconocidos). Devuelve JSON, se consume
      * desde un buscador con resultados en vivo.
      */
     public function searchClients(Request $request)
@@ -155,12 +157,7 @@ class DriverInvitationController extends Controller
             ->where('id', '!=', $driverId)
             ->where('role', 'cliente')
             ->with('city')
-            ->where(function ($query) use ($term, $memberCode) {
-                $query->where('name', 'like', "%{$term}%")
-                    ->orWhere('phone', 'like', "%{$term}%")
-                    ->orWhere('username', Str::lower($term))
-                    ->when($memberCode, fn ($query) => $query->orWhere('member_code', $memberCode));
-            })
+            ->when($memberCode, fn ($query) => $query->where('member_code', $memberCode), fn ($query) => $query->whereRaw('1 = 0'))
             ->limit(10)
             ->get();
 

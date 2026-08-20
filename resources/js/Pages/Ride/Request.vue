@@ -7,13 +7,16 @@ import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import TextInput from '@/Components/TextInput.vue';
 import FleetMap from '@/Components/FleetMap.vue';
+import BottomSheet from '@/Components/BottomSheet.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { distanceKm } from '@/Utils/haversine';
 import { fetchOsrmRoute } from '@/Utils/osrmRoute';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
+import { etaMinutes } from '@/Utils/eta';
 
 const props = defineProps({
     fleet: { type: Object, required: true },
@@ -50,6 +53,27 @@ const props = defineProps({
     savedRoutes: { type: Array, default: () => [] },
     // Cooperativas verificadas que el cliente agregó previamente a su red.
     cooperatives: { type: Array, default: () => [] },
+    preselectedCooperativeId: { type: Number, default: null },
+    // Rediseño UX (pedido explícito del usuario): si se llega desde el
+    // buscador "¿A dónde vas?" de Inicio, el destino ya viene elegido — ver
+    // RideRequestController::create().
+    initialDestination: { type: Object, default: null },
+    // Documento formal de ajuste UX, sección 13: si Inicio ya sabía la
+    // ubicación en vivo del cliente, el origen viene resuelto de una vez —
+    // evita pedir geolocalización por segunda vez acá (ver onMounted).
+    initialOrigin: { type: Object, default: null },
+});
+
+// El mismo fondo se aplica tanto al layout como al contenido del primer
+// paso. Así, los espacios estructurales que existen entre la cabecera y la
+// página (por ejemplo, el área del aviso de permisos) no dejan ver una
+// franja negra distinta al degradado.
+const destinationBackground = 'radial-gradient(circle at 18% 0%, rgba(52, 211, 153, 0.18) 0%, transparent 32%), radial-gradient(circle at 90% 28%, rgba(110, 231, 183, 0.07) 0%, transparent 26%), linear-gradient(180deg, #10271d 0%, #0b1b14 52%, #07110d 100%)';
+
+const cooperativeSearch = ref('');
+const filteredCooperatives = computed(() => {
+    const term = cooperativeSearch.value.trim().toLocaleLowerCase('es');
+    return props.cooperatives.filter((cooperative) => !term || cooperative.name.toLocaleLowerCase('es').includes(term));
 });
 
 // De dónde elegir conductor (consideración agregada al alcance): mi flota
@@ -100,18 +124,6 @@ function sortDrivers(list) {
 // llega al canal de las flotas donde el conductor es miembro (routes/channels.php),
 // y uno público no tiene por qué serlo de la mía.
 const fleetDriversLocal = ref([...props.fleetDrivers]);
-
-// El orden final (sortDrivers) se aplica más abajo, en driversWithDistance —
-// recién ahí se conoce la distancia de cada conductor al origen, así que
-// ordenar acá todavía sería prematuro para el criterio "más cercanos".
-const visibleDrivers = computed(() => {
-    const fleet = fleetDriversLocal.value.map((d) => ({ ...d, source: 'fleet' }));
-    const pub = props.publicDrivers.map((d) => ({ ...d, source: 'public' }));
-
-    if (sourceMode.value === 'fleet') return fleet;
-    if (sourceMode.value === 'public') return pub;
-    return [...fleet, ...pub];
-});
 
 let fleetChannel = null;
 
@@ -178,7 +190,7 @@ const sectorOptions = computed(() => (selectedCity.value?.sectors ?? []).map((se
 
 const originSectorId = ref(null);
 const destinationSectorId = ref(null);
-const originAddress = ref('');
+const originAddress = ref(props.initialOrigin?.address ?? '');
 
 // Simplificar el pedido de carrera (pedido explícito del usuario): ciudad y
 // sector quedan como un ajuste opcional, colapsado — buscar la dirección con
@@ -201,7 +213,11 @@ const preselectableIds = new Set([...props.fleetDrivers, ...props.publicDrivers]
 const selectedDriverId = ref(
     props.preselectedDriverId && preselectableIds.has(props.preselectedDriverId) ? props.preselectedDriverId : WHOLE_FLEET
 );
-const selectedCooperativeId = ref(null);
+const selectedCooperativeId = ref(
+    props.cooperatives.some((cooperative) => cooperative.id === props.preselectedCooperativeId)
+        ? props.preselectedCooperativeId
+        : null
+);
 
 watch(selectedCooperativeId, (value) => {
     if (value) selectedDriverId.value = WHOLE_FLEET;
@@ -213,23 +229,48 @@ watch(selectedCooperativeId, (value) => {
 // valen lo mismo (1 pasajero, sin cajuela, efectivo, toda mi flota) — se
 // abren solo si hace falta cambiar algo. Nada de lo que había se sacó.
 const showRideOptions = ref(false);
-// Si ya viene con un conductor puntual elegido (ej. desde "Mi flota" o el
-// directorio), el picker arranca abierto para que se vea de una quién es.
-const showDriverPicker = ref(selectedDriverId.value !== WHOLE_FLEET);
 
-const originLat = ref(null);
-const originLng = ref(null);
-const locatingOrigin = ref(true);
+// Rediseño UX (pedido explícito del usuario, guiado por
+// ARKA01_Rediseno_UX_Flujo_Carreras.md): "máximo 3 acciones" — destino,
+// elegir conductor, pedir ahora. Esta pantalla pasa a tener pasos internos
+// en vez de un solo scroll largo; ver el paso 'driver' más abajo, que
+// reemplaza al viejo showDriverPicker por las 4 categorías del documento
+// (Flota → Cooperativas → Públicos → Todos).
+// Si el destino ya viene elegido desde el buscador de Inicio
+// (initialDestination), esta pantalla arranca directo en "Elige tu
+// conductor" — el paso 'destination' no tiene nada que agregar en ese caso.
+const step = ref(props.initialDestination ? 'driver' : 'destination');
+// Si ya viene con un conductor puntual elegido (ej. desde "Conductores que
+// quizás conozcas"), la categoría correspondiente arranca ya elegida —
+// mismo criterio que ya resolvía `sourceMode` más arriba para ese mismo
+// caso (sus valores iniciales son siempre 'fleet' o 'public', nunca 'both').
+const activeCategory = ref(
+    selectedCooperativeId.value
+        ? 'cooperative'
+        : (selectedDriverId.value !== WHOLE_FLEET ? sourceMode.value : null)
+);
+
+// Documento formal de ajuste UX, sección 13: si Inicio ya mandó la ubicación
+// en vivo del cliente como origen, arranca resuelto de una vez — el guard de
+// `useCurrentLocationAsOrigin()` de más abajo (`!overwriteAddress &&
+// originAddress.value.trim()`) ya evita que la geolocalización automática
+// silenciosa lo pise después, sin tocar esa lógica.
+const originLat = ref(props.initialOrigin?.lat ?? null);
+const originLng = ref(props.initialOrigin?.lng ?? null);
+const locatingOrigin = ref(!props.initialOrigin);
 const locationError = ref('');
 
-const destinationLat = ref(null);
-const destinationLng = ref(null);
-const destinationAddress = ref('');
+const destinationLat = ref(props.initialDestination?.lat ?? null);
+const destinationLng = ref(props.initialDestination?.lng ?? null);
+const destinationAddress = ref(props.initialDestination?.address ?? '');
 
 // Centro del mapa (consideración agregada al alcance): arranca en la
 // ubicación real del cliente (geolocalización); si cambia de ciudad a mano,
-// el mapa se recentra ahí — ver changeCity() más abajo.
-const mapCenter = ref(null);
+// el mapa se recentra ahí — ver changeCity() más abajo. Si ya llega un
+// `initialOrigin` (documento formal de ajuste UX, sección 13), arranca
+// centrado ahí directo — la geolocalización automática silenciosa no lo va
+// a resolver esta vez (ver el guard de useCurrentLocationAsOrigin()).
+const mapCenter = ref(props.initialOrigin ? { lat: props.initialOrigin.lat, lng: props.initialOrigin.lng } : null);
 
 // Pedido explícito del usuario: "la caja del mapa... se ve muy extenso" —
 // arranca minimizado (más bajito) y se puede expandir si hace falta ver
@@ -309,7 +350,16 @@ async function useCurrentLocationAsOrigin({ overwriteAddress = true } = {}) {
 // Apenas se abre la pantalla, tratamos de ubicar al cliente automáticamente
 // (sección 3.5: "ver flota disponible" ya arranca con la posición del
 // cliente) — sin pisarle la referencia si ya empezó a escribir la suya.
-useCurrentLocationAsOrigin({ overwriteAddress: false });
+if (props.initialOrigin) {
+    const genericOrigin = /^mi ubicaci[oó]n/i.test(originAddress.value.trim());
+    if (genericOrigin || !originAddress.value.trim()) {
+        reverseGeocode(originLat.value, originLng.value).then((address) => {
+            originAddress.value = address ?? `Punto GPS ${Number(originLat.value).toFixed(5)}, ${Number(originLng.value).toFixed(5)}`;
+        });
+    }
+} else {
+    useCurrentLocationAsOrigin({ overwriteAddress: false });
+}
 
 // Pedido explícito del usuario: cantidad de pasajeros (por defecto 1) y si
 // hace falta cajuela para maletas (por defecto no) — filtran qué
@@ -317,13 +367,21 @@ useCurrentLocationAsOrigin({ overwriteAddress: false });
 const passengerCount = ref(1);
 const needsTrunk = ref(false);
 
-// Distancia a cada conductor visible, calculada en el navegador (Haversine)
-// solo para mostrarla — el precio final lo calcula el backend.
+// Distancia a cada conductor, calculada en el navegador (Haversine) solo
+// para mostrarla — el precio final lo calcula el backend.
 // Pedido explícito del usuario: "solo buscar los conductores que tengan esa
 // característica" — se filtra, no solo se muestra en gris, a diferencia de
 // "fuera de zona" (outOfRange, más abajo), que sigue siendo informativo.
-const driversWithDistance = computed(() => {
-    const withDistance = visibleDrivers.value
+//
+// Rediseño UX: antes esto dependía de `visibleDrivers` (a su vez atado a
+// `sourceMode`), así que solo se podía conocer la lista de UNA fuente a la
+// vez. Las 4 tarjetas de categoría (Flota/Cooperativas/Públicos/Todos)
+// necesitan sus contadores TODOS a la vez, antes de que el cliente elija
+// ninguna — se extrae el cálculo a una función reusable en vez de
+// duplicarlo por categoría.
+function withDistanceAndFilters(list, sourceTag) {
+    const withDistance = list
+        .map((driver) => ({ ...driver, source: sourceTag }))
         .filter((driver) => (driver.passenger_capacity ?? 0) >= passengerCount.value && (!needsTrunk.value || driver.has_trunk))
         .map((driver) => {
             const hasLocation = driver.current_lat != null && driver.current_lng != null;
@@ -339,10 +397,144 @@ const driversWithDistance = computed(() => {
             // para que el cliente lo vea antes de intentarlo).
             const outOfRange = distance != null && driver.max_request_distance_km != null && distance > driver.max_request_distance_km;
 
-            return { ...driver, distance, outOfRange };
+            return { ...driver, distance, outOfRange, etaMinutes: etaMinutes(distance) };
         });
 
     return sortDrivers(withDistance);
+}
+
+const fleetCandidates = computed(() => withDistanceAndFilters(fleetDriversLocal.value, 'fleet'));
+const publicCandidates = computed(() => withDistanceAndFilters(props.publicDrivers, 'public'));
+const allCandidates = computed(() => sortDrivers([...fleetCandidates.value, ...publicCandidates.value]));
+
+// Busca un conductor por id en las listas CRUDAS (sin el filtro de
+// pasajeros/cajuela que ya aplica withDistanceAndFilters) — para mostrar la
+// info del conductor ya elegido en el paso "Confirma y pide" aunque
+// después, en el cajón de opciones, se suba la cantidad de pasajeros por
+// encima de lo que ese conductor admite (si no, el conductor "desaparecía"
+// de la pantalla de confirmación apenas dejaba de calzar el filtro).
+function findDriverById(id) {
+    return fleetDriversLocal.value.find((d) => d.user_id === id) ?? props.publicDrivers.find((d) => d.user_id === id) ?? null;
+}
+
+const selectedDriverInfo = computed(() => {
+    if (selectedDriverId.value === WHOLE_FLEET) return null;
+    const raw = findDriverById(selectedDriverId.value);
+    if (!raw) return null;
+
+    const distance =
+        raw.current_lat != null && originLat.value != null
+            ? distanceKm(originLat.value, originLng.value, Number(raw.current_lat), Number(raw.current_lng))
+            : null;
+
+    return { ...raw, distance, etaMinutes: etaMinutes(distance) };
+});
+
+// Aviso en el paso "Confirma y pide" (no bloquea: el backend valida esto de
+// verdad al mandar la solicitud) — si después de elegir un conductor
+// puntual se suben los pasajeros o se pide cajuela desde el cajón de
+// opciones y ya no calza, mejor decirlo ahí mismo que dejar que rebote sola
+// la solicitud.
+const selectedDriverStillFits = computed(() => {
+    if (!selectedDriverInfo.value) return true;
+    return (
+        (selectedDriverInfo.value.passenger_capacity ?? 0) >= passengerCount.value &&
+        (!needsTrunk.value || selectedDriverInfo.value.has_trunk)
+    );
+});
+
+const selectedCooperativeInfo = computed(() => props.cooperatives.find((c) => c.id === selectedCooperativeId.value) ?? null);
+
+// Jerarquía del documento de rediseño: Flota → Cooperativas → Públicos →
+// Todos — NUNCA como 4 opciones equivalentes (sección 29), Flota siempre
+// primero y más grande visualmente (ver template). "Cooperativas" no tiene
+// lista de conductores propia (el backend no expone eso todavía, solo
+// cuántas unidades activas tiene cada cooperativa — RideDispatchCandidates::forCooperative()
+// recién arma candidatos al despachar de verdad) — se muestran las
+// cooperativas de la red del cliente, elegir una es la selección en sí,
+// igual que ya hace el `<select>` de hoy.
+// `badgeClass` (pedido explícito del usuario, con el bosquejo como
+// referencia): un ícono por categoría, en una insignia circular de color
+// propio — Flota en verde (la principal), Cooperativas en ámbar (como el
+// escudo del bosquejo), Públicos/Todos neutros.
+const CATEGORY_META = {
+    fleet: { label: 'Conductores de tu flota', hint: 'Siempre primero', badgeClass: 'bg-arka-primary/15 text-arka-primary' },
+    cooperative: { label: 'Cooperativas', hint: 'Unidades verificadas', badgeClass: 'bg-arka-warning/15 text-arka-warning' },
+    public: { label: 'Conductores públicos', hint: 'Verificados', badgeClass: 'bg-arka-text-muted/15 text-arka-text-muted' },
+    all: { label: 'Todos', hint: 'Mi flota y el directorio público', badgeClass: 'bg-arka-text-muted/15 text-arka-text-muted' },
+};
+const CATEGORY_ORDER = ['fleet', 'cooperative', 'public', 'all'];
+
+const categoryCounts = computed(() => ({
+    fleet: fleetCandidates.value.length,
+    cooperative: props.cooperatives.length,
+    public: publicCandidates.value.length,
+    all: allCandidates.value.length,
+}));
+
+// La lista que se ve expandida es la de la categoría activa nada más — la
+// paginación/orden de acá abajo (pagedDrivers) sigue funcionando igual que
+// antes, solo que ahora filtra por categoría en vez de por `sourceMode` a
+// secas.
+const driversWithDistance = computed(() => {
+    if (activeCategory.value === 'fleet') return fleetCandidates.value;
+    if (activeCategory.value === 'public') return publicCandidates.value;
+    if (activeCategory.value === 'all') return allCandidates.value;
+    return [];
+});
+
+// Mantiene sourceMode al día con la categoría elegida — sigue siendo lo que
+// submit() manda como dispatch_pool cuando se pide "toda la categoría
+// disponible" (WHOLE_FLEET), sin tocar esa lógica.
+watch(activeCategory, (category) => {
+    if (category === 'fleet') sourceMode.value = 'fleet';
+    else if (category === 'public') sourceMode.value = 'public';
+    else if (category === 'all') sourceMode.value = 'both';
+});
+
+function nextNonEmptyCategory(from) {
+    const startIndex = CATEGORY_ORDER.indexOf(from);
+    for (let i = 1; i <= CATEGORY_ORDER.length; i++) {
+        const candidate = CATEGORY_ORDER[(startIndex + i) % CATEGORY_ORDER.length];
+        if (categoryCounts.value[candidate] > 0) return candidate;
+    }
+    return null;
+}
+
+// Recomendación en cascada (sección 30 del documento: "no dejar al usuario
+// bloqueado") — ya NO es la categoría por defecto (pedido explícito del
+// usuario: "deja por defecto todos los conductores", con el bosquejo
+// mostrando "Todos los disponibles" como punto de partida). Se usa solo como
+// respaldo cuando "Todos" queda vacío, y para el botón "Pruebe con..." que
+// aparece si el servidor rechaza al conductor elegido.
+function recommendCategory() {
+    if (fleetCandidates.value.some((driver) => driver.status === 'available')) return 'fleet';
+    if (props.cooperatives.length === 1) return 'cooperative';
+    if (publicCandidates.value.some((driver) => driver.status === 'available')) return 'public';
+    if (allCandidates.value.length) return 'all';
+    if (props.cooperatives.length) return 'cooperative';
+    return categoryCounts.value.fleet ? 'fleet' : null;
+}
+
+// Selección por defecto al entrar a "Elige tu conductor" (pedido explícito
+// del usuario): "Todos" salvo que esté vacía, ahí sí cae en cascada. Se
+// preselecciona el primero de la lista (el más cercano, sortBy='distance')
+// para que "Ver disponibles"/"Pedir ahora" ya tengan a quién apuntar sin
+// perder la posibilidad de elegir otro con un toque.
+watch(step, (value) => {
+    if (value !== 'driver' || activeCategory.value) return;
+
+    activeCategory.value = categoryCounts.value.all > 0 ? 'all' : recommendCategory();
+
+    if (activeCategory.value === 'fleet' && fleetCandidates.value.length) {
+        selectedDriverId.value = fleetCandidates.value[0].user_id;
+    } else if (activeCategory.value === 'public' && publicCandidates.value.length) {
+        selectedDriverId.value = publicCandidates.value[0].user_id;
+    } else if (activeCategory.value === 'all' && allCandidates.value.length) {
+        selectedDriverId.value = allCandidates.value[0].user_id;
+    } else if (activeCategory.value === 'cooperative' && props.cooperatives.length === 1) {
+        selectedCooperativeId.value = props.cooperatives[0].id;
+    }
 });
 
 // Pedido explícito del usuario: la lista se hacía eterna con flotas grandes —
@@ -352,7 +544,7 @@ const driversWithDistance = computed(() => {
 const DRIVERS_PER_PAGE = 5;
 const currentPage = ref(1);
 
-watch([sourceMode, sortBy, passengerCount, needsTrunk], () => {
+watch([activeCategory, sourceMode, sortBy, passengerCount, needsTrunk], () => {
     currentPage.value = 1;
 });
 
@@ -369,17 +561,36 @@ const pagedDrivers = computed(() => {
     return driversWithDistance.value.slice(start, start + DRIVERS_PER_PAGE);
 });
 
+// Color del auto por categoría (pedido explícito del usuario: "unos de mi
+// flota, otros de cooperativa... colocar que sea amarillo, los públicos") —
+// verde de flota (mismo tono que la insignia "Conductores de tu flota"),
+// azul para públicos. Las cooperativas no tienen unidades individuales que
+// mostrar acá: el backend nunca expone la posición en vivo de cada unidad de
+// una cooperativa al cliente (solo cuántas hay disponibles en total, ver
+// RideDispatchCandidates::forCooperative()) — si se quiere ese mismo
+// tratamiento (marcador amarillo por unidad), hace falta un endpoint nuevo,
+// no es solo un cambio de color acá.
+const DRIVER_MARKER_COLOR = { fleet: '#34d399', public: '#60a5fa' };
+
 const mapMarkers = computed(() => {
     // Pedido explícito del usuario: ícono de auto (no el pin celeste
     // genérico de Leaflet) para cada conductor de la lista — ver
-    // Components/FleetMap.vue (ICONS.car).
-    const markers = driversWithDistance.value
+    // Components/FleetMap.vue (ICONS.car). Usa `allCandidates` (no
+    // `driversWithDistance`, que ahora depende de qué categoría está
+    // desplegada) para que el mapa siga mostrando a todos los candidatos
+    // conocidos sin importar cuál tarjeta esté abierta. Pedido explícito del
+    // usuario ("que no me aparezca el nombre si no a que categoría
+    // pertenece"): el globo al tocar el auto ya no muestra el nombre del
+    // conductor — privacidad de paso, y de una resuelve el pedido de
+    // colorear por categoría.
+    const markers = allCandidates.value
         .filter((driver) => driver.current_lat != null && driver.status !== 'offline')
         .map((driver) => ({
             id: 'car',
             lat: Number(driver.current_lat),
             lng: Number(driver.current_lng),
-            label: driver.name,
+            label: driver.source === 'fleet' ? 'Conductor de tu flota' : 'Conductor público',
+            color: DRIVER_MARKER_COLOR[driver.source] ?? DRIVER_MARKER_COLOR.public,
         }));
 
     // Origen en el mapa (consideración agregada al alcance: con el buscador
@@ -453,18 +664,35 @@ const routeCoords = ref([]);
 // usarla en el estimado y mandarla al backend — ver estimatedDistanceKm más
 // abajo y submit().
 const routeDistanceKm = ref(null);
+// Duración real de manejo de la misma respuesta de OSRM (pedido explícito
+// del usuario: "indicar los km y minutos de ese recorrido" en la tarjeta
+// fija de origen/destino).
+const routeDurationMin = ref(null);
 
-watch([originLat, originLng, destinationLat, destinationLng], async () => {
-    if (originLat.value == null || destinationLat.value == null) {
-        routeCoords.value = [];
-        routeDistanceKm.value = null;
-        return;
-    }
+// Bug real reportado por el usuario ("no traza el recorrido"): al llegar
+// directo al paso 'driver' desde el buscador de Inicio, origen Y destino ya
+// vienen resueltos en las props (initialOrigin/initialDestination) DESDE
+// que se crean estos refs — un `watch` sin `immediate` solo dispara ante un
+// CAMBIO posterior, así que nunca llegaba a pedir la ruta en ese caso (sí
+// funcionaba viniendo del paso 'destination' de esta misma pantalla, donde
+// los valores sí cambian recién al elegir origen/destino a mano).
+watch(
+    [originLat, originLng, destinationLat, destinationLng],
+    async () => {
+        if (originLat.value == null || destinationLat.value == null) {
+            routeCoords.value = [];
+            routeDistanceKm.value = null;
+            routeDurationMin.value = null;
+            return;
+        }
 
-    const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
-    routeCoords.value = route.coords;
-    routeDistanceKm.value = route.distanceKm;
-});
+        const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+        routeCoords.value = route.coords;
+        routeDistanceKm.value = route.distanceKm;
+        routeDurationMin.value = route.durationMin;
+    },
+    { immediate: true }
+);
 
 // --- Precio sugerido (sección 5): distancia × tarifa de referencia. Es una
 // estimación para mostrar antes de mandar la solicitud — el monto que
@@ -490,13 +718,29 @@ const estimatedDistanceKm = computed(() => {
     return realKm + DISTANCE_PADDING_KM;
 });
 
+// Busca con findDriverById() (no `driversWithDistance`, acotado a la
+// categoría desplegada, ni `allCandidates`, que igual lo pierde si deja de
+// calzar el filtro de pasajeros/cajuela) — el conductor elegido tiene que
+// encontrarse acá sin importar qué tarjeta esté abierta ni qué se haya
+// cambiado después en el cajón de opciones.
 const referenceRatePerKm = computed(() => {
+    if (selectedCooperativeId.value) {
+        return Number(selectedCooperativeInfo.value?.average_rate_per_km ?? 0);
+    }
+
     if (selectedDriverId.value !== WHOLE_FLEET) {
-        const chosen = driversWithDistance.value.find((driver) => driver.user_id === selectedDriverId.value);
+        const chosen = selectedDriverInfo.value;
         return chosen ? Number(chosen.rate_per_km ?? 0) : 0;
     }
 
-    const rates = driversWithDistance.value.map((driver) => Number(driver.rate_per_km ?? 0)).filter(Boolean);
+    // Promedio sobre `allCandidates` (no `driversWithDistance`, acotado a la
+    // categoría activa) — bug real encontrado al agregar las categorías: si
+    // la categoría abierta era "Cooperativas" (sin lista de conductores
+    // propia), driversWithDistance quedaba vacío y el estimado mostraba $0.
+    // El promedio de flota+público es la mejor referencia disponible
+    // mientras no haya un conductor puntual elegido, sin importar qué
+    // tarjeta esté abierta.
+    const rates = allCandidates.value.map((driver) => Number(driver.rate_per_km ?? 0)).filter(Boolean);
     return rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
 });
 
@@ -518,8 +762,7 @@ const rawPriceByDistance = computed(() => {
 const referenceMinimumFare = computed(() => {
     if (selectedDriverId.value === WHOLE_FLEET) return props.minimumFare;
 
-    const chosen = driversWithDistance.value.find((driver) => driver.user_id === selectedDriverId.value);
-    const driverFloor = chosen?.minimum_fare != null ? Number(chosen.minimum_fare) : null;
+    const driverFloor = selectedDriverInfo.value?.minimum_fare != null ? Number(selectedDriverInfo.value.minimum_fare) : null;
     return driverFloor != null ? Math.min(driverFloor, props.minimumFare) : props.minimumFare;
 });
 
@@ -529,6 +772,17 @@ const estimatedPrice = computed(() => {
     if (rawPriceByDistance.value == null) return null;
     return Math.max(rawPriceByDistance.value, referenceMinimumFare.value);
 });
+
+// Precio estimado POR CONDUCTOR (rediseño UX, con mockup de referencia: cada
+// fila de la lista muestra su propio precio, no solo el del elegido) — mismo
+// cálculo que rawPriceByDistance/referenceMinimumFare de acá arriba, aplicado
+// a un conductor puntual en vez de al elegido o al promedio de la flota.
+function estimatedPriceForDriver(driver) {
+    if (estimatedDistanceKm.value == null) return null;
+    const raw = Math.round(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0) * 100) / 100;
+    const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
+    return Math.max(raw, floor);
+}
 
 // El cliente puede aceptar el precio estimado tal cual, o proponer otro monto
 // desde el arranque (sección 5: "el cliente puede aceptar ese precio o hacer
@@ -566,12 +820,16 @@ const form = useForm({
 });
 
 // Si "toda mi flota" no tiene a quién ofrecerle la carrera, el aviso sugiere
-// ampliar a público/ambos o mirar la lista — hace falta que el picker de
-// conductores esté abierto para que esa sugerencia sirva de algo.
+// ampliar a otra categoría (ver nextNonEmptyCategory() y el botón que ya
+// muestra el propio mensaje de error en el paso 'driver') — acá solo hace
+// falta volver a ese paso si el envío se disparó desde 'confirm' (más
+// adelante) y asegurarse de que quede alguna categoría abierta.
 watch(
     () => form.errors.driver_user_id,
     (error) => {
-        if (error) showDriverPicker.value = true;
+        if (!error) return;
+        step.value = 'driver';
+        if (!activeCategory.value) activeCategory.value = recommendCategory();
     }
 );
 
@@ -684,6 +942,28 @@ function saveRoute() {
     );
 }
 
+// Gate del botón "Continuar" del paso 'destination' (rediseño UX): origen y
+// destino son los únicos datos realmente obligatorios para avanzar — mismo
+// criterio que ya exige el backend en RideRequestController::store()
+// (origin_lat/lng y destination_lat/lng son los únicos `required`). Si ya
+// se eligió "Programar viaje", la fecha/hora también se piden acá (es la
+// sección que las muestra), para no dejar avanzar a elegir conductor sin
+// saber para cuándo es.
+const canProceedToDriver = computed(() => {
+    if (originLat.value == null || destinationLat.value == null) return false;
+    if (whenMode.value === 'scheduled') return Boolean(scheduledDate.value && scheduledTime.value);
+    return true;
+});
+
+function goToDriverStep() {
+    step.value = 'driver';
+}
+
+function backToDestinationStep() {
+    step.value = 'destination';
+    activeCategory.value = null;
+}
+
 const canSubmit = computed(() => {
     if (originLat.value == null || destinationLat.value == null) return false;
     if (whenMode.value === 'scheduled') return Boolean(scheduledDate.value && scheduledTime.value);
@@ -739,40 +1019,75 @@ function submit() {
 <template>
     <Head title="Solicitar carrera" />
 
-    <AuthenticatedLayout>
-        <template #header>
-            <h2 class="font-semibold text-xl text-arka-text leading-tight">Solicitar carrera</h2>
-        </template>
-
-        <div class="py-12">
+    <AuthenticatedLayout
+        :style="step === 'destination' ? { background: destinationBackground } : null"
+    >
+        <!-- El título de página solo aparece en el paso 1 (bug real reportado por
+             el usuario, con captura: en los pasos 2 y 3 el mapa "no aprovechaba
+             la parte de arriba" y obligaba a scrollear para ver "Elige tu
+             conductor" completo) — mismo criterio que ya usa Dashboard.vue para
+             su pantalla de mapa, que tampoco define este slot. -->
+        <!-- Fondo propio del paso inicial: verde bosque en vez de negro puro.
+             Mantiene el lenguaje oscuro de Arka01, pero conecta visualmente
+             con el acento menta y con la superficie clara del formulario. -->
+        <div
+            :class="step === 'destination' ? 'min-h-[calc(100dvh-4rem)] py-3 pb-24 sm:py-8' : 'py-3'"
+            :style="step === 'destination'
+                ? { background: destinationBackground }
+                : null"
+        >
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <!-- Rediseño UX (pedido explícito del usuario, guiado por
+                     ARKA01_Rediseno_UX_Flujo_Carreras.md): paso 1, "¿A dónde
+                     vas?" — todo lo que hace falta para tener origen y
+                     destino, tal cual estaba, ahora envuelto en su propio
+                     paso en vez de ser el arranque de un scroll largo. -->
+                <template v-if="step === 'destination'">
+                <div class="space-y-4 rounded-[28px] border border-white/70 bg-[#f4f7f5] p-4 shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06] sm:p-6">
+                <div class="flex items-start justify-between gap-4 px-1">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-arka-primary">
+                            {{ whenMode === 'scheduled' ? 'Viaje programado' : 'Nueva carrera' }}
+                        </p>
+                        <h1 class="mt-1 text-2xl font-bold tracking-tight text-arka-base">
+                            {{ whenMode === 'scheduled' ? 'Programa tu viaje' : '¿A dónde vas?' }}
+                        </h1>
+                        <p class="mt-1 text-sm text-arka-base/50">Completa los datos y luego elige quién te llevará.</p>
+                    </div>
+                    <button type="button" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-arka-base/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
+                        </svg>
+                    </button>
+                </div>
                 <!-- Selector de flota: solo aparece si el cliente tiene más de una
                      (sección 7.3, plan Multi-flota). -->
-                <div v-if="fleets.length > 1" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <InputLabel value="Pedir carrera desde la flota" />
+                <div v-if="fleets.length > 1" class="rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm">
+                    <InputLabel value="Pedir carrera desde la flota" light />
                     <SearchableSelect
                         class="mt-1"
+                        light
                         :model-value="fleet.id"
                         :options="fleets.map((f) => ({ value: f.id, label: f.name }))"
                         @update:model-value="changeFleet"
                     />
                 </div>
 
-                <div v-if="locationError" class="p-4 bg-arka-card shadow rounded-arka text-sm text-arka-warning">
+                <div v-if="locationError" class="rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-4 text-sm text-arka-base/70">
                     {{ locationError }}
                 </div>
 
                 <!-- ¿Cuándo? (consideración agregada al alcance, pedido explícito del
                      usuario): "ahora mismo" por defecto, o programar fecha/hora — con
                      la opción de marcarla como ida y vuelta. -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
-                    <h3 class="text-lg font-medium text-arka-text">¿Cuándo?</h3>
+                <div class="space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
+                    <h3 class="text-lg font-bold text-arka-base">¿Cuándo?</h3>
 
-                    <div class="flex items-center gap-1 bg-arka-base/60 rounded-full p-1 text-sm w-fit">
+                    <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
                         <button
                             type="button"
                             class="px-4 py-1.5 rounded-full font-medium transition"
-                            :class="whenMode === 'now' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
+                            :class="whenMode === 'now' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
                             @click="whenMode = 'now'"
                         >
                             Ahora mismo
@@ -780,7 +1095,7 @@ function submit() {
                         <button
                             type="button"
                             class="px-4 py-1.5 rounded-full font-medium transition"
-                            :class="whenMode === 'scheduled' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
+                            :class="whenMode === 'scheduled' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
                             @click="whenMode = 'scheduled'"
                         >
                             Programar viaje
@@ -790,23 +1105,24 @@ function submit() {
                     <div v-if="whenMode === 'scheduled'" class="space-y-3 pt-1">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <InputLabel for="scheduled_date" value="Fecha" />
+                                <InputLabel for="scheduled_date" value="Fecha" light />
                                 <TextInput
                                     id="scheduled_date"
                                     type="date"
                                     class="mt-1 block w-full"
                                     :min="todayDateString"
                                     v-model="scheduledDate"
+                                    light
                                 />
                                 <InputError class="mt-1" :message="form.errors.scheduled_date" />
                             </div>
                             <div>
-                                <InputLabel value="Hora" />
+                                <InputLabel value="Hora" light />
                                 <div class="mt-1 grid grid-cols-3 gap-2">
                                     <select
                                         v-model="scheduledHour"
                                         aria-label="Hora"
-                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                        class="w-full rounded-arka border-arka-base/10 bg-white text-arka-base shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                     >
                                         <option value="" disabled>Hora</option>
                                         <option v-for="hour in HOUR_OPTIONS" :key="hour" :value="hour">{{ hour }}</option>
@@ -814,7 +1130,7 @@ function submit() {
                                     <select
                                         v-model="scheduledMinute"
                                         aria-label="Minutos"
-                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                        class="w-full rounded-arka border-arka-base/10 bg-white text-arka-base shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                     >
                                         <option value="" disabled>Min.</option>
                                         <option v-for="minute in MINUTE_OPTIONS" :key="minute" :value="minute">{{ minute }}</option>
@@ -822,7 +1138,7 @@ function submit() {
                                     <select
                                         v-model="scheduledPeriod"
                                         aria-label="A. m. o p. m."
-                                        class="w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                        class="w-full rounded-arka border-arka-base/10 bg-white text-arka-base shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                     >
                                         <option value="AM">a. m.</option>
                                         <option value="PM">p. m.</option>
@@ -834,18 +1150,18 @@ function submit() {
 
                         <label class="flex items-center gap-2">
                             <input type="checkbox" v-model="roundTrip" class="text-arka-primary rounded" />
-                            <span class="text-sm text-arka-text">Es ida y vuelta</span>
+                            <span class="text-sm font-medium text-arka-base/75">Es ida y vuelta</span>
                         </label>
 
                         <!-- Observación libre (pedido explícito del usuario): algo que el
                              conductor tenga que saber de antemano — nunca obligatoria. -->
                         <div>
-                            <InputLabel value="Observación para el conductor (opcional)" />
+                            <InputLabel value="Observación para el conductor (opcional)" light />
                             <textarea
                                 v-model="scheduledNotes"
                                 rows="2"
                                 maxlength="500"
-                                class="mt-1 block w-full rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text placeholder-arka-text-muted shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                class="mt-1 block w-full rounded-arka border-arka-base/10 bg-white text-arka-base placeholder:text-arka-base/35 shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                 placeholder="Ej: el portón es el azul, llamar al llegar…"
                             ></textarea>
                             <InputError class="mt-1" :message="form.errors.notes" />
@@ -857,8 +1173,8 @@ function submit() {
                      búsqueda... que sea más fácil pedir una carrera") — buscador con
                      Google Places como campo principal, con los lugares ya usados
                      antes como favoritos (ver AddressAutocomplete.vue). -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
-                    <h3 class="text-lg font-medium text-arka-text">¿De dónde a dónde vas?</h3>
+                <div class="space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
+                    <h3 class="text-lg font-bold text-arka-base">¿De dónde a dónde vas?</h3>
 
                     <!-- "Mis rutas" (pedido explícito del usuario): tomar una
                          ruta guardada de una, sin escribir ni marcar nada. -->
@@ -866,9 +1182,9 @@ function submit() {
                         <div
                             v-for="saved in savedRoutes"
                             :key="saved.id"
-                            class="group flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full border border-arka-text-muted/20 hover:border-arka-primary/50 bg-arka-base/60"
+                            class="group flex items-center gap-1.5 rounded-full border border-arka-base/10 bg-[#f7f8fa] py-1.5 pl-3 pr-1.5 hover:border-arka-primary/50"
                         >
-                            <button type="button" class="text-sm text-arka-text" @click="useSavedRoute(saved)">
+                            <button type="button" class="text-sm text-arka-base" @click="useSavedRoute(saved)">
                                 📍 {{ saved.alias || saved.origin_address || 'Ruta guardada' }}
                             </button>
                             <button
@@ -884,7 +1200,7 @@ function submit() {
 
                     <div>
                         <div class="flex items-center justify-between gap-2">
-                            <InputLabel for="origin_address" value="Origen" />
+                            <InputLabel for="origin_address" value="Origen" light />
                             <!-- Pedido explícito del usuario: que el origen también
                                  tenga la opción de usar la ubicación actual, no solo
                                  el intento automático silencioso de al abrir la
@@ -905,13 +1221,14 @@ function submit() {
                             :city-bias="cityBias"
                             :favorites="frequentPlaces"
                             placeholder="Su ubicación actual o busque una dirección"
+                            light
                             @place-selected="pickOriginFromAddress"
                             @clear="clearOrigin"
                         />
                     </div>
 
                     <div>
-                        <InputLabel for="destination_address" value="Destino" />
+                        <InputLabel for="destination_address" value="Destino" light />
                         <AddressAutocomplete
                             id="destination_address"
                             class="mt-1"
@@ -919,6 +1236,7 @@ function submit() {
                             :city-bias="cityBias"
                             :favorites="frequentPlaces"
                             placeholder="¿A dónde vas?"
+                            light
                             @place-selected="pickDestinationFromAddress"
                             @clear="clearDestination"
                         />
@@ -932,7 +1250,7 @@ function submit() {
                     <div v-if="canSaveRoute" class="pt-1">
                         <label class="flex items-center gap-2">
                             <input type="checkbox" v-model="wantsToSaveRoute" class="text-arka-primary rounded" />
-                            <span class="text-sm text-arka-text">Guardar esta ruta en "Mis rutas"</span>
+                            <span class="text-sm text-arka-base/75">Guardar esta ruta en "Mis rutas"</span>
                         </label>
                         <div v-if="wantsToSaveRoute" class="mt-2 flex gap-2">
                             <TextInput
@@ -941,6 +1259,7 @@ function submit() {
                                 v-model="routeAlias"
                                 placeholder="Alias (opcional): Casa, Trabajo, Paseo…"
                                 maxlength="50"
+                                light
                             />
                             <SecondaryButton :disabled="savingRoute" @click="saveRoute">
                                 {{ savingRoute ? 'Guardando…' : 'Guardar' }}
@@ -962,9 +1281,10 @@ function submit() {
 
                     <div v-if="showZoneDetails" class="space-y-3 pt-1">
                         <div>
-                            <InputLabel value="Ciudad" />
+                            <InputLabel value="Ciudad" light />
                             <SearchableSelect
                                 class="mt-1"
+                                light
                                 :model-value="selectedCityId"
                                 :options="cityOptions"
                                 @update:model-value="changeCity"
@@ -973,20 +1293,22 @@ function submit() {
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <InputLabel for="origin_sector_id" value="Sector donde está" />
+                                <InputLabel for="origin_sector_id" value="Sector donde está" light />
                                 <SearchableSelect
                                     id="origin_sector_id"
                                     class="mt-1"
+                                    light
                                     v-model="originSectorId"
                                     :options="sectorOptions"
                                     empty-label="Sin especificar"
                                 />
                             </div>
                             <div>
-                                <InputLabel for="destination_sector_id" value="Sector a donde vas" />
+                                <InputLabel for="destination_sector_id" value="Sector a donde vas" light />
                                 <SearchableSelect
                                     id="destination_sector_id"
                                     class="mt-1"
+                                    light
                                     v-model="destinationSectorId"
                                     :options="sectorOptions"
                                     empty-label="Sin especificar"
@@ -998,9 +1320,9 @@ function submit() {
 
                 <!-- Mapa: confirmación visual del recorrido, y una forma de ajustar el
                      destino a mano tocando el mapa (sección 9.3: Leaflet + OpenStreetMap). -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                <div class="rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
                     <div class="flex items-center justify-between gap-3 mb-1">
-                        <h3 class="text-lg font-medium text-arka-text">Mapa</h3>
+                        <h3 class="text-lg font-bold text-arka-base">Comprueba la ruta</h3>
                         <button
                             type="button"
                             class="text-sm text-arka-primary hover:text-arka-primary-bright shrink-0"
@@ -1016,36 +1338,536 @@ function submit() {
                         :route="routeCoords"
                         :clickable="true"
                         :auto-fit="false"
+                        :dark="false"
                         :height="mapExpanded ? '420px' : '160px'"
                         @map-click="pickDestination"
                     />
 
-                    <p v-if="!destinationLat" class="mt-2 text-sm text-arka-text-muted">
+                    <p v-if="!destinationLat" class="mt-2 text-sm text-arka-base/50">
                         Todavía no marcaste el destino.
                     </p>
                 </div>
 
-                <!-- Pedido explícito del usuario: cantidad de pasajeros (por
-                     defecto 1), si hace falta cajuela (por defecto no) y la
-                     forma de pago (por defecto efectivo) — colapsado en un
-                     resumen de una línea (mockup acordado antes de tocar
-                     esto): casi siempre valen lo mismo, se abre solo si hace
-                     falta cambiar algo. -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                <!-- Acción 1 del documento: elegido el destino, "Continuar"
+                     lleva al paso de elegir conductor — nada de formulario
+                     largo en el medio (sección 5). -->
+                <div class="sticky bottom-20 z-20 rounded-2xl bg-[#f4f7f5]/95 px-1 pb-1 pt-2 backdrop-blur-sm">
+                    <!-- Secuencia visible (pedido explícito del usuario): deja
+                         claro que Continuar NO envía todavía la solicitud, sino
+                         que abre el siguiente paso para elegir conductor. -->
+                    <div class="mb-2 flex items-center justify-between px-1">
+                        <div class="flex items-center gap-2">
+                            <div class="flex gap-1" aria-hidden="true">
+                                <span class="h-1.5 w-6 rounded-full bg-arka-primary"></span>
+                                <span class="h-1.5 w-6 rounded-full bg-arka-base/10"></span>
+                                <span class="h-1.5 w-6 rounded-full bg-arka-base/10"></span>
+                            </div>
+                            <span class="text-[11px] font-semibold text-arka-base/45">Paso 1 de 3</span>
+                        </div>
+                        <span class="text-[11px] text-arka-base/45">Siguiente: conductor</span>
+                    </div>
+                    <PrimaryButton class="min-h-12 w-full justify-between text-sm" :disabled="!canProceedToDriver" @click="goToDriverStep">
+                        <span class="flex-1 text-center">Continuar</span>
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-base/10" aria-hidden="true">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" />
+                            </svg>
+                        </span>
+                    </PrimaryButton>
+                </div>
+                </div>
+                </template>
+
+                <!-- Info persistente (sección 32 del documento): mapa fijo arriba
+                     con la tarjeta de origen/destino superpuesta encima —
+                     pedido explícito del usuario, tal como el bosquejo — en
+                     vez de una tarjeta plana separada del mapa. Visible en
+                     los pasos 2 y 3, nunca hay que "acordarse" qué se eligió. -->
+                <div v-if="step === 'driver' || step === 'confirm'">
+                    <!-- Mapa claro (pedido explícito del usuario: "manejemos el
+                         mismo color" que Inicio) — la tarjeta de origen/destino
+                         se queda oscura a propósito, flotando encima, tal como
+                         el bosquejo de referencia. -->
+                    <FleetMap
+                        :markers="mapMarkers"
+                        :center="mapCenter ?? undefined"
+                        :route="routeCoords"
+                        :clickable="false"
+                        :auto-fit="true"
+                        :dark="false"
+                        height="170px"
+                    />
+                    <!-- Bug real reportado por el usuario, con varias capturas
+                         repetidas ("la tarjeta sigue apareciendo por debajo
+                         del mapa"): un intento anterior lo había atribuido a
+                         un problema de "pintado" de Leaflet que ignoraba el
+                         z-index, y por eso el solape se había dejado en solo
+                         12px como parche — pero la causa real es otra:
+                         Leaflet le pone z-index PROPIO a sus capas internas
+                         (marcadores 600, controles 1000, fijos en su propio
+                         CSS) y el contenedor del mapa no armaba su propio
+                         contexto de apilamiento, así que esos números
+                         competían directo contra el z-10 de esta tarjeta y
+                         le ganaban — ver el arreglo de fondo en
+                         Components/FleetMap.vue (`isolate`). Ya solucionado
+                         eso, el solape puede ser el de verdad (como el
+                         bosquejo), no el parche de 12px. -->
+                    <div class="-mt-8 mx-3 relative z-10 p-3.5 bg-arka-card shadow-2xl rounded-arka border border-arka-text-muted/20">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-xs text-arka-text-muted flex items-center gap-1">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-arka-primary shrink-0"></span> Origen
+                                </p>
+                                <p class="text-sm text-arka-text font-medium truncate">{{ originAddress || 'Mi ubicación' }}</p>
+                                <p class="text-xs text-arka-text-muted mt-1.5 flex items-center gap-1">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-arka-danger shrink-0"></span> Destino
+                                </p>
+                                <p class="text-sm text-arka-text font-medium truncate">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
+                                <!-- Pedido explícito del usuario: "indicar los km y
+                                     minutos de ese recorrido" — distancia y duración
+                                     REALES de manejo (OSRM, misma ruta dibujada en el
+                                     mapa), no la línea recta. -->
+                                <p v-if="routeDistanceKm != null" class="text-xs text-arka-text-muted mt-1.5">
+                                    {{ routeDistanceKm.toFixed(1) }} km · {{ Math.round(routeDurationMin) }} min
+                                </p>
+                                <p v-else-if="originLat != null && destinationLat != null" class="text-xs text-arka-text-muted mt-1.5">
+                                    Calculando recorrido…
+                                </p>
+                            </div>
+                            <SecondaryButton size="sm" class="shrink-0" @click="backToDestinationStep">Cambiar</SecondaryButton>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Paso 2, "Elige tu conductor" (secciones 6-10 del documento).
+                     Pasajeros/cajuela/pago se movieron al cajón "Opciones del
+                     viaje" del paso 3 (sección 18-19 del documento: no son
+                     obligatorios para pedir, casi siempre valen lo mismo) —
+                     siguen filtrando la lista de acá con sus valores por
+                     defecto (1 pasajero, sin cajuela), ver driversWithDistance. -->
+                <template v-if="step === 'driver'">
+                <!-- Elegir conductor (secciones 6-10 y 29 del documento de
+                     rediseño): 4 categorías en jerarquía fija — nunca 4
+                     opciones equivalentes, Flota siempre primero. Tema claro
+                     (pedido explícito del usuario: "manejemos el mismo
+                     color" que Inicio) — filas blancas sobre fondo gris,
+                     igual criterio que HomeSearchSheet.vue. -->
+                <div class="p-4 sm:p-6 bg-gray-100 shadow rounded-arka space-y-3">
+                    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+                        <h3 class="text-lg font-medium text-arka-base">Elige tu conductor</h3>
+
+                        <!-- Pedido explícito del usuario: que el botón de pedir esté
+                             también acá arriba — con listas largas se perdía de vista
+                             allá abajo. Mismo botón, misma acción; el de más abajo
+                             (después del precio) sigue estando para quien prefiere
+                             revisar todo antes. -->
+                        <PrimaryButton :disabled="!canSubmit || form.processing" @click="submit">
+                            {{ whenMode === 'scheduled' ? 'Programar' : 'Pedir ahora' }}
+                        </PrimaryButton>
+                    </div>
+
+                    <InputError :message="form.errors.cooperative_id" />
+                    <p v-if="form.errors.driver_user_id" class="text-sm text-arka-danger">
+                        {{ form.errors.driver_user_id }}
+                        <button
+                            v-if="activeCategory && nextNonEmptyCategory(activeCategory)"
+                            type="button"
+                            class="underline hover:text-arka-danger/80"
+                            @click="activeCategory = nextNonEmptyCategory(activeCategory)"
+                        >
+                            Pruebe con {{ CATEGORY_META[nextNonEmptyCategory(activeCategory)].label.toLowerCase() }}.
+                        </button>
+                    </p>
+
+                    <!-- Tarjetas de categoría (sección 8): tocarla despliega o
+                         cierra su lista — "Ver disponibles" del documento — nunca
+                         dispara la solicitud (sección 10). -->
+                    <div class="space-y-2">
+                        <button
+                            v-for="category in CATEGORY_ORDER"
+                            :key="category"
+                            type="button"
+                            class="w-full flex items-center gap-3 p-3 rounded-arka border transition text-start"
+                            :class="activeCategory === category ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white hover:border-arka-primary/40'"
+                            @click="activeCategory = activeCategory === category ? null : category"
+                        >
+                            <!-- Ícono por categoría (pedido explícito del usuario, con el
+                                 bosquejo como referencia). -->
+                            <span class="h-9 w-9 rounded-full flex items-center justify-center shrink-0" :class="CATEGORY_META[category].badgeClass">
+                                <svg v-if="category === 'fleet'" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="9" cy="9" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                                    <circle cx="17" cy="9" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 13.5c2.4 0 4.5 1.9 5 5" />
+                                </svg>
+                                <svg v-else-if="category === 'cooperative'" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m9 12 2 2 4-4" />
+                                </svg>
+                                <svg v-else-if="category === 'public'" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 20a7 7 0 0 1 14 0" />
+                                </svg>
+                                <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.3 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.3-3.8-8.5S9.5 5.8 12 3.5Z" />
+                                </svg>
+                            </span>
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-arka-base" :class="category === 'fleet' ? 'font-semibold' : 'font-medium'">
+                                        {{ CATEGORY_META[category].label }}
+                                        <span
+                                            v-if="category === 'fleet' && categoryCounts.fleet"
+                                            class="ml-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-arka-primary/15 text-arka-primary"
+                                        >
+                                            Recomendado
+                                        </span>
+                                    </span>
+                                    <span class="text-sm text-arka-base/50 shrink-0">{{ categoryCounts[category] }} ›</span>
+                                </div>
+                                <p class="text-xs text-arka-base/50">{{ CATEGORY_META[category].hint }}</p>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Cooperativas: sin lista de conductores propia — el backend
+                         recién arma candidatos al despachar de verdad
+                         (RideDispatchCandidates::forCooperative()). Elegir la
+                         cooperativa ES la selección, igual que ya hacía el
+                         <select> de antes. -->
+                    <div v-if="activeCategory === 'cooperative'" class="space-y-2 pt-1">
+                        <div class="relative">
+                            <input v-model="cooperativeSearch" type="search" placeholder="Buscar cooperativa por nombre" class="w-full rounded-arka border-arka-base/10 bg-white px-4 py-3 text-sm text-arka-base focus:border-arka-primary focus:ring-arka-primary" />
+                        </div>
+                        <p v-if="!cooperatives.length" class="text-sm text-arka-base/50 py-2">
+                            Todavía no tiene cooperativas en su red.
+                        </p>
+                        <div
+                            v-for="cooperative in filteredCooperatives"
+                            :key="cooperative.id"
+                            class="flex items-center justify-between gap-3 p-3 rounded-arka border cursor-pointer"
+                            :class="selectedCooperativeId === cooperative.id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white'"
+                            role="radio"
+                            :aria-checked="selectedCooperativeId === cooperative.id"
+                            tabindex="0"
+                            @click="selectedCooperativeId = cooperative.id; step = 'confirm'"
+                            @keydown.enter.prevent="selectedCooperativeId = cooperative.id; step = 'confirm'"
+                            @keydown.space.prevent="selectedCooperativeId = cooperative.id; step = 'confirm'"
+                        >
+                            <span class="flex min-w-0 items-center gap-3">
+                                <input type="radio" :value="cooperative.id" v-model="selectedCooperativeId" class="text-arka-primary" tabindex="-1" aria-hidden="true" />
+                                <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-arka-base/10 bg-arka-primary/10">
+                                    <img
+                                        v-if="cooperative.logo_url"
+                                        :src="cooperative.logo_url"
+                                        :alt="`Logo de ${cooperative.name}`"
+                                        class="h-full w-full object-cover"
+                                    />
+                                    <span v-else class="text-sm font-bold text-arka-primary">
+                                        {{ cooperative.name?.trim().charAt(0).toUpperCase() || 'C' }}
+                                    </span>
+                                </span>
+                                <span class="min-w-0">
+                                    <span class="block truncate font-medium text-arka-base">{{ cooperative.name }}</span>
+                                    <Link
+                                        :href="route('cooperatives.show', cooperative.id)"
+                                        target="_blank"
+                                        class="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-arka-primary hover:underline"
+                                        aria-label="Ver el perfil público de la cooperativa en otra pestaña"
+                                        @click.stop
+                                        @keydown.stop
+                                    >
+                                        Ver perfil público <span aria-hidden="true">↗</span>
+                                    </Link>
+                                </span>
+                            </span>
+                            <span class="shrink-0 text-right text-sm text-arka-base/50">{{ cooperative.active_driver_memberships_count }} unidades<br><small v-if="cooperative.distance_km != null">{{ cooperative.distance_km }} km · ~{{ Math.max(1, Math.ceil(cooperative.distance_km / 0.45)) }} min desde el origen</small></span>
+                        </div>
+                        <p v-if="cooperatives.length" class="text-xs text-arka-base/50">
+                            La cooperativa asigna una unidad verificada. Si no responde a tiempo, la oferta pasa a la siguiente.
+                        </p>
+                    </div>
+
+                    <!-- Flota / Públicos / Todos: lista compacta de conductores de
+                         esa categoría (sección 33: quién es, si es de confianza,
+                         cuánto tarda, cuánto cuesta, qué vehículo tiene). -->
+                    <div v-else-if="activeCategory" class="space-y-3 pt-1">
+                        <p v-if="!driversWithDistance.length" class="text-sm text-arka-base/50 py-2">
+                            0 disponibles ahora en esta categoría para {{ passengerCount }} pasajero(s){{ needsTrunk ? ' con cajuela' : '' }}.
+                            <button
+                                v-if="nextNonEmptyCategory(activeCategory)"
+                                type="button"
+                                class="underline hover:text-arka-base"
+                                @click="activeCategory = nextNonEmptyCategory(activeCategory)"
+                            >
+                                Probar con {{ CATEGORY_META[nextNonEmptyCategory(activeCategory)].label.toLowerCase() }}.
+                            </button>
+                        </p>
+
+                        <template v-else>
+                            <label
+                                class="flex items-center gap-3 p-3 rounded-arka border cursor-pointer"
+                                :class="selectedDriverId === WHOLE_FLEET ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white'"
+                            >
+                                <input type="radio" :value="WHOLE_FLEET" v-model="selectedDriverId" class="text-arka-primary" @change="step = 'confirm'" />
+                                <span class="text-arka-base font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</span>
+                            </label>
+
+                            <!-- Pedido explícito del usuario: no había ningún orden claro
+                                 con flotas grandes — el disponible siempre va primero,
+                                 esto solo cambia el desempate entre ellos. -->
+                            <div class="flex items-center justify-end gap-2 text-xs">
+                                <label for="driver_sort" class="text-arka-base/50">Ordenar por:</label>
+                                <select
+                                    id="driver_sort"
+                                    v-model="sortBy"
+                                    class="bg-white border-arka-base/15 text-arka-base rounded-arka text-xs py-1.5 focus:border-arka-primary focus:ring-arka-primary"
+                                >
+                                    <option v-for="(label, value) in SORT_OPTIONS" :key="value" :value="value">{{ label }}</option>
+                                </select>
+                            </div>
+
+                            <!-- Foto + nombre + ⭐ + precio estimado por fila (rediseño UX, con
+                                 mockup de referencia estilo Uber/DiDi) — antes solo había un
+                                 punto de color aislado, sin foto ni precio propio. El punto de
+                                 estado se mantiene, ahora como insignia sobre la esquina del
+                                 avatar, y también en texto (STATUS_STYLE[...].label) para no
+                                 depender solo del color. -->
+                            <label
+                                v-for="driver in pagedDrivers"
+                                :key="`${driver.source}-${driver.user_id}`"
+                                class="flex items-center justify-between gap-3 p-3 rounded-arka border cursor-pointer"
+                                :class="[
+                                    selectedDriverId === driver.user_id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white',
+                                    STATUS_STYLE[driver.status].textClass,
+                                    driver.outOfRange ? 'opacity-50 grayscale' : '',
+                                ]"
+                            >
+                                <input
+                                    type="radio"
+                                    :value="driver.user_id"
+                                    v-model="selectedDriverId"
+                                    :disabled="driver.status === 'offline' || driver.outOfRange"
+                                    class="text-arka-primary shrink-0"
+                                    @change="step = 'confirm'"
+                                />
+                                <span class="relative shrink-0">
+                                    <!-- `role: 'conductor'` a mano: driverCardData() manda un
+                                         array armado a propósito, sin esa clave — así UserAvatar
+                                         cae en el ícono de volante (no el de persona) cuando no
+                                         hay foto, coherente con quién es. -->
+                                    <UserAvatar :user="{ ...driver, role: 'conductor' }" size-class="h-11 w-11 text-sm" />
+                                    <span
+                                        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white"
+                                        :class="STATUS_STYLE[driver.status].dot"
+                                        :title="STATUS_STYLE[driver.status].label"
+                                    />
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-arka-base font-medium">{{ driver.name }}</span>
+                                        <span
+                                            v-if="driver.source === 'public'"
+                                            class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                            :class="tierColorClass(driver.tier.color_key)"
+                                        >
+                                            {{ tierLabel(driver.tier) }}
+                                        </span>
+                                        <span v-if="driver.review_count > 0" class="text-xs text-arka-base/60">
+                                            ★ {{ Number(driver.average_rating).toFixed(1) }}
+                                        </span>
+                                    </span>
+                                    <span class="block text-xs text-arka-base/50">
+                                        {{ driver.outOfRange ? 'Fuera de su zona de cobertura' : STATUS_STYLE[driver.status].label }}
+                                    </span>
+                                    <!-- Pedido explícito del usuario: qué vehículo tiene, para
+                                         saber qué esperar antes de pedirle la carrera. Placa
+                                         tapada, no completa (confidencialidad, ver
+                                         DriverProfile::maskedPlate()). -->
+                                    <span v-if="driver.vehicle_make" class="block text-xs text-arka-base/40 truncate">
+                                        {{ driver.vehicle_make }} {{ driver.vehicle_model }} {{ driver.vehicle_color }}
+                                        <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
+                                        · {{ driver.vehicle_plate }}
+                                        · {{ driver.passenger_capacity }} pasajero(s)
+                                        <span v-if="driver.has_trunk"> · con cajuela</span>
+                                    </span>
+                                </span>
+                                <!-- Precio estimado (nuevo, con mockup de referencia: cada fila
+                                     muestra su propio precio, no solo el km/rate) y, debajo, el
+                                     ETA en minutos — pedido explícito del usuario ("manejar la
+                                     privacidad... los km cercano manejemos minutos mejor para la
+                                     distancia"): nunca km exacto hasta un conductor puntual. -->
+                                <span class="text-right shrink-0">
+                                    <span v-if="estimatedPriceForDriver(driver) != null" class="block text-sm font-semibold text-arka-base">
+                                        ${{ estimatedPriceForDriver(driver).toFixed(2) }}
+                                    </span>
+                                    <span v-if="driver.etaMinutes != null" class="block text-xs text-arka-base/50">{{ driver.etaMinutes }} min</span>
+                                </span>
+                            </label>
+
+                            <!-- Paginado (pedido explícito del usuario): de a 5, para no tener
+                                 que scrollear una lista de 20+ conductores. -->
+                            <div v-if="totalDriverPages > 1" class="flex items-center justify-between gap-2 text-sm">
+                                <SecondaryButton :disabled="currentPage === 1" @click="currentPage--">Anterior</SecondaryButton>
+                                <span class="text-arka-base/50">Página {{ currentPage }} de {{ totalDriverPages }}</span>
+                                <SecondaryButton :disabled="currentPage === totalDriverPages" @click="currentPage++">Siguiente</SecondaryButton>
+                            </div>
+                        </template>
+                    </div>
+
+                    <p v-if="!categoryCounts.fleet && !categoryCounts.cooperative && !categoryCounts.public" class="text-sm text-arka-base/50 py-2">
+                        Todavía no tiene conductores acá.
+                        <a :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">Vaya a Mi Flota para invitar a alguno</a>
+                        o mire el
+                        <a :href="route('directory.index')" class="text-arka-primary hover:text-arka-primary-bright">directorio público</a>
+                        (sección 3.4: la red de respaldo cuando nadie de su flota está disponible).
+                    </p>
+                </div>
+
+                </template>
+
+                <!-- Paso 3, "Confirma y pide" (sección 11 del documento):
+                     resumen de todo lo elegido, de un vistazo, con "Pedir
+                     ahora" como única acción principal — sin una segunda
+                     pantalla preguntando "¿está seguro?" (regla explícita
+                     del documento). -->
+                <template v-if="step === 'confirm'">
+                <!-- Tema claro (pedido explícito del usuario: "manejemos el
+                     mismo color" que la pantalla de elegir conductor). -->
+                <div class="p-4 sm:p-6 bg-gray-100 shadow rounded-arka space-y-3">
+                    <!-- Foto grande + píldora de ETA (rediseño UX, con mockup de
+                         referencia): antes era un punto de color + texto plano. -->
+                    <div v-if="selectedDriverInfo" class="flex items-center gap-3">
+                        <span class="relative shrink-0">
+                            <UserAvatar :user="{ ...selectedDriverInfo, role: 'conductor' }" size-class="h-14 w-14 text-base" />
+                            <span
+                                class="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-gray-100"
+                                :class="STATUS_STYLE[selectedDriverInfo.status].dot"
+                                :title="STATUS_STYLE[selectedDriverInfo.status].label"
+                            />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-arka-base font-medium flex items-center gap-1.5 flex-wrap">
+                                {{ selectedDriverInfo.name }}
+                                <span
+                                    v-if="selectedDriverInfo.source === 'public'"
+                                    class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                    :class="tierColorClass(selectedDriverInfo.tier.color_key)"
+                                >
+                                    {{ tierLabel(selectedDriverInfo.tier) }}
+                                </span>
+                                <span v-if="selectedDriverInfo.review_count > 0" class="text-xs text-arka-base/60">
+                                    ★ {{ Number(selectedDriverInfo.average_rating).toFixed(1) }}
+                                </span>
+                            </p>
+                            <p v-if="selectedDriverInfo.vehicle_make" class="text-sm text-arka-base/50 truncate">
+                                {{ selectedDriverInfo.vehicle_make }} {{ selectedDriverInfo.vehicle_model }} · {{ selectedDriverInfo.vehicle_plate }}
+                            </p>
+                        </div>
+                        <!-- Píldora de ETA (mismo dato que antes, "Llegada Xmin" en texto
+                             plano — ahora con el mismo lenguaje visual que el resto del
+                             rediseño). -->
+                        <span
+                            v-if="selectedDriverInfo.etaMinutes != null"
+                            class="shrink-0 px-3 py-1.5 rounded-full bg-arka-primary/15 text-arka-primary text-xs font-semibold"
+                        >
+                            Llegando en {{ selectedDriverInfo.etaMinutes }} min
+                        </span>
+                    </div>
+                    <div v-else-if="selectedCooperativeInfo">
+                        <p class="text-arka-base font-medium">{{ selectedCooperativeInfo.name }}</p>
+                        <p class="text-sm text-arka-base/50">Cooperativa · asigna una unidad verificada</p>
+                    </div>
+                    <div v-else>
+                        <p class="text-arka-base font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</p>
+                        <p class="text-sm text-arka-base/50">Se ofrece primero al más cercano</p>
+                    </div>
+
+                    <p v-if="!selectedDriverStillFits" class="text-xs text-arka-danger">
+                        Este conductor no tiene lugar para {{ passengerCount }} pasajero(s){{ needsTrunk ? ' con cajuela' : '' }} —
+                        vuelva a "Elegir conductor" o baje la cantidad en Opciones del viaje.
+                    </p>
+
+                    <!-- Precio (sección 5): estimado a partir de la distancia y la
+                         tarifa, desglosado y editable — el cliente puede aceptarlo o
+                         contraofertar. -->
+                    <div v-if="estimatedPrice != null" class="pt-2 border-t border-arka-base/10 space-y-2">
+                        <div class="flex items-center justify-between text-sm text-arka-base/50">
+                            <!-- Si el mínimo configurado ya supera lo que daría distancia ×
+                                 tarifa, mostrar ese cálculo sería engañoso — no es lo que se
+                                 termina cobrando (fix reportado por el usuario). -->
+                            <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
+                            <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km</span>
+                            <span class="text-arka-base font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
+                        </div>
+
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" v-model="useCustomPrice" class="text-arka-primary rounded" />
+                            <span class="text-sm text-arka-base">Proponer otro monto en vez del estimado</span>
+                        </label>
+
+                        <TextInput
+                            v-if="useCustomPrice"
+                            type="number"
+                            step="0.01"
+                            :min="estimatedPrice ?? 0.01"
+                            class="block w-full"
+                            v-model="customPrice"
+                            placeholder="Su propuesta en USD"
+                        />
+                        <!-- Pedido explícito del usuario (caso real: se propuso $2 contra
+                             un estimado de $3.85) — aviso inmediato en vez de esperar a que
+                             el servidor lo rechace al mandar el formulario. -->
+                        <p
+                            v-if="useCustomPrice && customPrice && estimatedPrice != null && Number(customPrice) < estimatedPrice"
+                            class="text-xs text-arka-danger"
+                        >
+                            No puede ser menor al precio estimado (${{ estimatedPrice.toFixed(2) }}).
+                        </p>
+                        <InputError :message="form.errors.offered_price" />
+                    </div>
+
+                    <!-- Fila de pago tocable (sección 18: "no convertir la
+                         elección de pago en una pantalla obligatoria") — abre el
+                         mismo cajón de opciones, ya en el campo de pago. -->
                     <button
                         type="button"
-                        class="w-full flex items-center justify-between gap-2 text-start"
-                        @click="showRideOptions = !showRideOptions"
+                        class="w-full flex items-center justify-between pt-2 border-t border-arka-base/10 text-start"
+                        @click="showRideOptions = true"
                     >
-                        <span class="text-sm text-arka-text">
-                            <span class="text-arka-text-muted">Viajás</span> {{ rideOptionsSummary }} ✎
-                        </span>
-                        <svg class="h-4 w-4 shrink-0 text-arka-text-muted transition-transform" :class="{ 'rotate-180': showRideOptions }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
-                        </svg>
+                        <span class="text-sm text-arka-base/50">Forma de pago</span>
+                        <span class="text-sm text-arka-base">{{ paymentMethod === 'efectivo' ? 'Efectivo' : 'Transferencia' }} ›</span>
                     </button>
 
-                    <div v-if="showRideOptions" class="mt-3 space-y-3">
+                    <!-- Acceso discreto (sección 19 del documento): el usuario
+                         normal nunca necesita entrar acá. -->
+                    <button
+                        type="button"
+                        class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        @click="showRideOptions = true"
+                    >
+                        Opciones del viaje ({{ rideOptionsSummary }}) ›
+                    </button>
+                </div>
+
+                <!-- Sticky (sección 34: "Pedir ahora" siempre accesible con el
+                     pulgar) — sin segunda pantalla de "¿está seguro?" (sección 11). -->
+                <div class="sticky bottom-4 pt-2">
+                    <PrimaryButton class="w-full justify-center shadow-lg" :disabled="!canSubmit || form.processing" @click="submit">
+                        {{ whenMode === 'scheduled' ? 'Programar carrera' : 'Pedir ahora' }}
+                    </PrimaryButton>
+                </div>
+                </template>
+
+                <!-- Cajón "Opciones del viaje" (secciones 18-19 del documento):
+                     pasajeros, cajuela y forma de pago — nada de esto bloquea el
+                     camino principal, valores por defecto para casi todos. -->
+                <BottomSheet :show="showRideOptions" @close="showRideOptions = false">
+                    <div class="p-4 sm:p-6 space-y-4">
+                        <h3 class="text-lg font-medium text-arka-text">Opciones del viaje</h3>
+
                         <div class="flex items-center gap-3">
                             <InputLabel for="passenger_count" value="Pasajeros" class="shrink-0" />
                             <TextInput
@@ -1087,257 +1909,10 @@ function submit() {
                                 </button>
                             </div>
                         </div>
+
+                        <PrimaryButton class="w-full justify-center" @click="showRideOptions = false">Listo</PrimaryButton>
                     </div>
-                </div>
-
-                <!-- Elegir conductor o toda la flota -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-                        <h3 class="text-lg font-medium text-arka-text">¿A quién se la pedís?</h3>
-
-                        <!-- Pedido explícito del usuario: que el botón de pedir esté
-                             también acá arriba, al lado de "¿A quién se la pedís?" —
-                             con listas largas se perdía de vista allá abajo. Mismo
-                             botón, misma acción; el de más abajo (después del precio)
-                             sigue estando para quien prefiere revisar todo antes. -->
-                        <PrimaryButton :disabled="!canSubmit || form.processing" @click="submit">
-                            {{ whenMode === 'scheduled' ? 'Programar' : 'Pedir' }}
-                        </PrimaryButton>
-                    </div>
-
-                    <div v-if="cooperatives.length" class="mb-4 rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-3">
-                        <InputLabel for="cooperative_id" value="Solicitar a una cooperativa de mi red" />
-                        <select
-                            id="cooperative_id"
-                            v-model="selectedCooperativeId"
-                            class="mt-2 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-sm text-arka-text"
-                        >
-                            <option :value="null">No usar cooperativa</option>
-                            <option v-for="cooperative in cooperatives" :key="cooperative.id" :value="cooperative.id">
-                                {{ cooperative.name }} · {{ cooperative.active_driver_memberships_count }} unidades
-                            </option>
-                        </select>
-                        <p class="mt-2 text-xs text-arka-text-muted">
-                            La cooperativa asignará una unidad verificada. Si no responde a tiempo, la oferta pasa automáticamente a la siguiente.
-                        </p>
-                        <InputError class="mt-2" :message="form.errors.cooperative_id" />
-                    </div>
-
-                    <label
-                        v-if="!selectedCooperativeId"
-                        class="flex items-center gap-3 p-3 rounded-arka border cursor-pointer mb-2"
-                        :class="selectedDriverId === WHOLE_FLEET ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20'"
-                    >
-                        <input type="radio" :value="WHOLE_FLEET" v-model="selectedDriverId" class="text-arka-primary" />
-                        <span class="text-arka-text font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</span>
-                          <!--(se le ofrece primero al más cercano; si no responde en 30 seg. pasa al siguiente · recomendado) -->
-                    </label>
-
-                    <p v-if="!selectedCooperativeId && !driversWithDistance.length && visibleDrivers.length" class="text-sm text-arka-text-muted py-3">
-                        Ningún conductor de acá tiene lugar para {{ passengerCount }} pasajero(s){{ needsTrunk ? ' con cajuela' : '' }} ahora mismo.
-                        Pruebe bajar la cantidad de pasajeros, sacar el filtro de cajuela, o mire el
-                        <a :href="route('directory.index')" class="text-arka-primary hover:text-arka-primary-bright">directorio público</a>.
-                    </p>
-                    <p v-else-if="!selectedCooperativeId && !driversWithDistance.length" class="text-sm text-arka-text-muted py-3">
-                        Todavía no tiene conductores acá.
-                        <a :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">Vaya a Mi Flota para invitar a alguno</a>
-                        o mire el
-                        <a :href="route('directory.index')" class="text-arka-primary hover:text-arka-primary-bright">directorio público</a>
-                        (sección 3.4: la red de respaldo cuando nadie de su flota está disponible).
-                    </p>
-
-                    <!-- Bug reportado por el usuario: con "Mi Flota" elegida y sin
-                         conductores que de verdad puedan tomarla (todos ocupados,
-                         desconectados o fuera de rango), "Pedir Carrera" no hacía
-                         nada visible — el backend YA rechazaba la solicitud
-                         (RideRequestController::store()), pero el error nunca se
-                         mostraba en pantalla. Ahora se ve, con la misma
-                         recomendación de ampliar la búsqueda — y abre el picker de
-                         abajo solo, para que la sugerencia sirva de algo. -->
-                    <p v-if="!selectedCooperativeId && form.errors.driver_user_id" class="text-sm text-arka-danger py-3">
-                        {{ form.errors.driver_user_id }}
-                        <span v-if="selectedDriverId === WHOLE_FLEET">
-                            Pruebe con
-                            <button type="button" class="underline hover:text-arka-danger/80" @click="sourceMode = sourceMode === 'public' ? 'both' : 'public'">
-                                {{ sourceMode === 'fleet' ? 'el directorio público' : 'ambos' }}
-                            </button>
-                            en "¿A quién se la pide?", o agregue conductores a su flota.
-                        </span>
-                    </p>
-
-                    <!-- Elegir un conductor puntual (mockup acordado antes de tocar
-                         esto): arranca cerrado — "toda mi flota" ya alcanza para la
-                         gran mayoría de los pedidos, no hace falta escrollear la
-                         lista completa para descartarla cada vez. -->
-                    <button
-                        v-if="!selectedCooperativeId"
-                        type="button"
-                        class="w-full flex items-center justify-between gap-2 p-3 rounded-arka border border-arka-text-muted/20 text-start hover:border-arka-primary/50"
-                        @click="showDriverPicker = !showDriverPicker"
-                    >
-                        <span class="text-sm text-arka-text">
-                            Elegir un conductor puntual
-                            <span class="text-arka-text-muted">({{ driversWithDistance.length }})</span>
-                        </span>
-                        <svg class="h-4 w-4 shrink-0 text-arka-text-muted transition-transform" :class="{ 'rotate-180': showDriverPicker }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
-                        </svg>
-                    </button>
-
-                    <div v-if="!selectedCooperativeId && showDriverPicker" class="mt-3 space-y-3">
-                        <div class="flex items-center justify-between flex-wrap gap-2">
-                            <!-- De mi flota / del directorio público / ambos (consideración
-                                 agregada al alcance). -->
-                            <div class="flex items-center gap-1 bg-arka-base/60 rounded-full p-1 text-xs">
-                                <button
-                                    type="button"
-                                    class="px-3 py-1.5 rounded-full font-medium transition"
-                                    :class="sourceMode === 'fleet' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
-                                    @click="sourceMode = 'fleet'"
-                                >
-                                    Mi flota
-                                </button>
-                                <button
-                                    type="button"
-                                    class="px-3 py-1.5 rounded-full font-medium transition"
-                                    :class="sourceMode === 'public' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
-                                    @click="sourceMode = 'public'"
-                                >
-                                    Público
-                                </button>
-                                <button
-                                    type="button"
-                                    class="px-3 py-1.5 rounded-full font-medium transition"
-                                    :class="sourceMode === 'both' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
-                                    @click="sourceMode = 'both'"
-                                >
-                                    Ambos
-                                </button>
-                            </div>
-
-                            <!-- Pedido explícito del usuario: no había ningún orden claro
-                                 con flotas grandes — el disponible siempre va primero,
-                                 esto solo cambia el desempate entre ellos. -->
-                            <div class="flex items-center gap-2 text-xs">
-                                <label for="driver_sort" class="text-arka-text-muted">Ordenar por:</label>
-                                <select
-                                    id="driver_sort"
-                                    v-model="sortBy"
-                                    class="bg-arka-base/60 border-arka-text-muted/20 text-arka-text rounded-arka text-xs py-1.5 focus:border-arka-primary focus:ring-arka-primary"
-                                >
-                                    <option v-for="(label, value) in SORT_OPTIONS" :key="value" :value="value">{{ label }}</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Disponible en verde, en carrera en naranja, desconectado "apagado"
-                             (consideración agregada al alcance) — ya vienen ordenados así. -->
-                        <label
-                            v-for="driver in pagedDrivers"
-                            :key="`${driver.source}-${driver.user_id}`"
-                            class="flex items-center justify-between gap-3 p-3 rounded-arka border cursor-pointer"
-                            :class="[
-                                selectedDriverId === driver.user_id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20',
-                                STATUS_STYLE[driver.status].textClass,
-                                driver.outOfRange ? 'opacity-50 grayscale' : '',
-                            ]"
-                        >
-                            <span class="flex items-center gap-3 min-w-0">
-                                <input
-                                    type="radio"
-                                    :value="driver.user_id"
-                                    v-model="selectedDriverId"
-                                    :disabled="driver.status === 'offline' || driver.outOfRange"
-                                    class="text-arka-primary shrink-0"
-                                />
-                                <span class="h-2.5 w-2.5 rounded-full shrink-0" :class="STATUS_STYLE[driver.status].dot" :title="STATUS_STYLE[driver.status].label" />
-                                <span class="min-w-0">
-                                    <span class="flex items-center gap-1.5 flex-wrap">
-                                        <span class="text-arka-text font-medium">{{ driver.name }}</span>
-                                        <span
-                                            v-if="driver.source === 'public'"
-                                            class="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                                            :class="tierColorClass(driver.tier.color_key)"
-                                        >
-                                            {{ tierLabel(driver.tier) }}
-                                        </span>
-                                    </span>
-                                    <span class="block text-sm text-arka-text-muted">
-                                        ${{ driver.rate_per_km }}/km
-                                        <span v-if="driver.review_count > 0">· ★ {{ Number(driver.average_rating).toFixed(1) }}</span>
-                                        · {{ driver.outOfRange ? 'Fuera de su zona de cobertura' : STATUS_STYLE[driver.status].label }}
-                                    </span>
-                                    <!-- Pedido explícito del usuario: qué vehículo tiene, para
-                                         saber qué esperar antes de pedirle la carrera. Placa
-                                         tapada, no completa (confidencialidad, ver
-                                         DriverProfile::maskedPlate()). -->
-                                    <span v-if="driver.vehicle_make" class="block text-xs text-arka-text-muted">
-                                        {{ driver.vehicle_make }} {{ driver.vehicle_model }} {{ driver.vehicle_color }}
-                                        <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
-                                        · {{ driver.vehicle_plate }}
-                                        · {{ driver.passenger_capacity }} pasajero(s)
-                                        <span v-if="driver.has_trunk"> · con cajuela</span>
-                                    </span>
-                                </span>
-                            </span>
-                            <span v-if="driver.distance != null" class="text-sm text-arka-text-muted shrink-0">
-                                {{ driver.distance.toFixed(1) }} km
-                            </span>
-                        </label>
-
-                        <!-- Paginado (pedido explícito del usuario): de a 5, para no tener
-                             que scrollear una lista de 20+ conductores. -->
-                        <div v-if="totalDriverPages > 1" class="flex items-center justify-between gap-2 text-sm">
-                            <SecondaryButton :disabled="currentPage === 1" @click="currentPage--">Anterior</SecondaryButton>
-                            <span class="text-arka-text-muted">Página {{ currentPage }} de {{ totalDriverPages }}</span>
-                            <SecondaryButton :disabled="currentPage === totalDriverPages" @click="currentPage++">Siguiente</SecondaryButton>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Precio (sección 5): estimado a partir de la distancia y la tarifa,
-                     desglosado y editable — el cliente puede aceptarlo o contraofertar. -->
-                <div v-if="estimatedPrice != null" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
-                    <h3 class="text-lg font-medium text-arka-text">Precio</h3>
-
-                    <div class="flex items-center justify-between text-sm text-arka-text-muted">
-                        <!-- Si el mínimo configurado ya supera lo que daría distancia ×
-                             tarifa, mostrar ese cálculo sería engañoso — no es lo que se
-                             termina cobrando (fix reportado por el usuario). -->
-                        <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
-                        <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km</span>
-                        <span class="text-arka-text font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
-                    </div>
-
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" v-model="useCustomPrice" class="text-arka-primary rounded" />
-                        <span class="text-sm text-arka-text">Proponer otro monto en vez del estimado</span>
-                    </label>
-
-                    <TextInput
-                        v-if="useCustomPrice"
-                        type="number"
-                        step="0.01"
-                        :min="estimatedPrice ?? 0.01"
-                        class="block w-full"
-                        v-model="customPrice"
-                        placeholder="Su propuesta en USD"
-                    />
-                    <!-- Pedido explícito del usuario (caso real: se propuso $2 contra
-                         un estimado de $3.85) — aviso inmediato en vez de esperar a que
-                         el servidor lo rechace al mandar el formulario. -->
-                    <p
-                        v-if="useCustomPrice && customPrice && estimatedPrice != null && Number(customPrice) < estimatedPrice"
-                        class="text-xs text-arka-danger"
-                    >
-                        No puede ser menor al precio estimado (${{ estimatedPrice.toFixed(2) }}).
-                    </p>
-                    <InputError :message="form.errors.offered_price" />
-                </div>
-
-                <PrimaryButton :disabled="!canSubmit || form.processing" @click="submit">
-                    {{ whenMode === 'scheduled' ? 'Programar carrera' : 'Pedir carrera' }}
-                </PrimaryButton>
+                </BottomSheet>
             </div>
         </div>
     </AuthenticatedLayout>

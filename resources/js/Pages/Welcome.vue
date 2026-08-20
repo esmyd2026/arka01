@@ -1,10 +1,11 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Modal from '@/Components/Modal.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
+import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 
 // Bug real reportado por el usuario (con captura): el <select> nativo del
 // "Tipo" se veía blanco, con el tema del sistema operativo en vez del oscuro
@@ -18,16 +19,88 @@ const FEEDBACK_TYPES = [
     { value: 'otro', label: 'Otro' },
 ];
 
-defineProps({
+const props = defineProps({
     canLogin: {
         type: Boolean,
     },
     canRegister: {
         type: Boolean,
     },
+    guestCooperatives: { type: Array, default: () => [] },
 });
 
 const authUser = usePage().props.auth?.user ?? null;
+
+const showingGuestIdentity = ref(false);
+const guestLocationMessage = ref('');
+const guestForm = useForm({
+    origin_address: '', origin_lat: null, origin_lng: null,
+    destination_address: '', destination_lat: null, destination_lng: null,
+    cooperative_id: null,
+    name: '', country_code: '+593', phone_local: '',
+    website: '',
+});
+
+const cooperativeOptions = computed(() => props.guestCooperatives.map((cooperative) => ({
+    value: cooperative.id,
+    label: `${cooperative.name} · ${cooperative.active_driver_memberships_count} unidades`,
+})));
+const assignedCooperative = computed(() => props.guestCooperatives.find((item) => item.id === guestForm.cooperative_id));
+
+function nearestCooperative(lat, lng) {
+    if (!props.guestCooperatives.length) return null;
+    const radians = (value) => value * Math.PI / 180;
+    const distance = (item) => {
+        const dLat = radians(Number(item.stand_lat) - lat);
+        const dLng = radians(Number(item.stand_lng) - lng);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat)) * Math.cos(radians(Number(item.stand_lat))) * Math.sin(dLng / 2) ** 2;
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+    return [...props.guestCooperatives].sort((a, b) => distance(a) - distance(b))[0];
+}
+
+function chooseOrigin(place) {
+    guestForm.origin_address = place.address || 'Mi ubicación actual';
+    guestForm.origin_lat = place.lat;
+    guestForm.origin_lng = place.lng;
+    guestForm.cooperative_id = nearestCooperative(Number(place.lat), Number(place.lng))?.id ?? null;
+    guestLocationMessage.value = '';
+}
+
+function chooseDestination(place) {
+    guestForm.destination_address = place.address;
+    guestForm.destination_lat = place.lat;
+    guestForm.destination_lng = place.lng;
+}
+
+function useCurrentLocation() {
+    guestLocationMessage.value = 'Ubicando…';
+    if (!navigator.geolocation) {
+        guestLocationMessage.value = 'Su navegador no permite obtener la ubicación.';
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+            chooseOrigin({ lat: coords.latitude, lng: coords.longitude, address: 'Mi ubicación actual' });
+            guestLocationMessage.value = 'Ubicación lista';
+        },
+        () => { guestLocationMessage.value = 'No pudimos acceder a su ubicación. Puede buscarla manualmente.'; },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
+}
+
+function continueAsGuest() {
+    guestForm.clearErrors();
+    if (guestForm.origin_lat == null) guestForm.setError('origin_address', 'Seleccione el origen o use su ubicación actual.');
+    if (guestForm.destination_lat == null) guestForm.setError('destination_address', 'Elija un destino de la lista para ubicarlo en el mapa.');
+    if (!guestForm.cooperative_id) guestForm.setError('cooperative_id', 'No encontramos una cooperativa disponible para este origen.');
+    if (guestForm.hasErrors) return;
+    showingGuestIdentity.value = true;
+}
+
+function submitGuestRide() {
+    guestForm.post(route('guest-rides.store'), { preserveScroll: true });
+}
 
 // "Para Clientes" / "Para Conductores" (pedido explícito del usuario, mockup
 // provisto) — reemplaza el flujo de pasos anterior por dos fichas con lo que
@@ -78,7 +151,7 @@ function submitFeedback() {
 <template>
     <Head title="Arka01 — Tu círculo. Tus viajes. Tu decisión." />
 
-    <div class="min-h-screen bg-arka-base">
+    <div class="arka-app-background min-h-screen">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
             <!-- Barra superior: ayuda + cuenta, solo si ya tiene sesión iniciada. -->
             <div class="flex justify-end items-center gap-3 mb-4">
@@ -244,14 +317,50 @@ function submitFeedback() {
                     </div>
                 </div>
 
-                <!-- Ilustración de "cómo funciona" (pedido explícito del usuario:
-                     reemplazar el mockup dibujado a mano por la imagen real). -->
-                <div class="relative mx-auto w-full max-w-xs">
-                    <img
-                        src="/img/como-funciona.png"
-                        alt="Cómo funciona Arka01: solicite un viaje dentro de su círculo de confianza"
-                        class="w-full h-auto rounded-[2rem] shadow-2xl"
-                    />
+                <!-- Acceso urgente sin correo: conserva la identidad visual de
+                     la app y asigna la cooperativa más cercana al origen. -->
+                <div class="relative mx-auto w-full max-w-md rounded-[1.75rem] border border-arka-primary/15 bg-arka-card p-5 shadow-2xl sm:p-7">
+                    <div class="mb-5 flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-arka-primary">Viaje como invitado</p>
+                            <h2 class="mt-1 text-2xl font-bold text-arka-text">¿A dónde vamos?</h2>
+                            <p class="mt-1 text-sm text-arka-text-muted">Sin correo ni contraseña. Solo validaremos su WhatsApp.</p>
+                        </div>
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 text-arka-primary">
+                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 17h14l-1.5-6h-11L5 17Zm2-6 2-4h6l2 4M7 17v2m10-2v2"/><circle cx="8" cy="15" r="1" fill="currentColor"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg>
+                        </span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <div class="mb-1.5 flex items-center justify-between gap-3">
+                                <label class="text-xs font-semibold uppercase tracking-wide text-arka-text-muted">Punto de partida</label>
+                                <button type="button" class="text-xs font-medium text-arka-primary hover:text-arka-primary-bright" @click="useCurrentLocation">Usar mi ubicación</button>
+                            </div>
+                            <AddressAutocomplete v-model="guestForm.origin_address" placeholder="¿Dónde le recogemos?" @place-selected="chooseOrigin" @clear="guestForm.origin_lat = guestForm.origin_lng = null" />
+                            <p v-if="guestLocationMessage" class="mt-1.5 text-xs text-arka-text-muted">{{ guestLocationMessage }}</p>
+                            <p v-if="guestForm.errors.origin_address" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.origin_address }}</p>
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-arka-text-muted">Destino</label>
+                            <AddressAutocomplete v-model="guestForm.destination_address" placeholder="Escriba su destino" @place-selected="chooseDestination" @clear="guestForm.destination_lat = guestForm.destination_lng = null" />
+                            <p v-if="guestForm.errors.destination_address" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.destination_address }}</p>
+                        </div>
+                        <div v-if="guestCooperatives.length">
+                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-arka-text-muted">Le atenderá</label>
+                            <SearchableSelect v-model="guestForm.cooperative_id" :options="cooperativeOptions" placeholder="Seleccione una cooperativa" />
+                            <p v-if="assignedCooperative" class="mt-2 text-xs text-arka-text-muted">Asignada por cercanía a su punto de partida. Puede cambiarla.</p>
+                            <p v-if="guestForm.errors.cooperative_id" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.cooperative_id }}</p>
+                        </div>
+                        <div v-else class="rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">
+                            No hay cooperativas disponibles en este momento.
+                        </div>
+                        <button type="button" :disabled="!guestCooperatives.length" class="flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-arka-base transition hover:bg-arka-primary-bright disabled:cursor-not-allowed disabled:opacity-40" @click="continueAsGuest">
+                            Ver tarifa y solicitar
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6"/></svg>
+                        </button>
+                        <p class="text-center text-[11px] leading-relaxed text-arka-text-muted">Antes de enviar verá la ruta, el precio y podrá confirmar o corregir los datos.</p>
+                    </div>
                 </div>
             </div>
 
@@ -525,6 +634,42 @@ function submitFeedback() {
                     </button>
                 </div>
             </div>
+        </Modal>
+
+        <Modal :show="showingGuestIdentity" max-width="md" @close="showingGuestIdentity = false">
+            <form class="p-6" @submit.prevent="submitGuestRide">
+                <input v-model="guestForm.website" type="text" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
+                <div class="mx-auto mb-3 h-1 w-12 rounded-full bg-arka-text-muted/30 sm:hidden"></div>
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-arka-primary">Último paso</p>
+                <h3 class="mt-1 text-xl font-bold text-arka-text">¿A nombre de quién pedimos?</h3>
+                <p class="mt-1 text-sm text-arka-text-muted">La cooperativa necesita estos datos para identificarle y contactarle.</p>
+
+                <div class="mt-5 space-y-4">
+                    <div>
+                        <label class="mb-1.5 block text-sm font-medium text-arka-text">Nombre</label>
+                        <input v-model="guestForm.name" type="text" autocomplete="name" placeholder="Ej. María López" class="w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
+                        <p v-if="guestForm.errors.name" class="mt-1 text-xs text-arka-danger">{{ guestForm.errors.name }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1.5 block text-sm font-medium text-arka-text">Número de WhatsApp</label>
+                        <div class="grid grid-cols-[7rem_1fr] gap-2">
+                            <SearchableSelect v-model="guestForm.country_code" :options="[{value: '+593', label: '🇪🇨 +593'}, {value: '+51', label: '🇵🇪 +51'}, {value: '+57', label: '🇨🇴 +57'}, {value: '+58', label: '🇻🇪 +58'}, {value: '+56', label: '🇨🇱 +56'}, {value: '+54', label: '🇦🇷 +54'}]" />
+                            <input v-model="guestForm.phone_local" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="999 000 222" class="min-w-0 rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
+                        </div>
+                        <p v-if="guestForm.errors.phone_local" class="mt-1 text-xs text-arka-danger">{{ guestForm.errors.phone_local }}</p>
+                    </div>
+                    <div class="rounded-arka bg-arka-primary/10 p-3 text-xs leading-relaxed text-arka-text-muted">
+                        Recibirá un código corto por WhatsApp. No necesita correo ni crear una contraseña.
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-[auto_1fr] gap-2">
+                    <button type="button" class="rounded-arka border border-arka-text-muted/25 px-4 py-3 text-sm font-semibold text-arka-text" @click="showingGuestIdentity = false">Volver</button>
+                    <button type="submit" :disabled="guestForm.processing" class="rounded-arka bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright disabled:opacity-50">
+                        {{ guestForm.processing ? 'Preparando…' : 'Continuar seguro' }}
+                    </button>
+                </div>
+            </form>
         </Modal>
     </div>
 </template>

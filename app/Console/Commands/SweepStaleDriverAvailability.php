@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Events\DriverLocationUpdated;
 use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Models\DriverProfile;
+use App\Services\DriverActivityTracker;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -36,6 +37,11 @@ class SweepStaleDriverAvailability extends Command
 
     protected $description = 'Marca como desconectados a los conductores "disponibles" que dejaron de mandar su ubicación';
 
+    public function __construct(private readonly DriverActivityTracker $activityTracker)
+    {
+        parent::__construct();
+    }
+
     public function handle(): int
     {
         // Mismo umbral que DriverProfile::isStale() (única fuente de
@@ -60,6 +66,8 @@ class SweepStaleDriverAvailability extends Command
 
         foreach ($stale as $profile) {
             $profile->update(['is_available' => false]);
+            // Cierra en el último pulso conocido para no inflar las horas activas.
+            $this->activityTracker->close($profile->user_id, $profile->location_updated_at);
 
             broadcast(new DriverLocationUpdated($profile));
 

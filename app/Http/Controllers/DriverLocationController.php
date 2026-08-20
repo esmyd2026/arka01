@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Events\DriverLocationUpdated;
 use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
+use App\Services\DriverActivityTracker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DriverLocationController extends Controller
 {
+    public function __construct(private readonly DriverActivityTracker $activityTracker) {}
+
     /**
      * El conductor manda su posición mientras está disponible (sección 9.3).
      * El navegador llama a esto periódicamente desde DriverAvailabilityToggle.vue
@@ -57,6 +60,8 @@ class DriverLocationController extends Controller
             'is_available' => $validated['is_available'],
             'location_updated_at' => now(),
         ]);
+
+        $this->activityTracker->record($driverProfile->user_id, (bool) $validated['is_available']);
 
         if ($wasAvailable && ! $validated['is_available']) {
             NotifyDriverDisconnectedByWhatsApp::dispatch($driverProfile->user_id);

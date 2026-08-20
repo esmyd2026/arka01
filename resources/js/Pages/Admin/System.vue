@@ -20,7 +20,7 @@ async function resetDemo() {
     );
     if (!confirmed) return;
 
-    router.post(route('admin.system.reset-demo'));
+    router.post(route('admin.system.reset-demo'), { enter_demo: true });
 }
 </script>
 
@@ -59,7 +59,11 @@ async function resetDemo() {
                         junto con la cuenta demo — la cuenta real en sí no se borra.
                     </p>
 
-                    <DangerButton @click="resetDemo">Borrar suscriptores demo</DangerButton>
+                    <p class="rounded-lg bg-arka-primary/10 p-3 text-sm text-arka-primary">
+                        Al finalizar se cerrará esta sesión administrativa y se abrirá el login para que pueda probar como cliente, conductor o cooperativa.
+                    </p>
+
+                    <DangerButton @click="resetDemo">Reiniciar demo e ir al login</DangerButton>
                 </div>
             </div>
         </div>

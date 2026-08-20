@@ -18,6 +18,8 @@ class Cooperative extends Model
         'legal_name',
         'ruc',
         'main_address',
+        'stand_lat',
+        'stand_lng',
         'city_id',
         'province',
         'phone',
@@ -29,9 +31,15 @@ class Cooperative extends Model
         'geographic_coverage',
         'operating_hours',
         'response_timeout_seconds',
+        'automatic_assignment_enabled',
+        'manual_assignment_timeout_seconds',
     ];
 
     protected $casts = [
+        'stand_lat' => 'decimal:7',
+        'stand_lng' => 'decimal:7',
+        'automatic_assignment_enabled' => 'boolean',
+        'manual_assignment_timeout_seconds' => 'integer',
         'declared_driver_count' => 'integer',
         'declared_unit_count' => 'integer',
         'response_timeout_seconds' => 'integer',

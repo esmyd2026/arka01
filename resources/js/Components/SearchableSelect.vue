@@ -23,6 +23,7 @@ const props = defineProps({
     // explícito en vez de fallthrough automático, porque ese hubiera caído
     // en el <div> contenedor, no en el botón.
     id: { type: String, default: null },
+    light: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -66,14 +67,15 @@ function close() {
             :id="id"
             ref="buttonEl"
             type="button"
-            class="w-full flex items-center justify-between gap-2 rounded-arka border border-arka-text-muted/20 bg-arka-base px-3 py-2 text-start text-arka-text focus:outline-none focus:ring-2 focus:ring-arka-primary"
+            class="flex w-full items-center justify-between gap-2 rounded-arka border px-3 py-2 text-start focus:outline-none focus:ring-2 focus:ring-arka-primary"
+            :class="light ? 'border-arka-base/10 bg-white text-arka-base' : 'border-arka-text-muted/20 bg-arka-base text-arka-text'"
             @click="toggle"
             @keydown.escape="close"
         >
-            <span :class="{ 'text-arka-text-muted': !selectedOption }" class="truncate">
+            <span :class="!selectedOption ? (light ? 'text-arka-base/40' : 'text-arka-text-muted') : ''" class="truncate">
                 {{ selectedOption ? (selectedOption.shortLabel ?? selectedOption.label) : emptyLabel ?? placeholder }}
             </span>
-            <svg class="h-4 w-4 shrink-0 text-arka-text-muted transition-transform" :class="{ 'rotate-180': open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="h-4 w-4 shrink-0 transition-transform" :class="[light ? 'text-arka-base/40' : 'text-arka-text-muted', { 'rotate-180': open }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
             </svg>
         </button>
@@ -90,15 +92,17 @@ function close() {
              en un celular muy chico. -->
         <div
             v-if="open"
-            class="absolute z-50 mt-1 w-full min-w-56 max-w-[90vw] max-h-64 overflow-hidden rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg flex flex-col"
+            class="absolute z-50 mt-1 flex max-h-64 w-full min-w-56 max-w-[90vw] flex-col overflow-hidden rounded-arka border shadow-lg"
+            :class="light ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
-            <div class="p-2 border-b border-arka-text-muted/10">
+            <div class="border-b p-2" :class="light ? 'border-arka-base/10' : 'border-arka-text-muted/10'">
                 <input
                     ref="searchEl"
                     v-model="search"
                     type="text"
                     placeholder="Buscar…"
-                    class="w-full rounded-arka border border-arka-text-muted/20 bg-arka-base px-2.5 py-1.5 text-sm text-arka-text placeholder:text-arka-text-muted focus:outline-none focus:ring-2 focus:ring-arka-primary"
+                    class="w-full rounded-arka border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-arka-primary"
+                    :class="light ? 'border-arka-base/10 bg-[#f7f8fa] text-arka-base placeholder:text-arka-base/40' : 'border-arka-text-muted/20 bg-arka-base text-arka-text placeholder:text-arka-text-muted'"
                     @keydown.escape="close"
                 />
             </div>
@@ -107,8 +111,8 @@ function close() {
                 <li v-if="emptyLabel">
                     <button
                         type="button"
-                        class="w-full px-3 py-2 text-start text-sm hover:bg-arka-base"
-                        :class="modelValue === null ? 'text-arka-primary-bright' : 'text-arka-text-muted'"
+                        class="w-full px-3 py-2 text-start text-sm"
+                        :class="modelValue === null ? 'text-arka-primary font-medium' : (light ? 'text-arka-base/50 hover:bg-arka-base/[0.04]' : 'text-arka-text-muted hover:bg-arka-base')"
                         @click="select(null)"
                     >
                         {{ emptyLabel }}
@@ -117,14 +121,14 @@ function close() {
                 <li v-for="option in filteredOptions" :key="option.value">
                     <button
                         type="button"
-                        class="w-full px-3 py-2 text-start text-sm hover:bg-arka-base"
-                        :class="option.value === modelValue ? 'text-arka-primary-bright font-medium' : 'text-arka-text'"
+                        class="w-full px-3 py-2 text-start text-sm"
+                        :class="option.value === modelValue ? 'text-arka-primary font-medium' : (light ? 'text-arka-base hover:bg-arka-base/[0.04]' : 'text-arka-text hover:bg-arka-base')"
                         @click="select(option.value)"
                     >
                         {{ option.label }}
                     </button>
                 </li>
-                <li v-if="!filteredOptions.length" class="px-3 py-2 text-sm text-arka-text-muted">
+                <li v-if="!filteredOptions.length" class="px-3 py-2 text-sm" :class="light ? 'text-arka-base/45' : 'text-arka-text-muted'">
                     Sin resultados.
                 </li>
             </ul>

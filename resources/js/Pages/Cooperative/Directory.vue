@@ -67,6 +67,8 @@ function toggle(cooperative) {
                         </div>
                         <p class="mt-4 line-clamp-2 text-sm text-arka-text-muted">{{ cooperative.coverage }}</p>
                         <div class="mt-4 flex flex-wrap gap-2 text-xs text-arka-text-muted">
+                            <span class="rounded-full bg-arka-warning/10 px-2.5 py-1 font-semibold text-arka-warning">★ {{ cooperative.average_rating || 'Nueva' }} ({{ cooperative.review_count }})</span>
+                            <span class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-semibold text-arka-primary">{{ cooperative.completed_rides }} carreras</span>
                             <span class="rounded-full bg-arka-base px-2.5 py-1">{{ cooperative.driver_count }} conductores</span>
                             <span class="rounded-full bg-arka-base px-2.5 py-1">{{ cooperative.unit_count }} unidades</span>
                             <span class="rounded-full bg-arka-base px-2.5 py-1">{{ cooperative.client_count }} clientes</span>

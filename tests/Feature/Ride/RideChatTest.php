@@ -39,6 +39,26 @@ class RideChatTest extends TestCase
         return [$client, $driver, $ride];
     }
 
+    /**
+     * Rediseño UX (pedido explícito del usuario, guiado por
+     * ARKA01_Rediseno_UX_Flujo_Carreras.md): el botón "Llamar" nuevo en
+     * Ride/Show.vue depende de que el teléfono de la contraparte viaje en
+     * `ride.client`/`ride.driver` — ya viajaba así antes de este cambio
+     * (`phone` nunca estuvo en `User::$hidden`), esta prueba deja eso
+     * cubierto para que no se rompa en silencio si algún día se lo oculta.
+     */
+    public function test_the_ride_detail_screen_exposes_both_parties_phone_numbers(): void
+    {
+        [$client, $driver, $ride] = $this->clientAndDriverWithRide();
+
+        $response = $this->actingAs($client)->get(route('rides.show', $ride));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('ride.client.phone', $client->phone)
+            ->where('ride.driver.phone', $driver->phone)
+        );
+    }
+
     public function test_the_client_can_send_a_message_while_the_ride_is_in_progress(): void
     {
         Event::fake([RideMessageSent::class]);

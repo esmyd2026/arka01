@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AdBanner;
+use App\Models\Cooperative;
+use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetInvitation;
@@ -11,9 +13,11 @@ use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Services\FrequentPlaces;
 use App\Services\Haversine;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -28,6 +32,24 @@ class DashboardController extends Controller
 {
     public function index(Request $request): Response|RedirectResponse
     {
+        // Compatibilidad con versiones anteriores del frontend: las
+        // coordenadas nunca deben permanecer en una URL, porque terminan en
+        // historial, capturas, analytics y logs del servidor. Si llega un
+        // enlace antiguo, guardamos temporalmente una coordenada válida en
+        // la sesión y redirigimos de inmediato al Dashboard limpio.
+        if ($request->hasAny(['lat', 'lng'])) {
+            $validated = $request->validate([
+                'lat' => ['required_with:lng', 'numeric', 'between:-90,90'],
+                'lng' => ['required_with:lat', 'numeric', 'between:-180,180'],
+            ]);
+
+            if (isset($validated['lat'], $validated['lng'])) {
+                $this->storeLocationInSession($request, (float) $validated['lat'], (float) $validated['lng']);
+            }
+
+            return redirect()->route('dashboard');
+        }
+
         $user = $request->user();
 
         if ($user->isCooperative()) {
@@ -43,6 +65,13 @@ class DashboardController extends Controller
         $whatsappSession = null;
 
         if ($user->isDriver()) {
+            $cooperative = CooperativeDriverMembership::query()
+                ->where('driver_user_id', $userId)
+                ->where('status', 'accepted')
+                ->whereNull('ended_at')
+                ->with('cooperative:id,name,logo_path')
+                ->first()?->cooperative;
+
             // Flotas donde deshabilité las solicitudes del cliente dueño
             // (pedido explícito del usuario) — mismo criterio que RideController::index().
             $disabledFleetIds = FleetMember::query()
@@ -51,6 +80,11 @@ class DashboardController extends Controller
                 ->pluck('fleet_id');
 
             $driverStats = [
+                'cooperative' => $cooperative ? [
+                    'id' => $cooperative->id,
+                    'name' => $cooperative->name,
+                    'logo_url' => $cooperative->logo_url,
+                ] : null,
                 'active_clients' => FleetMember::query()->where('driver_user_id', $userId)->whereNull('left_at')->count(),
                 'pending_requests' => $this->incomingRequestsQuery($userId)
                     ->get()
@@ -129,6 +163,9 @@ class DashboardController extends Controller
         $fleetDrivers = null;
         $nearbyDrivers = null;
         $targetFleetId = null;
+        $frequentPlaces = [];
+        $savedRoutes = [];
+        $homeInitialCenter = null;
 
         if ($user->isClient()) {
             // Mismo criterio que FleetController::index()/RideRequestController:
@@ -139,9 +176,31 @@ class DashboardController extends Controller
                 ?? Fleet::query()->create(['owner_user_id' => $userId, 'name' => 'Mi flota']);
 
             $fleetDrivers = $this->fleetDriversFor($request, $fleet);
-            $nearbyDrivers = $this->nearbyDriversFor($request, $user, $fleetDrivers->pluck('user_id'));
+            $nearbyDrivers = $this->nearbyActiveDriversFor($request, $user, $fleet);
             $targetFleetId = $fleet->id;
             $upcomingTrips = $this->upcomingTripsFor($userId, asDriver: false);
+            // Rediseño UX (pedido explícito del usuario, guiado por
+            // ARKA01_Rediseno_UX_Flujo_Carreras.md): buscador "¿A dónde vas?"
+            // arriba de Inicio — mismos datos que ya usaba Ride/Request.vue
+            // (favoritos automáticos y rutas guardadas con alias), ver
+            // App\Services\FrequentPlaces (compartido entre los dos
+            // controllers para no duplicar la consulta).
+            $frequentPlaces = FrequentPlaces::forClient($userId);
+            $savedRoutes = $user->savedRoutes()->latest()->get();
+
+            // Bug real reportado por el usuario ("porque no centra la
+            // ubicación actual"): el mapa de Inicio arrancaba centrado en
+            // Quito (el valor por defecto de FleetMap.vue) hasta que la
+            // geolocalización en vivo del navegador resolviera — sin
+            // permiso, o mientras el usuario no respondía el aviso del
+            // navegador, se quedaba ahí sin ningún indicio de qué pasó. Con
+            // la ubicación de registro ya guardada (si la hay), el mapa
+            // arranca centrado en la ciudad real del cliente de una — la
+            // ubicación en vivo, si se consigue, la corrige después con más
+            // precisión (ver Dashboard.vue, onMounted).
+            if ($user->registration_lat !== null && $user->registration_lng !== null) {
+                $homeInitialCenter = ['lat' => (float) $user->registration_lat, 'lng' => (float) $user->registration_lng];
+            }
         }
 
         return Inertia::render('Dashboard', [
@@ -159,7 +218,27 @@ class DashboardController extends Controller
             'adBanners' => AdBanner::query()->visible()->orderBy('sort_order')->get(),
             'whatsappSession' => $whatsappSession,
             'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
+            'frequentPlaces' => $frequentPlaces,
+            'savedRoutes' => $savedRoutes,
+            'homeInitialCenter' => $homeInitialCenter,
         ]);
+    }
+
+    /**
+     * Recibe la ubicación por POST para que no forme parte de la URL.
+     * Se conserva solo en la sesión y caduca rápidamente; no modifica el
+     * perfil ni crea un historial permanente de ubicaciones.
+     */
+    public function updateLocation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $this->storeLocationInSession($request, (float) $validated['lat'], (float) $validated['lng']);
+
+        return response()->json(status: 204);
     }
 
     /**
@@ -174,8 +253,7 @@ class DashboardController extends Controller
      */
     private function fleetDriversFor(Request $request, Fleet $fleet): Collection
     {
-        $lat = $request->float('lat') ?: null;
-        $lng = $request->float('lng') ?: null;
+        [$lat, $lng] = $this->locationFromSession($request);
 
         $busyDriverIds = Ride::query()->where('status', 'in_progress')->pluck('driver_user_id');
 
@@ -339,99 +417,119 @@ class DashboardController extends Controller
     }
 
     /**
-     * "Conductores que quizás conozcas" del inicio (pedido explícito del
-     * usuario: "indicarle a los clientes que hay conductores cerca de donde
-     * viven... buscar datos que coincidan ya sea por las ubicaciones por
-     * rangos o buscar otra datos") — la misma red de respaldo del directorio
-     * público (sección 3.4), acotada a los realmente disponibles ahora mismo
-     * y sin volver a mostrar a quien ya integra la flota del cliente.
+     * Conductores activos para el mapa de Inicio (pedido explícito del
+     * usuario: "colocar todos los conductores sean de su flota o
+     * cooperativas... o [públicos], que aparezcan solo los activos y cerca
+     * del origen de la carrera") — unión de las tres bolsas que ya existen
+     * al pedir una carrera (App\Services\RideDispatchCandidates: flota,
+     * cooperativas de la red del cliente, y público), pero acá con fines
+     * ilustrativos nomás (marcadores en el mapa, sin tocar el despacho real).
      *
-     * Tres niveles de "qué tan cerca", de mejor a peor dato disponible:
-     * 1. Ubicación EN VIVO del navegador (`lat`/`lng` por query string, mismo
-     *    patrón que DriverDirectoryController) — la más precisa.
-     * 2. Si todavía no la compartió esta vez (recién entrando, antes de que
-     *    el `onMounted` de Dashboard.vue pida el permiso y recargue), se cae
-     *    a la ubicación que dio AL REGISTRARSE (`users.registration_lat/lng`,
-     *    si la dio) — más vieja, pero mejor que nada.
-     * 3. Sin ninguna coordenada del cliente: "otro dato que coincida" (pedido
-     *    explícito del usuario) — misma ciudad declarada (`users.city_id`),
-     *    y si tampoco hay eso, mejor calificados nomás.
+     * "Activos" = disponibles y alcanzables ahora mismo (mismo criterio que
+     * el despacho real: `isReachable()`, no en una carrera en curso). "Cerca
+     * del origen" = con `current_lat/lng` conocido y, si el cliente tiene
+     * ubicación (en vivo guardada temporalmente en sesión o, si no, la del registro), dentro
+     * de 15 km — sin coordenadas del cliente no hay "cerca" que calcular, así
+     * que no se filtra por distancia (se listan igual, sin orden geográfico).
+     * La distancia se manda en km solo para que el frontend calcule minutos
+     * (Utils/eta.js) — nunca se muestra el km exacto (pedido explícito del
+     * usuario sobre privacidad, ver Ride/Request.vue y Directory/Index.vue).
      *
-     * @return Collection<int, array>
+     * @return Collection<int, array{user_id: int, name: string, avatar_url: string|null, lat: float, lng: float, distance_km: float|null, source: string}>
      */
-    private function nearbyDriversFor(Request $request, User $user, Collection $excludeDriverIds): Collection
+    private function nearbyActiveDriversFor(Request $request, User $user, Fleet $fleet): Collection
     {
-        $lat = $request->float('lat') ?: null;
-        $lng = $request->float('lng') ?: null;
+        [$lat, $lng] = $this->locationFromSession($request);
 
         if ($lat === null && $lng === null && $user->registration_lat !== null && $user->registration_lng !== null) {
             $lat = (float) $user->registration_lat;
             $lng = (float) $user->registration_lng;
         }
 
+        $fleetDriverIds = $fleet->activeMembers()->pluck('driver_user_id');
+
+        $cooperativeIds = Cooperative::query()
+            ->where('status', 'approved')
+            ->whereNull('suspended_at')
+            ->whereHas('clientLinks', fn ($query) => $query->where('client_user_id', $user->id))
+            ->pluck('id');
+
+        $cooperativeDriverIds = CooperativeDriverMembership::query()
+            ->whereIn('cooperative_id', $cooperativeIds)
+            ->where('status', 'accepted')
+            ->whereNull('ended_at')
+            ->pluck('driver_user_id');
+
+        $publicDriverIds = DriverProfile::query()->where('is_public', true)->pluck('user_id');
+
+        $candidateIds = $fleetDriverIds->concat($cooperativeDriverIds)->concat($publicDriverIds)
+            ->unique()
+            ->reject(fn ($id) => $id === $user->id);
+
+        $busyDriverIds = Ride::query()->where('status', 'in_progress')->pluck('driver_user_id');
+
         $profiles = DriverProfile::query()
-            ->where('is_public', true)
+            ->whereIn('user_id', $candidateIds)
             ->where('is_available', true)
             ->where('verification_status', '!=', 'rejected')
-            ->where('user_id', '!=', $user->id)
-            ->whereNotIn('user_id', $excludeDriverIds)
+            ->whereNull('deactivated_at')
+            ->whereNotNull('current_lat')
+            ->whereNotNull('current_lng')
             ->with('user')
-            ->get();
-
-        $ratings = Review::query()
-            ->whereIn('reviewee_user_id', $profiles->pluck('user_id'))
-            ->selectRaw('reviewee_user_id, avg(rating) as avg_rating, count(*) as review_count')
-            ->groupBy('reviewee_user_id')
             ->get()
-            ->keyBy('reviewee_user_id');
+            ->filter(fn (DriverProfile $profile) => ! $busyDriverIds->contains($profile->user_id)
+                && $profile->isReachable($profile->user->hasActiveWhatsAppSession()));
 
-        $pendingInvitationDriverIds = Fleet::query()->where('owner_user_id', $user->id)->pluck('id')
-            ->pipe(fn ($fleetIds) => FleetInvitation::query()
-                ->whereIn('fleet_id', $fleetIds)
-                ->where('status', 'pending')
-                ->pluck('driver_user_id'));
-
-        $entries = $profiles->map(function (DriverProfile $profile) use ($ratings, $lat, $lng, $pendingInvitationDriverIds, $user) {
-            $rating = $ratings->get($profile->user_id);
-            $distanceKm = ($lat !== null && $lng !== null && $profile->current_lat !== null)
+        $entries = $profiles->map(function (DriverProfile $profile) use ($lat, $lng, $fleetDriverIds, $cooperativeDriverIds) {
+            $distanceKm = ($lat !== null && $lng !== null)
                 ? Haversine::distanceKm($lat, $lng, (float) $profile->current_lat, (float) $profile->current_lng)
                 : null;
-
-            // "Otro dato que coincida" cuando no hay forma de calcular una
-            // distancia real (ninguno de los dos tiene coordenadas): misma
-            // ciudad declarada en el perfil.
-            $sameCity = $distanceKm === null
-                && $user->city_id !== null
-                && $profile->user->city_id === $user->city_id;
 
             return [
                 'user_id' => $profile->user_id,
                 'name' => $profile->user->name,
                 'avatar_url' => $profile->user->avatar_url,
-                'average_rating' => $rating ? round((float) $rating->avg_rating, 1) : null,
-                'review_count' => $rating->review_count ?? 0,
+                'lat' => (float) $profile->current_lat,
+                'lng' => (float) $profile->current_lng,
                 'distance_km' => $distanceKm,
-                'same_city' => $sameCity,
-                'already_invited' => $pendingInvitationDriverIds->contains($profile->user_id),
+                'source' => match (true) {
+                    $fleetDriverIds->contains($profile->user_id) => 'fleet',
+                    $cooperativeDriverIds->contains($profile->user_id) => 'cooperative',
+                    default => 'public',
+                },
             ];
         });
 
-        // Con distancia conocida (de cualquiera de los dos niveles de
-        // ubicación), la más cercana primero. Sin eso, misma ciudad gana
-        // sobre no saber nada; último criterio, mejor calificado.
-        $entries = $entries->sort(function ($a, $b) {
-            if ($a['distance_km'] !== null || $b['distance_km'] !== null) {
-                return ($a['distance_km'] ?? PHP_FLOAT_MAX) <=> ($b['distance_km'] ?? PHP_FLOAT_MAX);
-            }
+        if ($lat !== null && $lng !== null) {
+            $entries = $entries->filter(fn (array $entry) => $entry['distance_km'] <= 15);
+        }
 
-            if ($a['same_city'] !== $b['same_city']) {
-                return $b['same_city'] <=> $a['same_city'];
-            }
+        return $entries->sortBy('distance_km')->take(20)->values();
+    }
 
-            return ($b['average_rating'] ?? 0) <=> ($a['average_rating'] ?? 0);
-        });
+    private function storeLocationInSession(Request $request, float $lat, float $lng): void
+    {
+        $request->session()->put('dashboard_location', [
+            'lat' => $lat,
+            'lng' => $lng,
+            'captured_at' => now()->timestamp,
+        ]);
+    }
 
-        return $entries->take(8)->values();
+    /** @return array{0: float|null, 1: float|null} */
+    private function locationFromSession(Request $request): array
+    {
+        $location = $request->session()->get('dashboard_location');
+
+        if (! is_array($location)
+            || ! isset($location['lat'], $location['lng'], $location['captured_at'])
+            || ((int) $location['captured_at']) < now()->subMinutes(5)->timestamp) {
+            $request->session()->forget('dashboard_location');
+
+            return [null, null];
+        }
+
+        return [(float) $location['lat'], (float) $location['lng']];
     }
 
     private function incomingRequestsQuery(int $userId)

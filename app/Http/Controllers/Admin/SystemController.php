@@ -7,7 +7,9 @@ use App\Models\User;
 use App\Services\UserFileCleanup;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -36,8 +38,10 @@ class SystemController extends Controller
         ]);
     }
 
-    public function resetDemo(): RedirectResponse
+    public function resetDemo(Request $request): RedirectResponse
     {
+        $enterDemo = $request->boolean('enter_demo');
+
         DB::transaction(function () {
             // Nunca se toca una cuenta admin (pedido explícito del usuario) —
             // ni la de quien está usando el panel ahora mismo, ni ninguna
@@ -53,6 +57,13 @@ class SystemController extends Controller
             // el cascade se lleve la fila que guarda la ruta.
             $demoSubscribers->each(fn (User $user) => UserFileCleanup::purge($user));
 
+            // Elimina también las sesiones antiguas de esas cuentas. Aunque
+            // luego se vuelvan a crear con otros IDs, ningún navegador debe
+            // conservar una sesión que apunte a un usuario demo eliminado.
+            DB::table('sessions')
+                ->whereIn('user_id', $demoSubscribers->pluck('id'))
+                ->delete();
+
             User::query()
                 ->whereIn('id', $demoSubscribers->pluck('id'))
                 ->delete();
@@ -62,6 +73,17 @@ class SystemController extends Controller
             // demo que se acaban de borrar.
             Artisan::call('db:seed', ['--class' => DemoDataSeeder::class, '--force' => true]);
         });
+
+        if ($enterDemo) {
+            // Desde el botón visual, reiniciar es el paso previo a entrar
+            // como cliente, conductor o cooperativa. Cierra únicamente esta
+            // sesión admin para que /login no la redirija al área privada.
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->with('status', 'Demo reiniciada. Ya puede ingresar con cualquiera de las cuentas de prueba.');
+        }
 
         return back()->with('status', 'Suscriptores de prueba reiniciados. Las configuraciones y su cuenta admin quedaron intactas.');
     }

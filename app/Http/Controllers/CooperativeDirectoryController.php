@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\City;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
-use App\Models\Review;
+use App\Services\CooperativeReputation;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +15,7 @@ use Inertia\Response;
 
 class CooperativeDirectoryController extends Controller
 {
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(private readonly PlanLimits $planLimits, private readonly CooperativeReputation $reputation) {}
 
     public function index(Request $request): Response
     {
@@ -39,19 +39,26 @@ class CooperativeDirectoryController extends Controller
             ? ClientCooperative::query()->where('client_user_id', $request->user()->id)->pluck('cooperative_id')
             : collect();
 
-        $cooperatives->through(fn (Cooperative $cooperative) => [
-            'id' => $cooperative->id,
-            'name' => $cooperative->name,
-            'logo_url' => $cooperative->logo_url,
-            'city' => $cooperative->city?->name,
-            'province' => $cooperative->province,
-            'coverage' => $cooperative->geographic_coverage,
-            'operating_hours' => $cooperative->operating_hours,
-            'driver_count' => $cooperative->active_driver_memberships_count,
-            'unit_count' => $cooperative->declared_unit_count,
-            'client_count' => $cooperative->client_links_count,
-            'is_attached' => $attachedIds->contains($cooperative->id),
-        ]);
+        $cooperatives->through(function (Cooperative $cooperative) use ($attachedIds) {
+            $reputation = $this->reputation->summary($cooperative);
+
+            return [
+                'id' => $cooperative->id,
+                'name' => $cooperative->name,
+                'logo_url' => $cooperative->logo_url,
+                'city' => $cooperative->city?->name,
+                'province' => $cooperative->province,
+                'coverage' => $cooperative->geographic_coverage,
+                'operating_hours' => $cooperative->operating_hours,
+                'driver_count' => $cooperative->active_driver_memberships_count,
+                'unit_count' => $cooperative->declared_unit_count,
+                'client_count' => $cooperative->client_links_count,
+                'completed_rides' => $reputation['completed_rides'],
+                'average_rating' => $reputation['average_rating'],
+                'review_count' => $reputation['review_count'],
+                'is_attached' => $attachedIds->contains($cooperative->id),
+            ];
+        });
 
         return Inertia::render('Cooperative/Directory', [
             'cooperatives' => $cooperatives,
@@ -67,14 +74,14 @@ class CooperativeDirectoryController extends Controller
             || $request->user()?->cooperative?->is($cooperative);
         abort_unless($canPreview, 404);
 
-        $cooperative->load(['city', 'activeDriverMemberships.driver.driverProfile']);
-        $driverIds = $cooperative->activeDriverMemberships->pluck('driver_user_id');
-
-        $rating = Review::query()->whereIn('reviewee_user_id', $driverIds)->avg('rating');
+        $cooperative->load('city');
+        $summary = $this->reputation->summary($cooperative);
 
         return Inertia::render('Cooperative/Show', [
             'cooperative' => $cooperative,
-            'averageRating' => $rating ? round((float) $rating, 1) : null,
+            'reputation' => $summary,
+            'drivers' => $this->reputation->drivers($cooperative),
+            'reviews' => $this->reputation->recentReviews($cooperative),
             'isAttached' => $request->user()?->isClient()
                 ? ClientCooperative::query()->where('client_user_id', $request->user()->id)->where('cooperative_id', $cooperative->id)->exists()
                 : false,

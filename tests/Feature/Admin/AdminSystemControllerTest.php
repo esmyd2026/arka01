@@ -38,10 +38,18 @@ class AdminSystemControllerTest extends TestCase
 
         $this->actingAs($admin)->post(route('admin.system.reset-demo'))->assertRedirect();
 
-        $this->assertSame(9, User::query()->where('email', 'like', '%@arka01.test')->count());
+        // 9 de la base original (admin + 4 clientes + 4 conductores) + 14 del
+        // elenco de flotas/cooperativas/públicos agregado después (pedido
+        // explícito del usuario: "agrega flotas y cooperativas con
+        // conductores de prueba... conductores públicos también" — ver
+        // DemoDataSeeder).
+        $this->assertSame(23, User::query()->where('email', 'like', '%@arka01.test')->count());
         $this->assertFalse(User::query()->whereKey($demoClient->id)->exists());
         $this->assertTrue(User::query()->where('email', 'cliente@arka01.test')->exists());
         $this->assertTrue(User::query()->where('email', 'pedro@arka01.test')->exists());
+        $this->assertTrue(User::query()->where('email', 'diego.flota@arka01.test')->exists());
+        $this->assertTrue(User::query()->where('email', 'coop.amazonas@arka01.test')->exists());
+        $this->assertTrue(User::query()->where('email', 'nina.publica@arka01.test')->exists());
     }
 
     /**
@@ -59,6 +67,19 @@ class AdminSystemControllerTest extends TestCase
         $response->assertRedirect();
         $this->assertAuthenticatedAs($admin->fresh());
         $this->assertTrue(User::query()->whereKey($admin->id)->where('email', 'admin@arka01.test')->exists());
+    }
+
+    public function test_reset_can_close_the_admin_session_and_open_the_demo_login(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true, 'email' => 'admin@arka01.test']);
+
+        $response = $this->actingAs($admin)->post(route('admin.system.reset-demo'), [
+            'enter_demo' => true,
+        ]);
+
+        $response->assertRedirect(route('login'));
+        $this->assertGuest();
+        $this->assertTrue(User::query()->whereKey($admin->id)->exists());
     }
 
     public function test_a_second_admin_with_an_arka01_test_email_also_survives(): void

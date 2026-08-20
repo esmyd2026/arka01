@@ -6,6 +6,7 @@ import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
+import { etaMinutes } from '@/Utils/eta';
 
 const props = defineProps({
     drivers: { type: Object, required: true },
@@ -115,7 +116,12 @@ function invite(driver) {
                                 <p class="mt-1 text-sm text-arka-text-muted">
                                     ${{ driver.rate_per_km }}/km
                                     <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
-                                    <span v-if="driver.distance_km != null"> · {{ driver.distance_km.toFixed(1) }} km</span>
+                                    <!-- Pedido explícito del usuario ("los km cercano
+                                         manejemos minutos mejor para la distancia"):
+                                         minutos estimados en vez del km exacto hasta
+                                         un conductor puntual (Utils/eta.js, mismo
+                                         criterio que Ride/Request.vue). -->
+                                    <span v-if="driver.distance_km != null"> · {{ etaMinutes(driver.distance_km) }} min</span>
                                     <span v-if="!driver.is_available"> · no disponible ahora</span>
                                 </p>
                             </div>

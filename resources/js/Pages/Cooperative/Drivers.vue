@@ -5,7 +5,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 defineProps({
@@ -77,6 +77,7 @@ function invite(driver) {
                                 </p>
                             </div>
                             <div class="flex gap-2">
+                                <Link :href="route('cooperative.drivers.show', membership.id)" class="inline-flex items-center rounded-lg border border-arka-primary/40 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-arka-primary transition hover:bg-arka-primary/10">Ver perfil</Link>
                                 <SecondaryButton v-if="membership.status === 'accepted'" @click="router.post(route('cooperative.drivers.suspend', membership.id))">Suspender</SecondaryButton>
                                 <PrimaryButton v-if="membership.status === 'suspended'" @click="router.post(route('cooperative.drivers.reactivate', membership.id))">Reactivar</PrimaryButton>
                                 <DangerButton @click="router.delete(route('cooperative.drivers.remove', membership.id))">Retirar</DangerButton>

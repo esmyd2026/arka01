@@ -45,6 +45,12 @@ class FleetInvitationCreated implements ShouldBroadcast
         return [
             'id' => $this->invitation->id,
             'direction' => $this->invitation->initiated_by,
+            // Pedido explícito del usuario ("Mis flotas" ahora puede mostrar
+            // VARIAS flotas a la vez, cada una escuchando el mismo canal
+            // personal): sin esto, una invitación para UNA flota aparecía
+            // repetida en todas las que el cliente tuviera abiertas en
+            // pantalla — ver Components/FleetRoster.vue.
+            'fleet_id' => $this->invitation->fleet_id,
             'fleet_name' => $this->invitation->fleet->name,
             'owner_name' => $this->invitation->fleet->owner->name,
             'driver_name' => $this->invitation->driver->name,

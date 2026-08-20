@@ -13,8 +13,18 @@ class TrustHosts extends Middleware
      */
     public function hosts(): array
     {
-        return [
+        $hosts = [
             $this->allSubdomainsOfApplicationUrl(),
         ];
+
+        // PHPUnit usa localhost y el servidor local puede abrirse por IP.
+        // Estas excepciones jamás se agregan en producción: allí solo se
+        // acepta el dominio de APP_URL y sus subdominios (por ejemplo www).
+        if (app()->environment(['local', 'testing'])) {
+            $hosts[] = '^localhost$';
+            $hosts[] = '^127\.0\.0\.1$';
+        }
+
+        return array_values(array_filter($hosts));
     }
 }

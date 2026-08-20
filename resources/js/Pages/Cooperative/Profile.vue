@@ -4,7 +4,10 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
+import FleetMap from '@/Components/FleetMap.vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     cooperative: { type: Object, required: true },
@@ -18,6 +21,8 @@ const form = useForm({
     legal_name: props.cooperative.legal_name ?? '',
     ruc: props.cooperative.ruc ?? '',
     main_address: props.cooperative.main_address ?? '',
+    stand_lat: props.cooperative.stand_lat ?? '',
+    stand_lng: props.cooperative.stand_lng ?? '',
     city_id: props.cooperative.city_id ?? '',
     province: props.cooperative.province ?? '',
     phone: props.cooperative.phone ?? '',
@@ -28,6 +33,8 @@ const form = useForm({
     geographic_coverage: props.cooperative.geographic_coverage ?? '',
     operating_hours: props.cooperative.operating_hours ?? '',
     response_timeout_seconds: props.cooperative.response_timeout_seconds ?? 30,
+    automatic_assignment_enabled: props.cooperative.automatic_assignment_enabled ?? true,
+    manual_assignment_timeout_seconds: 30,
     logo: null,
     ruc_document: null,
     legal_appointment_document: null,
@@ -35,6 +42,12 @@ const form = useForm({
     operating_permit_document: null,
     other_documents: [],
 });
+const logoUploading = ref(false);
+const logoError = ref('');
+const baseMarkers = computed(() => form.stand_lat !== '' && form.stand_lng !== '' ? [{
+    id: 'cooperative-base', type: 'base', lat: Number(form.stand_lat), lng: Number(form.stand_lng), label: `Base · ${form.name || 'Cooperativa'}`, color: '#f59e0b',
+}] : []);
+const baseCenter = computed(() => baseMarkers.value[0] ?? { lat: -2.1709, lng: -79.9224 });
 
 const documentByType = (type) => props.cooperative.documents?.find((document) => document.type === type);
 
@@ -46,18 +59,40 @@ const statusLabel = {
     suspended: 'Suspendida',
 }[props.cooperative.status] ?? 'Pendiente';
 
-function submit() {
+function submit(sendForReview = false) {
     form.post(route('cooperative.profile.update'), {
         forceFormData: true,
         preserveScroll: true,
-        onSuccess: () => form.reset(
-            'logo',
-            'ruc_document',
-            'legal_appointment_document',
-            'operating_authorization_document',
-            'operating_permit_document',
-            'other_documents'
-        ),
+        onSuccess: () => {
+            form.reset('logo', 'ruc_document', 'legal_appointment_document', 'operating_authorization_document', 'operating_permit_document', 'other_documents');
+            if (sendForReview) router.post(route('cooperative.profile.submit-review'), {}, {
+                preserveScroll: true,
+                onError: (errors) => Object.entries(errors).forEach(([field, message]) => form.setError(field, message)),
+            });
+        },
+    });
+}
+
+function selectStand(place) {
+    form.main_address = place.address ?? place.display_name ?? place.label ?? form.main_address;
+    form.stand_lat = place.lat;
+    form.stand_lng = place.lng;
+}
+
+function selectStandOnMap(point) {
+    form.stand_lat = Number(point.lat).toFixed(7);
+    form.stand_lng = Number(point.lng).toFixed(7);
+}
+
+function uploadLogo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    logoUploading.value = true;
+    logoError.value = '';
+    router.post(route('cooperative.profile.logo.update'), { logo: file }, {
+        forceFormData: true, preserveScroll: true,
+        onError: (errors) => { logoError.value = errors.logo ?? 'No se pudo guardar el logo.'; },
+        onFinish: () => { logoUploading.value = false; event.target.value = ''; },
     });
 }
 </script>
@@ -74,7 +109,7 @@ function submit() {
         </template>
 
         <div class="py-8 sm:py-12">
-            <form class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6" @submit.prevent="submit">
+            <form class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6" @submit.prevent="submit(false)">
                 <section class="overflow-hidden rounded-arka border border-arka-text-muted/10 bg-arka-card shadow-xl">
                     <div class="bg-gradient-to-r from-arka-primary/20 to-arka-lime/10 p-5 sm:p-7">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -129,8 +164,13 @@ function submit() {
                         </div>
                         <div class="sm:col-span-2">
                             <InputLabel for="main_address" value="Dirección principal" />
-                            <TextInput id="main_address" v-model="form.main_address" class="mt-1 block w-full" />
-                            <InputError class="mt-1" :message="form.errors.main_address" />
+                            <AddressAutocomplete id="main_address" v-model="form.main_address" class="mt-1 block w-full" @place-selected="selectStand" />
+                            <p class="mt-1 text-xs text-arka-text-muted">Seleccione la parada en las sugerencias; se usará para calcular cercanía.</p>
+                            <InputError class="mt-1" :message="form.errors.main_address || form.errors.stand_lat || form.errors.stand_lng" />
+                            <div class="mt-3 overflow-hidden rounded-arka border border-arka-text-muted/15">
+                                <FleetMap :markers="baseMarkers" :center="baseCenter" :zoom="15" :dark="false" :clickable="true" height="280px" @map-click="selectStandOnMap" />
+                            </div>
+                            <p class="mt-2 text-xs text-arka-text-muted">La marca amarilla identifica la base. También puede tocar el mapa para ajustar el punto exacto.</p>
                         </div>
                         <div>
                             <InputLabel for="city_id" value="Ciudad" />
@@ -157,8 +197,9 @@ function submit() {
                         </div>
                         <div class="sm:col-span-2">
                             <InputLabel for="logo" value="Logo" />
-                            <input id="logo" type="file" accept="image/*" class="mt-2 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-arka-primary/15 file:px-4 file:py-2 file:text-arka-primary-bright" @change="form.logo = $event.target.files[0]" />
-                            <InputError class="mt-1" :message="form.errors.logo" />
+                            <input id="logo" type="file" accept="image/*" :disabled="logoUploading" class="mt-2 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-arka-primary/15 file:px-4 file:py-2 file:text-arka-primary-bright disabled:opacity-50" @change="uploadLogo" />
+                            <p class="mt-1 text-xs text-arka-text-muted">{{ logoUploading ? 'Guardando logo…' : 'El logo se guarda inmediatamente al seleccionarlo.' }}</p>
+                            <InputError class="mt-1" :message="logoError || form.errors.logo" />
                         </div>
                     </div>
                 </section>
@@ -225,8 +266,9 @@ function submit() {
                 </section>
 
                 <InputError :message="form.errors.cooperative" />
-                <div class="flex justify-end pb-8">
-                    <PrimaryButton :disabled="form.processing || cooperative.status === 'in_review'">
+                <div class="flex flex-col justify-end gap-3 pb-8 sm:flex-row">
+                    <button type="submit" class="rounded-full border border-arka-primary px-5 py-2 text-sm font-semibold text-arka-primary disabled:opacity-50" :disabled="form.processing || cooperative.status === 'in_review'">Guardar borrador</button>
+                    <PrimaryButton type="button" :disabled="form.processing || cooperative.status === 'in_review'" @click="submit(true)">
                         {{ cooperative.status === 'in_review' ? 'Documentación en revisión' : 'Guardar y enviar a validación' }}
                     </PrimaryButton>
                 </div>

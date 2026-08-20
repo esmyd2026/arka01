@@ -85,7 +85,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
          QR o abre el link puede no tener cuenta todavía) — presentación
          mínima propia, sin la barra de navegación de la app, con una
          invitación a crear cuenta. -->
-    <div v-else class="min-h-screen bg-arka-base">
+    <div v-else class="arka-app-background min-h-screen">
         <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
             <div class="flex items-center justify-between mb-8">
                 <Link href="/">

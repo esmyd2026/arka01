@@ -10,6 +10,13 @@ const model = defineModel({
 
 const input = ref(null);
 
+defineProps({
+    light: {
+        type: Boolean,
+        default: false,
+    },
+});
+
 onMounted(() => {
     if (input.value.hasAttribute('autofocus')) {
         input.value.focus();
@@ -22,7 +29,10 @@ defineExpose({ focus: () => input.value.focus() });
 <template>
     <!-- Input oscuro: fondo de tarjeta, texto claro, foco en verde menta -->
     <input
-        class="bg-arka-card border-arka-text-muted/30 text-arka-text placeholder-arka-text-muted rounded-arka shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+        class="rounded-arka shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+        :class="light
+            ? 'border-arka-base/10 bg-white text-arka-base placeholder:text-arka-base/35'
+            : 'border-arka-text-muted/30 bg-arka-card text-arka-text placeholder:text-arka-text-muted'"
         v-model="model"
         ref="input"
     />

@@ -26,7 +26,31 @@ class FleetInvitationFlowTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_client_can_search_drivers_by_name_phone_or_invite_code(): void
+    /**
+     * Pedido explícito del usuario ("manejar la privacidad... limitemos la
+     * búsqueda por código nada más, porque chocarían con millones de
+     * personas"): ya no se puede buscar por nombre — solo por código de
+     * socio o código de invitación, cada uno identifica a una sola persona.
+     */
+    public function test_client_can_search_drivers_by_member_code_or_invite_code(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create(['name' => 'Juan Conductor']);
+        $driverProfile = DriverProfile::factory()->for($driver)->create();
+
+        $byCode = $this->actingAs($client)
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => (string) $driver->member_code]));
+        $byCode->assertOk();
+        $byCode->assertJsonPath('drivers.0.user_id', $driver->id);
+        $byCode->assertJsonPath('drivers.0.status', 'not_invited');
+
+        $byInviteCode = $this->actingAs($client)
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => $driverProfile->invite_code]));
+        $byInviteCode->assertJsonPath('drivers.0.user_id', $driver->id);
+    }
+
+    public function test_searching_a_driver_by_name_finds_nothing(): void
     {
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
@@ -37,8 +61,20 @@ class FleetInvitationFlowTest extends TestCase
             ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => 'Juan']));
 
         $response->assertOk();
-        $response->assertJsonPath('drivers.0.user_id', $driver->id);
-        $response->assertJsonPath('drivers.0.status', 'not_invited');
+        $response->assertJsonCount(0, 'drivers');
+    }
+
+    public function test_search_results_do_not_expose_the_drivers_phone(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->actingAs($client)
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => (string) $driver->member_code]));
+
+        $response->assertJsonMissingPath('drivers.0.phone');
     }
 
     /**
@@ -62,7 +98,7 @@ class FleetInvitationFlowTest extends TestCase
         FleetMember::factory()->for($otherFleetB)->for($driver, 'driver')->create(['added_by' => $otherClientB->id]);
 
         $response = $this->actingAs($client)
-            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => 'Juan']));
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => (string) $driver->member_code]));
 
         $response->assertJsonPath('drivers.0.active_clients_count', 2);
     }
@@ -93,7 +129,7 @@ class FleetInvitationFlowTest extends TestCase
         ]);
 
         $response = $this->actingAs($client)
-            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => 'Juan']));
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => (string) $driver->member_code]));
 
         $response->assertOk();
         $response->assertJsonPath('drivers.0.review_count', 1);
@@ -102,24 +138,17 @@ class FleetInvitationFlowTest extends TestCase
         $this->assertArrayHasKey('avatar_url', $response->json('drivers.0'));
     }
 
-    /**
-     * Usuario y código de socio (consideración agregada al alcance): además
-     * de nombre/teléfono/código de invitación, se puede buscar por acá.
-     */
-    public function test_client_can_search_drivers_by_username_or_member_code(): void
+    public function test_searching_a_driver_by_username_finds_nothing(): void
     {
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create(['name' => 'Ana Conductora']);
         DriverProfile::factory()->for($driver)->create();
 
-        $byUsername = $this->actingAs($client)
+        $response = $this->actingAs($client)
             ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => $driver->username]));
-        $byUsername->assertJsonPath('drivers.0.user_id', $driver->id);
 
-        $byCode = $this->actingAs($client)
-            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => (string) $driver->member_code]));
-        $byCode->assertJsonPath('drivers.0.user_id', $driver->id);
+        $response->assertJsonCount(0, 'drivers');
     }
 
     /**

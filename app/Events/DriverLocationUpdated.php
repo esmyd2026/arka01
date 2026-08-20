@@ -4,6 +4,7 @@ namespace App\Events;
 
 use App\Models\DriverProfile;
 use App\Models\FleetMember;
+use App\Models\Ride;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -31,9 +32,23 @@ class DriverLocationUpdated implements ShouldBroadcast
             ->whereNull('left_at')
             ->pluck('fleet_id');
 
-        return $fleetIds
+        $channels = $fleetIds
             ->map(fn ($fleetId) => new PrivateChannel("fleet.{$fleetId}"))
             ->all();
+
+        // Una unidad de cooperativa puede atender a un cliente sin ser
+        // miembro de su flota privada. El canal de la carrera garantiza que
+        // ambos participantes reciban la posición durante el viaje.
+        $activeRideIds = Ride::query()
+            ->where('driver_user_id', $this->driverProfile->user_id)
+            ->where('status', 'in_progress')
+            ->pluck('id');
+
+        foreach ($activeRideIds as $rideId) {
+            $channels[] = new PrivateChannel("ride.{$rideId}");
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

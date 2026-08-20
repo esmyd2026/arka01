@@ -10,6 +10,7 @@ import IncomingRideRequestModal from '@/Components/IncomingRideRequestModal.vue'
 import OnboardingTour from '@/Components/OnboardingTour.vue';
 import PermissionsPrompt from '@/Components/PermissionsPrompt.vue';
 import HelpTip from '@/Components/HelpTip.vue';
+import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
@@ -17,6 +18,31 @@ import { playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateCh
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { resetStartupSplash } from '@/Utils/startupSplash';
+
+// Pedido explícito del usuario (documento formal de ajuste UX): en Inicio
+// del pasajero, el mapa debe llegar hasta arriba de la pantalla con la nav
+// flotando ENCIMA — la primera vez que se probó esto (misma idea, sin este
+// documento) se implementó con `position: absolute`, que se desplaza junto
+// con el scroll de la página y por eso terminaba saliéndose de vista con
+// cualquier scroll chico (bug real reportado, con captura). Esta vez es
+// `fixed` de verdad: no depende de dónde esté la página al montarse ni se
+// mueve con el scroll. `false` por defecto — ninguna otra pantalla cambia.
+const props = defineProps({
+    transparentNav: {
+        type: Boolean,
+        default: false,
+    },
+    // Pedido explícito del usuario (carrera en curso del cliente, mapa fijo a
+    // toda la pantalla estilo Uber/DiDi): sin esto, la barra de navegación
+    // inferior (fixed, z-30) quedaba tapando la barra de acciones fija que
+    // usan Ride/Show.vue — las dos "fixed bottom-0" compitiendo por el mismo
+    // lugar. `false` por defecto — ninguna otra pantalla cambia.
+    hideBottomNav: {
+        type: Boolean,
+        default: false,
+    },
+});
 
 // Menú de accesos rápidos que abre el botón central flotante de la barra
 // inferior (preferencia de diseño: bottom sheet, no modal lateral).
@@ -306,7 +332,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-arka-base">
+    <div class="arka-app-background min-h-screen">
         <button
             v-if="clientRideAlert"
             type="button"
@@ -317,7 +343,16 @@ onBeforeUnmount(() => {
             <span class="block mt-1 text-sm text-arka-text-muted">{{ clientRideAlert.message }}</span>
             <span class="block mt-2 text-xs font-medium text-arka-primary">Tocar para abrir carreras</span>
         </button>
-        <nav class="bg-arka-card border-b border-arka-text-muted/10">
+        <!-- `transparentNav`: flota fija (no `absolute`, ver comentario junto
+             a la prop) sobre el mapa de Inicio del pasajero, SOLO en móvil —
+             de `sm:` para arriba vuelve a ser la barra sólida de siempre. -->
+        <nav
+            :class="
+                transparentNav
+                    ? 'fixed top-0 inset-x-0 z-50 bg-arka-base/65 backdrop-blur-md border-b border-white/5 sm:static sm:bg-arka-card sm:backdrop-blur-none sm:border-arka-text-muted/10'
+                    : 'bg-arka-card border-b border-arka-text-muted/10'
+            "
+        >
             <!-- Primary Navigation Menu -->
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <!-- Header en 3 zonas (logo / nav centrada / cuenta), no el típico
@@ -420,6 +455,11 @@ onBeforeUnmount(() => {
                          en escritorio Y en móvil, donde reemplazan al viejo menú de
                          hamburguesa: búsqueda, ayuda, accesos rápidos y avatar de cuenta. -->
                     <div class="flex items-center justify-end gap-0.5">
+                        <!-- Estimación de tráfico de la sesión para el conductor.
+                             Es orientativa: el navegador no expone el contador
+                             facturado por la operadora. -->
+                        <SessionDataUsage />
+
                         <!-- Buscar: acceso directo al directorio de conductores (herramienta
                              de cliente — buscar a quién invitar a la flota). -->
                         <Link
@@ -635,7 +675,7 @@ onBeforeUnmount(() => {
                                         Pasarme a cliente
                                     </button>
 
-                                    <DropdownLink :href="route('logout')" method="post" as="button">
+                                    <DropdownLink :href="route('logout')" method="post" as="button" @click="resetStartupSplash">
                                         Cerrar sesión
                                     </DropdownLink>
                                 </template>
@@ -681,6 +721,7 @@ onBeforeUnmount(() => {
         <!-- Navegación inferior tipo app, solo en móvil (sección 9.9: "Inicio · Flota · Carreras · Perfil"),
              con un botón central flotante para accesos rápidos (preferencia de diseño del usuario). -->
         <nav
+            v-if="!hideBottomNav"
             class="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-arka-card border-t border-arka-text-muted/10 flex items-stretch"
             style="padding-bottom: env(safe-area-inset-bottom)"
         >
@@ -939,6 +980,55 @@ onBeforeUnmount(() => {
                             <span class="text-arka-text">Contactos de confianza</span>
                         </Link>
                         <HelpTip text="A quién avisa el botón SOS si lo activa durante un viaje." />
+                    </div>
+
+                    <!-- Rutas y Turismo y Cupones (rediseño UX): ya vivían en el menú
+                         de escritorio (`quickLinks`) pero faltaban acá, en el cajón
+                         móvil — quedaron descubiertos al mover contenido de Inicio
+                         al menú. -->
+                    <div v-if="hasRoute('van-trips.browse') && showClientNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('van-trips.browse')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 19c2-4 3-6 3-9a5 5 0 0 1 10 0c0 3 1 5 3 9" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19h6M12 6v.01" />
+                            </svg>
+                            <span class="text-arka-text">Rutas y Turismo</span>
+                        </Link>
+                        <HelpTip text="Explore y reserve un asiento en las salidas programadas que publican los conductores." />
+                    </div>
+
+                    <div v-if="hasRoute('van-trips.index') && showDriverNav" class="flex items-center gap-1">
+                        <Link
+                            :href="route('van-trips.index')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 19c2-4 3-6 3-9a5 5 0 0 1 10 0c0 3 1 5 3 9" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19h6M12 6v.01" />
+                            </svg>
+                            <span class="text-arka-text">Mis rutas y turismo</span>
+                        </Link>
+                        <HelpTip text="Publique salidas programadas de ruta fija, que los clientes reservan por asiento." />
+                    </div>
+
+                    <div v-if="hasRoute('coupons.index')" class="flex items-center gap-1">
+                        <Link
+                            :href="route('coupons.index')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m4 12 7-7h7a2 2 0 0 1 2 2v7l-7 7a2 2 0 0 1-3 0l-6-6a2 2 0 0 1 0-3Z" />
+                                <circle cx="14.5" cy="9.5" r="1.2" />
+                            </svg>
+                            <span class="text-arka-text">Cupones y beneficios</span>
+                        </Link>
+                        <HelpTip text="Promos de comercios aliados, separadas para clientes y para conductores." />
                     </div>
                 </div>
             </div>

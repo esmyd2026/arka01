@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Verificación de teléfono por WhatsApp (consideración de seguridad agregada
@@ -35,35 +36,58 @@ class WhatsAppVerificationSender
             return false;
         }
 
-        $response = Http::withToken(WhatsAppConfig::token())
-            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
-                'messaging_product' => 'whatsapp',
-                'to' => ltrim($phoneE164, '+'),
-                'type' => 'template',
-                'template' => [
-                    'name' => WhatsAppConfig::verificationTemplate(),
-                    'language' => ['code' => 'es'],
-                    'components' => [
-                        [
-                            'type' => 'body',
-                            'parameters' => [['type' => 'text', 'text' => $code]],
+        // Timeout explícito — mismo motivo que WhatsAppFreeformSender::sendText().
+        try {
+            $response = Http::withToken(WhatsAppConfig::token())
+                ->connectTimeout(3)
+                ->timeout(8)
+                ->retry(1, 200)
+                ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to' => ltrim($phoneE164, '+'),
+                    'type' => 'template',
+                    'template' => [
+                        'name' => WhatsAppConfig::verificationTemplate(),
+                        'language' => ['code' => 'es'],
+                        'components' => [
+                            [
+                                'type' => 'body',
+                                'parameters' => [['type' => 'text', 'text' => $code]],
+                            ],
                         ],
                     ],
-                ],
+                ]);
+        } catch (Throwable $exception) {
+            // Una caída de Meta o de red no debe transformarse en un error
+            // 500 de toda la aplicación ni registrar teléfono/token/código.
+            Log::warning('No se pudo conectar con WhatsApp para enviar el código.', [
+                'exception' => $exception::class,
             ]);
+
+            SystemEventLogger::log(
+                eventType: 'whatsapp_verification_unavailable',
+                module: 'whatsapp',
+                message: 'WhatsApp no estuvo disponible para enviar un código de verificación.',
+                severity: 'error',
+                context: ['exception' => $exception::class],
+                channel: 'whatsapp',
+            );
+
+            return false;
+        }
 
         if ($response->failed()) {
             Log::warning('No se pudo enviar el código de verificación por WhatsApp.', [
                 'status' => $response->status(),
-                'body' => $response->json(),
+                'provider_error_code' => $response->json('error.code'),
             ]);
 
             SystemEventLogger::log(
                 eventType: 'whatsapp_verification_send_failed',
                 module: 'whatsapp',
-                message: "No se pudo enviar el código de verificación por WhatsApp a {$phoneE164}.",
+                message: 'WhatsApp rechazó el envío de un código de verificación.',
                 severity: 'error',
-                context: ['status' => $response->status(), 'body' => $response->json()],
+                context: ['status' => $response->status(), 'provider_error_code' => $response->json('error.code')],
                 channel: 'whatsapp',
                 providerErrorCode: (string) $response->status(),
             );

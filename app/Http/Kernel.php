@@ -10,9 +10,11 @@ use App\Http\Middleware\EnsureUserIsCooperative;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\LogRequestContext;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
+use App\Http\Middleware\RedirectClientWithActiveImmediateRide;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\TrimStrings;
+use App\Http\Middleware\TrustHosts;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\ValidateSignature;
 use App\Http\Middleware\VerifyCsrfToken;
@@ -45,7 +47,7 @@ class Kernel extends HttpKernel
      * @var array<int, class-string|string>
      */
     protected $middleware = [
-        // \App\Http\Middleware\TrustHosts::class,
+        TrustHosts::class,
         TrustProxies::class,
         HandleCors::class,
         PreventRequestsDuringMaintenance::class,
@@ -72,6 +74,7 @@ class Kernel extends HttpKernel
             // request quede con contexto de quién/qué/cuándo.
             LogRequestContext::class,
             HandleInertiaRequests::class,
+            RedirectClientWithActiveImmediateRide::class,
             AddLinkHeadersForPreloadedAssets::class,
             SecurityHeaders::class,
         ],

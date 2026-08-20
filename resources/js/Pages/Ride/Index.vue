@@ -4,8 +4,10 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { playAttentionAlert, playCabinChime, playUpdateChime } from '@/Utils/liveAlert';
+import { waitingMessage as sharedWaitingMessage, secondsLeft as sharedSecondsLeft } from '@/Utils/rideWaitingMessage';
 
 const props = defineProps({
     pendingRequestsAsClient: { type: Array, required: true },
@@ -57,6 +59,10 @@ const unratedRides = computed(() => props.rideHistory.filter((ride) => ride.need
 // página completa (sección 3.5: notificación instantánea de solicitudes).
 const incoming = ref([...props.incomingRequestsAsDriver]);
 const myPending = ref([...props.pendingRequestsAsClient]);
+const activeImmediateRequest = computed(() => myPending.value.find((request) => !request.is_scheduled && ['pending', 'negotiating', 'waiting'].includes(request.status)) ?? null);
+const otherPendingRequests = computed(() => myPending.value.filter((request) => request.id !== activeImmediateRequest.value?.id));
+const reminderRideIds = ref(new Set(props.scheduledRides.filter((ride) => ride.driver_reminder_sent_at).map((ride) => ride.id)));
+const upcomingReminderRide = computed(() => props.scheduledRides.find((ride) => ride.driver_user_id === userId && reminderRideIds.value.has(ride.id)) ?? null);
 
 // Cuando el conductor acepta mi solicitud, `.ride-request.accepted` (más
 // abajo) pide un `router.reload()` de `pendingRequestsAsClient` — pero sin
@@ -75,6 +81,7 @@ watch(
 // Monto que cada conductor va escribiendo para contraofertar una solicitud
 // puntual (sección 5) — un input por solicitud, guardado por id.
 const counterAmounts = ref({});
+const processingRequestId = ref(null);
 
 const channels = [];
 
@@ -215,8 +222,9 @@ onMounted(() => {
     // explícito del usuario) — solo le llega al conductor (ver
     // RideReminderDue::broadcastOn()), acá solo hace falta el sonido: la
     // tarjeta ya muestra la hora, no hace falta recargar nada.
-    personal.listen('.ride.reminder-due', () => {
+    personal.listen('.ride.reminder-due', (event) => {
         playAttentionAlert();
+        reminderRideIds.value = new Set([...reminderRideIds.value, event.ride_id]);
     });
     channels.push(personal);
 
@@ -254,7 +262,12 @@ onBeforeUnmount(() => {
 });
 
 function acceptRequest(id) {
-    router.post(route('ride-requests.accept', id));
+    if (processingRequestId.value) return;
+    processingRequestId.value = id;
+    router.post(route('ride-requests.accept', id), {}, {
+        preserveScroll: true,
+        onFinish: () => (processingRequestId.value = null),
+    });
 }
 
 function rejectRequest(id) {
@@ -304,31 +317,16 @@ onMounted(() => {
 });
 onBeforeUnmount(() => clearInterval(fastClock));
 
+// Rediseño UX (pedido explícito del usuario): la lógica de estos dos
+// mensajes se extrajo a Utils/rideWaitingMessage.js para reusarla también
+// en Ride/Request.vue — acá solo se les pasa el reloj propio de esta
+// pantalla (nowFast/now, cada una con su propio setInterval).
 function secondsLeft(request) {
-    if (!request.current_offer_expires_at) return null;
-    return Math.max(0, Math.round((new Date(request.current_offer_expires_at).getTime() - nowFast.value) / 1000));
+    return sharedSecondsLeft(request, nowFast.value);
 }
 
-function waitingMinutes(request) {
-    if (!request.requested_at) return 0;
-    return Math.floor((now.value - new Date(request.requested_at).getTime()) / 60000);
-}
-
-// Fix reportado por el usuario: acá decía siempre "buscando entre tus
-// conductores disponibles" (plural) — confuso para una solicitud dirigida a
-// UN conductor puntual, que no está "buscando entre" nadie más.
 function waitingMessage(request) {
-    const minutes = waitingMinutes(request);
-    if (request.status === 'negotiating') return null;
-
-    if (request.driver) {
-        if (minutes < 3) return `Esperando que ${request.driver.name} responda…`;
-        return `${request.driver.name} todavía no respondió. Si quiere, suba su oferta o cancele y pruebe con otro.`;
-    }
-
-    if (minutes < 1) return 'Buscando entre sus conductores disponibles…';
-    if (minutes < 3) return 'Avisamos a sus conductores — puede tardar un minuto en aparecer alguien.';
-    return 'Todavía nadie respondió. Si quiere, suba su oferta para que sea más atractiva.';
+    return sharedWaitingMessage(request, now.value);
 }
 
 const raisingOfferFor = ref(null);
@@ -377,13 +375,24 @@ function confirmRaiseOffer(id) {
             </div>
         </template>
 
-        <div class="py-12">
-            <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-                <div v-if="isClient" class="flex justify-end">
+        <div class="overflow-x-hidden py-6 sm:py-12">
+            <div class="mx-auto w-full max-w-3xl space-y-6 px-3 sm:px-6 lg:px-8">
+                <div v-if="isClient && !activeImmediateRequest && !activeRides.length" class="flex justify-end">
                     <Link :href="route('ride-requests.create')">
                         <PrimaryButton>Pedir una carrera</PrimaryButton>
                     </Link>
                 </div>
+
+                <section v-if="isClient && activeImmediateRequest" class="w-full max-w-full overflow-hidden rounded-3xl border border-arka-primary/30 bg-gradient-to-br from-arka-primary/15 via-arka-card to-arka-card shadow-2xl">
+                    <div class="min-w-0 p-4 sm:p-7">
+                        <div class="flex min-w-0 items-start gap-3 sm:gap-4"><div class="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-arka-primary/15 sm:h-14 sm:w-14"><span class="text-xl sm:text-2xl">🚕</span><span class="absolute inset-0 animate-ping rounded-full border border-arka-primary/40"></span></div><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.18em] text-arka-primary">Solicitud activa</p><h2 class="mt-1 text-lg font-bold leading-tight text-arka-text sm:text-xl">Estamos buscando su conductor</h2><p class="mt-1 text-sm leading-snug text-arka-text-muted">Mantenga esta pantalla abierta. Le avisaremos apenas un conductor acepte.</p></div></div>
+                        <div class="mt-5 h-2 overflow-hidden rounded-full bg-arka-base"><div class="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-arka-primary/30 via-arka-primary to-arka-lime"></div></div>
+                        <div class="mt-4 grid min-w-0 gap-2 sm:mt-5 sm:grid-cols-[minmax(0,1fr)_auto]"><div class="min-w-0 rounded-2xl bg-arka-base/50 p-3.5 sm:p-4"><p class="text-xs uppercase tracking-wide text-arka-text-muted">Estado actual</p><p class="mt-1 break-words font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.status === 'waiting' ? 'Esperando una unidad disponible' : activeImmediateRequest.driver ? `Esperando respuesta de ${activeImmediateRequest.driver.name}` : 'Buscando conductores cercanos' }}</p><p class="mt-2 break-words text-sm leading-snug text-arka-text-muted">{{ activeImmediateRequest.origin_address || 'Origen marcado en el mapa' }} <span class="text-arka-primary">→</span> {{ activeImmediateRequest.destination_address || 'Destino seleccionado' }}</p></div><div class="flex min-w-0 items-center justify-between gap-4 rounded-2xl bg-arka-base/50 p-3.5 sm:block sm:min-w-32 sm:p-4 sm:text-right"><div><p class="text-xs text-arka-text-muted">Oferta</p><p class="text-xl font-bold text-arka-primary">${{ Number(activeImmediateRequest.current_offered_price).toFixed(2) }}</p></div><button type="button" class="shrink-0 rounded-full border border-arka-danger/40 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-arka-danger sm:mt-3" @click="cancelRequest(activeImmediateRequest.id)">Cancelar</button></div></div>
+                        <p class="mt-4 text-center text-xs text-arka-text-muted">Mientras esta solicitud esté activa, las demás secciones permanecerán bloqueadas.</p>
+                    </div>
+                </section>
+
+                <section v-if="upcomingReminderRide" class="rounded-2xl border border-arka-warning/40 bg-arka-warning/10 p-4 sm:p-5"><div class="flex items-center gap-3"><span class="text-2xl">⏰</span><div class="min-w-0 flex-1"><p class="font-bold text-arka-warning">Su carrera programada está próxima</p><p class="text-sm text-arka-text">{{ upcomingReminderRide.client.name }} · {{ formatScheduledAt(upcomingReminderRide.ride_request?.scheduled_at) }}</p><p class="mt-1 text-xs text-arka-text-muted">Revise la ruta y prepárese para salir.</p></div><Link :href="route('rides.show', upcomingReminderRide.id)" class="shrink-0 rounded-full bg-arka-warning px-4 py-2 text-xs font-bold text-arka-base">Ver viaje</Link></div></section>
 
                 <!-- Pedido explícito del usuario: alarma visible mientras haya
                      carreras completadas sin calificar de mi parte — cliente y
@@ -460,11 +469,25 @@ function confirmRaiseOffer(id) {
                         No tiene solicitudes de carrera por ahora.
                     </p>
 
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
-                        <li v-for="r in incoming" :key="r.id" class="py-3">
+                    <ul v-else class="space-y-4">
+                        <li v-for="r in incoming" :key="r.id" class="overflow-hidden rounded-2xl border border-arka-text-muted/15 bg-arka-base/35 shadow-lg">
+                            <div class="flex items-center justify-between gap-3 border-b border-arka-text-muted/10 bg-arka-primary/10 px-4 py-3">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">Carrera disponible</p>
+                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.current_offered_price).toFixed(2) }}</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm font-semibold text-arka-text">{{ Number(r.distance_km).toFixed(1) }} km</p>
+                                    <p class="text-xs capitalize text-arka-text-muted">{{ r.payment_method ?? 'efectivo' }}</p>
+                                </div>
+                            </div>
+
+                            <div class="space-y-4 p-4">
                             <!-- Quién es (sección 3.6 y 8: "app segura"), antes de decidir
                                  aceptar — nombre, calificación y código de socio. -->
-                            <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
+                            <div class="flex items-center gap-3">
+                                <UserAvatar :user="{ name: r.client_name, avatar_url: r.client_avatar_url }" size-class="h-11 w-11 text-base" />
+                            <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap min-w-0">
                                 {{ r.client_name }}
                                 <span
                                     v-if="r.client_review_count > 0"
@@ -475,28 +498,26 @@ function confirmRaiseOffer(id) {
                                 <span v-else class="text-xs text-arka-text-muted">Sin calificaciones todavía</span>
                                 <span v-if="r.client_member_code" class="text-xs text-arka-text-muted">#{{ r.client_member_code }}</span>
                             </p>
+                            </div>
                             <!-- Sector de origen/destino (consideración agregada al alcance): de
                                  un vistazo, sin tener que abrir el mapa — ej. "Sauces 1 → Samanes 3". -->
-                            <p
-                                v-if="r.origin_sector?.name || r.destination_sector?.name"
-                                class="text-sm text-arka-text font-medium"
-                            >
-                                {{ r.origin_sector?.name ?? 'origen sin sector' }} &rarr;
-                                {{ r.destination_sector?.name ?? 'destino sin sector' }}
-                            </p>
-                            <p class="text-sm text-arka-text-muted">
-                                {{ r.origin_address ?? 'Origen sin referencia' }} &rarr;
-                                {{ r.destination_address ?? 'Destino sin referencia' }}
-                                · {{ Number(r.distance_km).toFixed(1) }} km
-                            </p>
-                            <p class="text-sm text-arka-primary-bright font-medium mt-1">
-                                Precio ofrecido: ${{ Number(r.current_offered_price).toFixed(2) }}
-                            </p>
-                            <!-- Forma de pago (pedido explícito del usuario): que el
-                                 conductor la vea antes de aceptar. -->
-                            <p class="text-sm text-arka-text-muted">
-                                Paga con <span class="capitalize text-arka-text">{{ r.payment_method ?? 'efectivo' }}</span>
-                            </p>
+                            <div class="flex gap-3 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
+                                <div class="flex shrink-0 flex-col items-center pt-1.5">
+                                    <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
+                                    <span class="my-1 min-h-8 w-px flex-1 bg-arka-text-muted/30"></span>
+                                    <span class="h-2.5 w-2.5 rounded-full bg-arka-danger"></span>
+                                </div>
+                                <div class="min-w-0 flex-1 space-y-3">
+                                    <div>
+                                        <p class="truncate text-sm font-semibold text-arka-text">{{ r.origin_sector?.name ?? 'Origen' }}</p>
+                                        <p class="line-clamp-2 text-xs text-arka-text-muted">{{ r.origin_address ?? 'Origen sin referencia' }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="truncate text-sm font-semibold text-arka-text">{{ r.destination_sector?.name ?? 'Destino' }}</p>
+                                        <p class="line-clamp-2 text-xs text-arka-text-muted">{{ r.destination_address ?? 'Destino sin referencia' }}</p>
+                                    </div>
+                                </div>
+                            </div>
                             <p v-if="r.is_scheduled" class="mt-1 text-xs text-arka-warning font-medium">
                                 📅 Programada para {{ formatScheduledAt(r.scheduled_at) }}
                                 <span v-if="r.round_trip"> · Ida y vuelta</span>
@@ -515,37 +536,39 @@ function confirmRaiseOffer(id) {
                                 Ya le mandó una contraoferta. Esperando que el cliente responda.
                             </p>
 
-                            <div v-else class="mt-2 space-y-2">
-                                <div class="flex gap-2">
-                                    <PrimaryButton @click="acceptRequest(r.id)">Aceptar</PrimaryButton>
-                                    <!-- Rechazar solo tiene sentido en una solicitud dirigida a mí;
-                                         en "toda la flota" simplemente no respondo (sección 3.5) -->
-                                    <SecondaryButton v-if="r.driver_user_id" @click="rejectRequest(r.id)">
-                                        Rechazar
-                                    </SecondaryButton>
-                                </div>
+                            <div v-else class="space-y-3">
+                                <PrimaryButton class="min-h-12 w-full justify-center text-sm" :disabled="processingRequestId === r.id || secondsLeft(r) === 0" @click="acceptRequest(r.id)">
+                                    {{ processingRequestId === r.id ? 'Procesando…' : 'Aceptar carrera' }}
+                                </PrimaryButton>
 
-                                <div class="flex gap-2 items-center">
+                                <div class="grid grid-cols-[1fr_auto] gap-2 items-center">
                                     <TextInput
                                         type="number"
                                         step="0.01"
                                         min="0.01"
-                                        class="w-32"
+                                        class="min-w-0 w-full"
                                         v-model="counterAmounts[r.id]"
-                                        placeholder="Otro monto"
+                                        placeholder="Proponer otro monto"
                                     />
-                                    <SecondaryButton @click="counterRequest(r.id)">Contraofertar</SecondaryButton>
+                                    <SecondaryButton class="min-h-10" @click="counterRequest(r.id)">Enviar</SecondaryButton>
                                 </div>
+
+                                <div class="flex justify-center">
+                                    <!-- Rechazar solo tiene sentido en una solicitud dirigida a mí;
+                                         en "toda la flota" simplemente no respondo (sección 3.5) -->
+                                    <button v-if="r.driver_user_id" type="button" class="min-h-10 px-4 text-sm text-arka-text-muted hover:text-arka-danger" @click="rejectRequest(r.id)">No puedo tomarla</button>
+                                </div>
+                            </div>
                             </div>
                         </li>
                     </ul>
                 </div>
 
                 <!-- Mis solicitudes pendientes como cliente -->
-                <div v-if="myPending.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                <div v-if="otherPendingRequests.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-3">Esperando respuesta</h3>
                     <ul class="divide-y divide-arka-text-muted/10">
-                        <li v-for="r in myPending" :key="r.id" class="py-3">
+                        <li v-for="r in otherPendingRequests" :key="r.id" class="py-3">
                             <div class="flex items-center justify-between">
                                 <span class="text-arka-text">
                                     {{ r.driver ? r.driver.name : 'Toda la flota disponible' }}

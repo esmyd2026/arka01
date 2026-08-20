@@ -5,10 +5,14 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DriverAvailabilityToggle from '@/Components/DriverAvailabilityToggle.vue';
 import AdBannerSlider from '@/Components/AdBannerSlider.vue';
+import FleetMap from '@/Components/FleetMap.vue';
+import HomeSearchSheet from '@/Components/HomeSearchSheet.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
+import { etaMinutes } from '@/Utils/eta';
+import { saveClientLocation } from '@/Utils/sessionLocation';
 
 const props = defineProps({
     driverStats: { type: Object, default: null },
@@ -24,6 +28,18 @@ const props = defineProps({
     // se ofrece conectar la ventana de 24h justo al activarse.
     whatsappSession: { type: Object, default: null },
     whatsappBusinessNumber: { type: String, default: null },
+    // Rediseño UX (pedido explícito del usuario, guiado por
+    // ARKA01_Rediseno_UX_Flujo_Carreras.md): buscador "¿A dónde vas?" arriba
+    // de Inicio — mismos datos que ya usaba Ride/Request.vue para
+    // direcciones favoritas y rutas guardadas, ver DashboardController.
+    frequentPlaces: { type: Array, default: () => [] },
+    savedRoutes: { type: Array, default: () => [] },
+    // Bug real reportado por el usuario ("porque no centra la ubicación
+    // actual"): sin esto, el mapa arrancaba en el centro de Quito por
+    // defecto (FleetMap.vue) hasta que la geolocalización en vivo del
+    // navegador resolviera — sin permiso, o mientras el aviso del navegador
+    // seguía sin respuesta, se quedaba ahí sin ningún indicio de qué pasó.
+    homeInitialCenter: { type: Object, default: null },
 });
 
 const whatsappSessionActive = computed(() => props.whatsappSession && props.whatsappSession.status !== 'expired');
@@ -42,18 +58,6 @@ const isAdmin = usePage().props.auth.user.is_admin;
 // superior a acá, a la izquierda, en el lugar donde antes decía "Inicio").
 const firstName = (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] ?? '';
 
-// Cuántos conductores se muestran de un vistazo en "Tu flota" antes de
-// juntar el resto en el círculo "+N" (pedido explícito del usuario: más
-// apretado que antes para que quepan más).
-const FLEET_PREVIEW_LIMIT = 5;
-
-// Mismos colores de estado que Ride/Request.vue (STATUS_STYLE): disponible en
-// verde, en carrera en naranja, desconectado "quemado" (opacidad + gris).
-const STATUS_RING = {
-    available: 'ring-2 ring-arka-primary',
-    busy: 'ring-2 ring-arka-warning',
-    offline: 'ring-2 ring-arka-text-muted opacity-50 grayscale',
-};
 const TRIP_STATUS = {
     pending: { label: 'Pendiente', class: 'bg-arka-warning/15 text-arka-warning' },
     confirmed: { label: 'Confirmado', class: 'bg-arka-primary/15 text-arka-primary-bright' },
@@ -66,82 +70,241 @@ function formatScheduledAt(iso) {
     return new Date(iso).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-// Copia local de "Mi flota" (consideración agregada al alcance: que el
-// estado de un conductor se actualice solo, sin recargar, cuando se
-// activa/desactiva desde SU propio inicio) — se resincroniza cuando Inertia
-// trae props nuevas (ej. el reload por geolocalización de acá abajo) y se
-// puede mutar en vivo con lo que llega por WebSocket.
-const fleetDriversLocal = ref([...(props.fleetDrivers ?? [])]);
-watch(
-    () => props.fleetDrivers,
-    (value) => (fleetDriversLocal.value = [...(value ?? [])])
-);
+// Rediseño UX (pedido explícito del usuario): mapa + buscador "¿A dónde
+// vas?" arriba de Inicio (sección 4 del documento).
+const homeLat = ref(null);
+const homeLng = ref(null);
+// Arranca con la ubicación de registro del cliente si la hay (ver
+// DashboardController::index(), prop `homeInitialCenter`) — la
+// geolocalización en vivo, si se consigue, la corrige después con más
+// precisión (ver onMounted). Sin esto, sin permiso de ubicación el mapa se
+// quedaba en el centro de Quito por defecto de FleetMap.vue, sin ningún
+// indicio de qué había pasado.
+const homeMapCenter = ref(props.homeInitialCenter);
+const homeSearchQuery = ref('');
 
-let fleetChannel = null;
+// Móvil vs escritorio, DECIDIDO EN JAVASCRIPT (pedido explícito del usuario,
+// tras dos rondas de bugs reales seguidas: "en tipo web dañaste, no se ve el
+// navbar" + un hueco negro enorme entre el mapa y la tarjeta): la versión
+// anterior usaba las MISMAS etiquetas HTML para los dos layouts, alternando
+// `fixed`/`static`/`relative`/`absolute` con clases `sm:` — un elemento
+// `position: static` ignora el `z-index` por completo, así que el mapa fijo
+// (con su propio contexto de apilamiento) terminaba tapando la nav en
+// escritorio sin que ningún z-index lo evitara, entre otros problemas de
+// superposición difíciles de razonar a ciegas sin poder abrir un navegador.
+// Ahora son dos ramas de plantilla TOTALMENTE separadas (ver el template más
+// abajo) — móvil sigue con el mapa de fondo fijo a pantalla completa sin
+// scroll; escritorio es una página normal, sin ningún `fixed`/`absolute`
+// de por medio, mucho más simple de que salga bien.
+const isDesktopViewport = ref(window.innerWidth >= 640);
+function updateViewportKind() {
+    isDesktopViewport.value = window.innerWidth >= 640;
+}
 
-onMounted(() => {
-    // Mismo patrón que Directory/Index.vue: si el navegador comparte
-    // ubicación, se recarga "Mi flota" y "Conductores cerca" ordenados por
-    // cercanía.
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((position) => {
-            router.reload({
-                data: { lat: position.coords.latitude, lng: position.coords.longitude },
-                only: ['fleetDrivers', 'nearbyDrivers'],
-                preserveScroll: true,
-            });
-        });
+// Bug real reportado por el usuario ("ayudame a que la ubicación actual
+// aparezca en el centro de la pantalla del espacio del mapa, porque sale
+// más abajo"): en móvil el bottom sheet tapa visualmente la mitad de abajo
+// del mapa de fondo — sin esto, `setView()` centraba sobre el contenedor
+// COMPLETO (los 100dvh de alto, incluida la parte tapada), así que el pin
+// terminaba pegado al borde inferior de lo que de verdad se alcanza a ver.
+// Se mide el alto REAL del bottom sheet (no un número fijo a ojo — cambia
+// según cuántos "Recientes" hay) con `ResizeObserver`, y se lo pasa a
+// FleetMap.vue (`center-offset-y`) para que corra el centro visual hacia
+// arriba esa mitad.
+const bottomSheetRef = ref(null);
+const bottomSheetHeight = ref(0);
+let bottomSheetObserver = null;
+
+// El `ref` cambia de elemento cada vez que se alterna entre la rama móvil y
+// la de escritorio (`isDesktopViewport`) — se re-observa cada vez que
+// aparece uno nuevo, en vez de una sola vez en `onMounted()`.
+watch(bottomSheetRef, (el) => {
+    bottomSheetObserver?.disconnect();
+    bottomSheetObserver = null;
+
+    if (!el) {
+        bottomSheetHeight.value = 0;
+        return;
     }
 
-    // Cuando un conductor de mi flota prende/apaga su disponibilidad (mismo
-    // evento que ya escuchan Ride/Show.vue y Ride/Index.vue), se refleja acá
-    // al toque — sin esto, "Mi flota" solo se hubiera actualizado recargando
-    // la página entera.
-    if (props.targetFleetId) {
-        fleetChannel = window.Echo.private(`fleet.${props.targetFleetId}`);
-        fleetChannel.listen('.driver.location.updated', (e) => {
-            const driver = fleetDriversLocal.value.find((d) => d.user_id === e.driver_user_id);
-            if (driver && driver.status !== 'busy') {
-                driver.status = e.is_available ? 'available' : 'offline';
-            }
-        });
-
-        // El conductor completó la carrera y queda libre de nuevo
-        // (consideración agregada al alcance) — sin esto, seguía apareciendo
-        // "en carrera" en "Mi flota" para siempre.
-        fleetChannel.listen('.ride.completed', (e) => {
-            playUpdateChime();
-            const driver = fleetDriversLocal.value.find((d) => d.user_id === e.driver_user_id);
-            if (driver) {
-                driver.status = e.is_available ? 'available' : 'offline';
-            }
-        });
-    }
+    bottomSheetHeight.value = el.getBoundingClientRect().height;
+    bottomSheetObserver = new ResizeObserver(() => {
+        bottomSheetHeight.value = el.getBoundingClientRect().height;
+    });
+    bottomSheetObserver.observe(el);
 });
 
-onBeforeUnmount(() => {
-    if (props.targetFleetId) {
-        window.Echo.leave(`fleet.${props.targetFleetId}`);
+// Bug real reportado por el usuario ("porque no centra la ubicación
+// actual"): las dos llamadas a `getCurrentPosition()` de acá abajo (al
+// montar, y al tocar el botón de recentrar) no tenían callback de error —
+// con el permiso denegado, o el navegador tardando en preguntar, no pasaba
+// nada visible ni en la consola, quedaba en silencio total. `locationDenied`
+// deja un rastro chico y visible junto al botón de recentrar, para que no
+// parezca que "no hace nada".
+const locationDenied = ref(false);
+function requestGeolocation(onSuccess) {
+    if (!navigator.geolocation) {
+        locationDenied.value = true;
+        return;
     }
-});
 
-function addToFleet(driver) {
-    router.post(
-        route('fleet.invitations.store', props.targetFleetId),
-        { driver_user_id: driver.user_id },
-        { preserveScroll: true, onSuccess: () => (driver.already_invited = true) }
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            locationDenied.value = false;
+            onSuccess(position);
+        },
+        (error) => {
+            console.warn('Arka01: no se pudo obtener la ubicación en vivo del cliente.', error);
+            locationDenied.value = true;
+        }
     );
 }
 
-// Puntos indicadores del carrusel de "Conductores cerca": el ancho de tarjeta
-// + separación es fijo (w-40 = 160px, gap-3 = 12px), así que alcanza con la
-// posición de scroll para saber cuál está al frente, sin librerías de carrusel.
-const carouselEl = ref(null);
-const activeCardIndex = ref(0);
-function onCarouselScroll() {
-    if (!carouselEl.value) return;
-    activeCardIndex.value = Math.round(carouselEl.value.scrollLeft / (160 + 12));
+// Botón "mi ubicación" (pedido explícito del usuario: "necesitamos un botón
+// de ubicación actual para que se centre el mapa") — `setView()` ya lo
+// expone FleetMap.vue para esto mismo en otras pantallas. Sin ubicación
+// todavía (permiso recién denegado, o tardío), la vuelve a pedir en vez de
+// no hacer nada.
+const fleetMapRef = ref(null);
+function recenterMap() {
+    if (homeLat.value != null && homeLng.value != null) {
+        fleetMapRef.value?.setView(homeLat.value, homeLng.value, 15);
+        return;
+    }
+
+    requestGeolocation((position) => {
+        homeLat.value = position.coords.latitude;
+        homeLng.value = position.coords.longitude;
+        homeMapCenter.value = { lat: homeLat.value, lng: homeLng.value };
+        fleetMapRef.value?.setView(homeLat.value, homeLng.value, 15);
+    });
 }
+
+// Conductores activos en el mapa de Inicio (pedido explícito del usuario:
+// "colocar todos los conductores sean de su flota o cooperativas... o
+// públicos, que aparezcan solo los activos y cerca del origen de la
+// carrera... en minutos") — `nearbyDrivers` ya viene filtrado/ordenado por
+// cercanía desde DashboardController::nearbyActiveDriversFor(); acá solo se
+// arman los marcadores (ícono de auto, igual que en el resto de la app) y un
+// texto corto en minutos, nunca en km exacto (mismo criterio de privacidad
+// que Ride/Request.vue y Directory/Index.vue).
+//
+// Color por categoría (pedido explícito del usuario, con imagen de
+// referencia: "unos de mi flota, otros de cooperativa... colocar que sea
+// amarillo, los públicos") — acá SÍ hay dato de cooperativa por unidad
+// (`nearbyActiveDriversFor()` ya expone `source: 'fleet'|'cooperative'|'public'`
+// por conductor), a diferencia de Ride/Request.vue, donde esa bolsa no trae
+// unidades individuales. Mismo ámbar que la insignia de "Cooperativas" en
+// el paso "Elige tu conductor" (`arka-warning`), para que sea el mismo
+// color en toda la app.
+const DRIVER_MARKER_COLOR = { fleet: '#34d399', cooperative: '#fbbf24', public: '#60a5fa' };
+const nearbyDriverMarkers = computed(() =>
+    (props.nearbyDrivers ?? []).map((driver) => ({
+        id: 'car',
+        lat: driver.lat,
+        lng: driver.lng,
+        color: DRIVER_MARKER_COLOR[driver.source] ?? DRIVER_MARKER_COLOR.public,
+    }))
+);
+
+const nearbyDriversCaption = computed(() => {
+    const drivers = props.nearbyDrivers ?? [];
+    if (!drivers.length) return null;
+
+    // Ya vienen ordenados por cercanía desde el backend — el primero es el más próximo.
+    const minutes = etaMinutes(drivers[0].distance_km);
+    const count = `${drivers.length} conductor${drivers.length === 1 ? '' : 'es'} activo${drivers.length === 1 ? '' : 's'} cerca`;
+
+    return minutes != null ? `${count} · el más próximo llega en ${minutes} min` : count;
+});
+
+// Pedido explícito del usuario (documento formal de ajuste UX, sección 13):
+// si ya se sabe la ubicación en vivo del cliente, se manda de una vez como
+// origen — así la pantalla de "Elige tu conductor" no repite el pedido de
+// geolocalización que ya se resolvió acá (ver App\Http\Controllers\RideRequestController::create(),
+// prop `initialOrigin`).
+async function resolveCurrentAddress(lat, lng) {
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+        const data = await response.json();
+        return data?.display_name ?? null;
+    } catch {
+        return null;
+    }
+}
+
+async function goToDestination({ lat, lng, address }) {
+    const originAddress = homeLat.value != null && homeLng.value != null
+        ? await resolveCurrentAddress(homeLat.value, homeLng.value)
+        : null;
+    router.get(route('ride-requests.create'), {
+        ...(homeLat.value != null && homeLng.value != null
+            ? { origin_lat: homeLat.value, origin_lng: homeLng.value, origin_address: originAddress ?? '' }
+            : {}),
+        destination_lat: lat,
+        destination_lng: lng,
+        destination_address: address ?? '',
+    });
+}
+
+// Rediseño UX (pedido explícito del usuario): "Tu flota" y "Conductores que
+// quizás conozcas" salieron de Inicio (siguen accesibles por la nav
+// "Flotas" y por "Directorio de conductores" en el menú de accesos
+// rápidos) — con eso se fue también el único motivo por el que este
+// onMounted pedía geolocalización dos veces y escuchaba el canal de flota:
+// ya no hay ninguna lista en pantalla que recolorear en vivo. Lo único que
+// sigue haciendo falta es el marcador de "mi ubicación" en el mapa de
+// arriba, y — pedido explícito del usuario, "conductores... cerca del
+// origen de la carrera" — pedirle al servidor los conductores activos
+// cercanos otra vez YA con la ubicación en vivo (llega sin ella en la carga
+// inicial, `nearbyActiveDriversFor()` recién ahí cae al respaldo de la
+// ubicación de registro). Recarga parcial (`only`), no se pierde nada del
+// resto de la pantalla.
+onMounted(() => {
+    // Limpia de inmediato una URL generada por una versión anterior del
+    // frontend. El backend también redirige esos enlaces para cubrir una
+    // carga completa, pero replaceState evita que permanezcan visibles si
+    // la actualización de assets ocurre con la página ya abierta.
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has('lat') || currentUrl.searchParams.has('lng')) {
+        window.history.replaceState(window.history.state, '', route('dashboard'));
+    }
+
+    if (props.fleetDrivers) {
+        window.addEventListener('resize', updateViewportKind);
+    }
+
+    requestGeolocation(async (position) => {
+        homeLat.value = position.coords.latitude;
+        homeLng.value = position.coords.longitude;
+        homeMapCenter.value = { lat: homeLat.value, lng: homeLng.value };
+        saveClientLocation({ lat: homeLat.value, lng: homeLng.value });
+
+        if (props.fleetDrivers) {
+            try {
+                await window.axios.post(route('dashboard.location.update'), {
+                    lat: homeLat.value,
+                    lng: homeLng.value,
+                });
+
+                router.reload({
+                    only: ['nearbyDrivers'],
+                    preserveScroll: true,
+                    preserveState: true,
+                });
+            } catch (error) {
+                // El mapa local sigue funcionando aunque falle la
+                // actualización de proximidad del servidor.
+                console.error('No se pudo actualizar la ubicación del Dashboard.', error);
+            }
+        }
+    });
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateViewportKind);
+    bottomSheetObserver?.disconnect();
+});
 
 // Banner "Activarme"/"Desconectarme" del conductor (consideración agregada al
 // alcance): el switch de DriverAvailabilityToggle avisa cada cambio acá para
@@ -278,8 +441,14 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
 <template>
     <Head title="Inicio" />
 
-    <AuthenticatedLayout>
-        <template #header>
+    <AuthenticatedLayout :transparent-nav="!!fleetDrivers">
+        <!-- Pedido explícito del usuario (documento formal de ajuste UX):
+             en Inicio del pasajero la nav flota FIJA sobre el mapa (ver
+             `transparent-nav` en AuthenticatedLayout.vue, ahora con
+             `position: fixed` de verdad, no `absolute` — eso fue lo que
+             falló la vez anterior) — sin una cabecera sólida aparte que
+             tape el mapa. Admin/conductor no cambian. -->
+        <template v-if="!fleetDrivers" #header>
             <!-- Pedido explícito del usuario: el switch de disponibilidad
                  subió a la cabecera (antes era un banner grande más abajo,
                  para que quede visible sin hacer scroll) — pero conservando
@@ -321,7 +490,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
             </div>
         </template>
 
-        <div class="py-12">
+        <div v-if="!fleetDrivers" class="py-12">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- Carrera en curso sin cerrar (consideración agregada al alcance):
                      si se le apagó el celular a alguna de las dos partes con una
@@ -420,6 +589,15 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 {{ isAvailableNow ? '● Disponible' : '○ No disponible' }}
                             </span>
                         </p>
+                        <Link
+                            v-if="driverStats.cooperative"
+                            :href="route('cooperatives.show', driverStats.cooperative.id)"
+                            class="mt-2 inline-flex items-center gap-2 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright transition hover:border-arka-primary/60 hover:bg-arka-primary/15"
+                        >
+                            <span class="grid h-5 w-5 place-items-center rounded-full bg-arka-primary text-arka-base" aria-hidden="true">◉</span>
+                            Conductor de {{ driverStats.cooperative.name }}
+                            <span aria-hidden="true">→</span>
+                        </Link>
                         <!-- Bug reportado por el usuario: un conductor con el switch
                              prendido podía seguir viéndose "Desconectado" en el
                              roster de sus clientes, sin ningún aviso de por qué —
@@ -618,327 +796,203 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     </div>
                 </template>
 
-                <!-- Como cliente (consideración agregada al alcance: mockup del
-                     cliente provisto por el usuario) — saludo, mi flota, accesos
-                     grandes, conductores cerca y próximos viajes. -->
-                <template v-else-if="fleetDrivers">
-                    <!-- Rediseño pedido explícito del usuario (mockup provisto): saludo +
-                         insignia de rol/plan, mismo criterio que ya usa el lado conductor
-                         ("Conductor ✓ · Disponible"). -->
-                    <!-- Pedido explícito del usuario: el saludo ya vive en el navbar
-                         (roadmap de mejoras, sección 1) y la insignia "Cliente · Plan
-                         X" se sacó de acá — esa info ya se ve en Mi perfil, mostrarla
-                         también en el Inicio quedaba redundante. -->
-                    <AdBannerSlider :banners="adBanners" />
+            </div>
+        </div>
 
-                    <!-- Pedido explícito del usuario: "entran y no saben qué
-                         hacer" — un cliente nuevo con la flota vacía necesita
-                         que le digan, antes que nada, que el primer paso es
-                         buscar conductores (no que lo adivine solo entre el
-                         resto de la pantalla). Desaparece solo apenas tiene
-                         al menos un conductor en su flota. -->
-                    <div v-if="!fleetDriversLocal.length" class="p-4 bg-arka-primary/10 border border-arka-primary/30 rounded-arka">
-                        <p class="text-sm font-semibold text-arka-primary-bright">Primero arme su flota</p>
-                        <p class="mt-1 text-sm text-arka-text-muted">
-                            Para pedir un viaje necesita al menos un conductor de confianza. Búsquelo por código de
-                            invitación o elija uno del directorio público — después ya puede pedirle una carrera.
-                        </p>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <Link
-                                :href="route('fleet.show', targetFleetId)"
-                                class="px-3 py-1.5 rounded-arka bg-arka-primary text-arka-base text-xs font-semibold uppercase tracking-wide hover:bg-arka-primary-bright"
-                            >
-                                Buscar por código
-                            </Link>
-                            <Link
-                                :href="route('directory.index')"
-                                class="px-3 py-1.5 rounded-arka border border-arka-primary/40 text-arka-primary-bright text-xs font-semibold uppercase tracking-wide hover:bg-arka-primary/10"
-                            >
-                                Ver directorio público
-                            </Link>
-                        </div>
-                    </div>
+        <!-- Inicio del pasajero: dos ramas de plantilla SEPARADAS para móvil
+             y escritorio, decidido en JavaScript (`isDesktopViewport`, ver
+             comentario junto a su declaración) — tras dos rondas de bugs
+             reales con una sola plantilla alternando `fixed`/`static`/
+             `absolute` por clases `sm:` (la nav quedaba tapada en
+             escritorio, un hueco negro enorme entre el mapa y la tarjeta),
+             separarlas de verdad es mucho más simple de razonar y de que
+             salga bien. -->
+        <template v-else>
+            <!-- MÓVIL: mapa de fondo fijo a toda la pantalla (pedido
+                 explícito: "quisiera no scrollear que todo quede en la
+                 misma pantalla"), nav flotando fija encima (ver
+                 `transparent-nav`, AuthenticatedLayout.vue), bottom sheet
+                 anclado abajo. -->
+            <template v-if="!isDesktopViewport">
+                <div class="fixed inset-0 z-0">
+                    <FleetMap
+                        ref="fleetMapRef"
+                        :markers="[
+                            ...(homeLat != null ? [{ id: 'origin', lat: homeLat, lng: homeLng, label: 'Mi ubicación' }] : []),
+                            ...nearbyDriverMarkers,
+                        ]"
+                        :center="homeMapCenter ?? undefined"
+                        :clickable="true"
+                        :auto-fit="false"
+                        :dark="false"
+                        :rounded="false"
+                        height="100%"
+                        controls-top-offset="64px"
+                        :center-offset-y="bottomSheetHeight"
+                        @map-click="({ lat, lng }) => goToDestination({ lat, lng })"
+                    />
 
-                    <!-- "Tu flota": resumen glanceable, no la lista completa — el
-                         detalle por conductor (buscar, invitar, pedir carrera directo)
-                         ya vive en Fleet/Show.vue, no tiene sentido duplicarlo acá. -->
-                    <Link :href="route('fleet.show', targetFleetId)" class="block p-4 bg-arka-card shadow rounded-arka hover:bg-arka-card/70">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <p class="text-arka-text font-medium">Tu flota</p>
-                                <p class="text-sm text-arka-text-muted">
-                                    {{ fleetDriversLocal.filter((d) => d.status === 'available').length }} disponible(s) ahora
-                                </p>
-                            </div>
-                            <svg class="h-5 w-5 text-arka-text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-                            </svg>
-                        </div>
+                    <!-- Conductores activos cerca — insignia discreta, debajo
+                         de la nav, sin competir con "¿A dónde vas?". Nunca en
+                         km exacto (mismo criterio de privacidad que
+                         Ride/Request.vue y Directory/Index.vue). Pedido
+                         explícito del usuario ("no se ve profesional, el
+                         ícono ni se ve serio"): el emoji 🚗 se reemplazó por
+                         un punto "en vivo" pulsando — mismo lenguaje visual
+                         que un indicador de estado, sin depender de cómo cada
+                         sistema operativo dibuje un emoji. -->
+                    <p
+                        v-if="nearbyDriversCaption"
+                        class="absolute left-3 top-[4.5rem] z-10 flex max-w-[calc(100%-4.75rem)] items-center gap-2 rounded-full border border-white/10 bg-arka-base/75 py-2 pl-3 pr-3.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md"
+                    >
+                        <span class="relative flex h-2 w-2 shrink-0">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-arka-primary opacity-75"></span>
+                            <span class="relative inline-flex h-2 w-2 rounded-full bg-arka-primary"></span>
+                        </span>
+                        <span class="truncate">{{ nearbyDriversCaption }}</span>
+                    </p>
 
-                        <!-- Pedido explícito del usuario (roadmap de mejoras, sección 2):
-                             foto, nombre, calificación y distancia — en fila horizontal,
-                             con los datos debajo de cada foto y el nombre truncado si es
-                             muy largo. Ajuste posterior (también pedido): más apretada
-                             para que quepan más de un vistazo, y en vez de una línea de
-                             texto aparte para "los que faltan" se usa un círculo "+N" al
-                             final de la propia fila (como el resto de los avatares) —
-                             flex en vez de grid fijo, así una flota chica no deja
-                             columnas vacías y se ve prolija igual. -->
-                        <div v-if="fleetDriversLocal.length" class="mt-3 flex flex-wrap gap-x-2.5 gap-y-3">
-                            <div
-                                v-for="driver in fleetDriversLocal.slice(0, FLEET_PREVIEW_LIMIT)"
-                                :key="driver.user_id"
-                                class="flex flex-col items-center text-center w-12"
-                            >
-                                <div class="rounded-full" :class="STATUS_RING[driver.status]">
-                                    <UserAvatar :user="driver" size-class="h-10 w-10 text-xs" />
-                                </div>
-                                <p class="mt-1 w-full text-[11px] text-arka-text font-medium truncate">
-                                    {{ driver.name.split(' ')[0] }}
-                                </p>
-                                <p class="w-full text-[10px] text-arka-text-muted truncate">
-                                    <span v-if="driver.review_count > 0" class="text-arka-lime">★{{ driver.average_rating.toFixed(1) }}</span>
-                                    <span v-else>Sin calif.</span>
-                                    <span v-if="driver.distance_km != null">· {{ driver.distance_km.toFixed(1) }}km</span>
-                                </p>
-                            </div>
+                    <!-- Botón "mi ubicación" (pedido explícito del usuario) —
+                         reutiliza `setView()`, ya expuesto por FleetMap.vue
+                         para esto mismo en otras pantallas. -->
+                    <button
+                        type="button"
+                        class="absolute right-3 top-[4.5rem] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-black/5 bg-white text-arka-base/70 shadow-xl transition hover:text-arka-primary active:scale-95"
+                        aria-label="Centrar en mi ubicación"
+                        @click="recenterMap"
+                    >
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                        </svg>
+                    </button>
 
-                            <!-- Círculo punteado con "+" (pedido explícito del usuario, con
-                                 captura de referencia): mismo lugar que antes, pero ahora
-                                 siempre visible como llamado a la acción — si sobran
-                                 conductores muestra cuántos faltan por ver, y si la flota
-                                 todavía tiene lugar invita directamente a agregar más. -->
-                            <div class="flex flex-col items-center text-center w-12">
-                                <div
-                                    class="h-10 w-10 rounded-full border-2 border-dashed flex items-center justify-center text-xs font-semibold"
-                                    :class="fleetDriversLocal.length > FLEET_PREVIEW_LIMIT
-                                        ? 'border-arka-text-muted/40 text-arka-text-muted'
-                                        : 'border-arka-primary/60 text-arka-primary-bright'"
-                                >
-                                    <span v-if="fleetDriversLocal.length > FLEET_PREVIEW_LIMIT">
-                                        +{{ fleetDriversLocal.length - FLEET_PREVIEW_LIMIT }}
-                                    </span>
-                                    <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <path stroke-linecap="round" d="M12 5v14M5 12h14" />
-                                    </svg>
-                                </div>
-                                <p class="mt-1 w-full text-[11px] text-arka-text-muted truncate">
-                                    {{ fleetDriversLocal.length > FLEET_PREVIEW_LIMIT ? 'Ver todos' : 'Agregar' }}
-                                </p>
-                            </div>
-                        </div>
-                        <p v-else class="mt-2 text-sm text-arka-text-muted">
-                            Todavía no tiene conductores — toque para armar su flota.
-                        </p>
+                    <!-- Sin esto, un permiso de ubicación denegado no dejaba
+                         ningún rastro visible — el botón de arriba "no hacía
+                         nada" en apariencia. -->
+                    <p
+                        v-if="locationDenied"
+                        class="absolute right-3 top-32 z-10 max-w-[10rem] px-2.5 py-1.5 rounded-arka text-[11px] leading-tight bg-black/70 text-white backdrop-blur-sm"
+                    >
+                        Active el permiso de ubicación del navegador para centrar el mapa.
+                    </p>
+
+                    <!-- Carrera en curso sin cerrar — solo aparece en el caso
+                         raro de que exista. -->
+                    <Link
+                        v-if="pendingRideToClose"
+                        :href="route('rides.show', pendingRideToClose.ride_id)"
+                        class="absolute inset-x-2 top-32 z-10 p-3 rounded-arka bg-arka-warning/95 text-arka-base shadow-lg"
+                    >
+                        <p class="font-semibold text-sm">⚠️ Carrera en curso sin cerrar</p>
+                        <p class="text-xs">Con {{ pendingRideToClose.counterpart_name }}. Tocá para continuar.</p>
                     </Link>
+                </div>
 
-                    <!-- Dos accesos grandes (pedido explícito del usuario: "Pedir
-                         carrera" para ahora mismo, "Programar carrera" para elegir
-                         fecha y hora) — antes eran dos ítems más del grid chico de
-                         "Solicitá un viaje", ahora son la acción principal del inicio. -->
-                    <div v-if="hasRoute('ride-requests.create')" class="grid grid-cols-2 gap-3">
-                        <Link
-                            :href="route('ride-requests.create')"
-                            class="p-4 bg-arka-primary/15 border border-arka-primary/30 rounded-arka hover:bg-arka-primary/20"
-                        >
-                            <svg class="h-7 w-7 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                            </svg>
-                            <p class="mt-2 font-medium text-arka-primary-bright">Pedir carrera</p>
-                            <p class="text-xs text-arka-text-muted">Viaje inmediato</p>
-                        </Link>
-                        <Link
-                            :href="route('ride-requests.create', { programar: 1 })"
-                            class="p-4 bg-arka-card border border-arka-text-muted/20 rounded-arka hover:bg-arka-card/70"
-                        >
-                            <svg class="h-7 w-7 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="3.5" y="4.5" width="17" height="16" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 9.5h17M8 3v3M16 3v3" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 13.5h2M8 17h2M14 13.5h2M14 17h2" />
-                            </svg>
-                            <p class="mt-2 font-medium text-arka-text">Programar carrera</p>
-                            <p class="text-xs text-arka-text-muted">Elegí fecha y hora</p>
-                        </Link>
+                <!-- Bottom sheet: fondo GRIS, sin padding lateral, pegado a
+                     los dos bordes y a la nav inferior, sin espacio vacío
+                     entre medio (pedido explícito del usuario). -->
+                <div ref="bottomSheetRef" class="fixed inset-x-3 bottom-[4.75rem] z-20 sm:inset-x-5">
+                    <div class="flex h-[46dvh] max-h-[25rem] min-h-[20rem] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f8fa]/95 px-4 pb-4 pt-3 shadow-[0_20px_60px_rgba(3,15,9,0.24)] backdrop-blur-xl sm:px-5">
+                        <div class="mx-auto h-1.5 w-11 rounded-full bg-arka-base/10" aria-hidden="true"></div>
+                        <HomeSearchSheet
+                            v-model="homeSearchQuery"
+                            compact
+                            :frequent-places="frequentPlaces"
+                            :saved-routes="savedRoutes"
+                            :origin-lat="homeLat"
+                            :origin-lng="homeLng"
+                            :can-schedule="hasRoute('ride-requests.create')"
+                            :schedule-href="hasRoute('ride-requests.create') ? route('ride-requests.create', { programar: 1 }) : null"
+                            @place-selected="({ lat, lng, address }) => goToDestination({ lat, lng, address })"
+                            @select-recent="(place) => goToDestination({ lat: place.lat, lng: place.lng, address: place.address })"
+                        />
                     </div>
+                </div>
+            </template>
 
-                    <!-- Más opciones -->
-                    <div class="space-y-2">
-                        <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Más opciones</h4>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            <Link
-                                v-if="hasRoute('express-routes.index')"
-                                :href="route('express-routes.index')"
-                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                            >
-                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="3.5" y="5" width="17" height="15" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17M8 3v4M16 3v4" />
-                                </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Expresos</p>
-                                <p class="text-xs text-arka-text-muted">Rutas fijas</p>
-                            </Link>
-                            <!-- Bug propio de esta sesión (roadmap de mejoras, sección 3: "el
-                                 cliente no debe ver opciones para publicar, debe ver el
-                                 catálogo"): esta tarjeta apuntaba a `van-trips.index`, la
-                                 pantalla de gestión del CONDUCTOR ("Mis rutas y turismo") — un
-                                 cliente la veía siempre vacía. Acá va `van-trips.browse`, el
-                                 catálogo de viajes publicados, que es lo que corresponde. -->
-                            <Link
-                                v-if="hasRoute('van-trips.browse')"
-                                :href="route('van-trips.browse')"
-                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                            >
-                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="2.5" y="8" width="19" height="9" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 12h19M6 17v2M18 17v2" />
-                                </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Rutas y Turismo</p>
-                            </Link>
-                            <Link
-                                v-if="hasRoute('ride-requests.create')"
-                                :href="route('ride-requests.create')"
-                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                            >
-                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7L12 3Z" />
-                                </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Mis rutas</p>
-                                <p class="text-xs text-arka-text-muted">favoritas</p>
-                            </Link>
-                            <Link
-                                v-if="hasRoute('coupons.index')"
-                                :href="route('coupons.index')"
-                                class="p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                            >
-                                <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v1a2 2 0 0 0 0 4v1A2.5 2.5 0 0 1 17.5 17h-11A2.5 2.5 0 0 1 4 14.5v-1a2 2 0 0 0 0-4v-1Z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.5 6.5v11" stroke-dasharray="2 2" />
-                                </svg>
-                                <p class="mt-2 text-sm text-arka-text font-medium">Cupones</p>
-                                <p class="text-xs text-arka-text-muted">y beneficios</p>
-                            </Link>
-                        </div>
-                    </div>
+            <!-- ESCRITORIO (pedido explícito del usuario: "en web tiene que
+                 ser un poco diferente"): página normal, sin `fixed` ni
+                 `absolute` de por medio — nav sólida de siempre, mapa
+                 contenido de alto fijo, tarjeta debajo, todo en el flujo
+                 normal del documento. -->
+            <template v-else>
+                <div class="py-10">
+                    <div class="max-w-xl mx-auto px-4 space-y-4">
+                        <div class="relative rounded-arka overflow-hidden shadow bg-gray-100">
+                            <FleetMap
+                                ref="fleetMapRef"
+                                :markers="[
+                                    ...(homeLat != null ? [{ id: 'origin', lat: homeLat, lng: homeLng, label: 'Mi ubicación' }] : []),
+                                    ...nearbyDriverMarkers,
+                                ]"
+                                :center="homeMapCenter ?? undefined"
+                                :clickable="true"
+                                :auto-fit="false"
+                                :dark="false"
+                                height="340px"
+                                @map-click="({ lat, lng }) => goToDestination({ lat, lng })"
+                            />
 
-                    <!-- Conductores que quizás conozcas (pedido explícito del
-                         usuario: "indicarle a los clientes que hay
-                         conductores cerca de donde viven") -->
-                    <div v-if="nearbyDrivers && nearbyDrivers.length" class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Conductores que quizás conozcas</h4>
-                            <Link :href="route('directory.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
-                                Ver todos
-                            </Link>
+                            <p
+                                v-if="nearbyDriversCaption"
+                                class="absolute left-3 top-3 z-10 flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full text-xs font-medium bg-black/55 text-white backdrop-blur-sm shadow-sm"
+                            >
+                                <span class="relative flex h-2 w-2 shrink-0">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-arka-primary opacity-75"></span>
+                                    <span class="relative inline-flex h-2 w-2 rounded-full bg-arka-primary"></span>
+                                </span>
+                                {{ nearbyDriversCaption }}
+                            </p>
+
+                            <button
+                                type="button"
+                                class="absolute right-3 top-3 z-10 h-10 w-10 rounded-full bg-white shadow-lg flex items-center justify-center text-arka-base/70 hover:text-arka-primary"
+                                aria-label="Centrar en mi ubicación"
+                                @click="recenterMap"
+                            >
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                                </svg>
+                            </button>
+
+                            <p
+                                v-if="locationDenied"
+                                class="absolute right-3 top-16 z-10 max-w-[10rem] px-2.5 py-1.5 rounded-arka text-[11px] leading-tight bg-black/70 text-white backdrop-blur-sm"
+                            >
+                                Active el permiso de ubicación del navegador para centrar el mapa.
+                            </p>
                         </div>
 
-                        <div ref="carouselEl" class="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1" @scroll="onCarouselScroll">
-                            <div
-                                v-for="driver in nearbyDrivers"
-                                :key="driver.user_id"
-                                class="w-40 shrink-0 snap-start p-3 bg-arka-card shadow rounded-arka"
-                            >
-                                <div class="flex items-center gap-2">
-                                    <UserAvatar :user="driver" size-class="h-10 w-10 text-sm" />
-                                    <div class="min-w-0">
-                                        <Link :href="route('profiles.show', driver.user_id)" class="block text-arka-text font-medium truncate hover:text-arka-primary-bright">
-                                            {{ driver.name }}
-                                        </Link>
-                                        <span v-if="driver.review_count > 0" class="text-xs text-arka-lime">★ {{ driver.average_rating.toFixed(1) }}</span>
-                                    </div>
-                                </div>
-                                <p v-if="driver.distance_km != null" class="mt-2 text-xs text-arka-text-muted">
-                                    A {{ driver.distance_km.toFixed(1) }} km de ti
-                                </p>
-                                <!-- "Otro dato que coincida" (pedido explícito del
-                                     usuario) cuando no hay forma de calcular la
-                                     distancia real: misma ciudad declarada. -->
-                                <p v-else-if="driver.same_city" class="mt-2 text-xs text-arka-text-muted">
-                                    En su misma ciudad
-                                </p>
-                                <p class="mt-0.5 text-xs text-arka-primary-bright">● Disponible</p>
-                                <Link
-                                    :href="route('ride-requests.create', { flota: targetFleetId, conductor: driver.user_id })"
-                                    class="mt-2 block text-xs text-arka-primary hover:text-arka-primary-bright font-medium text-center"
-                                >
-                                    Pedir carrera
-                                </Link>
-                                <PrimaryButton v-if="!driver.already_invited" class="mt-2 w-full justify-center text-xs" @click="addToFleet(driver)">
-                                    Agregar
-                                </PrimaryButton>
-                                <p v-else class="mt-2 text-xs text-arka-text-muted">Invitación enviada</p>
-                            </div>
-                        </div>
+                        <Link
+                            v-if="pendingRideToClose"
+                            :href="route('rides.show', pendingRideToClose.ride_id)"
+                            class="block p-4 bg-arka-warning/15 border border-arka-warning/40 rounded-arka hover:bg-arka-warning/20"
+                        >
+                            <p class="font-semibold text-arka-warning">⚠️ Tiene una carrera en curso sin cerrar</p>
+                            <p class="text-sm text-arka-text-muted">
+                                Con {{ pendingRideToClose.counterpart_name }} — {{ pendingRideToClose.origin_label }} &rarr;
+                                {{ pendingRideToClose.destination_label }}. Tocá para continuar.
+                            </p>
+                        </Link>
 
-                        <div class="flex justify-center gap-1.5">
-                            <span
-                                v-for="(driver, index) in nearbyDrivers"
-                                :key="driver.user_id"
-                                class="h-1.5 w-1.5 rounded-full"
-                                :class="index === activeCardIndex ? 'bg-arka-primary' : 'bg-arka-text-muted/30'"
+                        <div class="space-y-5 rounded-[28px] border border-white/70 bg-[#f7f8fa] px-6 pb-6 pt-6 shadow-[0_18px_55px_rgba(3,15,9,0.16)]">
+                            <HomeSearchSheet
+                                v-model="homeSearchQuery"
+                                :frequent-places="frequentPlaces"
+                                :saved-routes="savedRoutes"
+                                :origin-lat="homeLat"
+                                :origin-lng="homeLng"
+                                :can-schedule="hasRoute('ride-requests.create')"
+                                :schedule-href="hasRoute('ride-requests.create') ? route('ride-requests.create', { programar: 1 }) : null"
+                                @place-selected="({ lat, lng, address }) => goToDestination({ lat, lng, address })"
+                                @select-recent="(place) => goToDestination({ lat: place.lat, lng: place.lng, address: place.address })"
                             />
                         </div>
                     </div>
-
-                    <!-- Próximos viajes -->
-                    <div v-if="upcomingTrips" class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Próximos viajes</h4>
-                            <Link :href="route('rides.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
-                                Ver todos
-                            </Link>
-                        </div>
-                        <p v-if="!upcomingTrips.length" class="text-sm text-arka-text-muted">
-                            No tiene viajes pendientes ni en curso ahora mismo.
-                        </p>
-                        <Link
-                            v-for="(trip, i) in upcomingTrips"
-                            :key="i"
-                            :href="trip.ride_id ? route('rides.show', trip.ride_id) : route('rides.index')"
-                            class="flex items-center justify-between gap-3 p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                        >
-                            <div class="min-w-0">
-                                <p class="text-sm text-arka-text truncate">{{ trip.origin_label }} &rarr; {{ trip.destination_label }}</p>
-                                <p class="text-xs text-arka-text-muted truncate">Con {{ trip.counterpart_name }}</p>
-                                <p v-if="trip.status === 'scheduled'" class="text-xs text-arka-warning truncate">
-                                    {{ formatScheduledAt(trip.scheduled_at) }}
-                                    <span v-if="trip.round_trip"> · Ida y vuelta</span>
-                                </p>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <span class="px-2 py-0.5 rounded-full text-[11px] font-medium" :class="TRIP_STATUS[trip.status].class">
-                                    {{ TRIP_STATUS[trip.status].label }}
-                                </span>
-                                <p class="mt-1 text-sm text-arka-primary-bright font-semibold">${{ trip.price.toFixed(2) }}</p>
-                            </div>
-                        </Link>
-                    </div>
-
-                    <!-- Seguridad siempre (pedido explícito del usuario, mockup provisto):
-                         el botón SOS de verdad depende de una carrera en curso puntual
-                         (SosAlertController::store() necesita el conductor/vehículo de
-                         ESA carrera) — acá, sin una carrera activa, lleva a administrar
-                         los contactos de confianza que reciben esa alerta cuando sí la
-                         hay, en vez de simular un botón que no podría hacer nada. -->
-                    <Link
-                        v-if="hasRoute('trusted-contacts.index')"
-                        :href="route('trusted-contacts.index')"
-                        class="p-4 bg-arka-card shadow rounded-arka flex items-center gap-4 hover:bg-arka-card/70"
-                    >
-                        <div class="h-12 w-12 rounded-full bg-arka-primary/15 flex items-center justify-center shrink-0">
-                            <svg class="h-6 w-6 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m9 12 2 2 4-4" />
-                            </svg>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-arka-text font-medium">Seguridad siempre</p>
-                            <p class="text-xs text-arka-text-muted">Su seguridad es primero — mantenga al día sus contactos de confianza.</p>
-                        </div>
-                        <span class="shrink-0 px-3 py-1.5 rounded-full bg-arka-primary text-arka-base text-xs font-bold">SOS</span>
-                    </Link>
-                </template>
-            </div>
-        </div>
+                </div>
+            </template>
+        </template>
     </AuthenticatedLayout>
 </template>

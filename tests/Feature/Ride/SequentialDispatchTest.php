@@ -438,8 +438,14 @@ class SequentialDispatchTest extends TestCase
         $older = RideRequest::query()->where('client_user_id', $client->id)->firstOrFail();
         $older->update(['requested_at' => now()->subMinutes(5)]);
 
-        $this->actingAs($client)->post(route('ride-requests.store'), $payload)->assertRedirect();
-        $newer = RideRequest::query()->where('client_user_id', $client->id)->where('id', '!=', $older->id)->firstOrFail();
+        // La plataforma prohíbe dos solicitudes inmediatas del mismo
+        // cliente. La segunda posición de la cola pertenece a otro cliente
+        // cuya flota también incluye al mismo conductor ocupado.
+        $newerClient = User::factory()->create();
+        $newerFleet = Fleet::factory()->for($newerClient, 'owner')->create();
+        FleetMember::factory()->for($newerFleet)->for($driver, 'driver')->create(['added_by' => $newerClient->id]);
+        $this->actingAs($newerClient)->post(route('ride-requests.store'), $payload)->assertRedirect();
+        $newer = RideRequest::query()->where('client_user_id', $newerClient->id)->firstOrFail();
 
         $this->actingAs($driver)->post(route('rides.complete', $busyRide))->assertRedirect();
 
@@ -486,7 +492,12 @@ class SequentialDispatchTest extends TestCase
         $this->assertSame('waiting', $needsTrunk->status);
         $needsTrunk->update(['requested_at' => now()->subMinutes(5)]);
 
-        $this->actingAs($client)->post(route('ride-requests.store'), [
+        $noTrunkClient = User::factory()->create();
+        $noTrunkFleet = Fleet::factory()->for($noTrunkClient, 'owner')->create();
+        FleetMember::factory()->for($noTrunkFleet)->for($driverNoTrunk, 'driver')->create(['added_by' => $noTrunkClient->id]);
+        FleetMember::factory()->for($noTrunkFleet)->for($driverWithTrunk, 'driver')->create(['added_by' => $noTrunkClient->id]);
+
+        $this->actingAs($noTrunkClient)->post(route('ride-requests.store'), [
             'driver_user_id' => null,
             'dispatch_pool' => 'fleet',
             'origin_lat' => -0.1807,
@@ -494,7 +505,7 @@ class SequentialDispatchTest extends TestCase
             'destination_lat' => -0.2000,
             'destination_lng' => -78.5000,
         ])->assertSessionHasNoErrors()->assertRedirect();
-        $noTrunk = RideRequest::query()->where('client_user_id', $client->id)->where('id', '!=', $needsTrunk->id)->firstOrFail();
+        $noTrunk = RideRequest::query()->where('client_user_id', $noTrunkClient->id)->firstOrFail();
         $this->assertSame('waiting', $noTrunk->status);
 
         // Se libera el que NO tiene cajuela — driverWithTrunk sigue ocupado.

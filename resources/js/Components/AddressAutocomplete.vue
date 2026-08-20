@@ -21,13 +21,21 @@ const props = defineProps({
     // cualquier app de viajes), y no gastan cuota de Google porque no
     // disparan ninguna búsqueda — ya se sabe lat/lng de antes.
     favorites: { type: Array, default: () => [] },
+    // Pedido explícito del usuario (bosquejo de referencia): la tarjeta de
+    // búsqueda de Inicio (Dashboard.vue) flota sobre el mapa con un fondo
+    // blanco cálido, mientras el resto de la app sigue oscura — este
+    // componente se reutiliza en las dos, así que en vez de duplicarlo
+    // entero solo cambia de paleta con esta prop, sin tocar su lógica.
+    light: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['update:modelValue', 'place-selected', 'clear']);
 
 let placesLib = null;
+let placesLoading = null;
 let sessionToken = null;
 let debounceTimer = null;
+let suggestionRequest = 0;
 
 // Bug real reportado por el usuario (lista de sugerencias con datos válidos
 // en la respuesta de Google, pero "Unhandled error during execution of
@@ -41,9 +49,19 @@ const suggestions = shallowRef([]);
 const open = ref(false);
 const loading = ref(false);
 
-loadGooglePlaces().then((lib) => {
-    placesLib = lib;
-});
+// No descargar Google Maps al abrir una pantalla. En móvil es uno de los
+// recursos externos más pesados y muchas personas ni siquiera tocarán este
+// campo. Se carga una sola vez, recién al enfocarlo o empezar a escribir.
+function ensurePlacesLoaded() {
+    if (placesLib) return Promise.resolve(placesLib);
+    if (!placesLoading) {
+        placesLoading = loadGooglePlaces().then((lib) => {
+            placesLib = lib;
+            return lib;
+        });
+    }
+    return placesLoading;
+}
 
 function newSessionToken() {
     if (!placesLib) return null;
@@ -65,13 +83,16 @@ function onInput(event) {
         return;
     }
 
-    if (!placesLib || value.trim().length < 3) {
+    if (value.trim().length < 3) {
         suggestions.value = [];
         open.value = false;
         return;
     }
 
-    debounceTimer = setTimeout(() => fetchSuggestions(value), 300);
+    debounceTimer = setTimeout(async () => {
+        await ensurePlacesLoaded();
+        fetchSuggestions(value);
+    }, 300);
 }
 
 const showFavorites = computed(() => open.value && !props.modelValue?.trim() && props.favorites.length > 0);
@@ -93,6 +114,7 @@ async function fetchSuggestions(text) {
     // desde acá. Mejor no intentarlo — mismo comportamiento que sin key.
     if (!placesLib?.AutocompleteSuggestion) return;
 
+    const requestId = ++suggestionRequest;
     loading.value = true;
 
     try {
@@ -112,6 +134,8 @@ async function fetchSuggestions(text) {
         }
 
         const { suggestions: results } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+        // Una respuesta vieja no debe reemplazar la búsqueda más reciente.
+        if (requestId !== suggestionRequest) return;
         suggestions.value = results ?? [];
         open.value = suggestions.value.length > 0;
     } catch (error) {
@@ -122,10 +146,11 @@ async function fetchSuggestions(text) {
         // podía llegar a verse "exitoso" en Network y sin embargo esto
         // fallar después, al armar los objetos de sugerencia).
         console.warn('Arka01: Google Places respondió pero no se pudieron armar las sugerencias.', error);
+        if (requestId !== suggestionRequest) return;
         suggestions.value = [];
         open.value = false;
     } finally {
-        loading.value = false;
+        if (requestId === suggestionRequest) loading.value = false;
     }
 }
 
@@ -195,20 +220,43 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
             type="text"
             :value="modelValue"
             :placeholder="placeholder"
-            class="w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary focus:ring-arka-primary"
-            :class="{ 'pe-9': modelValue?.trim() }"
+            class="w-full focus:ring-arka-primary"
+            :class="
+                light
+                    ? 'min-h-12 rounded-full ps-11 pe-10 border border-arka-base/[0.06] bg-white text-arka-base placeholder:text-arka-base/40 shadow-[0_8px_24px_rgba(15,23,42,0.06)] focus:border-arka-primary focus:shadow-[0_10px_28px_rgba(52,211,153,0.12)]'
+                    : 'rounded-arka pe-9 border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary'
+            "
             autocomplete="off"
             @input="onInput"
             @keydown.escape="close"
-            @focus="() => (open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0)"
+            @focus="() => { ensurePlacesLoaded(); open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0; }"
         />
+
+        <!-- Ícono de lupa: pedido explícito del usuario, con imagen de
+             referencia — en la variante clara vive SIEMPRE a la izquierda,
+             como cualquier barra de búsqueda (no se esconde al escribir, ese
+             es el trabajo del botón de limpiar a la derecha). En la
+             variante oscura se mantiene el comportamiento de siempre
+             (a la derecha, solo mientras el campo está vacío), sin tocar
+             ninguna otra pantalla que ya la usa así. -->
+        <span
+            v-if="light || !modelValue?.trim()"
+            class="pointer-events-none absolute inset-y-0 flex items-center"
+            :class="light ? 'left-0 ps-4 text-arka-base/40' : 'right-0 px-3 text-arka-text-muted'"
+        >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="7" stroke-linecap="round" stroke-linejoin="round" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="m20 20-3.5-3.5" />
+            </svg>
+        </span>
 
         <!-- Limpiar el campo (pedido explícito del usuario): borra el texto Y
              lo que ya se había elegido (lat/lng/sector), no solo lo visible. -->
         <button
             v-if="modelValue?.trim()"
             type="button"
-            class="absolute inset-y-0 right-0 flex items-center px-2.5 text-arka-text-muted hover:text-arka-text"
+            class="absolute inset-y-0 right-0 flex items-center px-2.5"
+            :class="light ? 'text-arka-base/40 hover:text-arka-base/70' : 'text-arka-text-muted hover:text-arka-text'"
             aria-label="Limpiar"
             tabindex="-1"
             @click="clearField"
@@ -229,12 +277,14 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
              antes de escribir nada, como "lugares recientes". -->
         <ul
             v-if="showFavorites"
-            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg py-1"
+            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1"
+            :class="light ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
             <li v-for="place in favorites" :key="place.address">
                 <button
                     type="button"
-                    class="w-full px-3 py-2 text-start text-sm text-arka-text hover:bg-arka-base flex items-center gap-2"
+                    class="w-full px-3 py-2 text-start text-sm flex items-center gap-2"
+                    :class="light ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
                     @click="selectFavorite(place)"
                 >
                     <span class="text-arka-primary-bright shrink-0">★</span>
@@ -245,12 +295,14 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
 
         <ul
             v-else-if="showSuggestions"
-            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border border-arka-text-muted/20 bg-arka-card shadow-lg py-1"
+            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1"
+            :class="light ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
             <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
                 <button
                     type="button"
-                    class="w-full px-3 py-2 text-start text-sm text-arka-text hover:bg-arka-base"
+                    class="w-full px-3 py-2 text-start text-sm"
+                    :class="light ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
                     @click="selectSuggestion(suggestion)"
                 >
                     {{ suggestion.placePrediction.text.text }}

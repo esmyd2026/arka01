@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\CooperativeRideUpdated;
 use App\Events\RideRequestCancelled;
 use App\Events\RideRequested;
 use App\Jobs\ExpireRideOffer;
@@ -37,7 +38,7 @@ class CooperativeRideAssignmentController extends Controller
             ->with('driver.driverProfile')
             ->first();
 
-        if (! $membership || ! $membership->driver->driverProfile?->is_available) {
+        if (! $membership || (! $rideRequest->is_scheduled && ! $membership->driver->driverProfile?->is_available)) {
             throw ValidationException::withMessages([
                 'driver_user_id' => 'Seleccione un conductor activo y disponible de la cooperativa.',
             ]);
@@ -45,7 +46,7 @@ class CooperativeRideAssignmentController extends Controller
 
         $previousDriverId = $rideRequest->driver_user_id;
         $timeoutSeconds = max(15, min(300, (int) $cooperative->response_timeout_seconds));
-        $remaining = RideDispatchCandidates::forCooperative(
+        $remaining = $rideRequest->is_scheduled ? [] : RideDispatchCandidates::forCooperative(
             $cooperative,
             (float) $rideRequest->origin_lat,
             (float) $rideRequest->origin_lng,
@@ -61,7 +62,10 @@ class CooperativeRideAssignmentController extends Controller
                 throw ValidationException::withMessages(['ride_request' => 'Esta solicitud ya no admite asignación.']);
             }
 
-            $expiresAt = now()->addSeconds($timeoutSeconds);
+            // Una reserva futura no vence en segundos. El conductor la ve
+            // como programada y puede confirmarla sin la presión del
+            // despacho inmediato.
+            $expiresAt = $locked->is_scheduled ? null : now()->addSeconds($timeoutSeconds);
             $locked->update([
                 'status' => 'pending',
                 'driver_user_id' => (int) $validated['driver_user_id'],
@@ -87,12 +91,15 @@ class CooperativeRideAssignmentController extends Controller
         $driver = User::find($assigned->driver_user_id);
         $driver?->notify(new RideRequestedPushNotification($assigned));
         $assigned->client->notify(new CooperativeRideAssignedPushNotification($assigned));
+        broadcast(new CooperativeRideUpdated($assigned, 'assigned'));
         if ($driver) {
             WhatsAppFreeformSender::sendNewRideAlert($driver, $assigned);
         }
 
-        ExpireRideOffer::dispatch($assigned->id, $assigned->driver_user_id)
-            ->delay($assigned->current_offer_expires_at);
+        if (! $assigned->is_scheduled) {
+            ExpireRideOffer::dispatch($assigned->id, $assigned->driver_user_id)
+                ->delay($assigned->current_offer_expires_at);
+        }
 
         return back()->with('status', 'Solicitud asignada. El conductor debe aceptarla antes de que venza la oferta.');
     }

@@ -48,6 +48,7 @@ use App\Http\Controllers\ExpressRouteController;
 use App\Http\Controllers\FleetController;
 use App\Http\Controllers\FleetInvitationController;
 use App\Http\Controllers\FleetMemberController;
+use App\Http\Controllers\GuestRideController;
 use App\Http\Controllers\MyPlanController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlatformFeedbackController;
@@ -85,8 +86,20 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
+        'guestCooperatives' => \App\Models\Cooperative::query()
+            ->where('status', 'approved')
+            ->whereNull('suspended_at')
+            ->whereNotNull('stand_lat')
+            ->whereNotNull('stand_lng')
+            ->withCount('activeDriverMemberships')
+            ->orderBy('name')
+            ->get(['id', 'name', 'logo_path', 'stand_lat', 'stand_lng']),
     ]);
 });
+
+Route::post('/viajar-como-invitado', [GuestRideController::class, 'store'])
+    ->middleware(['guest', 'throttle:4,1'])
+    ->name('guest-rides.store');
 
 // "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): formulario
 // público en el Home, sin necesidad de sesión — throttle porque no hay
@@ -120,6 +133,10 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'phone_verified'])
     ->name('dashboard');
 
+Route::post('/dashboard/ubicacion', [DashboardController::class, 'updateLocation'])
+    ->middleware(['auth', 'verified', 'phone_verified', 'throttle:12,1'])
+    ->name('dashboard.location.update');
+
 Route::middleware('auth')->group(function () {
     // Recorrido guiado por rol, una sola vez (pedido explícito del usuario).
     Route::post('/onboarding/completar', [OnboardingController::class, 'complete'])->name('onboarding.complete');
@@ -132,11 +149,15 @@ Route::middleware('auth')->group(function () {
     // crea la cuenta base; este formulario completa la postulación legal.
     Route::middleware('cooperative')->group(function () {
         Route::get('/cooperativa', [CooperativeDashboardController::class, 'index'])->name('cooperative.dashboard');
+        Route::patch('/cooperativa/configuracion-despacho', [CooperativeDashboardController::class, 'updateDispatchSettings'])->name('cooperative.dispatch-settings.update');
         Route::get('/cooperativa/perfil', [CooperativeProfileController::class, 'edit'])->name('cooperative.profile.edit');
         Route::post('/cooperativa/perfil', [CooperativeProfileController::class, 'update'])->name('cooperative.profile.update');
+        Route::post('/cooperativa/perfil/enviar-revision', [CooperativeProfileController::class, 'submitForReview'])->name('cooperative.profile.submit-review');
+        Route::post('/cooperativa/perfil/logo', [CooperativeProfileController::class, 'updateLogo'])->name('cooperative.profile.logo.update');
         Route::get('/cooperativa/conductores', [CooperativeDriverController::class, 'index'])->name('cooperative.drivers.index');
         Route::get('/cooperativa/conductores/buscar', [CooperativeDriverController::class, 'search'])->name('cooperative.drivers.search');
         Route::post('/cooperativa/conductores/invitar', [CooperativeDriverController::class, 'invite'])->name('cooperative.drivers.invite');
+        Route::get('/cooperativa/conductores/{membership}', [CooperativeDriverController::class, 'show'])->name('cooperative.drivers.show');
         Route::post('/cooperativa/conductores/{membership}/suspender', [CooperativeDriverController::class, 'suspend'])->name('cooperative.drivers.suspend');
         Route::post('/cooperativa/conductores/{membership}/reactivar', [CooperativeDriverController::class, 'reactivate'])->name('cooperative.drivers.reactivate');
         Route::delete('/cooperativa/conductores/{membership}', [CooperativeDriverController::class, 'remove'])->name('cooperative.drivers.remove');

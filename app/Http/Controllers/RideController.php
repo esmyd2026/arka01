@@ -96,7 +96,13 @@ class RideController extends Controller
         $distanceKm = Haversine::distanceKm($targetLat, $targetLng, (float) $validated['lat'], (float) $validated['lng']);
 
         if ($distanceKm > self::RIDE_ACTION_LOCATION_TOLERANCE_KM) {
-            throw ValidationException::withMessages(['ride' => $message]);
+            $distanceLabel = $distanceKm < 1
+                ? round($distanceKm * 1000).' m'
+                : number_format($distanceKm, 1).' km';
+
+            throw ValidationException::withMessages([
+                'ride' => $message.' Su ubicación está a '.$distanceLabel.' del punto requerido.',
+            ]);
         }
     }
 
@@ -267,6 +273,14 @@ class RideController extends Controller
         // rideRequest: solo para leer `scheduled_at` cuando la carrera viene
         // de una solicitud PROGRAMADA (consideración agregada al alcance).
         $ride->load(['client', 'driver.driverProfile', 'originSector', 'destinationSector', 'rideRequest']);
+
+        // Calificación del conductor (pedido explícito del usuario, con
+        // mockup de referencia): la tarjeta de "En camino" necesita mostrar
+        // su ⭐ de un vistazo — mismo cálculo que ya usa driverCardData() en
+        // RideRequestController, asignado como atributo dinámico (mismo
+        // patrón que `needs_my_review` más arriba, Eloquent lo serializa igual).
+        $ride->driver->average_rating = round((float) $ride->driver->reviewsReceived()->avg('rating'), 1);
+        $ride->driver->review_count = $ride->driver->reviewsReceived()->count();
 
         // Mi reseña y la de la otra parte, si ya existen (sección 3.6: se ven
         // de inmediato, no hay mecánica de revelado a ciegas en esta fase).

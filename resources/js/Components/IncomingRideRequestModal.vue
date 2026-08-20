@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
-import DangerButton from '@/Components/DangerButton.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { dismissIncomingRideRequest, incomingRideRequestState } from '@/Utils/incomingRideRequest';
 
@@ -87,9 +86,15 @@ function discard() {
 
 <template>
     <BottomSheet :show="show" :closeable="false">
-        <div v-if="current" class="min-h-[50vh] p-4 sm:p-6 flex flex-col">
+        <div v-if="current" class="flex max-h-[80vh] flex-col">
+            <div class="flex-1 overflow-y-auto px-4 pb-3 pt-2 sm:px-6">
             <div class="flex items-start justify-between gap-3">
-                <h3 class="text-lg font-semibold text-arka-text">¡Carrera nueva!</h3>
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-arka-primary">Nueva solicitud</p>
+                    <h3 class="mt-0.5 text-xl font-semibold text-arka-text">
+                        {{ current.is_scheduled ? 'Carrera programada' : '¿Toma esta carrera?' }}
+                    </h3>
+                </div>
                 <!-- La X del modal también descarta (pedido explícito del usuario). -->
                 <button
                     type="button"
@@ -101,18 +106,36 @@ function discard() {
                 </button>
             </div>
 
-            <p v-if="secondsLeft === 0" class="mt-1 text-sm font-medium text-arka-danger">
+            <p v-if="secondsLeft === 0" class="mt-2 text-sm font-medium text-arka-danger">
                 ⏱ Se acabó el tiempo — pasando al siguiente conductor…
             </p>
             <p v-else-if="secondsLeft !== null" class="mt-1 text-sm font-medium" :class="secondsLeft <= 10 ? 'text-arka-danger' : 'text-arka-warning'">
                 ⏱ Tiene {{ secondsLeft }} seg. para responder antes de que pase a otro conductor
             </p>
 
-            <div class="mt-4 space-y-2">
+            <!-- La decisión principal debe entenderse antes de leer detalles:
+                 primero ingreso, distancia y tiempo disponible. -->
+            <div class="mt-4 grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-arka-primary/25 bg-arka-primary/10 p-4">
+                <div>
+                    <p class="text-xs text-arka-text-muted">Usted recibe</p>
+                    <p class="text-3xl font-bold leading-none text-arka-primary-bright">
+                        ${{ Number(current.current_offered_price).toFixed(2) }}
+                    </p>
+                    <p class="mt-1 text-xs text-arka-text-muted">
+                        {{ Number(current.distance_km).toFixed(1) }} km · <span class="capitalize">{{ current.payment_method ?? 'efectivo' }}</span>
+                    </p>
+                </div>
+                <div v-if="secondsLeft !== null" class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 text-base font-bold"
+                    :class="secondsLeft <= 10 ? 'border-arka-danger/40 text-arka-danger' : 'border-arka-warning/40 text-arka-warning'">
+                    {{ secondsLeft }}s
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-4">
                 <!-- Pedido explícito del usuario: que aparezca la foto del
                      cliente, no solo el nombre — mismo <UserAvatar> con
                      respaldo a iniciales que usa el resto de la app. -->
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 rounded-arka bg-arka-base/45 p-3">
                     <UserAvatar
                         :user="{ name: current.client_name, avatar_url: current.client_avatar_url }"
                         size-class="h-14 w-14 text-lg shrink-0"
@@ -135,7 +158,7 @@ function discard() {
                      corrida con "→", ilegible cuando la dirección es larga y hace
                      wrap. Mismo lenguaje visual de "punto de origen (verde) → punto
                      de destino (rojo)" que ya usa el mapa (FleetMap.vue). -->
-                <div class="flex gap-3">
+                <div class="flex gap-3 rounded-arka border border-arka-text-muted/10 p-3">
                     <div class="flex flex-col items-center pt-1.5 shrink-0">
                         <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
                         <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
@@ -156,17 +179,6 @@ function discard() {
                         </div>
                     </div>
                 </div>
-                <p class="text-xs text-arka-text-muted">{{ Number(current.distance_km).toFixed(1) }} km</p>
-
-                <p class="text-2xl font-semibold text-arka-primary-bright mt-2">
-                    ${{ Number(current.current_offered_price).toFixed(2) }}
-                </p>
-                <!-- Forma de pago (pedido explícito del usuario): antes de
-                     aceptar, no solo en el detalle. -->
-                <p class="text-sm text-arka-text-muted">
-                    Paga con <span class="capitalize text-arka-text">{{ current.payment_method ?? 'efectivo' }}</span>
-                </p>
-
                 <p v-if="current.is_scheduled" class="text-xs text-arka-warning font-medium">
                     📅 Programada para {{ formatScheduledAt(current.scheduled_at) }}
                     <span v-if="current.round_trip">· Ida y vuelta</span>
@@ -178,10 +190,22 @@ function discard() {
                     "{{ current.notes }}"
                 </p>
             </div>
+            </div>
 
-            <div class="mt-auto pt-6 grid grid-cols-2 gap-3">
-                <DangerButton class="justify-center" :disabled="processing || secondsLeft === 0" @click="discard">Descartar</DangerButton>
-                <PrimaryButton class="justify-center" :disabled="processing || secondsLeft === 0" @click="accept">Aceptar</PrimaryButton>
+            <!-- Acciones pegadas al borde inferior: siempre quedan al alcance
+                 del pulgar aunque una dirección o nota sea extensa. -->
+            <div class="shrink-0 border-t border-arka-text-muted/10 bg-arka-card px-4 pb-4 pt-3 sm:px-6">
+                <PrimaryButton class="min-h-12 w-full justify-center text-sm" :disabled="processing || secondsLeft === 0" @click="accept">
+                    {{ processing ? 'Procesando…' : 'Aceptar carrera' }}
+                </PrimaryButton>
+                <button
+                    type="button"
+                    class="mt-2 min-h-10 w-full text-sm font-medium text-arka-text-muted hover:text-arka-danger disabled:opacity-50"
+                    :disabled="processing || secondsLeft === 0"
+                    @click="discard"
+                >
+                    No puedo tomarla
+                </button>
             </div>
         </div>
     </BottomSheet>

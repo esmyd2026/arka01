@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -32,7 +33,14 @@ class WhatsAppFreeformSender
             return false;
         }
 
+        // Timeout explícito (pedido explícito del usuario, tras encontrar un
+        // job de cola colgado más de 60 segundos): sin esto, un HTTP a la API
+        // de Meta que se queda esperando (red lenta, DNS colgado) podía
+        // trabar todo un worker de cola indefinidamente — con `queue:work`
+        // eso ya no tumba el worker entero, pero igual no tiene sentido
+        // esperar de más por un solo mensaje de WhatsApp.
         $response = Http::withToken(WhatsAppConfig::token())
+            ->timeout(10)
             ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => ltrim($phoneE164, '+'),
@@ -96,7 +104,11 @@ class WhatsAppFreeformSender
             ? max(0, $rideRequest->current_offer_expires_at->getTimestamp() - now()->getTimestamp())
             : null;
 
+        $scheduledLine = $rideRequest->is_scheduled && $rideRequest->scheduled_at
+            ? '📅 Programada para '.$rideRequest->scheduled_at->format('d/m/Y H:i')."\n"
+            : '';
         $message = " ¡Carrera nueva de {$rideRequest->client->name}!\n"
+            .$scheduledLine
             .'Recogida: '.($rideRequest->origin_address ?? 'ver en la app')."\n"
             .($distanceKm !== null ? "Distancia: {$distanceKm} km\n" : '')
             ."Valor aproximado: \${$rideRequest->current_offered_price}\n"
@@ -108,6 +120,22 @@ class WhatsAppFreeformSender
             // quiere más, tiene que desconectarse a propósito desde la app,
             // no alcanza con cerrarla o dejarla en segundo plano.
             ."\n\n¿No quiere más solicitudes? Desconéctese desde la app para dejar de recibirlas.";
+
+        self::sendText($driver->phone, $message);
+    }
+
+    public static function sendScheduledRideReminder(User $driver, Ride $ride): void
+    {
+        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+            return;
+        }
+
+        $time = $ride->rideRequest->scheduled_at->format('H:i');
+        $message = "⏰ Su carrera programada está próxima.\n"
+            ."Cliente: {$ride->client->name}\n"
+            ."Hora: {$time}\n"
+            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n\n"
+            .'Abra Arka01 para revisar e iniciar el viaje: '.route('rides.show', $ride);
 
         self::sendText($driver->phone, $message);
     }
