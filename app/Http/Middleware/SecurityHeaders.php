@@ -46,7 +46,11 @@ class SecurityHeaders
                 "script-src 'self' 'unsafe-inline' https://maps.googleapis.com",
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                 "font-src 'self' data: https://fonts.gstatic.com",
-                "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.gstatic.com https://maps.googleapis.com",
+                // FleetMap usa CARTO Positron/Dark Matter. Sus teselas llegan
+                // desde subdominios a-d.basemaps.cartocdn.com; si este origen
+                // no figura aquí, el mapa funciona en local (sin CSP) pero
+                // aparece vacío en producción.
+                "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://maps.gstatic.com https://maps.googleapis.com",
                 // La API "nueva" de Google Places (Utils/googleMaps.js) manda las
                 // llamadas de autocompletado por gRPC-Web a places.googleapis.com
                 // — un origen DISTINTO del que usa el resto de Maps
