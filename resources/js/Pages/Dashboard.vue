@@ -142,21 +142,31 @@ watch(bottomSheetRef, (el) => {
 // deja un rastro chico y visible junto al botón de recentrar, para que no
 // parezca que "no hace nada".
 const locationDenied = ref(false);
+const locationLoading = ref(Boolean(props.fleetDrivers));
 function requestGeolocation(onSuccess) {
+    if (props.fleetDrivers) locationLoading.value = true;
+
     if (!navigator.geolocation) {
+        locationLoading.value = false;
         locationDenied.value = true;
         return;
     }
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
+            locationLoading.value = false;
             locationDenied.value = false;
             onSuccess(position);
         },
         (error) => {
+            locationLoading.value = false;
             console.warn('Arka01: no se pudo obtener la ubicación en vivo del cliente.', error);
             locationDenied.value = true;
-        }
+        },
+        // Evita que la capa de carga quede indefinidamente si el GPS del
+        // dispositivo no responde. Una posición reciente sirve para centrar
+        // rápido y luego el usuario puede volver a solicitar mayor precisión.
+        { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 }
     );
 }
 
@@ -841,6 +851,22 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         @map-click="({ lat, lng }) => goToDestination({ lat, lng })"
                     />
 
+                    <!-- Feedback inmediato mientras el navegador obtiene el
+                         GPS y FleetMap ajusta el centro/zoom. Sin esta capa el
+                         mapa general parecía congelado antes del salto a la
+                         ubicación real. No bloquea los controles ni el sheet. -->
+                    <div
+                        v-if="locationLoading"
+                        class="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-white/45 backdrop-blur-[1px]"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <div class="flex items-center gap-3 rounded-full border border-white/80 bg-arka-base/85 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md">
+                            <span class="h-5 w-5 animate-spin rounded-full border-2 border-white/35 border-t-arka-primary" aria-hidden="true"></span>
+                            <span>Ubicando y ajustando el mapa…</span>
+                        </div>
+                    </div>
+
                     <!-- Conductores activos cerca — insignia discreta, debajo
                          de la nav, sin competir con "¿A dónde vas?". Nunca en
                          km exacto (mismo criterio de privacidad que
@@ -942,6 +968,18 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 height="340px"
                                 @map-click="({ lat, lng }) => goToDestination({ lat, lng })"
                             />
+
+                            <div
+                                v-if="locationLoading"
+                                class="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-white/50 backdrop-blur-[1px]"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                <div class="flex items-center gap-3 rounded-full bg-arka-base/85 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md">
+                                    <span class="h-5 w-5 animate-spin rounded-full border-2 border-white/35 border-t-arka-primary" aria-hidden="true"></span>
+                                    <span>Ubicando y ajustando el mapa…</span>
+                                </div>
+                            </div>
 
                             <p
                                 v-if="nearbyDriversCaption"

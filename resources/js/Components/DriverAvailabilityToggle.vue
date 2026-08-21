@@ -26,7 +26,10 @@ const props = defineProps({
 const emit = defineEmits(['update:available']);
 
 const available = ref(props.initialAvailable);
-const error = ref('');
+// Si el backend ya informó que no puede conectarse, la causa debe verse de
+// inmediato. Antes el botón HTML estaba `disabled`: eso también anulaba el
+// click que intentaba explicar el bloqueo y parecía que no hacía nada.
+const error = ref(props.canConnect ? '' : props.blockedReason);
 const sending = ref(false);
 
 let watchId = null;
@@ -170,7 +173,10 @@ function toggle() {
     error.value = '';
 
     if (!available.value && !props.canConnect) {
-        error.value = props.blockedReason || 'Complete la verificación de su perfil para conectarse.';
+        // Flujo directo: si falta un requisito, el conductor no debe quedarse
+        // tocando un control bloqueado. El perfil explica el requisito exacto
+        // con la misma regla del backend.
+        window.location.assign(route('driver.profile.edit'));
         return;
     }
 
@@ -230,11 +236,13 @@ onBeforeUnmount(() => {
         <button
             type="button"
             @click="toggle"
-            :disabled="!canConnect && !available"
             :aria-disabled="!canConnect && !available"
             :title="!canConnect ? blockedReason : undefined"
-            class="relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            :class="available ? 'bg-arka-primary' : 'bg-arka-text-muted/30'"
+            class="relative inline-flex h-7 w-12 items-center rounded-full transition-colors"
+            :class="[
+                available ? 'bg-arka-primary' : 'bg-arka-text-muted/30',
+                !canConnect && !available ? 'cursor-help opacity-60' : '',
+            ]"
         >
             <span
                 class="inline-block h-5 w-5 transform rounded-full bg-arka-base transition-transform"
@@ -247,6 +255,15 @@ onBeforeUnmount(() => {
         </span>
 
         <span v-if="sending" class="text-xs text-arka-text-muted">actualizando…</span>
-        <span v-if="error" class="basis-full text-xs leading-snug text-arka-warning">{{ error }}</span>
+        <span v-if="error" role="status" class="basis-full text-xs leading-snug text-arka-warning">
+            {{ error }}
+            <a
+                v-if="!canConnect"
+                :href="route('driver.profile.edit')"
+                class="ml-1 font-semibold underline underline-offset-2 hover:text-arka-primary-bright"
+            >
+                Revisar mi perfil
+            </a>
+        </span>
     </div>
 </template>

@@ -34,6 +34,8 @@ const props = defineProps({
         type: Object,
         default: null,
     },
+    canConnect: { type: Boolean, default: false },
+    connectionBlockReason: { type: String, default: null },
     planLimits: { type: Object, required: true },
     // Avisos de carrera nueva por WhatsApp (pedido explícito del usuario).
     whatsappSession: { type: Object, default: null },
@@ -174,7 +176,16 @@ const vehicleColorOptions = computed(() => {
 // servidor.
 const vehicleInfoComplete = computed(() => {
     const p = props.driverProfile;
-    return Boolean(p?.vehicle_make && p?.vehicle_model && p?.vehicle_color && p?.vehicle_plate && p?.vehicle_year && p?.passenger_capacity);
+    return Boolean(
+        p?.vehicle_make
+        && p?.vehicle_model
+        && p?.vehicle_color
+        && p?.vehicle_type
+        && p?.vehicle_plate
+        && p?.vehicle_year
+        && p?.passenger_capacity
+        && p?.has_trunk !== null
+    );
 });
 
 // "Tu estado" (pedido explícito del usuario: "si falta que el conductor
@@ -185,6 +196,13 @@ const statusItems = computed(() => {
     if (!p) return [];
 
     const items = [
+        {
+            label: 'Habilitado para conectarse',
+            ok: props.canConnect,
+            detail: props.canConnect
+                ? 'Su perfil está completo y aprobado. Puede activarse desde Inicio.'
+                : props.connectionBlockReason || 'Complete el perfil y espere la aprobación administrativa.',
+        },
         {
             label: 'Datos del vehículo completos',
             ok: vehicleInfoComplete.value,
@@ -284,6 +302,23 @@ const VERIFICATION_LABELS = {
 
         <div class="py-12">
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <div
+                    v-if="driverProfile && !canConnect"
+                    role="status"
+                    class="rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-4"
+                >
+                    <p class="font-semibold text-arka-warning">Aún no puede conectarse</p>
+                    <p class="mt-1 text-sm leading-relaxed text-arka-text-muted">{{ connectionBlockReason }}</p>
+                </div>
+                <div
+                    v-else-if="driverProfile && canConnect"
+                    role="status"
+                    class="rounded-arka border border-arka-primary/30 bg-arka-primary/10 p-4"
+                >
+                    <p class="font-semibold text-arka-primary-bright">Perfil aprobado y listo</p>
+                    <p class="mt-1 text-sm text-arka-text-muted">Ya puede regresar a Inicio y ponerse disponible.</p>
+                </div>
+
                 <!-- Tarjeta de perfil (pedido explícito del usuario: "algo así
                      profesional como en las tarjetas cuando se comparten
                      referidos") — mismo lenguaje visual que Referral/Show.vue,

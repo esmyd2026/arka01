@@ -64,6 +64,10 @@ class DriverProfileController extends Controller
 
         return Inertia::render('Driver/Profile', [
             'driverProfile' => $request->user()->driverProfile,
+            // La pantalla de perfil debe explicar exactamente la misma causa
+            // que bloquea el switch y el endpoint de ubicación.
+            'canConnect' => (bool) $user->driverProfile?->canBecomeAvailable(),
+            'connectionBlockReason' => $user->driverProfile?->availabilityBlockReason(),
             // Pedido explícito del usuario: tarjeta de perfil "profesional"
             // arriba de todo, mismo lenguaje visual que la tarjeta de "Te
             // recomendaron viajar con..." (Referral/Show.vue).
