@@ -50,7 +50,10 @@ class SecurityHeaders
                 // desde subdominios a-d.basemaps.cartocdn.com; si este origen
                 // no figura aquí, el mapa funciona en local (sin CSP) pero
                 // aparece vacío en producción.
-                "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://maps.gstatic.com https://maps.googleapis.com",
+                // Google OAuth entrega los avatares de cuenta desde lh3.
+                // Autorizar el host exacto evita abrir todos los subdominios
+                // de googleusercontent.com sin necesidad.
+                "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://maps.gstatic.com https://maps.googleapis.com https://lh3.googleusercontent.com",
                 // La API "nueva" de Google Places (Utils/googleMaps.js) manda las
                 // llamadas de autocompletado por gRPC-Web a places.googleapis.com
                 // — un origen DISTINTO del que usa el resto de Maps

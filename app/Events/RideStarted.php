@@ -6,7 +6,7 @@ use App\Models\FleetMember;
 use App\Models\Ride;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -19,7 +19,7 @@ use Illuminate\Queue\SerializesModels;
  * canal personal de las dos partes de ESTA carrera puntual, para que
  * Ride/Show.vue se refresque solo si lo tenían abierto desde antes.
  */
-class RideStarted implements ShouldBroadcast
+class RideStarted implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

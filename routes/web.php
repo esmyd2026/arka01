@@ -242,6 +242,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/mis-clientes/{member}/salir', [DriverInvitationController::class, 'leave'])->name('driver.fleets.leave');
     Route::post('/mis-clientes/{member}/solicitudes', [DriverInvitationController::class, 'toggleRequests'])->name('driver.fleets.toggle-requests');
 
+    // Ruta Google calculada desde el servidor: protege la clave privada y
+    // aplica caché/throttle para controlar costos.
+    Route::post('/mapas/ruta', \App\Http\Controllers\MapRouteController::class)
+        ->middleware('throttle:30,1')
+        ->name('maps.route');
+
     // Ubicación en vivo del conductor (sección 9.3). El frontend la llama
     // cada ~15s (DriverAvailabilityToggle.vue) — 20/min da margen de sobra
     // sin dejar la puerta abierta a inundarla (pedido explícito del usuario:
@@ -262,6 +268,11 @@ Route::middleware('auth')->group(function () {
     // si no Laravel lo toma como {ride}="indicadores" y tira 404.
     Route::get('/carreras/indicadores', [DriverStatsController::class, 'index'])->name('rides.stats');
     Route::get('/carreras/{ride}', [RideController::class, 'show'])->name('rides.show');
+    // Seguimiento GPS durante la carrera, separado del estado Disponible.
+    // 30/min permite una posición cada pocos segundos sin aceptar abuso.
+    Route::post('/carreras/{ride}/ubicacion', [RideController::class, 'updateLocation'])
+        ->middleware('throttle:30,1')
+        ->name('rides.location.update');
     Route::post('/carreras/{ride}/arrancar', [RideController::class, 'start'])->name('rides.start');
     Route::post('/carreras/{ride}/llegue', [RideController::class, 'arrived'])->name('rides.arrived');
     Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');

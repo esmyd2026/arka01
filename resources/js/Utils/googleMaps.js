@@ -1,50 +1,20 @@
-// Carga perezosa y única del script de Google Maps JS (sección 9.3 y decisión
-// explícita del usuario: Google se usa SOLO para el autocompletado de
-// direcciones — el mapa visual y el trazado de ruta siguen siendo Leaflet +
-// OpenStreetMap + OSRM, gratis, sin tocar). Si no hay API key configurada,
-// `loadGooglePlaces()` resuelve a `null` en vez de tirar error, para que los
-// campos de dirección sigan funcionando como texto libre normal.
+// Carga perezosa y única del SDK de Google Maps. Lo comparten mapas y Places:
+// una pantalla que usa ambos nunca descarga dos veces el mismo script.
 let loadPromise = null;
 
-export function loadGooglePlaces() {
+export function loadGoogleMaps() {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return Promise.resolve(null);
 
     if (loadPromise) return loadPromise;
 
     loadPromise = new Promise((resolve) => {
-        if (window.google?.maps?.places) {
-            resolve(window.google.maps.places);
+        if (window.google?.maps) {
+            resolve(window.google.maps);
             return;
         }
 
-        window.__arkaGoogleMapsCallback = async () => {
-            try {
-                const places = await window.google.maps.importLibrary('places');
-
-                // Bug real reportado: si el proyecto de Google Cloud no tiene
-                // habilitada "Places API (New)" (o falta la cuenta de
-                // facturación), la librería igual carga pero sin estas dos
-                // clases — usarla igual termina en un error sin atrapar
-                // dentro del propio SDK de Google. Mejor tratarlo como "no
-                // disponible" acá mismo, igual que sin API key.
-                if (!places?.AutocompleteSuggestion || !places?.AutocompleteSessionToken) {
-                    // Pedido explícito del usuario ("coloca log también"): sin
-                    // esto, hay que abrir la pestaña Network a mano para
-                    // enterarse de que a Google le faltó habilitar "Places
-                    // API (New)" o la facturación del proyecto.
-                    console.warn(
-                        'Arka01: Google Places cargó pero sin autocompletado — revisá que "Places API (New)" esté habilitada y que el proyecto tenga facturación activa en Google Cloud Console.'
-                    );
-                    resolve(null);
-                    return;
-                }
-
-                resolve(places);
-            } catch {
-                resolve(null);
-            }
-        };
+        window.__arkaGoogleMapsCallback = () => resolve(window.google?.maps ?? null);
 
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&loading=async&callback=__arkaGoogleMapsCallback`;
@@ -66,4 +36,20 @@ export function loadGooglePlaces() {
     });
 
     return loadPromise;
+}
+
+export async function loadGooglePlaces() {
+    const maps = await loadGoogleMaps();
+    if (!maps) return null;
+
+    try {
+        const places = await maps.importLibrary('places');
+        if (!places?.AutocompleteSuggestion || !places?.AutocompleteSessionToken) {
+            console.warn('Arka01: habilite Places API (New) para usar el autocompletado.');
+            return null;
+        }
+        return places;
+    } catch {
+        return null;
+    }
 }

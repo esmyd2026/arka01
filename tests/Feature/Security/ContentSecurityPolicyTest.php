@@ -9,7 +9,7 @@ use Tests\TestCase;
 
 class ContentSecurityPolicyTest extends TestCase
 {
-    public function test_production_csp_allows_the_carto_map_tiles_used_by_fleet_map(): void
+    public function test_production_csp_allows_required_external_images(): void
     {
         // Validamos directamente el middleware para no acoplar esta prueba a
         // sesiones, rutas ni tablas. "testing" reproduce la rama no-local
@@ -26,6 +26,11 @@ class ContentSecurityPolicyTest extends TestCase
             'https://*.basemaps.cartocdn.com',
             $policy,
             'La CSP debe permitir las teselas CARTO utilizadas por FleetMap.',
+        );
+        $this->assertStringContainsString(
+            'https://lh3.googleusercontent.com',
+            $policy,
+            'La CSP debe permitir los avatares entregados por Google OAuth.',
         );
     }
 }

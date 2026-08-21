@@ -2,6 +2,12 @@
 
 return [
 
+    'google_maps' => [
+        // Clave de servidor para Routes API. Debe restringirse por IP del
+        // servidor; nunca se envía al navegador.
+        'server_api_key' => env('GOOGLE_MAPS_SERVER_API_KEY'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

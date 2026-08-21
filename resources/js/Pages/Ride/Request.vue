@@ -272,11 +272,8 @@ const destinationAddress = ref(props.initialDestination?.address ?? '');
 // a resolver esta vez (ver el guard de useCurrentLocationAsOrigin()).
 const mapCenter = ref(props.initialOrigin ? { lat: props.initialOrigin.lat, lng: props.initialOrigin.lng } : null);
 
-// Pedido explícito del usuario: "la caja del mapa... se ve muy extenso" —
-// arranca minimizado (más bajito) y se puede expandir si hace falta ver
-// mejor el recorrido; sigue siendo clickeable en los dos estados, solo
-// cambia el alto.
-const mapExpanded = ref(false);
+// El cliente elige qué punto desea ajustar antes de tocar el mapa.
+const mapEditingPoint = ref('destination');
 
 // Geocodificación inversa gratis, sin API key (OpenStreetMap Nominatim —
 // mismo criterio que OSRM para el trazado del recorrido, sección 9.3): para
@@ -607,9 +604,22 @@ const mapMarkers = computed(() => {
     return markers;
 });
 
-function pickDestination({ lat, lng }) {
+async function pickRoutePoint({ lat, lng }) {
+    const address = await reverseGeocode(lat, lng);
+
+    if (mapEditingPoint.value === 'origin') {
+        originLat.value = lat;
+        originLng.value = lng;
+        originSectorId.value = null;
+        mapCenter.value = { lat, lng };
+        if (address) originAddress.value = address;
+        return;
+    }
+
     destinationLat.value = lat;
     destinationLng.value = lng;
+    destinationSectorId.value = null;
+    if (address) destinationAddress.value = address;
 }
 
 // El cliente eligió una sugerencia de Google Places para el origen (decisión
@@ -1043,8 +1053,8 @@ function submit() {
                      destino, tal cual estaba, ahora envuelto en su propio
                      paso en vez de ser el arranque de un scroll largo. -->
                 <template v-if="step === 'destination'">
-                <div class="space-y-4 rounded-[28px] border border-white/70 bg-[#f4f7f5] p-4 shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06] sm:p-6">
-                <div class="flex items-start justify-between gap-4 px-1">
+                <div class="flex flex-col gap-4 rounded-[28px] border border-white/70 bg-[#f4f7f5] p-4 shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06] sm:p-6">
+                <div class="order-1 flex items-start justify-between gap-4 px-1">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.14em] text-arka-primary">
                             {{ whenMode === 'scheduled' ? 'Viaje programado' : 'Nueva carrera' }}
@@ -1062,7 +1072,7 @@ function submit() {
                 </div>
                 <!-- Selector de flota: solo aparece si el cliente tiene más de una
                      (sección 7.3, plan Multi-flota). -->
-                <div v-if="fleets.length > 1" class="rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm">
+                <div v-if="fleets.length > 1" class="order-5 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm">
                     <InputLabel value="Pedir carrera desde la flota" light />
                     <SearchableSelect
                         class="mt-1"
@@ -1073,15 +1083,18 @@ function submit() {
                     />
                 </div>
 
-                <div v-if="locationError" class="rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-4 text-sm text-arka-base/70">
+                <div v-if="locationError" class="order-3 rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-4 text-sm text-arka-base/70">
                     {{ locationError }}
                 </div>
 
                 <!-- ¿Cuándo? (consideración agregada al alcance, pedido explícito del
                      usuario): "ahora mismo" por defecto, o programar fecha/hora — con
                      la opción de marcarla como ida y vuelta. -->
-                <div class="space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
-                    <h3 class="text-lg font-bold text-arka-base">¿Cuándo?</h3>
+                <div class="order-4 space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-arka-primary">Opciones del viaje</p>
+                        <h3 class="mt-0.5 text-lg font-bold text-arka-base">¿Cuándo deseas viajar?</h3>
+                    </div>
 
                     <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
                         <button
@@ -1173,8 +1186,11 @@ function submit() {
                      búsqueda... que sea más fácil pedir una carrera") — buscador con
                      Google Places como campo principal, con los lugares ya usados
                      antes como favoritos (ver AddressAutocomplete.vue). -->
-                <div class="space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
-                    <h3 class="text-lg font-bold text-arka-base">¿De dónde a dónde vas?</h3>
+                <div class="order-3 relative z-10 -mt-10 space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-[0_14px_35px_rgba(1,12,7,0.16)] sm:p-5">
+                    <div>
+                        <h3 class="text-lg font-bold text-arka-base">Tu recorrido</h3>
+                        <p class="text-xs text-arka-base/45">Escribe una dirección o ajusta cada punto directamente en el mapa.</p>
+                    </div>
 
                     <!-- "Mis rutas" (pedido explícito del usuario): tomar una
                          ruta guardada de una, sin escribir ni marcar nada. -->
@@ -1198,7 +1214,9 @@ function submit() {
                         </div>
                     </div>
 
-                    <div>
+                    <div class="relative pl-7">
+                        <span class="absolute left-[5px] top-7 h-[calc(100%+2.25rem)] w-px bg-arka-base/15" aria-hidden="true"></span>
+                        <span class="absolute left-0 top-7 h-3 w-3 rounded-full border-[3px] border-arka-primary bg-white" aria-hidden="true"></span>
                         <div class="flex items-center justify-between gap-2">
                             <InputLabel for="origin_address" value="Origen" light />
                             <!-- Pedido explícito del usuario: que el origen también
@@ -1227,7 +1245,8 @@ function submit() {
                         />
                     </div>
 
-                    <div>
+                    <div class="relative pl-7">
+                        <span class="absolute left-0 top-7 h-3 w-3 rounded-sm bg-rose-500 ring-4 ring-rose-50" aria-hidden="true"></span>
                         <InputLabel for="destination_address" value="Destino" light />
                         <AddressAutocomplete
                             id="destination_address"
@@ -1320,38 +1339,35 @@ function submit() {
 
                 <!-- Mapa: confirmación visual del recorrido, y una forma de ajustar el
                      destino a mano tocando el mapa (sección 9.3: Leaflet + OpenStreetMap). -->
-                <div class="rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
-                    <div class="flex items-center justify-between gap-3 mb-1">
-                        <h3 class="text-lg font-bold text-arka-base">Comprueba la ruta</h3>
-                        <button
-                            type="button"
-                            class="text-sm text-arka-primary hover:text-arka-primary-bright shrink-0"
-                            @click="mapExpanded = !mapExpanded"
-                        >
-                            {{ mapExpanded ? 'Minimizar' : 'Expandir' }}
-                        </button>
-                    </div>
-
+                <div class="order-2 relative -mx-4 min-h-[330px] overflow-hidden border-y border-arka-base/[0.05] bg-white sm:-mx-6">
                     <FleetMap
                         :markers="mapMarkers"
                         :center="mapCenter ?? undefined"
                         :route="routeCoords"
                         :clickable="true"
-                        :auto-fit="false"
+                        :auto-fit="true"
+                        :fit-marker-ids="['origin', 'destination']"
                         :dark="false"
-                        :height="mapExpanded ? '420px' : '160px'"
-                        @map-click="pickDestination"
+                        height="330px"
+                        @map-click="pickRoutePoint"
                     />
-
-                    <p v-if="!destinationLat" class="mt-2 text-sm text-arka-base/50">
-                        Todavía no marcaste el destino.
-                    </p>
+                    <div class="absolute left-14 right-3 top-3 z-[500] flex justify-end gap-2">
+                        <button type="button" class="rounded-full border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur transition" :class="mapEditingPoint === 'origin' ? 'border-arka-primary bg-arka-primary text-arka-base' : 'border-white/70 bg-white/90 text-arka-base/65'" @click="mapEditingPoint = 'origin'">
+                            <span class="mr-1 inline-block h-2 w-2 rounded-full bg-current"></span> Mover origen
+                        </button>
+                        <button type="button" class="rounded-full border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur transition" :class="mapEditingPoint === 'destination' ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-white/90 text-arka-base/65'" @click="mapEditingPoint = 'destination'">
+                            <span class="mr-1 inline-block h-2 w-2 rounded-sm bg-current"></span> Mover destino
+                        </button>
+                    </div>
+                    <div class="absolute bottom-12 left-1/2 z-[500] -translate-x-1/2 whitespace-nowrap rounded-full bg-arka-base/90 px-4 py-2 text-xs font-medium text-white shadow-lg backdrop-blur">
+                        Toca el mapa para ubicar el {{ mapEditingPoint === 'origin' ? 'origen' : 'destino' }} exacto
+                    </div>
                 </div>
 
                 <!-- Acción 1 del documento: elegido el destino, "Continuar"
                      lleva al paso de elegir conductor — nada de formulario
                      largo en el medio (sección 5). -->
-                <div class="sticky bottom-20 z-20 rounded-2xl bg-[#f4f7f5]/95 px-1 pb-1 pt-2 backdrop-blur-sm">
+                <div class="order-6 sticky bottom-20 z-20 rounded-2xl bg-[#f4f7f5]/95 px-1 pb-1 pt-2 backdrop-blur-sm">
                     <!-- Secuencia visible (pedido explícito del usuario): deja
                          claro que Continuar NO envía todavía la solicitud, sino
                          que abre el siguiente paso para elegir conductor. -->
@@ -1383,7 +1399,7 @@ function submit() {
                      pedido explícito del usuario, tal como el bosquejo — en
                      vez de una tarjeta plana separada del mapa. Visible en
                      los pasos 2 y 3, nunca hay que "acordarse" qué se eligió. -->
-                <div v-if="step === 'driver' || step === 'confirm'">
+                <div v-if="step === 'driver' || step === 'confirm'" class="-mx-4 -mt-3 sm:-mx-6 lg:mx-0 lg:mt-0">
                     <!-- Mapa claro (pedido explícito del usuario: "manejemos el
                          mismo color" que Inicio) — la tarjeta de origen/destino
                          se queda oscura a propósito, flotando encima, tal como
@@ -1394,8 +1410,12 @@ function submit() {
                         :route="routeCoords"
                         :clickable="false"
                         :auto-fit="true"
+                        :fit-marker-ids="['origin', 'destination']"
+                        :fit-padding-top="72"
+                        :fit-padding-bottom="138"
                         :dark="false"
-                        height="170px"
+                        :rounded="false"
+                        height="310px"
                     />
                     <!-- Bug real reportado por el usuario, con varias capturas
                          repetidas ("la tarjeta sigue apareciendo por debajo
@@ -1412,25 +1432,40 @@ function submit() {
                          Components/FleetMap.vue (`isolate`). Ya solucionado
                          eso, el solape puede ser el de verdad (como el
                          bosquejo), no el parche de 12px. -->
-                    <div class="-mt-8 mx-3 relative z-10 p-3.5 bg-arka-card shadow-2xl rounded-arka border border-arka-text-muted/20">
+                    <div class="-mt-24 mx-3 sm:mx-6 lg:mx-4 relative z-10 p-3.5 bg-arka-card/95 backdrop-blur-md shadow-2xl rounded-arka border border-arka-text-muted/20">
                         <div class="flex items-center justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="text-xs text-arka-text-muted flex items-center gap-1">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-arka-primary shrink-0"></span> Origen
-                                </p>
-                                <p class="text-sm text-arka-text font-medium truncate">{{ originAddress || 'Mi ubicación' }}</p>
-                                <p class="text-xs text-arka-text-muted mt-1.5 flex items-center gap-1">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-arka-danger shrink-0"></span> Destino
-                                </p>
-                                <p class="text-sm text-arka-text font-medium truncate">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
+                            <div class="min-w-0 flex-1">
+                                <!-- Mini recorrido: origen y destino se leen como
+                                     una secuencia conectada, no como dos textos
+                                     independientes. La línea queda detrás de los
+                                     nodos y termina exactamente en el destino. -->
+                                <div class="relative">
+                                    <span class="absolute left-[4px] top-2 bottom-2 w-px bg-gradient-to-b from-arka-primary via-arka-primary/45 to-arka-danger/70"></span>
+                                    <div class="relative flex min-w-0 gap-3">
+                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-arka-card bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
+                                        <div class="min-w-0 flex-1">
+                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-primary/80">Recoger en</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-text">{{ originAddress || 'Mi ubicación' }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="relative mt-3 flex min-w-0 gap-3">
+                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border-2 border-arka-card bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.16)]"></span>
+                                        <div class="min-w-0 flex-1">
+                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-danger/80">Destino</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-text">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
+                                        </div>
+                                    </div>
+                                </div>
                                 <!-- Pedido explícito del usuario: "indicar los km y
                                      minutos de ese recorrido" — distancia y duración
                                      REALES de manejo (OSRM, misma ruta dibujada en el
                                      mapa), no la línea recta. -->
-                                <p v-if="routeDistanceKm != null" class="text-xs text-arka-text-muted mt-1.5">
-                                    {{ routeDistanceKm.toFixed(1) }} km · {{ Math.round(routeDurationMin) }} min
+                                <p v-if="routeDistanceKm != null" class="ml-[26px] mt-2 flex items-center gap-1.5 text-xs text-arka-text-muted">
+                                    <span class="inline-block h-1 w-1 rounded-full bg-arka-primary"></span>
+                                    {{ routeDistanceKm.toFixed(1) }} km · {{ Math.round(routeDurationMin) }} min estimados
                                 </p>
-                                <p v-else-if="originLat != null && destinationLat != null" class="text-xs text-arka-text-muted mt-1.5">
+                                <p v-else-if="originLat != null && destinationLat != null" class="ml-[26px] mt-2 text-xs text-arka-text-muted">
                                     Calculando recorrido…
                                 </p>
                             </div>

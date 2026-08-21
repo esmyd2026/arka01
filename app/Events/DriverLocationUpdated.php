@@ -7,7 +7,7 @@ use App\Models\FleetMember;
 use App\Models\Ride;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -16,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
  * Se avisa a TODAS las flotas a las que pertenece activamente, no solo a una,
  * porque un conductor puede ser parte de varios clientes de confianza a la vez.
  */
-class DriverLocationUpdated implements ShouldBroadcast
+class DriverLocationUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

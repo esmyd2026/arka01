@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\DriverLocationUpdated;
 use App\Events\RideArrived;
 use App\Events\RideCancelled;
 use App\Events\RideCompleted;
@@ -327,6 +328,48 @@ class RideController extends Controller
         $url = URL::temporarySignedRoute('public.rides.track', now()->addHours(24), ['ride' => $ride->id]);
 
         return response()->json(['url' => $url]);
+    }
+
+    /**
+     * Recibe la posición del conductor mientras atiende ESTA carrera.
+     * Es independiente del switch "Disponible": al aceptar un viaje puede
+     * dejar de recibir solicitudes nuevas, pero debe continuar compartiendo
+     * su recorrido con el cliente hasta completar o cancelar.
+     */
+    public function updateLocation(Request $request, Ride $ride): JsonResponse
+    {
+        if ((int) $ride->driver_user_id !== (int) $request->user()->id) {
+            abort(403);
+        }
+
+        if ($ride->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta carrera ya no admite actualizaciones de ubicación.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $profile = $request->user()->driverProfile;
+
+        if (! $profile) {
+            abort(403, 'Todavía no activó su perfil de conductor.');
+        }
+
+        // No se modifica is_available: disponibilidad para nuevas carreras
+        // y seguimiento del viaje actual son estados diferentes.
+        $profile->update([
+            'current_lat' => $validated['lat'],
+            'current_lng' => $validated['lng'],
+            'location_updated_at' => now(),
+        ]);
+
+        broadcast(new DriverLocationUpdated($profile))->toOthers();
+
+        return response()->json(['ok' => true]);
     }
 
     /**

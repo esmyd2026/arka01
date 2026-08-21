@@ -85,6 +85,79 @@ function googleNavigateUrl(lat, lng) {
 
 let rideChannel = null;
 let rideStatePoller = null;
+let activeRideLocationWatchId = null;
+let activeRideLocationHeartbeat = null;
+let lastRideLocationSentAt = 0;
+const RIDE_LOCATION_INTERVAL_MS = 8000;
+
+function sendActiveRideLocation(position, force = false) {
+    if (!props.isDriver || props.ride.status !== 'in_progress') return;
+
+    const now = Date.now();
+    if (!force && now - lastRideLocationSentAt < RIDE_LOCATION_INTERVAL_MS) return;
+    lastRideLocationSentAt = now;
+
+    // `toOthers()` evita devolverle por WebSocket al mismo navegador lo que
+    // acaba de enviar. Por eso el mapa del conductor se mueve localmente;
+    // el cliente recibe exactamente estas coordenadas por el canal privado.
+    updateCarHeading(position.coords.latitude, position.coords.longitude);
+    driverLat.value = position.coords.latitude;
+    driverLng.value = position.coords.longitude;
+
+    window.axios.post(route('rides.location.update', props.ride.id), {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+    }).catch((error) => {
+        // 422 significa que la carrera terminó entre la lectura del GPS y el
+        // envío. El siguiente cambio reactivo detiene el seguimiento; los
+        // cortes de red se recuperan con el próximo pulso.
+        if (error.response?.status !== 422) {
+            console.warn('No se pudo actualizar la ubicación de la carrera.', error);
+        }
+    });
+}
+
+function stopActiveRideLocationTracking() {
+    if (activeRideLocationWatchId !== null) {
+        if (typeof navigator !== 'undefined') navigator.geolocation?.clearWatch(activeRideLocationWatchId);
+        activeRideLocationWatchId = null;
+    }
+    if (activeRideLocationHeartbeat !== null) {
+        window.clearInterval(activeRideLocationHeartbeat);
+        activeRideLocationHeartbeat = null;
+    }
+}
+
+function startActiveRideLocationTracking() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation || activeRideLocationWatchId !== null || !props.isDriver || props.ride.status !== 'in_progress') return;
+
+    const options = { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 };
+    activeRideLocationWatchId = navigator.geolocation.watchPosition(
+        (position) => sendActiveRideLocation(position),
+        () => {},
+        options,
+    );
+
+    // Algunos móviles espacian watchPosition cuando el vehículo permanece
+    // quieto o la pestaña pierde actividad. Este pulso mantiene actualizada
+    // la sesión y fuerza una lectura periódica mientras la vista siga viva.
+    activeRideLocationHeartbeat = window.setInterval(() => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => sendActiveRideLocation(position, true),
+            () => {},
+            options,
+        );
+    }, RIDE_LOCATION_INTERVAL_MS);
+}
+
+watch(
+    [() => props.isDriver, () => props.ride.status],
+    ([isDriver, status]) => {
+        if (isDriver && status === 'in_progress') startActiveRideLocationTracking();
+        else stopActiveRideLocationTracking();
+    },
+    { immediate: true },
+);
 
 // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras): solo
 // existe mientras hay una relación de viaje vigente — mismo criterio que el
@@ -327,6 +400,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.Echo.leave(`ride.${props.ride.id}`);
     if (rideStatePoller) window.clearInterval(rideStatePoller);
+    stopActiveRideLocationTracking();
 });
 
 const mapMarkers = computed(() => {
@@ -1333,7 +1407,7 @@ function submitReview() {
                     </div>
 
                     <button
-                        v-if="!isDriver"
+                        v-if="!isDriver && ['scheduled', 'in_progress'].includes(ride.status)"
                         type="button"
                         class="w-full text-center text-sm text-arka-danger hover:opacity-80"
                         @click="quickCancelRide"

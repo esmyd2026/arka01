@@ -6,7 +6,7 @@ use App\Models\FleetMember;
 use App\Models\Ride;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -16,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
  * ya lo está esperando, en vez de que se entere recién cuando arranca el
  * viaje). Mismo criterio de fan-out que RideStarted/RideCompleted.
  */
-class RideArrived implements ShouldBroadcast
+class RideArrived implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

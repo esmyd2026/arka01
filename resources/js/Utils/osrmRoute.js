@@ -11,7 +11,52 @@
 // misma respuesta de OSRM, antes se descartaba) para que quien haga el
 // pedido de carrera pueda usar la distancia real, no la de línea recta —
 // ver Ride/Request.vue y RideRequestController::store().
+function decodeGooglePolyline(encoded) {
+    const coords = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < encoded.length) {
+        for (const axis of ['lat', 'lng']) {
+            let result = 0;
+            let shift = 0;
+            let byte;
+            do {
+                byte = encoded.charCodeAt(index++) - 63;
+                result |= (byte & 0x1f) << shift;
+                shift += 5;
+            } while (byte >= 0x20);
+            const delta = (result & 1) ? ~(result >> 1) : (result >> 1);
+            if (axis === 'lat') lat += delta;
+            else lng += delta;
+        }
+        coords.push({ lat: lat / 1e5, lng: lng / 1e5 });
+    }
+    return coords;
+}
+
 export async function fetchOsrmRoute(originLat, originLng, destinationLat, destinationLng) {
+    try {
+        // Google Routes es el proveedor principal. La llamada pasa por
+        // Laravel para no exponer la clave de servidor y para reutilizar la
+        // caché entre cliente/conductor y pequeños movimientos del GPS.
+        const { data } = await window.axios.post(route('maps.route'), {
+            origin_lat: originLat,
+            origin_lng: originLng,
+            destination_lat: destinationLat,
+            destination_lng: destinationLng,
+        });
+        return {
+            coords: decodeGooglePolyline(data.encoded_polyline),
+            distanceKm: data.distance_km,
+            durationMin: data.duration_min,
+        };
+    } catch {
+        // Si Google falla por cuota, configuración o red, OSRM mantiene la
+        // carrera operativa. Este fallback no se usa mientras Google responda.
+    }
+
     try {
         // fetch() nativo, NO window.axios (bug real reportado, veía errores de
         // CORS en la consola al elegir destino): apenas Echo se conecta, mete

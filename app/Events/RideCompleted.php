@@ -6,7 +6,7 @@ use App\Models\FleetMember;
 use App\Models\Ride;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -26,7 +26,7 @@ use Illuminate\Queue\SerializesModels;
  * completó la carrera) — así Ride/Index.vue puede refrescar esas dos listas
  * sin depender de que la otra parte esté en un canal de flota.
  */
-class RideCompleted implements ShouldBroadcast
+class RideCompleted implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
