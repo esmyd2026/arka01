@@ -845,6 +845,26 @@ class RideRequestFlowTest extends TestCase
         $this->assertNull(RideRequest::firstOrFail()->notes);
     }
 
+    public function test_an_immediate_direct_request_cannot_be_sent_to_a_busy_driver(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        Ride::factory()->create([
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertSessionHasErrors('driver_user_id');
+
+        $this->assertDatabaseCount('ride_requests', 1);
+    }
+
     /**
      * La observación se copia a la carrera aceptada — el conductor la sigue
      * teniendo a mano durante todo el viaje, no solo al decidir si aceptar.
@@ -1212,6 +1232,31 @@ class RideRequestFlowTest extends TestCase
             'price' => number_format($expectedPrice, 2, '.', ''),
             'status' => 'in_progress',
         ]);
+    }
+
+    public function test_a_driver_cannot_accept_a_second_immediate_ride_while_busy(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        Ride::factory()->create([
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'is_scheduled' => false,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.accept', $rideRequest))
+            ->assertSessionHasErrors('ride_request');
+
+        $this->assertSame('pending', $rideRequest->fresh()->status);
+        $this->assertDatabaseMissing('rides', ['ride_request_id' => $rideRequest->id]);
     }
 
     public function test_only_the_first_driver_wins_a_whole_fleet_request(): void

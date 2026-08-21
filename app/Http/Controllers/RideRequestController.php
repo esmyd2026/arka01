@@ -460,6 +460,19 @@ class RideRequestController extends Controller
                 ]);
             }
 
+            // Una solicitud inmediata dirigida no puede saltarse el filtro
+            // de ocupados que sí usa la bolsa automática. La carrera
+            // programada se trata aparte porque puede aceptarse para más
+            // adelante sin interrumpir el viaje actual.
+            if (! $isScheduled && Ride::query()
+                ->where('driver_user_id', $validated['driver_user_id'])
+                ->where('status', 'in_progress')
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'driver_user_id' => 'Ese conductor está atendiendo otra carrera. Elija otro conductor o solicite a toda su flota.',
+                ]);
+            }
+
             // Zona de cobertura (pedido explícito del usuario): un conductor
             // puede limitar hasta qué distancia de su ubicación quiere recibir
             // solicitudes — "así sea de mi flota, tiene que estar fuera de
@@ -959,6 +972,20 @@ class RideRequestController extends Controller
             if (! in_array($locked->status, ['pending', 'negotiating'], true)) {
                 throw ValidationException::withMessages([
                     'ride_request' => 'Esta solicitud ya no está disponible.',
+                ]);
+            }
+
+            // Serializa las aceptaciones del mismo conductor. Aunque dos
+            // solicitudes distintas se acepten casi al mismo tiempo, solo
+            // una puede convertirlo en conductor de una carrera inmediata.
+            User::query()->lockForUpdate()->findOrFail($driverId);
+
+            if (! $locked->is_scheduled && Ride::query()
+                ->where('driver_user_id', $driverId)
+                ->where('status', 'in_progress')
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'ride_request' => 'Ya tiene una carrera en curso. Termine o cancele ese viaje antes de aceptar otro.',
                 ]);
             }
 
