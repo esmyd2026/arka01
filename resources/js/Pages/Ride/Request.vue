@@ -100,6 +100,7 @@ const SORT_OPTIONS = {
     price: 'Más económicos',
     rating: 'Mejor calificados',
 };
+const SORT_OPTION_LIST = Object.entries(SORT_OPTIONS).map(([value, label]) => ({ value, label }));
 const sortBy = ref('distance');
 
 function sortDrivers(list) {
@@ -792,6 +793,41 @@ function estimatedPriceForDriver(driver) {
     const raw = Math.round(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0) * 100) / 100;
     const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
     return Math.max(raw, floor);
+}
+
+// Valor orientativo de cada grupo para la ruta actual. Se muestra como
+// "Desde" porque representa la alternativa disponible más económica, no una
+// promesa de precio final. En cooperativas todavía no se conoce la unidad que
+// será asignada, por eso se usa la tarifa promedio declarada por cada una.
+const categoryStartingPrices = computed(() => {
+    const lowestDriverPrice = (drivers) => {
+        const prices = drivers
+            .map(estimatedPriceForDriver)
+            .filter((price) => Number.isFinite(price) && price > 0);
+
+        return prices.length ? Math.min(...prices) : null;
+    };
+
+    const cooperativePrices = props.cooperatives
+        .map((cooperative) => {
+            if (estimatedDistanceKm.value == null) return null;
+            const rate = Number(cooperative.average_rate_per_km ?? 0);
+            if (!rate) return null;
+            return Math.max(Math.round(estimatedDistanceKm.value * rate * 100) / 100, props.minimumFare);
+        })
+        .filter((price) => Number.isFinite(price) && price > 0);
+
+    return {
+        fleet: lowestDriverPrice(fleetCandidates.value),
+        cooperative: cooperativePrices.length ? Math.min(...cooperativePrices) : null,
+        public: lowestDriverPrice(publicCandidates.value),
+        all: lowestDriverPrice(allCandidates.value),
+    };
+});
+
+function formattedStartingPrice(category) {
+    const price = categoryStartingPrices.value[category];
+    return price == null ? null : `$${price.toFixed(2)}`;
 }
 
 // El cliente puede aceptar el precio estimado tal cual, o proponer otro monto
@@ -1560,7 +1596,18 @@ function submit() {
                                             Recomendado
                                         </span>
                                     </span>
-                                    <span class="text-sm text-arka-base/50 shrink-0">{{ categoryCounts[category] }} ›</span>
+                                    <span class="shrink-0 text-right">
+                                        <span class="block text-sm text-arka-base/50">{{ categoryCounts[category] }} ›</span>
+                                        <span
+                                            v-if="formattedStartingPrice(category)"
+                                            class="mt-0.5 flex items-center justify-end gap-1 text-[11px] font-semibold text-arka-primary"
+                                        >
+                                            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm.9 15.8v1.1h-1.8v-1.05c-1.55-.2-2.7-1.05-3.2-2.3l1.65-.7c.4.9 1.2 1.45 2.35 1.45 1.05 0 1.75-.45 1.75-1.15 0-.65-.55-1-2.05-1.4-2.2-.55-3.3-1.45-3.3-3.1 0-1.5 1.1-2.65 2.8-2.95V6.6h1.8v1.05c1.25.2 2.2.85 2.8 1.9l-1.55.85c-.4-.7-1.1-1.15-2.05-1.15-1.05 0-1.7.45-1.7 1.15 0 .6.55.95 2.05 1.35 2.25.6 3.3 1.5 3.3 3.15 0 1.5-1.1 2.6-2.85 2.9Z" />
+                                            </svg>
+                                            Desde {{ formattedStartingPrice(category) }}
+                                        </span>
+                                    </span>
                                 </div>
                                 <p class="text-xs text-arka-base/50">{{ CATEGORY_META[category].hint }}</p>
                             </div>
@@ -1653,15 +1700,20 @@ function submit() {
                             <!-- Pedido explícito del usuario: no había ningún orden claro
                                  con flotas grandes — el disponible siempre va primero,
                                  esto solo cambia el desempate entre ellos. -->
-                            <div class="flex items-center justify-end gap-2 text-xs">
-                                <label for="driver_sort" class="text-arka-base/50">Ordenar por:</label>
-                                <select
+                            <div class="flex items-center justify-between gap-3 rounded-arka border border-arka-base/10 bg-white p-2.5">
+                                <span class="flex shrink-0 items-center gap-1.5 text-xs font-medium text-arka-base/55">
+                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <path d="M3 5.25A1.25 1.25 0 0 1 4.25 4h15.5a1.25 1.25 0 1 1 0 2.5H4.25A1.25 1.25 0 0 1 3 5.25ZM6 12a1.25 1.25 0 0 1 1.25-1.25h9.5a1.25 1.25 0 1 1 0 2.5h-9.5A1.25 1.25 0 0 1 6 12Zm4.25 6.75a1.25 1.25 0 1 1 0-2.5h3.5a1.25 1.25 0 1 1 0 2.5h-3.5Z" />
+                                    </svg>
+                                    Ordenar
+                                </span>
+                                <SearchableSelect
                                     id="driver_sort"
                                     v-model="sortBy"
-                                    class="bg-white border-arka-base/15 text-arka-base rounded-arka text-xs py-1.5 focus:border-arka-primary focus:ring-arka-primary"
-                                >
-                                    <option v-for="(label, value) in SORT_OPTIONS" :key="value" :value="value">{{ label }}</option>
-                                </select>
+                                    :options="SORT_OPTION_LIST"
+                                    light
+                                    class="min-w-0 w-44 max-w-[60%]"
+                                />
                             </div>
 
                             <!-- Foto + nombre + ⭐ + precio estimado por fila (rediseño UX, con
