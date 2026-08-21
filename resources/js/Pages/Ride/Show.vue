@@ -655,7 +655,6 @@ const actionsCardEl = ref(null);
 function quickCancelRide() {
     cancelError.value = '';
     showCancelForm.value = true;
-    nextTick(() => actionsCardEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
 // Botón "⋯" flotante del conductor (pedido explícito del usuario: "unificalo
@@ -702,6 +701,17 @@ function openClientChat() {
     clientOptionsView.value = 'chat';
     showClientOptions.value = true;
     scrollChatToBottom();
+}
+
+// Durante el viaje el chat vive en un panel inferior; en una carrera
+// programada todavía vive dentro de la página.
+function openClientMessage() {
+    if (clientFullscreenTrip.value) {
+        openClientChat();
+        return;
+    }
+
+    nextTick(() => chatPanelEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
 function openClientSafety() {
@@ -1015,16 +1025,18 @@ function submitReview() {
                     <button
                         type="button"
                         class="flex-1 px-3 py-2.5 rounded-arka bg-arka-card/95 backdrop-blur-sm shadow-lg border border-arka-text-muted/10 text-arka-text text-sm font-medium"
-                        @click="openClientChat"
+                        @click="openClientMessage"
                     >
-                        💬 Mensaje
+                        <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 3.75A2.75 2.75 0 0 0 1.75 6.5v8A2.75 2.75 0 0 0 4.5 17.25h2v3a.75.75 0 0 0 1.2.6l4.8-3.6h7A2.75 2.75 0 0 0 22.25 14.5v-8a2.75 2.75 0 0 0-2.75-2.75h-15Z" /></svg>
+                        Mensaje
                     </button>
                     <a
                         v-if="counterpart.phone"
                         :href="`tel:${counterpart.phone}`"
                         class="flex-1 text-center px-3 py-2.5 rounded-arka bg-arka-card/95 backdrop-blur-sm shadow-lg border border-arka-text-muted/10 text-arka-text text-sm font-medium"
                     >
-                        📞 Llamar
+                        <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.62 2.25c.55 0 1.04.34 1.24.85l1.3 3.42a1.34 1.34 0 0 1-.33 1.45L7.2 9.5a14.1 14.1 0 0 0 7.3 7.3l1.53-1.63a1.34 1.34 0 0 1 1.45-.33l3.42 1.3c.51.2.85.69.85 1.24v2.37a2 2 0 0 1-2 2C10.09 21.75 2.25 13.91 2.25 4.25a2 2 0 0 1 2-2h2.37Z" /></svg>
+                        Llamar
                     </a>
                 </div>
 
@@ -1393,9 +1405,10 @@ function submitReview() {
                         <button
                             type="button"
                             class="flex-1 px-3 py-2 rounded-arka bg-arka-base text-arka-text text-sm font-medium hover:bg-arka-base/70 transition"
-                            @click="chatPanelEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })"
+                            @click="openClientMessage"
                         >
-                            💬 Mensaje
+                            <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 3.75A2.75 2.75 0 0 0 1.75 6.5v8A2.75 2.75 0 0 0 4.5 17.25h2v3a.75.75 0 0 0 1.2.6l4.8-3.6h7A2.75 2.75 0 0 0 22.25 14.5v-8a2.75 2.75 0 0 0-2.75-2.75h-15Z" /></svg>
+                            Mensaje
                         </button>
                         <a
                             v-if="counterpart.phone"
@@ -1508,9 +1521,8 @@ function submitReview() {
                                 title="Cancelar carrera"
                                 @click="openDriverCancel"
                             >
-                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="8.5" />
-                                    <path stroke-linecap="round" d="m9 9 6 6m0-6-6 6" />
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5Zm-2.47 6.22a.75.75 0 0 0-1.06 1.06L10.94 12l-2.47 2.47a.75.75 0 1 0 1.06 1.06L12 13.06l2.47 2.47a.75.75 0 1 0 1.06-1.06L13.06 12l2.47-2.47a.75.75 0 1 0-1.06-1.06L12 10.94 9.53 8.47Z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </template>

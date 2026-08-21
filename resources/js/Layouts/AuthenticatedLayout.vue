@@ -455,10 +455,13 @@ onBeforeUnmount(() => {
                          en escritorio Y en móvil, donde reemplazan al viejo menú de
                          hamburguesa: búsqueda, ayuda, accesos rápidos y avatar de cuenta. -->
                     <div class="flex items-center justify-end gap-0.5">
-                        <!-- Estimación de tráfico de la sesión para el conductor.
-                             Es orientativa: el navegador no expone el contador
-                             facturado por la operadora. -->
-                        <SessionDataUsage />
+                        <!-- Mantiene el histórico local del conductor sin
+                             mostrar ningún indicador ni llamar al servidor. -->
+                        <SessionDataUsage
+                            v-if="showDriverNav"
+                            :visible="false"
+                            :user-id="$page.props.auth.user.id"
+                        />
 
                         <!-- Buscar: acceso directo al directorio de conductores (herramienta
                              de cliente — buscar a quién invitar a la flota). -->

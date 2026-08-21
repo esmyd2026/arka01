@@ -49,6 +49,7 @@ use App\Http\Controllers\FleetController;
 use App\Http\Controllers\FleetInvitationController;
 use App\Http\Controllers\FleetMemberController;
 use App\Http\Controllers\GuestRideController;
+use App\Http\Controllers\MapRouteController;
 use App\Http\Controllers\MyPlanController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlatformFeedbackController;
@@ -68,6 +69,7 @@ use App\Http\Controllers\SupportController;
 use App\Http\Controllers\TrustedContactController;
 use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
+use App\Models\Cooperative;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -86,7 +88,7 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'guestCooperatives' => \App\Models\Cooperative::query()
+        'guestCooperatives' => Cooperative::query()
             ->where('status', 'approved')
             ->whereNull('suspended_at')
             ->whereNotNull('stand_lat')
@@ -244,7 +246,7 @@ Route::middleware('auth')->group(function () {
 
     // Ruta Google calculada desde el servidor: protege la clave privada y
     // aplica caché/throttle para controlar costos.
-    Route::post('/mapas/ruta', \App\Http\Controllers\MapRouteController::class)
+    Route::post('/mapas/ruta', MapRouteController::class)
         ->middleware('throttle:30,1')
         ->name('maps.route');
 

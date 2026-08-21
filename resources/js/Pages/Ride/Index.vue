@@ -360,7 +360,7 @@ function confirmRaiseOffer(id) {
     <Head title="Carreras" />
 
     <AuthenticatedLayout>
-        <template #header>
+        <template v-if="!activeImmediateRequest" #header>
             <div class="flex items-center justify-between flex-wrap gap-2">
                 <h2 class="font-semibold text-xl text-arka-text leading-tight">Carreras</h2>
                 <!-- Pedido explícito del usuario: reporte completo con
@@ -383,14 +383,52 @@ function confirmRaiseOffer(id) {
                     </Link>
                 </div>
 
-                <section v-if="isClient && activeImmediateRequest" class="w-full max-w-full overflow-hidden rounded-3xl border border-arka-primary/30 bg-gradient-to-br from-arka-primary/15 via-arka-card to-arka-card shadow-2xl">
-                    <div class="min-w-0 p-4 sm:p-7">
-                        <div class="flex min-w-0 items-start gap-3 sm:gap-4"><div class="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-arka-primary/15 sm:h-14 sm:w-14"><span class="text-xl sm:text-2xl">🚕</span><span class="absolute inset-0 animate-ping rounded-full border border-arka-primary/40"></span></div><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.18em] text-arka-primary">Solicitud activa</p><h2 class="mt-1 text-lg font-bold leading-tight text-arka-text sm:text-xl">Estamos buscando su conductor</h2><p class="mt-1 text-sm leading-snug text-arka-text-muted">Mantenga esta pantalla abierta. Le avisaremos apenas un conductor acepte.</p></div></div>
-                        <div class="mt-5 h-2 overflow-hidden rounded-full bg-arka-base"><div class="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-arka-primary/30 via-arka-primary to-arka-lime"></div></div>
-                        <div class="mt-4 grid min-w-0 gap-2 sm:mt-5 sm:grid-cols-[minmax(0,1fr)_auto]"><div class="min-w-0 rounded-2xl bg-arka-base/50 p-3.5 sm:p-4"><p class="text-xs uppercase tracking-wide text-arka-text-muted">Estado actual</p><p class="mt-1 break-words font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.status === 'waiting' ? 'Esperando una unidad disponible' : activeImmediateRequest.driver ? `Esperando respuesta de ${activeImmediateRequest.driver.name}` : 'Buscando conductores cercanos' }}</p><p class="mt-2 break-words text-sm leading-snug text-arka-text-muted">{{ activeImmediateRequest.origin_address || 'Origen marcado en el mapa' }} <span class="text-arka-primary">→</span> {{ activeImmediateRequest.destination_address || 'Destino seleccionado' }}</p></div><div class="flex min-w-0 items-center justify-between gap-4 rounded-2xl bg-arka-base/50 p-3.5 sm:block sm:min-w-32 sm:p-4 sm:text-right"><div><p class="text-xs text-arka-text-muted">Oferta</p><p class="text-xl font-bold text-arka-primary">${{ Number(activeImmediateRequest.current_offered_price).toFixed(2) }}</p></div><button type="button" class="shrink-0 rounded-full border border-arka-danger/40 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-arka-danger sm:mt-3" @click="cancelRequest(activeImmediateRequest.id)">Cancelar</button></div></div>
-                        <p class="mt-4 text-center text-xs text-arka-text-muted">Mientras esta solicitud esté activa, las demás secciones permanecerán bloqueadas.</p>
+                <section v-if="isClient && activeImmediateRequest" class="w-full overflow-hidden rounded-3xl border border-arka-primary/30 bg-gradient-to-b from-arka-primary/15 to-arka-card shadow-2xl">
+                    <div class="p-5 sm:p-7">
+                        <div class="flex items-start gap-3">
+                            <div class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-arka-primary text-arka-base shadow-lg shadow-arka-primary/25">
+                                <span class="absolute inset-0 animate-ping rounded-full bg-arka-primary/30" aria-hidden="true"></span>
+                                <svg class="relative h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5.25 6.5A2.75 2.75 0 0 1 8 3.75h8a2.75 2.75 0 0 1 2.75 2.75v.75h.5A1.75 1.75 0 0 1 21 9v7.25a1.75 1.75 0 0 1-1.75 1.75h-.5v.75a1.5 1.5 0 0 1-3 0V18h-7.5v.75a1.5 1.5 0 0 1-3 0V18h-.5A1.75 1.75 0 0 1 3 16.25V9a1.75 1.75 0 0 1 1.75-1.75h.5V6.5Zm2.1.75h9.3l-.55-1.37a.75.75 0 0 0-.7-.48H8.6a.75.75 0 0 0-.7.48l-.55 1.37ZM6.5 14a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" /></svg>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-arka-primary">Solicitud activa</p>
+                                <h1 class="mt-1 text-xl font-bold leading-tight text-arka-text">Buscando su conductor</h1>
+                                <p class="mt-1 text-sm text-arka-text-muted">Le avisaremos en cuanto alguien acepte.</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 h-2 overflow-hidden rounded-full bg-arka-base/80"><div class="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-arka-primary/30 via-arka-primary to-arka-lime"></div></div>
+
+                        <div class="mt-5 rounded-2xl border border-arka-text-muted/10 bg-arka-base/55 p-4">
+                            <div class="flex gap-3">
+                                <div class="flex shrink-0 flex-col items-center pt-1">
+                                    <span class="h-3 w-3 rounded-full bg-arka-primary ring-4 ring-arka-primary/10"></span>
+                                    <span class="my-1 min-h-12 w-0.5 flex-1 bg-gradient-to-b from-arka-primary to-arka-danger"></span>
+                                    <span class="h-3 w-3 rotate-45 rounded-[2px] bg-arka-danger ring-4 ring-arka-danger/10"></span>
+                                </div>
+                                <div class="min-w-0 flex-1 space-y-4">
+                                    <div><p class="text-[10px] font-semibold uppercase tracking-wider text-arka-primary">Recoger en</p><p class="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.origin_address || 'Origen marcado en el mapa' }}</p></div>
+                                    <div><p class="text-[10px] font-semibold uppercase tracking-wider text-arka-danger">Destino</p><p class="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.destination_address || 'Destino seleccionado' }}</p></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-arka-base/35 px-4 py-3">
+                            <div class="min-w-0">
+                                <p class="text-[10px] uppercase tracking-wide text-arka-text-muted">Estado</p>
+                                <p class="truncate text-sm text-arka-text">{{ activeImmediateRequest.status === 'waiting' ? 'Esperando una unidad disponible' : activeImmediateRequest.driver ? `Contactando a ${activeImmediateRequest.driver.name}` : 'Buscando conductores cercanos' }}</p>
+                            </div>
+                            <div class="shrink-0 text-right"><p class="text-[10px] text-arka-text-muted">Oferta</p><p class="font-bold text-arka-primary">${{ Number(activeImmediateRequest.current_offered_price).toFixed(2) }}</p></div>
+                        </div>
+
+                        <button type="button" class="mx-auto mt-4 flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-arka-danger" @click="cancelRequest(activeImmediateRequest.id)">
+                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5Zm-2.47 6.22a.75.75 0 0 0-1.06 1.06L10.94 12l-2.47 2.47a.75.75 0 1 0 1.06 1.06L12 13.06l2.47 2.47a.75.75 0 1 0 1.06-1.06L13.06 12l2.47-2.47a.75.75 0 1 0-1.06-1.06L12 10.94 9.53 8.47Z" clip-rule="evenodd" /></svg>
+                            Cancelar solicitud
+                        </button>
                     </div>
                 </section>
+
+                <template v-if="!activeImmediateRequest">
 
                 <section v-if="upcomingReminderRide" class="rounded-2xl border border-arka-warning/40 bg-arka-warning/10 p-4 sm:p-5"><div class="flex items-center gap-3"><span class="text-2xl">⏰</span><div class="min-w-0 flex-1"><p class="font-bold text-arka-warning">Su carrera programada está próxima</p><p class="text-sm text-arka-text">{{ upcomingReminderRide.client.name }} · {{ formatScheduledAt(upcomingReminderRide.ride_request?.scheduled_at) }}</p><p class="mt-1 text-xs text-arka-text-muted">Revise la ruta y prepárese para salir.</p></div><Link :href="route('rides.show', upcomingReminderRide.id)" class="shrink-0 rounded-full bg-arka-warning px-4 py-2 text-xs font-bold text-arka-base">Ver viaje</Link></div></section>
 
@@ -694,6 +732,7 @@ function confirmRaiseOffer(id) {
                         </li>
                     </ul>
                 </div>
+                </template>
             </div>
         </div>
     </AuthenticatedLayout>

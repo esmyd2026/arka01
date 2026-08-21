@@ -11,6 +11,7 @@ import Checkbox from '@/Components/Checkbox.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
+import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
@@ -865,6 +866,19 @@ const VERIFICATION_LABELS = {
                             </Transition>
                         </div>
                     </form>
+                </div>
+
+                <!-- Medición local y orientativa: no envía telemetría al
+                     servidor. El conductor puede consultarla al final de su
+                     perfil sin ocupar espacio permanente en la cabecera. -->
+                <div v-if="driverProfile" class="mt-6 rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <h3 class="font-medium text-arka-text">Uso aproximado de datos</h3>
+                            <p class="mt-1 text-xs text-arka-text-muted">Se guarda únicamente en este dispositivo y no se envía a Arka01.</p>
+                        </div>
+                        <SessionDataUsage :user-id="$page.props.auth.user.id" />
+                    </div>
                 </div>
             </div>
         </div>

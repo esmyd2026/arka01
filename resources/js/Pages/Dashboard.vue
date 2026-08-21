@@ -353,11 +353,6 @@ function handleNewRequest(e, { alert = true } = {}) {
     if (alert) playAttentionAlert();
     pendingRequestsCount.value++;
     newRequestAlert.value = { clientName: e.client_name, price: e.current_offered_price, isScheduled: e.is_scheduled };
-    setTimeout(() => {
-        if (newRequestAlert.value?.clientName === e.client_name) {
-            newRequestAlert.value = null;
-        }
-    }, 12000);
 }
 
 function handleRequestGoneWhileWaiting() {
@@ -533,24 +528,36 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          (consideración agregada al alcance) — antes no pasaba nada
                          visible acá, solo en la pantalla de Carreras. -->
                     <div
-                        v-if="newRequestAlert"
-                        class="p-4 bg-arka-primary text-arka-base rounded-arka flex items-center justify-between gap-4"
+                        v-if="newRequestAlert || pendingRequestsCount > 0"
+                        class="relative overflow-hidden rounded-2xl border-2 border-arka-primary bg-arka-card p-4 shadow-[0_18px_45px_rgba(52,211,153,0.22)] ring-4 ring-arka-primary/10"
+                        role="alert"
+                        aria-live="assertive"
                     >
-                        <div>
-                            <p class="font-semibold">{{ newRequestAlert.isScheduled ? '¡Carrera programada nueva!' : '¡Nueva solicitud de carrera!' }}</p>
-                            <p class="text-sm">
-                                {{ newRequestAlert.clientName }} le
-                                {{ newRequestAlert.isScheduled ? 'programó una carrera' : 'ofrece' }}
-                                ${{ Number(newRequestAlert.price).toFixed(2) }}
-                            </p>
+                        <span class="absolute right-0 top-0 h-24 w-24 -translate-y-1/2 translate-x-1/2 rounded-full bg-arka-primary/15" aria-hidden="true"></span>
+                        <div class="relative flex items-start gap-3">
+                            <div class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-arka-primary text-arka-base shadow-lg shadow-arka-primary/30">
+                                <span class="absolute inset-0 animate-ping rounded-full bg-arka-primary/40" aria-hidden="true"></span>
+                                <svg class="relative h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M12 2.25a6.25 6.25 0 0 0-6.25 6.25v2.04c0 .87-.28 1.72-.8 2.42l-1.3 1.74A1.75 1.75 0 0 0 5.05 17.5h13.9a1.75 1.75 0 0 0 1.4-2.8l-1.3-1.74a4.03 4.03 0 0 1-.8-2.42V8.5A6.25 6.25 0 0 0 12 2.25Z" />
+                                    <path d="M9.4 19a2.75 2.75 0 0 0 5.2 0H9.4Z" />
+                                </svg>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-arka-primary">Acción prioritaria</p>
+                                <p class="mt-0.5 text-lg font-bold text-arka-text">{{ newRequestAlert?.isScheduled ? 'Nueva carrera programada' : 'Tiene una solicitud de carrera' }}</p>
+                                <p v-if="newRequestAlert" class="mt-1 text-sm text-arka-text-muted">
+                                    {{ newRequestAlert.clientName }} le {{ newRequestAlert.isScheduled ? 'programó una carrera' : 'ofrece' }}
+                                    <strong class="text-arka-primary-bright">${{ Number(newRequestAlert.price).toFixed(2) }}</strong>
+                                </p>
+                                <p v-else class="mt-1 text-sm text-arka-text-muted">Tiene {{ pendingRequestsCount }} solicitud{{ pendingRequestsCount === 1 ? '' : 'es' }} esperando respuesta.</p>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-3 shrink-0">
-                            <Link :href="route('rides.index')" class="px-3 py-1.5 rounded-arka bg-arka-base text-arka-primary-bright text-sm font-medium">
-                                Ver
+                        <div class="relative mt-4 flex items-center gap-2">
+                            <Link :href="route('rides.index')" class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 text-sm font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/20">
+                                Ver solicitud
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.22 4.72a.75.75 0 0 1 1.06 0l6.75 6.75a.75.75 0 0 1 0 1.06l-6.75 6.75a.75.75 0 1 1-1.06-1.06l5.47-5.47H3.5a.75.75 0 0 1 0-1.5h15.19l-5.47-5.47a.75.75 0 0 1 0-1.06Z" /></svg>
                             </Link>
-                            <button type="button" class="text-arka-base/70 hover:text-arka-base" @click="newRequestAlert = null">
-                                ✕
-                            </button>
+                            <span class="rounded-full bg-arka-primary/15 px-3 py-1.5 text-xs font-bold text-arka-primary-bright">{{ pendingRequestsCount }} pendiente{{ pendingRequestsCount === 1 ? '' : 's' }}</span>
                         </div>
                     </div>
 
@@ -686,8 +693,8 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 >
                                     {{ pendingRequestsCount }}
                                 </span>
-                                <svg class="h-6 w-6 mx-auto text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4 4 16 8-16 8 4-8-4-8Z" />
+                                <svg class="h-6 w-6 mx-auto text-arka-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M3.4 3.3a.75.75 0 0 1 .8-.08l16 8a.75.75 0 0 1 0 1.34l-16 8A.75.75 0 0 1 3.13 19.7L6.98 12 3.13 4.3a.75.75 0 0 1 .27-1Z" />
                                 </svg>
                                 <p class="mt-1 text-xs text-arka-text">Solicitudes</p>
                             </Link>

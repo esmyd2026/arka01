@@ -1,6 +1,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
+const props = defineProps({
+    visible: { type: Boolean, default: true },
+    userId: { type: [Number, String], required: true },
+});
+
 const bytes = ref(0);
 const open = ref(false);
 const connectionType = ref('');
@@ -12,9 +17,9 @@ const currentRideId = ref(null);
 let timer;
 let baseBytes = 0;
 
-const storageKey = 'arka-session-transfer-bytes';
-const historyKey = 'arka-data-usage-history';
-const meterKey = 'arka-data-usage-meter';
+const storageKey = `arka-session-transfer-bytes-${props.userId}`;
+const historyKey = `arka-data-usage-history-${props.userId}`;
+const meterKey = `arka-data-usage-meter-${props.userId}`;
 
 const localDate = (date = new Date()) => {
     const year = date.getFullYear();
@@ -80,6 +85,7 @@ function update() {
         timeOrigin: performance.timeOrigin,
         total: bytes.value,
     }));
+
 }
 
 const amount = computed(() => {
@@ -132,7 +138,7 @@ onBeforeUnmount(() => window.clearInterval(timer));
 </script>
 
 <template>
-    <div class="relative">
+    <div v-if="visible" class="relative">
         <button
             type="button"
             class="inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-2 text-xs font-semibold text-arka-text-muted transition hover:bg-arka-base hover:text-arka-primary"

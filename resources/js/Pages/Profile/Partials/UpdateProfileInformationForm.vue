@@ -41,6 +41,7 @@ const avatarPreview = ref(null);
 // pesado entero para recién enterarse del error al volver la respuesta.
 const MAX_AVATAR_SIZE_MB = 4;
 const avatarSizeError = ref(null);
+const avatarFileName = ref('');
 
 function onAvatarChange(event) {
     const file = event.target.files[0];
@@ -51,11 +52,13 @@ function onAvatarChange(event) {
         event.target.value = '';
         form.avatar = null;
         avatarPreview.value = null;
+        avatarFileName.value = '';
         return;
     }
 
     form.avatar = file ?? null;
     avatarPreview.value = file ? URL.createObjectURL(file) : null;
+    avatarFileName.value = file?.name ?? '';
 }
 
 // Bug real reportado: el <select> nativo se veía con texto ilegible (blanco
@@ -78,21 +81,35 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
         <form @submit.prevent="form.patch(route('profile.update'))" class="mt-6 space-y-6">
             <div>
                 <InputLabel for="avatar" value="Foto de perfil" />
-                <div class="mt-2 flex items-center gap-4">
+                <div class="mt-2 flex min-w-0 items-center gap-3">
                     <img
                         v-if="avatarPreview"
                         :src="avatarPreview"
                         alt="Vista previa"
-                        class="h-16 w-16 rounded-full object-cover"
+                        class="h-16 w-16 shrink-0 rounded-full object-cover"
                     />
-                    <UserAvatar v-else :user="user" size-class="h-16 w-16 text-lg" />
+                    <UserAvatar v-else :user="user" size-class="h-16 w-16 shrink-0 text-lg" />
                     <input
                         id="avatar"
                         type="file"
                         accept="image/*"
-                        class="block text-sm text-arka-text-muted file:mr-3 file:py-2 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base file:font-medium file:cursor-pointer"
+                        class="sr-only"
                         @change="onAvatarChange"
                     />
+                    <div class="min-w-0 flex-1">
+                        <label
+                            for="avatar"
+                            class="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-arka bg-arka-primary px-3 py-2 text-sm font-semibold text-arka-base transition hover:bg-arka-primary-bright focus-within:ring-2 focus-within:ring-arka-primary"
+                        >
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M8.25 3A2.25 2.25 0 0 0 6 5.25V6H4.25A2.25 2.25 0 0 0 2 8.25v9.5A2.25 2.25 0 0 0 4.25 20h15.5A2.25 2.25 0 0 0 22 17.75v-9.5A2.25 2.25 0 0 0 19.75 6H18v-.75A2.25 2.25 0 0 0 15.75 3h-7.5ZM12 8a4.25 4.25 0 1 1 0 8.5A4.25 4.25 0 0 1 12 8Z" />
+                            </svg>
+                            {{ avatarFileName ? 'Cambiar foto' : 'Seleccionar foto' }}
+                        </label>
+                        <p class="mt-1.5 truncate text-xs text-arka-text-muted" :title="avatarFileName || 'Ningún archivo seleccionado'">
+                            {{ avatarFileName || 'Ningún archivo seleccionado' }}
+                        </p>
+                    </div>
                 </div>
                 <p class="mt-1 text-xs text-arka-text-muted">JPG o PNG, máximo {{ MAX_AVATAR_SIZE_MB }} MB.</p>
                 <InputError class="mt-2" :message="avatarSizeError ?? form.errors.avatar" />

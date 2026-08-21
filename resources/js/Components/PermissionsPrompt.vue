@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import { pushSubscriptionStatus, subscribeToPush } from '@/push.js';
 import { unlockAudioContext } from '@/Utils/liveAlert';
@@ -52,12 +52,35 @@ async function refreshNotifStatus() {
 
 onMounted(async () => {
     readDismissed();
-    refreshGeoStatus();
+    await refreshGeoStatus();
     await refreshNotifStatus();
+    window.addEventListener('focus', refreshPermissionStatuses);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 });
 
+onBeforeUnmount(() => {
+    window.removeEventListener('focus', refreshPermissionStatuses);
+    document.removeEventListener('visibilitychange', refreshWhenVisible);
+});
+
+async function refreshPermissionStatuses() {
+    await refreshGeoStatus();
+    await refreshNotifStatus();
+}
+
+function refreshWhenVisible() {
+    if (!document.hidden) refreshPermissionStatuses();
+}
+
 const needsGeo = computed(() => geoStatus.value === 'prompt' || geoStatus.value === 'denied');
-const needsNotif = computed(() => ['default', 'denied', 'unsubscribed'].includes(notifStatus.value));
+const needsNotif = computed(() => {
+    // Si el navegador ya concedió el permiso, el aviso de activación no debe
+    // seguir ocupando la pantalla. La ausencia puntual de una suscripción
+    // push se repara desde los controles de cuenta, sin confundir al usuario
+    // diciendo que el permiso continúa desactivado.
+    if ('Notification' in window && Notification.permission === 'granted') return false;
+    return ['default', 'denied', 'unsubscribed'].includes(notifStatus.value);
+});
 const visible = computed(() => !dismissed.value && (needsGeo.value || needsNotif.value));
 
 function enableLocation() {
