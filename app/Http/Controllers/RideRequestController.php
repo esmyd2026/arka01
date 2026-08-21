@@ -142,6 +142,12 @@ class RideRequestController extends Controller
             // contra `fleetDrivers`/`publicDrivers` (si el id no aparece ahí,
             // simplemente no queda nada preseleccionado).
             'preselectedDriverId' => $request->filled('conductor') ? (int) $request->query('conductor') : null,
+            // Reintento después de rechazo/expiración: el cliente ya eligió
+            // ruta y el botón indica la bolsa concreta. La pantalla abre esa
+            // categoría directamente, sin volver a pedir destino.
+            'initialCategory' => in_array($request->query('categoria'), ['fleet', 'public', 'all'], true)
+                ? $request->query('categoria')
+                : null,
             // Pedido explícito del usuario: acceso directo "Programar
             // carrera" desde el inicio del cliente — arranca esta pantalla ya
             // en modo "programada" en vez de "ahora mismo".
@@ -168,6 +174,7 @@ class RideRequestController extends Controller
                 'lat' => (float) $request->query('destination_lat'),
                 'lng' => (float) $request->query('destination_lng'),
                 'address' => (string) $request->query('destination_address', ''),
+                'sector_id' => $request->filled('destination_sector_id') ? (int) $request->query('destination_sector_id') : null,
             ] : null,
             // Pedido explícito del usuario (documento formal de ajuste UX,
             // sección 13): si el buscador de Inicio ya sabía la ubicación en
@@ -178,7 +185,15 @@ class RideRequestController extends Controller
                 'lat' => (float) $request->query('origin_lat'),
                 'lng' => (float) $request->query('origin_lng'),
                 'address' => (string) $request->query('origin_address', ''),
+                'sector_id' => $request->filled('origin_sector_id') ? (int) $request->query('origin_sector_id') : null,
             ] : null,
+            'initialOptions' => [
+                'passenger_count' => min(8, max(1, (int) $request->query('passenger_count', 1))),
+                'needs_trunk' => $request->boolean('needs_trunk'),
+                'payment_method' => in_array($request->query('payment_method'), ['efectivo', 'transferencia'], true)
+                    ? $request->query('payment_method')
+                    : 'efectivo',
+            ],
             // "Mis rutas" (pedido explícito del usuario): pares completos de
             // origen+destino guardados a propósito, con alias opcional —
             // distinto de frequentPlaces (direcciones sueltas, automáticas).

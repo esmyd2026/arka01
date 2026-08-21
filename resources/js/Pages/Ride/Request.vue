@@ -36,6 +36,7 @@ const props = defineProps({
     // flota, directorio, perfil), esta pantalla arranca con ESE conductor ya
     // elegido, no "toda la flota disponible".
     preselectedDriverId: { type: Number, default: null },
+    initialCategory: { type: String, default: null },
     // Pedido explícito del usuario: acceso directo "Programar carrera" desde
     // el inicio del cliente, arranca esta pantalla ya en modo "programada".
     startScheduled: { type: Boolean, default: false },
@@ -62,6 +63,7 @@ const props = defineProps({
     // ubicación en vivo del cliente, el origen viene resuelto de una vez —
     // evita pedir geolocalización por segunda vez acá (ver onMounted).
     initialOrigin: { type: Object, default: null },
+    initialOptions: { type: Object, default: () => ({}) },
 });
 
 // El mismo fondo se aplica tanto al layout como al contenido del primer
@@ -82,7 +84,11 @@ const filteredCooperatives = computed(() => {
 // conductor preseleccionado es del directorio público (no de la flota), hay
 // que arrancar en "Público" para que aparezca seleccionable de una.
 const sourceMode = ref(
-    props.preselectedDriverId && !props.fleetDrivers.some((d) => d.user_id === props.preselectedDriverId) && props.publicDrivers.some((d) => d.user_id === props.preselectedDriverId)
+    props.initialCategory === 'all'
+        ? 'both'
+        : props.initialCategory === 'public'
+          ? 'public'
+          : props.preselectedDriverId && !props.fleetDrivers.some((d) => d.user_id === props.preselectedDriverId) && props.publicDrivers.some((d) => d.user_id === props.preselectedDriverId)
         ? 'public'
         : 'fleet'
 );
@@ -189,8 +195,8 @@ const cityBias = computed(() =>
 );
 const sectorOptions = computed(() => (selectedCity.value?.sectors ?? []).map((sector) => ({ value: sector.id, label: sector.name })));
 
-const originSectorId = ref(null);
-const destinationSectorId = ref(null);
+const originSectorId = ref(props.initialOrigin?.sector_id ?? null);
+const destinationSectorId = ref(props.initialDestination?.sector_id ?? null);
 const originAddress = ref(props.initialOrigin?.address ?? '');
 
 // Simplificar el pedido de carrera (pedido explícito del usuario): ciudad y
@@ -248,7 +254,9 @@ const step = ref(props.initialDestination ? 'driver' : 'destination');
 const activeCategory = ref(
     selectedCooperativeId.value
         ? 'cooperative'
-        : (selectedDriverId.value !== WHOLE_FLEET ? sourceMode.value : null)
+        : props.initialCategory
+          ? props.initialCategory
+          : (selectedDriverId.value !== WHOLE_FLEET ? sourceMode.value : null)
 );
 
 // Documento formal de ajuste UX, sección 13: si Inicio ya mandó la ubicación
@@ -362,8 +370,8 @@ if (props.initialOrigin) {
 // Pedido explícito del usuario: cantidad de pasajeros (por defecto 1) y si
 // hace falta cajuela para maletas (por defecto no) — filtran qué
 // conductores pueden tomar la carrera (ver driversWithDistance más abajo).
-const passengerCount = ref(1);
-const needsTrunk = ref(false);
+const passengerCount = ref(props.initialOptions.passenger_count ?? 1);
+const needsTrunk = ref(props.initialOptions.needs_trunk ?? false);
 
 // Distancia a cada conductor, calculada en el navegador (Haversine) solo
 // para mostrarla — el precio final lo calcula el backend.
@@ -909,7 +917,7 @@ const roundTrip = ref(false);
 const scheduledNotes = ref('');
 // Forma de pago (pedido explícito del usuario): "efectivo" de default,
 // el cliente todavía no tenía ninguna forma de elegirla.
-const paymentMethod = ref('efectivo');
+const paymentMethod = ref(props.initialOptions.payment_method ?? 'efectivo');
 
 // Resumen de una línea para el chip cerrado de "¿Cuántos van?" (mockup
 // acordado antes de tocar esto) — se recalcula solo con lo que ya hay

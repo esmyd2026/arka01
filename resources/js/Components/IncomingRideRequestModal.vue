@@ -76,9 +76,15 @@ function discard() {
     // actual del despacho secuencial dejan driver_user_id en mí.
     router.post(route('ride-requests.reject', id), {}, {
         preserveScroll: true,
+        onSuccess: () => {
+            dismissIncomingRideRequest(id);
+            // `broadcast(...)->toOthers()` no vuelve a la misma pestaña que
+            // hizo el POST. Avisamos al Dashboard local para que quite su
+            // tarjeta y contador sin esperar una recarga.
+            window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
+        },
         onFinish: () => {
             processing.value = false;
-            dismissIncomingRideRequest(id);
         },
     });
 }

@@ -279,8 +279,16 @@ class DriverVerificationTest extends TestCase
             ->get(route('driver-profile.license-photo', $driver))
             ->assertOk();
 
-        $this->actingAs($admin)
+        $adminResponse = $this->actingAs($admin)
             ->get(route('driver-profile.license-photo', $driver))
             ->assertOk();
+
+        // El documento sigue siendo privado, pero el panel administrativo
+        // puede incrustarlo desde el mismo dominio para revisarlo.
+        $adminResponse->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+        $this->assertStringContainsString(
+            "frame-ancestors 'self'",
+            (string) $adminResponse->headers->get('Content-Security-Policy'),
+        );
     }
 }

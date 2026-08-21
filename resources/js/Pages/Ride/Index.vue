@@ -298,6 +298,31 @@ function cancelRequest(id) {
     myPending.value = myPending.value.filter((r) => r.id !== id);
 }
 
+// Reutiliza la ruta completa de la solicitud que terminó. `replace: true`
+// evita que Atrás restaure desde el historial la tarjeta antigua de
+// "Buscando su conductor". initialDestination hace que Request.vue abra
+// directamente la elección de conductor, no el buscador de destino.
+function retryRequest(request, category = 'fleet') {
+    router.visit(route('ride-requests.create', {
+        flota: request.fleet_id,
+        categoria: category,
+        origin_lat: request.origin_lat,
+        origin_lng: request.origin_lng,
+        origin_address: request.origin_address,
+        origin_sector_id: request.origin_sector_id,
+        destination_lat: request.destination_lat,
+        destination_lng: request.destination_lng,
+        destination_address: request.destination_address,
+        destination_sector_id: request.destination_sector_id,
+        passenger_count: request.passenger_count,
+        needs_trunk: request.needs_trunk ? 1 : 0,
+        payment_method: request.payment_method,
+    }), {
+        replace: true,
+        preserveState: false,
+    });
+}
+
 // --- Feedback en vivo mientras se espera (sección 9.7: "que no parezca que
 // no pasó nada" — mismo espíritu que Uber mostrando "buscando conductor"). ---
 const now = ref(Date.now());
@@ -660,17 +685,15 @@ function confirmRaiseOffer(id) {
                             </p>
 
                             <div v-if="r.status === 'expired'" class="mt-2 flex gap-2">
-                                <Link :href="route('ride-requests.create')">
-                                    <PrimaryButton>Pedir de nuevo</PrimaryButton>
-                                </Link>
+                                <PrimaryButton @click="retryRequest(r, r.dispatch_pool === 'public' ? 'public' : r.dispatch_pool === 'both' ? 'all' : 'fleet')">
+                                    Pedir de nuevo
+                                </PrimaryButton>
                                 <SecondaryButton @click="myPending = myPending.filter((x) => x.id !== r.id)">
                                     Descartar
                                 </SecondaryButton>
                             </div>
                             <div v-else-if="r.status === 'declined'" class="mt-2 flex flex-wrap gap-2">
-                                <Link :href="route('ride-requests.create')">
-                                    <PrimaryButton>Pedir a toda mi flota</PrimaryButton>
-                                </Link>
+                                <PrimaryButton @click="retryRequest(r, 'fleet')">Pedir a toda mi flota</PrimaryButton>
                                 <Link v-if="route().has('directory.index')" :href="route('directory.index')">
                                     <SecondaryButton>Ver directorio público</SecondaryButton>
                                 </Link>

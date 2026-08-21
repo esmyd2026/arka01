@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
@@ -60,7 +61,12 @@ class RegisteredUserController extends Controller
             // `isDriver()`/`isClient()` (sección 3.1), esto es solo para decidir
             // el siguiente paso de la guía.
             'account_type' => ['required', 'string', Rule::in(['cliente', 'conductor', 'cooperativa'])],
-            'name' => ['required', 'string', 'max:255'],
+            // El formulario nuevo solicita nombre y apellido por separado,
+            // pero `name` se conserva temporalmente como entrada compatible
+            // para clientes antiguos que todavía tengan assets en caché.
+            'name' => ['nullable', 'string', 'max:255', 'required_without:first_name'],
+            'first_name' => ['nullable', 'string', 'max:100', 'required_without:name'],
+            'last_name' => ['nullable', 'string', 'max:100', 'required_with:first_name'],
             // Sin 'unique:' acá a propósito: el correo duplicado se valida a
             // mano más abajo (mismo criterio que el teléfono), con un
             // mensaje que invita a iniciar sesión en vez del genérico "ya
@@ -115,8 +121,12 @@ class RegisteredUserController extends Controller
         $hasCoordinates = isset($validated['lat'], $validated['lng']);
         $city = $hasCoordinates ? $this->nearestCity((float) $validated['lat'], (float) $validated['lng']) : null;
 
+        $fullName = filled($validated['first_name'] ?? null)
+            ? Str::squish($validated['first_name'].' '.$validated['last_name'])
+            : Str::squish($validated['name']);
+
         $user = User::create([
-            'name' => $validated['name'],
+            'name' => $fullName,
             'email' => $validated['email'],
             'phone' => $phone,
             'password' => Hash::make($validated['password']),

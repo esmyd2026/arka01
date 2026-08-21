@@ -367,6 +367,7 @@ function handleNewRequest(e, { alert = true } = {}) {
 
 function handleRequestGoneWhileWaiting() {
     pendingRequestsCount.value = Math.max(0, pendingRequestsCount.value - 1);
+    if (pendingRequestsCount.value === 0) newRequestAlert.value = null;
 }
 
 // Aviso en vivo de invitaciones a flota nuevas (se reportó: un cliente
@@ -391,6 +392,8 @@ function handleNewInvitation(e) {
 onMounted(() => {
     if (!props.driverStats) return;
 
+    window.addEventListener('arka:ride-request-answered', handleRequestGoneWhileWaiting);
+
     const personal = window.Echo.private(`App.Models.User.${userId}`);
     personal.listen('.ride-request.created', (e) => handleNewRequest(e, { alert: false }));
     personal.listen('.ride-request.cancelled', handleRequestGoneWhileWaiting);
@@ -411,6 +414,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     driverChannels.forEach((name) => window.Echo.leave(name));
+    window.removeEventListener('arka:ride-request-answered', handleRequestGoneWhileWaiting);
 });
 
 // Sparkline de ganancias (consideración agregada al alcance, mockup del

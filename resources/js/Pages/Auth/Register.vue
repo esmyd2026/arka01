@@ -40,7 +40,8 @@ const referrerId = new URLSearchParams(window.location.search).get('ref');
 
 const form = useForm({
     account_type: validPreselection,
-    name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     country_code: '+593',
     phone_local: '',
@@ -141,7 +142,7 @@ const stepIsValid = computed(() => {
         case 'account_type':
             return form.account_type !== '';
         case 'name':
-            return form.name.trim().length > 0;
+            return form.first_name.trim().length > 0 && form.last_name.trim().length > 0;
         case 'email':
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
         case 'phone':
@@ -183,7 +184,9 @@ function goBack() {
 // que ya no muestra ese input.
 const FIELD_STEP = {
     account_type: 0,
-    name: 1,
+    name: 1, // compatibilidad con una respuesta de backend anterior
+    first_name: 1,
+    last_name: 1,
     email: 2,
     country_code: 3,
     phone_local: 3,
@@ -285,19 +288,40 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.account_type" />
             </div>
 
-            <!-- Paso 2: nombre -->
+            <!-- Paso 2: nombres separados para evitar que el sistema tenga
+                 que adivinar cuál parte corresponde al apellido. En la base
+                 se conserva `users.name` como nombre completo para mantener
+                 compatibilidad con todos los perfiles actuales. -->
             <div v-else-if="STEPS[currentStep] === 'name'">
-                <InputLabel for="name" value="¿Cuál es su nombre?" />
-                <TextInput
-                    id="name"
-                    type="text"
-                    class="mt-1 block w-full"
-                    v-model="form.name"
-                    required
-                    autofocus
-                    autocomplete="name"
-                    @keydown.enter.prevent="goNext"
-                />
+                <p class="mb-3 text-sm font-medium text-arka-text">¿Cómo se llama?</p>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <InputLabel for="first_name" value="Nombre" />
+                        <TextInput
+                            id="first_name"
+                            v-model="form.first_name"
+                            type="text"
+                            class="mt-1 block w-full"
+                            required
+                            autofocus
+                            autocomplete="given-name"
+                        />
+                        <InputError class="mt-2" :message="form.errors.first_name" />
+                    </div>
+                    <div>
+                        <InputLabel for="last_name" value="Apellido" />
+                        <TextInput
+                            id="last_name"
+                            v-model="form.last_name"
+                            type="text"
+                            class="mt-1 block w-full"
+                            required
+                            autocomplete="family-name"
+                            @keydown.enter.prevent="goNext"
+                        />
+                        <InputError class="mt-2" :message="form.errors.last_name" />
+                    </div>
+                </div>
                 <InputError class="mt-2" :message="form.errors.name" />
             </div>
 

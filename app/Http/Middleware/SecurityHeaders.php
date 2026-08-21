@@ -29,6 +29,14 @@ class SecurityHeaders
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
+        // Estos endpoints sirven documentos privados únicamente al dueño o
+        // a un administrador. El panel admin los muestra en un iframe del
+        // MISMO origen; aplicar DENY/frame-ancestors none también ahí hacía
+        // que el archivo existiera pero Chrome mostrara un visor vacío.
+        $isPrivateDriverDocument = $request->routeIs([
+            'driver-profile.document',
+            'driver-profile.license-photo',
+        ]);
 
         // El CSP NO se aplica en local (pedido explícito del usuario, fix de
         // un bug real: pantalla en blanco). El servidor de desarrollo de Vite
@@ -65,13 +73,13 @@ class SecurityHeaders
                 "object-src 'none'",
                 "base-uri 'self'",
                 "form-action 'self'",
-                "frame-ancestors 'none'",
+                $isPrivateDriverDocument ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
             ]);
 
             $response->headers->set('Content-Security-Policy', $csp);
         }
 
-        $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('X-Frame-Options', $isPrivateDriverDocument ? 'SAMEORIGIN' : 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');

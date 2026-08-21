@@ -10,6 +10,7 @@ import UserAvatar from '@/Components/UserAvatar.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import TextInput from '@/Components/TextInput.vue';
+import BottomSheet from '@/Components/BottomSheet.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -470,6 +471,19 @@ const counterpart = computed(() => (props.isDriver ? props.ride.client : props.r
 // trazar todavía; 'completed'/'cancelled' vuelven a la pantalla normal, ahí
 // sí importa ver el recibo completo y calificar con calma, sin apuro).
 const clientFullscreenTrip = computed(() => !props.isDriver && props.ride.status === 'in_progress');
+
+const tripProgressSteps = computed(() => [
+    { label: 'Solicitud', complete: true },
+    { label: 'Asignado', complete: true },
+    { label: 'Recogida', complete: Boolean(props.ride.arrived_at) },
+    { label: 'En viaje', complete: Boolean(props.ride.picked_up_at) },
+    { label: 'Llegada', complete: props.ride.status === 'completed' },
+]);
+
+const currentTripProgressIndex = computed(() => {
+    const firstPending = tripProgressSteps.value.findIndex((step) => !step.complete);
+    return firstPending === -1 ? tripProgressSteps.value.length - 1 : firstPending;
+});
 
 // Cuánto falta para que el conductor llegue a buscarte (pedido explícito del
 // usuario: "cuando el conductor sale a buscar al cliente, avisarle que ya
@@ -1035,6 +1049,10 @@ function submitReview() {
                     <p v-if="ride.driver.driver_profile?.vehicle_plate" class="text-xs text-arka-text-muted">
                         {{ ride.driver.driver_profile.vehicle_plate }}
                     </p>
+                    <p v-if="ride.driver.driver_profile?.vehicle_make" class="mt-0.5 truncate text-[11px] text-arka-text-muted/80">
+                        {{ ride.driver.driver_profile.vehicle_make }} {{ ride.driver.driver_profile.vehicle_model }}
+                        <span v-if="ride.driver.driver_profile.vehicle_color"> · {{ ride.driver.driver_profile.vehicle_color }}</span>
+                    </p>
                 </div>
                 <span
                     v-if="pickupEta"
@@ -1066,21 +1084,37 @@ function submitReview() {
                 </svg>
             </button>
 
-            <!-- Vehículo + Mensaje/Llamar + Cancelar, flotando abajo (mismo
-                 orden que el mockup). -->
+            <!-- Progreso y acciones esenciales, siempre visibles sin cubrir
+                 innecesariamente el mapa. -->
             <div class="fixed inset-x-3 bottom-3 z-10 space-y-2">
-                <div
-                    v-if="ride.driver.driver_profile?.vehicle_make"
-                    class="flex items-center gap-2.5 px-4 py-3 bg-arka-card/95 backdrop-blur-sm shadow-lg rounded-arka border border-arka-text-muted/10"
-                >
-                    <svg class="h-5 w-5 text-arka-text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3.5" y="6" width="17" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                        <circle cx="9" cy="12" r="1.75" stroke-linecap="round" stroke-linejoin="round" />
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M14 10.5h3M14 13.5h3" />
-                    </svg>
-                    <span class="text-sm text-arka-text truncate">
-                        {{ ride.driver.driver_profile.vehicle_make }} {{ ride.driver.driver_profile.vehicle_model }} - {{ ride.driver.driver_profile.vehicle_color }}
-                    </span>
+                <div class="rounded-arka border border-arka-text-muted/10 bg-arka-card/95 px-3 py-3 shadow-lg backdrop-blur-sm">
+                    <div class="flex items-start">
+                        <div
+                            v-for="(step, index) in tripProgressSteps"
+                            :key="step.label"
+                            class="relative flex min-w-0 flex-1 flex-col items-center"
+                        >
+                            <div
+                                v-if="index < tripProgressSteps.length - 1"
+                                class="absolute left-1/2 top-[5px] h-0.5 w-full"
+                                :class="tripProgressSteps[index + 1].complete ? 'bg-arka-primary' : 'bg-arka-text-muted/20'"
+                            />
+                            <span
+                                class="relative z-10 h-3 w-3 rounded-full border-2"
+                                :class="step.complete
+                                    ? 'border-arka-primary bg-arka-primary'
+                                    : index === currentTripProgressIndex
+                                        ? 'border-arka-primary bg-arka-card ring-4 ring-arka-primary/15'
+                                        : 'border-arka-text-muted/30 bg-arka-card'"
+                            />
+                            <span
+                                class="mt-2 max-w-full truncate text-center text-[9px] leading-tight"
+                                :class="step.complete || index === currentTripProgressIndex ? 'font-medium text-arka-text' : 'text-arka-text-muted/60'"
+                            >
+                                {{ step.label }}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex items-center gap-2">
@@ -1102,7 +1136,7 @@ function submitReview() {
                     </a>
                 </div>
 
-                <DangerButton class="w-full justify-center" @click="showCancelForm = true">Cancelar viaje</DangerButton>
+                <DangerButton class="w-full justify-center" @click="quickCancelRide">Cancelar viaje</DangerButton>
             </div>
 
             <!-- Panel de mensaje/seguridad — dos vistas, mismo patrón que el

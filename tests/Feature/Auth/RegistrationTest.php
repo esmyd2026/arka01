@@ -45,6 +45,38 @@ class RegistrationTest extends TestCase
         $response->assertRedirect(RouteServiceProvider::HOME);
     }
 
+    public function test_registration_joins_first_name_and_last_name_into_the_existing_name_field(): void
+    {
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'first_name' => 'Laura',
+            'last_name' => 'Mendoza',
+            'email' => 'laura.mendoza@example.com',
+            'country_code' => '+593',
+            'phone_local' => '990001112',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ])->assertRedirect(RouteServiceProvider::HOME);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'laura.mendoza@example.com',
+            'name' => 'Laura Mendoza',
+        ]);
+    }
+
+    public function test_registration_requires_both_first_name_and_last_name(): void
+    {
+        $this->post('/register', [
+            'account_type' => 'cliente',
+            'first_name' => 'Laura',
+            'email' => 'solo.nombre@example.com',
+            'country_code' => '+593',
+            'phone_local' => '990001113',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ])->assertSessionHasErrors('last_name');
+    }
+
     /**
      * Registro guiado (consideración agregada al alcance): elegir "conductor"
      * en el primer paso lleva directo a completar el perfil de conductor

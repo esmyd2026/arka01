@@ -176,6 +176,33 @@ class RideRequestFlowTest extends TestCase
         );
     }
 
+    public function test_retrying_a_request_preserves_the_route_and_preselects_the_requested_pool(): void
+    {
+        [$client] = $this->clientWithFleetDriver();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create', [
+            'categoria' => 'fleet',
+            'origin_lat' => -2.14,
+            'origin_lng' => -79.89,
+            'origin_address' => 'Alborada',
+            'destination_lat' => -2.15,
+            'destination_lng' => -79.90,
+            'destination_address' => 'Sauces 9',
+            'passenger_count' => 3,
+            'needs_trunk' => 1,
+            'payment_method' => 'transferencia',
+        ]));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('initialCategory', 'fleet')
+            ->where('initialOrigin.address', 'Alborada')
+            ->where('initialDestination.address', 'Sauces 9')
+            ->where('initialOptions.passenger_count', 3)
+            ->where('initialOptions.needs_trunk', true)
+            ->where('initialOptions.payment_method', 'transferencia')
+        );
+    }
+
     public function test_the_request_screen_has_no_prefilled_destination_without_query_params(): void
     {
         [$client] = $this->clientWithFleetDriver();
