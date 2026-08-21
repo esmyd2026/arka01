@@ -105,6 +105,22 @@ class DriverVerificationTest extends TestCase
         Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
     }
 
+    public function test_an_admin_cannot_approve_an_incomplete_driver_profile(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'verification_status' => 'pending',
+            'vehicle_plate' => null,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.driver-verifications.approve', $profile))
+            ->assertSessionHasErrors('verification');
+
+        $this->assertSame('pending', $profile->fresh()->verification_status);
+    }
+
     public function test_an_admin_can_reject_a_pending_verification(): void
     {
         Notification::fake();
@@ -122,6 +138,24 @@ class DriverVerificationTest extends TestCase
         $this->assertSame('rejected', $profile->fresh()->verification_status);
         $this->assertSame('Foto de licencia borrosa.', $profile->fresh()->verification_rejection_reason);
         Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
+    }
+
+    public function test_rejecting_verification_disconnects_the_driver(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'verification_status' => 'pending',
+            'is_available' => true,
+        ]);
+
+        $this->actingAs($admin)->post(
+            route('admin.driver-verifications.reject', $profile),
+            ['reason' => 'La información no coincide.']
+        )->assertRedirect();
+
+        $this->assertFalse($profile->fresh()->is_available);
     }
 
     /**

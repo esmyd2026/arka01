@@ -45,7 +45,7 @@ class RideDispatchCandidates
 
                 return $profile
                     && $profile->driver_type === 'public_transport'
-                    && $profile->verification_status === 'approved'
+                    && $profile->canBecomeAvailable()
                     && $profile->is_available
                     && ! $profile->isSuspended()
                     && $profile->isReachable($driver->hasActiveWhatsAppSession())
@@ -54,14 +54,9 @@ class RideDispatchCandidates
                     && $profile->passenger_capacity >= $passengerCount
                     && (! $needsTrunk || $profile->has_trunk);
             })
-            ->sortBy(fn (User $driver) => $driver->driverProfile->current_lat !== null && $driver->driverProfile->current_lng !== null
-                ? Haversine::distanceKm(
-                    $originLat,
-                    $originLng,
-                    (float) $driver->driverProfile->current_lat,
-                    (float) $driver->driverProfile->current_lng,
-                )
-                : PHP_FLOAT_MAX)
+            // La cooperativa sigue siendo la bolsa elegida por el cliente;
+            // el motor solo ordena a sus unidades elegibles.
+            ->pipe(fn ($drivers) => SmartDispatchScorer::rank($drivers, $originLat, $originLng))
             ->pluck('id')
             ->values()
             ->all();
@@ -95,7 +90,7 @@ class RideDispatchCandidates
             $drivers = $drivers->concat(
                 DriverProfile::query()
                     ->where('is_public', true)
-                    ->where('verification_status', '!=', 'rejected')
+                    ->where('verification_status', 'approved')
                     // Pedido explícito del usuario ("pasarme a cliente"): con
                     // el perfil pausado no entra a la bolsa pública — is_available
                     // en false (que deactivate() ya fuerza) lo saca del
@@ -131,6 +126,7 @@ class RideDispatchCandidates
                 $profile = $driver->driverProfile;
 
                 return $profile
+                    && $profile->canBecomeAvailable()
                     && $profile->is_available
                     && ! $profile->isSuspended()
                     // Bug reportado por el usuario: sin ping reciente de
@@ -152,18 +148,10 @@ class RideDispatchCandidates
                     && $profile->passenger_capacity >= $passengerCount
                     && (! $needsTrunk || $profile->has_trunk);
             })
-            // Al más cercano primero (pedido explícito del usuario). Un
-            // conductor sin ubicación conocida todavía (recién se conectó, no
-            // reportó GPS) no queda afuera de la bolsa — simplemente no se le
-            // puede calcular la distancia, así que se ordena al final.
-            ->sortBy(fn (User $driver) => $driver->driverProfile->current_lat !== null && $driver->driverProfile->current_lng !== null
-                ? Haversine::distanceKm(
-                    $originLat,
-                    $originLng,
-                    (float) $driver->driverProfile->current_lat,
-                    (float) $driver->driverProfile->current_lng,
-                )
-                : PHP_FLOAT_MAX)
+            // El cliente ya decidió la bolsa (flota, públicos o ambos). El
+            // motor no puede incorporar personas de otra categoría: solamente
+            // mejora el orden dentro de los candidatos que pasaron los filtros.
+            ->pipe(fn ($drivers) => SmartDispatchScorer::rank($drivers, $originLat, $originLng))
             ->pluck('id')
             ->values()
             ->all();
@@ -188,6 +176,7 @@ class RideDispatchCandidates
         $isBusy = Ride::query()->where('driver_user_id', $driverUserId)->where('status', 'in_progress')->exists();
 
         return $profile->is_available
+            && $profile->canBecomeAvailable()
             && ! $profile->isSuspended()
             && $profile->isReachable($profile->user?->hasActiveWhatsAppSession() ?? false)
             && ! $isBusy
@@ -253,6 +242,7 @@ class RideDispatchCandidates
             $profile = $driver->driverProfile;
 
             return $profile
+                && $profile->canBecomeAvailable()
                 && $profile->is_available
                 && ! $profile->isSuspended()
                 && ($busyDriverIds->contains($driver->id) || $profile->isReachable($driver->hasActiveWhatsAppSession()));

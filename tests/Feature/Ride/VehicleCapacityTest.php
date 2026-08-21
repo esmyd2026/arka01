@@ -106,6 +106,23 @@ class VehicleCapacityTest extends TestCase
         $this->assertTrue($driver->driverProfile->fresh()->is_available);
     }
 
+    public function test_a_driver_cannot_connect_until_admin_approves_the_profile(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'verification_status' => 'pending',
+            'is_available' => false,
+        ]);
+
+        $this->actingAs($driver)->post(route('driver.location.update'), [
+            'lat' => -0.18,
+            'lng' => -78.46,
+            'is_available' => true,
+        ])->assertForbidden();
+
+        $this->assertFalse($driver->driverProfile->fresh()->is_available);
+    }
+
     /**
      * Disconnecting (is_available: false) always has to work, incomplete
      * profile or not — the gate only blocks CONNECTING.

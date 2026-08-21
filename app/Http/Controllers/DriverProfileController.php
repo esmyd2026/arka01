@@ -309,12 +309,28 @@ class DriverProfileController extends Controller
         }
         unset($validated['license_photo']);
 
-        // Cambiar los documentos vuelve a poner la verificación en revisión —
-        // lo que un admin ya había aprobado (o rechazado) era sobre la foto
-        // anterior, y se limpia la observación de un rechazo previo.
-        if ($reviewedDocuments) {
+        // Administración aprueba una identidad y un vehículo concretos. Si
+        // después cambian datos sensibles (licencia, placa, tipo o capacidad)
+        // o la foto/documentación, se necesita una revisión nueva. Tarifas,
+        // cobertura y formas de pago pueden cambiar sin perder aprobación.
+        $reviewedFields = [
+            'driver_type', 'license_number', 'vehicle_make', 'vehicle_model',
+            'vehicle_color', 'vehicle_type', 'vehicle_plate', 'vehicle_year',
+            'passenger_capacity', 'has_trunk',
+        ];
+        $reviewedInformationChanged = $existingProfile && collect($reviewedFields)->contains(
+            fn (string $field) => array_key_exists($field, $validated)
+                && (string) $validated[$field] !== (string) $existingProfile->{$field}
+        );
+
+        if ($reviewedDocuments || $request->hasFile('profile_photo') || $reviewedInformationChanged) {
             $validated['verification_status'] = 'pending';
             $validated['verification_rejection_reason'] = null;
+            // Una revisión anterior ya no cubre los documentos nuevos. El
+            // conductor queda fuera de línea hasta la nueva aprobación.
+            $validated['verified_at'] = null;
+            $validated['verified_by'] = null;
+            $validated['is_available'] = false;
         }
 
         // updateOrCreate porque un usuario tiene, como mucho, un solo perfil de

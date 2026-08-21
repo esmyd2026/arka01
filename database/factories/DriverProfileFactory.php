@@ -21,9 +21,11 @@ class DriverProfileFactory extends Factory
         return [
             'user_id' => User::factory(),
             'license_number' => fake()->unique()->bothify('LIC-#####'),
+            'driver_type' => 'independent',
             'vehicle_make' => fake()->randomElement(['Chevrolet', 'Kia', 'Toyota', 'Hyundai']),
             'vehicle_model' => fake()->word(),
             'vehicle_color' => fake()->safeColorName(),
+            'vehicle_type' => 'sedan',
             'vehicle_plate' => strtoupper(fake()->bothify('???-####')),
             'vehicle_year' => fake()->numberBetween(2005, (int) date('Y')),
             'passenger_capacity' => fake()->numberBetween(1, 4),
@@ -40,6 +42,9 @@ class DriverProfileFactory extends Factory
             'location_updated_at' => now(),
             'is_public' => false,
             'verification_status' => 'approved',
+            'identity_document_path' => 'driver-documents/test-identity.pdf',
+            'license_photo_path' => 'driver-documents/test-license.jpg',
+            'police_record_path' => 'driver-documents/test-police-record.pdf',
             // El código de invitación se genera solo en el evento "creating" del
             // modelo (App\Models\DriverProfile::booted), no hace falta acá.
         ];

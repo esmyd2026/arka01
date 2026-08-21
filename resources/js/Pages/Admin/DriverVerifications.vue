@@ -69,6 +69,9 @@ const viewingDocument = ref(null);
                             Licencia {{ profile.license_number }}
                             <span v-if="profile.vehicle_plate"> · Placa {{ profile.vehicle_plate }}</span>
                         </p>
+                        <p v-if="!profile.registration_complete" class="rounded-arka bg-arka-warning/10 p-3 text-sm text-arka-warning">
+                            Faltan datos obligatorios. Abra el perfil completo antes de tomar una decisión.
+                        </p>
 
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                             <button
@@ -98,7 +101,7 @@ const viewingDocument = ref(null);
                         </div>
 
                         <div v-if="rejectingProfileId !== profile.id" class="flex gap-2">
-                            <PrimaryButton @click="approve(profile.id)">Aprobar</PrimaryButton>
+                            <PrimaryButton :disabled="!profile.registration_complete" @click="approve(profile.id)">Aprobar</PrimaryButton>
                             <DangerButton @click="startReject(profile.id)">Rechazar</DangerButton>
                         </div>
                         <div v-else class="space-y-2">

@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div v-if="dispatchHelpOpen" class="absolute right-4 top-[5.5rem] z-20 w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-arka-primary/25 bg-arka-base p-4 text-xs leading-relaxed text-arka-text-muted shadow-2xl sm:right-5 sm:top-[4.75rem]">
-                                <div class="flex items-start justify-between gap-3"><div><p class="font-semibold text-arka-text">Modo de despacho</p><p class="mt-1"><strong class="text-arka-primary">Automático:</strong> ofrece la solicitud al conductor disponible más cercano.</p><p class="mt-2"><strong class="text-arka-text">Manual:</strong> el operador elige una unidad; si no responde en 30 segundos, se activa el respaldo automático.</p></div><button type="button" class="text-arka-text-muted hover:text-arka-text" aria-label="Cerrar ayuda" @click="dispatchHelpOpen = false">✕</button></div>
+                                <div class="flex items-start justify-between gap-3"><div><p class="font-semibold text-arka-text">Modo de despacho</p><p class="mt-1"><strong class="text-arka-primary">Automático inteligente:</strong> compara cercanía, respuesta, calificación, cumplimiento y tiempo sin carrera dentro de esta cooperativa.</p><p class="mt-2"><strong class="text-arka-text">Manual:</strong> el operador elige una unidad; si no responde en 30 segundos, se activa el respaldo automático.</p></div><button type="button" class="text-arka-text-muted hover:text-arka-text" aria-label="Cerrar ayuda" @click="dispatchHelpOpen = false">✕</button></div>
                             </div>
                         </div>
                         <div v-if="cooperative.stand_lat == null || cooperative.stand_lng == null" class="mx-5 mb-3 rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">Falta ubicar la base. <Link :href="route('cooperative.profile.edit')" class="font-semibold underline">Marcar ahora</Link></div>
@@ -262,7 +262,16 @@ onBeforeUnmount(() => {
                                     <button type="button" class="w-full shrink-0 rounded-full bg-arka-primary px-5 py-2.5 text-sm font-bold text-arka-base disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" :disabled="!selectedDrivers[request.id] || assigningRequests[request.id]" @click="assign(request)">{{ assigningRequests[request.id] ? 'Asignando…' : 'Confirmar asignación →' }}</button>
                                 </div>
                             </div>
-                            <div v-else-if="request.driver" class="flex items-center justify-between gap-3 border-t border-arka-text-muted/10 bg-arka-primary/5 p-4"><p class="text-sm text-arka-text">Esperando respuesta de <strong>{{ request.driver.name }}</strong></p><span class="h-2.5 w-2.5 animate-pulse rounded-full bg-arka-primary"></span></div>
+                            <div v-else-if="request.driver" class="flex items-center justify-between gap-3 border-t border-arka-text-muted/10 bg-arka-primary/5 p-4">
+                                <div class="min-w-0">
+                                    <p class="text-sm text-arka-text">Esperando respuesta de <strong>{{ request.driver.name }}</strong></p>
+                                    <p v-if="request.smart_dispatch_recommendation" class="mt-1 flex items-center gap-1.5 text-xs text-arka-primary">
+                                        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m13.2 2-8 11h6l-.4 9 8-12h-6l.4-8Z" /></svg>
+                                        Selección inteligente · {{ request.smart_dispatch_recommendation.reason }}
+                                    </p>
+                                </div>
+                                <span class="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-arka-primary"></span>
+                            </div>
                         </article>
                     </div>
                 </section>

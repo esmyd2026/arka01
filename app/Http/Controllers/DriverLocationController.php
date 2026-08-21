@@ -35,17 +35,11 @@ class DriverLocationController extends Controller
         // Panel admin (pedido explícito del usuario: "bloquear o deshabilitar
         // o desconectar"): mientras esté suspendido, ni siquiera puede
         // reconectarse a sí mismo — el bloqueo lo levanta un admin, no él.
-        if ($driverProfile->isSuspended()) {
-            abort(403, 'Su cuenta de conductor está suspendida. Contacte a soporte.');
-        }
-
-        // Pedido explícito del usuario: sin los datos del vehículo completos
-        // (hacen falta para que un cliente filtre por pasajeros/cajuela al
-        // pedir una carrera), no se puede poner disponible — solo bloquea
-        // CONECTARSE, no desconectarse (por eso el chequeo es solo cuando
-        // $validated['is_available'] es true).
-        if ($validated['is_available'] && ! $driverProfile->hasCompleteVehicleInfo()) {
-            abort(403, 'Complete los datos de su vehículo en su perfil de conductor antes de ponerse disponible.');
+        // Solo se bloquea el encendido; desconectarse siempre debe seguir
+        // siendo posible. La regla incluye perfil completo, documentos,
+        // aprobación administrativa, suspensión y pausa del perfil.
+        if ($validated['is_available'] && ($reason = $driverProfile->availabilityBlockReason())) {
+            abort(403, $reason);
         }
 
         // Pedido explícito del usuario: si se está desconectando A PROPÓSITO

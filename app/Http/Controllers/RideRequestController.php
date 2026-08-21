@@ -34,6 +34,7 @@ use App\Services\PlanLimits;
 use App\Services\PriceCalculator;
 use App\Services\RideDispatchAdvancer;
 use App\Services\RideDispatchCandidates;
+use App\Services\SmartDispatchScorer;
 use App\Services\WhatsAppFreeformSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -673,10 +674,31 @@ class RideRequestController extends Controller
 
         $offeredPrice = round((float) ($validated['offered_price'] ?? $suggestedPrice), 2);
 
+        // Auditoría explicable del orden automático. Una selección manual o
+        // una carrera programada no pasa por el motor y deja estos campos en
+        // null. Si la auditoría falla, la solicitud sigue normalmente.
+        $smartDispatchVersion = null;
+        $smartDispatchSnapshot = null;
+        if ($dispatchPool && $driverUserId && ! $isScheduled && config('smart_dispatch.enabled', true)) {
+            try {
+                $smartDispatchVersion = SmartDispatchScorer::VERSION;
+                $smartDispatchSnapshot = SmartDispatchScorer::safeSnapshot(
+                    [$driverUserId, ...$offerCandidateIds],
+                    (float) $validated['origin_lat'],
+                    (float) $validated['origin_lng'],
+                );
+            } catch (\Throwable $exception) {
+                Log::warning('No se pudo guardar la auditoría del despacho inteligente.', [
+                    'exception' => $exception->getMessage(),
+                ]);
+            }
+        }
+
         $rideRequest = DB::transaction(function () use (
             $validated, $fleet, $request, $distanceKm, $offeredPrice, $isScheduled, $scheduledAt,
             $driverUserId, $dispatchPool, $offerCandidateIds, $currentOfferExpiresAt, $needsTrunk, $passengerCount, $requestStatus,
             $cooperative, $cooperativeCandidateIds, $cooperativeOfferExpiresAt, $cooperativeAssignmentStatus,
+            $smartDispatchVersion, $smartDispatchSnapshot,
         ) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
@@ -707,6 +729,8 @@ class RideRequestController extends Controller
                 'dispatch_pool' => $dispatchPool,
                 'offer_candidate_ids' => $offerCandidateIds ?: null,
                 'current_offer_expires_at' => $currentOfferExpiresAt,
+                'smart_dispatch_version' => $smartDispatchVersion,
+                'smart_dispatch_snapshot' => $smartDispatchSnapshot,
                 'passenger_count' => $passengerCount,
                 'needs_trunk' => $needsTrunk,
                 'notes' => $validated['notes'] ?? null,

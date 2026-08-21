@@ -3,17 +3,19 @@
 namespace Tests\Feature\Ride;
 
 use App\Events\DriverLocationUpdated;
-use App\Events\RidePickedUp;
-use App\Events\RideCancelled;
 use App\Events\RideArrived;
+use App\Events\RideCancelled;
 use App\Events\RideCompleted;
+use App\Events\RidePickedUp;
 use App\Events\RideStarted;
 use App\Models\DriverProfile;
 use App\Models\Ride;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Notifications\RideArrivedPushNotification;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class RideTrackingBroadcastTest extends TestCase
@@ -63,6 +65,64 @@ class RideTrackingBroadcastTest extends TestCase
         $this->assertEqualsWithDelta(-79.895, (float) $profile->current_lng, 0.000001);
         $this->assertFalse($profile->is_available);
         Event::assertDispatched(DriverLocationUpdated::class);
+    }
+
+    public function test_location_ping_marks_arrival_and_notifies_client_when_driver_reaches_pickup(): void
+    {
+        Event::fake([DriverLocationUpdated::class, RideArrived::class]);
+        Notification::fake();
+
+        $driver = User::factory()->create();
+        $client = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => false]);
+        $ride = Ride::factory()->create([
+            'driver_user_id' => $driver->id,
+            'client_user_id' => $client->id,
+            'status' => 'in_progress',
+            'origin_lat' => -2.1376,
+            'origin_lng' => -79.8942,
+            'arrived_at' => null,
+            'picked_up_at' => null,
+        ]);
+
+        $this->actingAs($driver)
+            ->postJson(route('rides.location.update', $ride), [
+                'lat' => -2.1377,
+                'lng' => -79.8942,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJson(fn ($json) => $json->whereType('arrived_at', 'string')->etc());
+
+        $this->assertNotNull($ride->fresh()->arrived_at);
+        Event::assertDispatched(RideArrived::class, fn (RideArrived $event) => $event->ride->is($ride));
+        Notification::assertSentTo($client, RideArrivedPushNotification::class);
+    }
+
+    public function test_location_ping_does_not_mark_arrival_while_driver_is_far_from_pickup(): void
+    {
+        Event::fake([DriverLocationUpdated::class, RideArrived::class]);
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $ride = Ride::factory()->create([
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'origin_lat' => -2.1376,
+            'origin_lng' => -79.8942,
+            'arrived_at' => null,
+        ]);
+
+        $this->actingAs($driver)
+            ->postJson(route('rides.location.update', $ride), [
+                'lat' => -2.1600,
+                'lng' => -79.9100,
+            ])
+            ->assertOk()
+            ->assertJsonPath('arrived_at', null);
+
+        $this->assertNull($ride->fresh()->arrived_at);
+        Event::assertNotDispatched(RideArrived::class);
     }
 
     public function test_location_updates_are_rejected_after_the_ride_finishes(): void

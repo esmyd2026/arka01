@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
+use App\Events\CooperativeRideUpdated;
 use App\Events\RideRequestCancelled;
 use App\Events\RideRequested;
 use App\Events\RideRequestExpired;
-use App\Events\CooperativeRideUpdated;
 use App\Jobs\ExpireRideOffer;
 use App\Models\RideRequest;
 use App\Models\User;
@@ -29,7 +29,9 @@ class RideDispatchAdvancer
     {
         $rideRequest = DB::transaction(function () use ($rideRequestId) {
             $request = RideRequest::query()->lockForUpdate()->with('cooperative')->find($rideRequestId);
-            if (! $request || $request->status !== 'pending' || ! $request->cooperative_id || $request->driver_user_id) return null;
+            if (! $request || $request->status !== 'pending' || ! $request->cooperative_id || $request->driver_user_id) {
+                return null;
+            }
 
             $candidates = RideDispatchCandidates::forCooperative(
                 $request->cooperative, (float) $request->origin_lat, (float) $request->origin_lng,
@@ -37,29 +39,42 @@ class RideDispatchAdvancer
             );
             if (empty($candidates)) {
                 $request->update(['status' => 'expired', 'responded_at' => now(), 'cooperative_assignment_status' => 'unassigned']);
+
                 return $request->fresh();
             }
 
             $driverId = array_shift($candidates);
+            $orderedCandidates = [$driverId, ...$candidates];
             $expiresAt = now()->addSeconds(max(15, min(300, (int) $request->cooperative->response_timeout_seconds)));
             $request->update([
                 'driver_user_id' => $driverId, 'dispatch_pool' => 'cooperative',
                 'offer_candidate_ids' => $candidates ?: null, 'cooperative_candidate_ids' => $candidates ?: null,
                 'current_offer_expires_at' => $expiresAt, 'cooperative_offer_expires_at' => $expiresAt,
                 'cooperative_assignment_status' => 'awaiting_driver',
+                'smart_dispatch_version' => config('smart_dispatch.enabled', true) ? SmartDispatchScorer::VERSION : null,
+                'smart_dispatch_snapshot' => SmartDispatchScorer::safeSnapshot(
+                    $orderedCandidates,
+                    (float) $request->origin_lat,
+                    (float) $request->origin_lng,
+                ) ?: null,
             ]);
+
             return $request->fresh();
         });
 
-        if (! $rideRequest) return;
+        if (! $rideRequest) {
+            return;
+        }
         broadcast(new CooperativeRideUpdated($rideRequest, $rideRequest->status === 'expired' ? 'expired' : 'assigned'));
         if ($rideRequest->status === 'expired') {
             broadcast(new RideRequestExpired($rideRequest));
             $rideRequest->client->notify(new RideRequestExpiredPushNotification($rideRequest));
+
             return;
         }
         self::notifyCurrentCandidate($rideRequest);
     }
+
     /**
      * @param  int|null  $expectedCurrentDriverId  si se pasa, no hace nada si
      *                                             la solicitud ya avanzó desde que se encoló este chequeo
@@ -261,8 +276,14 @@ class RideDispatchAdvancer
 
                 $rideRequest->update([
                     'status' => 'pending',
-                    'driver_user_id' => array_shift($candidateIds),
-                    'offer_candidate_ids' => $candidateIds ?: null,
+                    'driver_user_id' => $candidateIds[0],
+                    'smart_dispatch_version' => config('smart_dispatch.enabled', true) ? SmartDispatchScorer::VERSION : null,
+                    'smart_dispatch_snapshot' => SmartDispatchScorer::safeSnapshot(
+                        $candidateIds,
+                        (float) $rideRequest->origin_lat,
+                        (float) $rideRequest->origin_lng,
+                    ) ?: null,
+                    'offer_candidate_ids' => array_slice($candidateIds, 1) ?: null,
                     'current_offer_expires_at' => now()->addSeconds(30),
                 ]);
 

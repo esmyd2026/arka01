@@ -85,6 +85,7 @@ function googleNavigateUrl(lat, lng) {
 
 let rideChannel = null;
 let rideStatePoller = null;
+let waitingClockTimer = null;
 let activeRideLocationWatchId = null;
 let activeRideLocationHeartbeat = null;
 let lastRideLocationSentAt = 0;
@@ -107,6 +108,13 @@ function sendActiveRideLocation(position, force = false) {
     window.axios.post(route('rides.location.update', props.ride.id), {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
+    }).then(({ data }) => {
+        // El backend puede detectar automáticamente que se alcanzó el punto
+        // de recogida. `toOthers()` no devuelve el evento a este mismo
+        // navegador, así que se refresca al conductor desde la respuesta.
+        if (data.arrived_at && !props.ride.arrived_at) {
+            router.reload({ only: ['ride'], preserveScroll: true, preserveState: true });
+        }
     }).catch((error) => {
         // 422 significa que la carrera terminó entre la lectura del GPS y el
         // envío. El siguiente cambio reactivo detiene el seguimiento; los
@@ -277,6 +285,7 @@ async function sendChatMessage(text) {
 
 onMounted(() => {
     scrollChatToBottom();
+    waitingClockTimer = window.setInterval(() => { waitingClock.value = Date.now(); }, 1000);
     // Canal específico del viaje: funciona también cuando el conductor es
     // de una cooperativa y no pertenece a la flota privada del cliente.
     rideChannel = window.Echo.private(`ride.${props.ride.id}`);
@@ -400,6 +409,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.Echo.leave(`ride.${props.ride.id}`);
     if (rideStatePoller) window.clearInterval(rideStatePoller);
+    if (waitingClockTimer) window.clearInterval(waitingClockTimer);
     stopActiveRideLocationTracking();
 });
 
@@ -443,7 +453,7 @@ const mapMarkers = computed(() => {
 // únicamente el tramo que importa en cada momento.
 const trackingMapMarkers = computed(() => {
     const car = mapMarkers.value.find((marker) => marker.id === 'car');
-    const targetId = props.ride.arrived_at ? 'destination' : 'origin';
+    const targetId = props.ride.picked_up_at ? 'destination' : 'origin';
     const target = mapMarkers.value.find((marker) => marker.id === targetId);
 
     return [target, car].filter(Boolean);
@@ -472,26 +482,71 @@ const pickupEta = computed(() => {
     return etaBetween(driverLat.value, driverLng.value, Number(props.ride.origin_lat), Number(props.ride.origin_lng));
 });
 
-// Trazado real (OSRM, mismo mecanismo que Ride/Request.vue) del recorrido
-// del conductor hasta el punto de encuentro (pedido explícito del usuario,
-// con captura de referencia estilo Uber/DiDi: "que le muestre también ahí en
-// el mapa cuando tiene por llegar y su recorrido") — antes el mapa solo
-// mostraba el puntito del conductor sin ninguna línea, sin forma de ver POR
-// DÓNDE viene. Mismo gate que pickupEta (solo cliente, solo mientras viene en
-// camino) para no pedirle una ruta a OSRM de más una vez que ya llegó.
-const pickupRouteCoords = ref([]);
-watch(
-    [driverLat, driverLng],
-    async () => {
-        if (props.ride.status !== 'in_progress' || props.ride.arrived_at || driverLat.value == null) {
-            pickupRouteCoords.value = [];
-            return;
-        }
+// Cinco minutos de cortesía desde la llegada automática/manual. El tiempo
+// base viene del servidor (`arrived_at`), por lo que cliente y conductor ven
+// el mismo conteo aunque abran la pantalla en momentos distintos.
+const waitingClock = ref(Date.now());
+const pickupWaitCountdown = computed(() => {
+    if (!props.ride.arrived_at || props.ride.picked_up_at || props.ride.status !== 'in_progress') return null;
+    const elapsedSeconds = Math.max(0, Math.floor((waitingClock.value - new Date(props.ride.arrived_at).getTime()) / 1000));
+    const remainingSeconds = Math.max(0, 300 - elapsedSeconds);
 
-        const route = await fetchOsrmRoute(driverLat.value, driverLng.value, Number(props.ride.origin_lat), Number(props.ride.origin_lng));
-        pickupRouteCoords.value = route.coords;
-    },
-    { immediate: true }
+    return {
+        remainingSeconds,
+        label: remainingSeconds > 0
+            ? `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`
+            : 'Tiempo cumplido',
+    };
+});
+
+// Ruta viva: siempre parte de la posición ACTUAL del vehículo y termina en
+// el siguiente objetivo (origen antes de recoger, destino después). Así la
+// línea se va consumiendo y, si el conductor se desvía, Google/OSRM devuelve
+// una nueva trayectoria en vez de conservar el trazado inicial congelado.
+const liveRouteCoords = ref([]);
+let liveRouteRequestSerial = 0;
+let lastLiveRouteRequestedAt = 0;
+let lastLiveRouteOrigin = null;
+const LIVE_ROUTE_MIN_INTERVAL_MS = 12000;
+const LIVE_ROUTE_MIN_MOVEMENT_KM = 0.025;
+
+async function refreshLiveRoute(force = false) {
+    if (props.ride.status !== 'in_progress' || driverLat.value == null || driverLng.value == null) {
+        liveRouteCoords.value = [];
+        return;
+    }
+
+    const origin = { lat: Number(driverLat.value), lng: Number(driverLng.value) };
+    const target = props.ride.picked_up_at
+        ? { lat: Number(props.ride.destination_lat), lng: Number(props.ride.destination_lng) }
+        : { lat: Number(props.ride.origin_lat), lng: Number(props.ride.origin_lng) };
+    const movedKm = lastLiveRouteOrigin
+        ? distanceKm(lastLiveRouteOrigin.lat, lastLiveRouteOrigin.lng, origin.lat, origin.lng)
+        : Infinity;
+
+    if (!force && (Date.now() - lastLiveRouteRequestedAt < LIVE_ROUTE_MIN_INTERVAL_MS || movedKm < LIVE_ROUTE_MIN_MOVEMENT_KM)) return;
+
+    // Al estar prácticamente encima del objetivo, una polilínea de unos
+    // metros agrega ruido. Se limpia hasta que cambie el siguiente tramo.
+    if (distanceKm(origin.lat, origin.lng, target.lat, target.lng) < 0.03) {
+        liveRouteCoords.value = [];
+        return;
+    }
+
+    lastLiveRouteRequestedAt = Date.now();
+    lastLiveRouteOrigin = origin;
+    const serial = ++liveRouteRequestSerial;
+    const routeResult = await fetchOsrmRoute(origin.lat, origin.lng, target.lat, target.lng);
+
+    // Una respuesta lenta de una ubicación anterior nunca debe sobrescribir
+    // la ruta más reciente.
+    if (serial === liveRouteRequestSerial) liveRouteCoords.value = routeResult.coords;
+}
+
+watch([driverLat, driverLng], () => refreshLiveRoute(false), { immediate: true });
+watch(
+    [() => props.ride.status, () => props.ride.arrived_at, () => props.ride.picked_up_at],
+    () => refreshLiveRoute(true),
 );
 
 // Ruta principal de la carrera. Se mantiene separada de la aproximación al
@@ -511,8 +566,8 @@ const loadTripRoute = async () => {
 onMounted(loadTripRoute);
 
 const visibleRouteCoords = computed(() => (
-    props.ride.status === 'in_progress' && !props.ride.arrived_at
-        ? pickupRouteCoords.value
+    props.ride.status === 'in_progress'
+        ? liveRouteCoords.value
         : tripRouteCoords.value
 ));
 
@@ -988,6 +1043,13 @@ function submitReview() {
                     <span class="block text-[10px] text-arka-primary-bright/80 leading-none">Llegando en</span>
                     <span class="block text-sm font-semibold text-arka-primary-bright leading-tight">{{ pickupEta.minutes }} min</span>
                 </span>
+                <span
+                    v-else-if="pickupWaitCountdown"
+                    class="shrink-0 rounded-arka border border-arka-warning/30 bg-arka-warning/10 px-3 py-1.5 text-center"
+                >
+                    <span class="block text-[10px] leading-none text-arka-warning/80">Tiempo de espera</span>
+                    <span class="block text-sm font-bold leading-tight text-arka-warning">{{ pickupWaitCountdown.label }}</span>
+                </span>
             </div>
 
             <!-- Acceso chico a mensaje/seguridad (pedido explícito del
@@ -1354,13 +1416,26 @@ function submitReview() {
                     <!-- Estado en vivo (solo para el cliente, mientras el viaje sigue
                          en curso) — mismo texto que antes vivía en banners separados. -->
                     <p v-if="!isDriver && ride.status === 'in_progress' && !ride.picked_up_at" class="text-sm text-arka-text-muted">
-                        <template v-if="ride.arrived_at">📍 Lo está esperando en el punto de encuentro.</template>
+                        <template v-if="ride.arrived_at">
+                            📍 Lo está esperando en el punto de encuentro.
+                            <strong v-if="pickupWaitCountdown" class="ms-1 text-arka-warning">{{ pickupWaitCountdown.label }}</strong>
+                        </template>
                         <template v-else-if="pickupEta">🚗 Viene en camino — está a {{ pickupEta.km.toFixed(1) }} km.</template>
                         <template v-else>🚗 Viene en camino — buscando su ubicación en vivo…</template>
                     </p>
                     <p v-if="!isDriver && ride.status === 'in_progress' && ride.picked_up_at" class="text-sm text-arka-text-muted">
                         🚙 Viaje en curso hacia el destino.
                     </p>
+                    <div
+                        v-if="isDriver && pickupWaitCountdown"
+                        class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/30 bg-arka-warning/10 px-3 py-2.5"
+                    >
+                        <div>
+                            <p class="text-xs font-semibold text-arka-warning">Esperando al pasajero</p>
+                            <p class="text-[11px] text-arka-text-muted">Tiempo de cortesía: 5 minutos</p>
+                        </div>
+                        <span class="font-mono text-lg font-bold text-arka-warning">{{ pickupWaitCountdown.label }}</span>
+                    </div>
 
                     <!-- Datos de la carrera (pedido explícito del usuario: "en esa
                          misma caja del cliente coloca los datos de la carrera") —

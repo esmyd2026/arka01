@@ -136,9 +136,52 @@ class SequentialDispatchTest extends TestCase
         $this->assertSame($near->id, $rideRequest->driver_user_id);
         $this->assertSame([$far->id], $rideRequest->offer_candidate_ids);
         $this->assertNotNull($rideRequest->current_offer_expires_at);
+        $this->assertSame('v1', $rideRequest->smart_dispatch_version);
+        $this->assertSame([$near->id, $far->id], collect($rideRequest->smart_dispatch_snapshot)->pluck('driver_user_id')->all());
 
         Queue::assertPushed(ExpireRideOffer::class, fn (ExpireRideOffer $job) => $job->rideRequestId === $rideRequest->id
             && $job->expectedCurrentDriverId === $near->id);
+    }
+
+    public function test_smart_dispatch_only_reorders_eligible_drivers_inside_the_selected_pool(): void
+    {
+        config()->set('smart_dispatch.enabled', true);
+        config()->set('smart_dispatch.minimum_history_samples', 3);
+        config()->set('smart_dispatch.weights', [
+            'proximity' => 0,
+            'acceptance' => 100,
+            'rating' => 0,
+            'reliability' => 0,
+            'idle_time' => 0,
+        ]);
+
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $nearWithRejections = $this->driverAt($fleet, $client, -0.1810, -78.4680, ['rides_rejected_count' => 5]);
+        $farWithAcceptances = $this->driverAt($fleet, $client, -0.2200, -78.5100);
+
+        RideRequest::factory()->count(5)->create([
+            'status' => 'accepted',
+            'accepted_by' => $farWithAcceptances->id,
+        ]);
+
+        $ids = RideDispatchCandidates::forPool($fleet, $client, 'fleet', -0.1807, -78.4678);
+
+        $this->assertSame([$farWithAcceptances->id, $nearWithRejections->id], $ids);
+    }
+
+    public function test_disabling_smart_dispatch_restores_distance_order(): void
+    {
+        config()->set('smart_dispatch.enabled', false);
+
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $near = $this->driverAt($fleet, $client, -0.1810, -78.4680, ['rides_rejected_count' => 100]);
+        $far = $this->driverAt($fleet, $client, -0.2200, -78.5100);
+
+        $ids = RideDispatchCandidates::forPool($fleet, $client, 'fleet', -0.1807, -78.4678);
+
+        $this->assertSame([$near->id, $far->id], $ids);
     }
 
     public function test_store_fails_when_no_candidate_is_available(): void

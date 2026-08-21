@@ -22,6 +22,7 @@ class DriverProfile extends Model
         'identity_document_url',
         'police_record_url',
         'trust_label',
+        'registration_complete',
     ];
 
     protected $fillable = [
@@ -327,9 +328,65 @@ class DriverProfile extends Model
         return filled($this->vehicle_make)
             && filled($this->vehicle_model)
             && filled($this->vehicle_color)
+            && filled($this->vehicle_type)
             && filled($this->vehicle_plate)
             && filled($this->vehicle_year)
-            && filled($this->passenger_capacity);
+            && filled($this->passenger_capacity)
+            // `false` significa que no tiene cajuela y también es una
+            // respuesta válida; por eso no usamos filled() aquí.
+            && $this->has_trunk !== null;
+    }
+
+    /**
+     * Información mínima que administración debe revisar antes de permitir
+     * que el conductor se conecte y reciba solicitudes.
+     */
+    public function hasCompleteRegistrationInformation(): bool
+    {
+        return filled($this->driver_type)
+            && filled($this->license_number)
+            && $this->hasCompleteVehicleInfo()
+            && is_numeric($this->rate_per_km)
+            && (float) $this->rate_per_km >= 0
+            && ($this->accepts_cash || $this->accepts_transfer)
+            && filled($this->identity_document_path)
+            && filled($this->license_photo_path)
+            && filled($this->police_record_path);
+    }
+
+    /**
+     * Una sola regla para API, dashboard y despacho. Así el botón no puede
+     * habilitar algo que luego el servidor o la asignación deberían negar.
+     */
+    public function availabilityBlockReason(): ?string
+    {
+        if ($this->isDeactivated()) {
+            return 'Su perfil de conductor está pausado. Reactívelo para conectarse.';
+        }
+
+        if ($this->isSuspended()) {
+            return 'Su cuenta de conductor está suspendida. Contacte a soporte.';
+        }
+
+        if (! $this->hasCompleteRegistrationInformation()) {
+            return 'Complete toda su información, vehículo y documentos en el perfil antes de conectarse.';
+        }
+
+        return match ($this->verification_status) {
+            'approved' => null,
+            'rejected' => 'Administración rechazó la verificación. Revise el motivo y corrija su información.',
+            default => 'Su información está pendiente de aprobación administrativa. Le avisaremos cuando pueda conectarse.',
+        };
+    }
+
+    public function canBecomeAvailable(): bool
+    {
+        return $this->availabilityBlockReason() === null;
+    }
+
+    public function getRegistrationCompleteAttribute(): bool
+    {
+        return $this->hasCompleteRegistrationInformation();
     }
 
     /**

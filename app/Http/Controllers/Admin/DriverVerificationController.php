@@ -7,6 +7,7 @@ use App\Models\DriverProfile;
 use App\Notifications\DriverVerificationResultPushNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,12 +33,19 @@ class DriverVerificationController extends Controller
                 ->with('user')
                 ->latest('updated_at')
                 ->limit(200)
-                ->get(),
+                ->get()
+                ->each->append('registration_complete'),
         ]);
     }
 
     public function approve(Request $request, DriverProfile $driverProfile): RedirectResponse
     {
+        if (! $driverProfile->hasCompleteRegistrationInformation()) {
+            throw ValidationException::withMessages([
+                'verification' => 'No se puede aprobar: faltan datos obligatorios del conductor, vehículo o documentos.',
+            ]);
+        }
+
         $driverProfile->update([
             'verification_status' => 'approved',
             'verification_rejection_reason' => null,
@@ -65,6 +73,8 @@ class DriverVerificationController extends Controller
             'verification_status' => 'rejected',
             'verification_rejection_reason' => $validated['reason'],
             'verified_at' => null,
+            'verified_by' => $request->user()->id,
+            'is_available' => false,
         ]);
 
         $driverProfile->user->notify(new DriverVerificationResultPushNotification($driverProfile, false));

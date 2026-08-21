@@ -29,6 +29,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -70,6 +71,12 @@ class RideController extends Controller
      * conductor de verdad por un margen de error normal.
      */
     private const RIDE_ACTION_LOCATION_TOLERANCE_KM = 1.5;
+
+    // Detección automática de llegada al punto de recogida. Es mucho más
+    // estricta que el botón manual: 150 m tolera el error normal del GPS y
+    // que el pin esté al otro lado de una cuadra, sin marcar llegada desde
+    // una zona lejana.
+    private const AUTOMATIC_PICKUP_ARRIVAL_RADIUS_KM = 0.15;
 
     /**
      * Pedido explícito del usuario: "validá que las acciones del
@@ -367,9 +374,43 @@ class RideController extends Controller
             'location_updated_at' => now(),
         ]);
 
+        // La ubicación ya llega cada pocos segundos; aprovechar este mismo
+        // ping evita otra petición del navegador. El lock impide que dos
+        // lecturas simultáneas generen dos avisos de llegada.
+        $automaticallyArrived = DB::transaction(function () use ($ride, $validated) {
+            $lockedRide = Ride::query()->lockForUpdate()->findOrFail($ride->id);
+
+            if ($lockedRide->status !== 'in_progress' || $lockedRide->arrived_at || $lockedRide->picked_up_at) {
+                return null;
+            }
+
+            $distanceToPickup = Haversine::distanceKm(
+                (float) $lockedRide->origin_lat,
+                (float) $lockedRide->origin_lng,
+                (float) $validated['lat'],
+                (float) $validated['lng'],
+            );
+
+            if ($distanceToPickup > self::AUTOMATIC_PICKUP_ARRIVAL_RADIUS_KM) {
+                return null;
+            }
+
+            $lockedRide->update(['arrived_at' => now()]);
+
+            return $lockedRide->fresh(['client', 'driver']);
+        });
+
         broadcast(new DriverLocationUpdated($profile))->toOthers();
 
-        return response()->json(['ok' => true]);
+        if ($automaticallyArrived) {
+            broadcast(new RideArrived($automaticallyArrived))->toOthers();
+            $automaticallyArrived->client->notify(new RideArrivedPushNotification($automaticallyArrived));
+        }
+
+        return response()->json([
+            'ok' => true,
+            'arrived_at' => $automaticallyArrived?->arrived_at?->toIso8601String(),
+        ]);
     }
 
     /**

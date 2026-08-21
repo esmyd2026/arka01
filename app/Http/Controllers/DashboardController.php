@@ -16,8 +16,8 @@ use App\Models\User;
 use App\Services\FrequentPlaces;
 use App\Services\Haversine;
 use App\Services\WhatsAppConfig;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -114,7 +114,12 @@ class DashboardController extends Controller
                     ->sum('price'),
                 'rating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
                 'review_count' => $user->reviewsReceived()->count(),
-                'is_available' => (bool) $user->driverProfile?->is_available,
+                // La UI recibe la misma decisión que aplica el endpoint de
+                // ubicación. No mostramos el switch encendido si el perfil
+                // quedó pendiente/rechazado aunque exista un valor antiguo.
+                'can_connect' => (bool) $user->driverProfile?->canBecomeAvailable(),
+                'connection_block_reason' => $user->driverProfile?->availabilityBlockReason(),
+                'is_available' => (bool) ($user->driverProfile?->is_available && $user->driverProfile?->canBecomeAvailable()),
                 // Reporte del usuario ("Luis aparece desconectado si está en
                 // línea"): `is_available` es la intención del conductor
                 // (prendió el switch), pero el resto de la app (roster de

@@ -83,6 +83,13 @@ class CooperativeDashboardController extends Controller
                     // referencia operativa y no se confunde con el ETA de cada
                     // conductor hasta el origen, calculado más abajo.
                     $rideRequest->trip_eta_minutes = max(3, (int) ceil((float) $rideRequest->distance_km / 0.45));
+                    $currentRecommendation = collect($rideRequest->smart_dispatch_snapshot ?? [])
+                        ->firstWhere('driver_user_id', $rideRequest->driver_user_id);
+                    $rideRequest->smart_dispatch_recommendation = $currentRecommendation ? [
+                        'score' => $currentRecommendation['score'] ?? null,
+                        'reason' => $currentRecommendation['reason'] ?? 'Mejor opción disponible',
+                        'version' => $rideRequest->smart_dispatch_version,
+                    ] : null;
                     $rideRequest->available_drivers = $memberships->where('status', 'accepted')->map(function ($membership) use ($rideRequest) {
                         $profile = $membership->driver->driverProfile;
                         $distance = $profile?->current_lat !== null && $profile?->current_lng !== null

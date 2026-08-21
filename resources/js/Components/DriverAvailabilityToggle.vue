@@ -9,6 +9,14 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    canConnect: {
+        type: Boolean,
+        default: true,
+    },
+    blockedReason: {
+        type: String,
+        default: '',
+    },
 });
 
 // Le avisa al padre cuando cambia (consideración agregada al alcance): así una
@@ -115,6 +123,11 @@ function startWatching() {
 // recupera el estado (reprende el switch y retoma watchPosition()) en vez
 // de quedarse en silencio.
 function refreshNow() {
+    if (!props.canConnect) {
+        error.value = props.blockedReason;
+        return;
+    }
+
     if (!navigator.geolocation) {
         error.value = 'Su navegador no soporta geolocalización.';
         return;
@@ -155,6 +168,12 @@ function stopWatching(lastPosition) {
 
 function toggle() {
     error.value = '';
+
+    if (!available.value && !props.canConnect) {
+        error.value = props.blockedReason || 'Complete la verificación de su perfil para conectarse.';
+        return;
+    }
+
     available.value = !available.value;
     emit('update:available', available.value);
 
@@ -194,7 +213,7 @@ function toggle() {
 // los minutos de DriverProfile::isReachable() y sus clientes lo veían
 // desconectado, sin que él pudiera notarlo sin tocar el switch dos veces.
 onMounted(() => {
-    if (props.initialAvailable) {
+    if (props.initialAvailable && props.canConnect) {
         startWatching();
     }
 });
@@ -207,11 +226,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="flex items-center gap-3">
+    <div class="flex max-w-sm flex-wrap items-center gap-x-3 gap-y-1">
         <button
             type="button"
             @click="toggle"
-            class="relative inline-flex h-7 w-12 items-center rounded-full transition-colors"
+            :disabled="!canConnect && !available"
+            :aria-disabled="!canConnect && !available"
+            :title="!canConnect ? blockedReason : undefined"
+            class="relative inline-flex h-7 w-12 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             :class="available ? 'bg-arka-primary' : 'bg-arka-text-muted/30'"
         >
             <span
@@ -225,6 +247,6 @@ onBeforeUnmount(() => {
         </span>
 
         <span v-if="sending" class="text-xs text-arka-text-muted">actualizando…</span>
-        <span v-if="error" class="text-xs text-arka-danger">{{ error }}</span>
+        <span v-if="error" class="basis-full text-xs leading-snug text-arka-warning">{{ error }}</span>
     </div>
 </template>

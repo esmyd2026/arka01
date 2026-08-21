@@ -479,6 +479,8 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <DriverAvailabilityToggle
                         ref="availabilityToggleRef"
                         :initial-available="driverStats.is_available"
+                        :can-connect="driverStats.can_connect"
+                        :blocked-reason="driverStats.connection_block_reason"
                         @update:available="handleAvailabilityChange"
                     />
                 </div>

@@ -12,6 +12,11 @@ class RideRequest extends Model
 {
     use HasFactory;
 
+    // La auditoría completa contiene puntajes internos de todos los
+    // candidatos. Se conserva para operación/soporte, pero no se serializa
+    // accidentalmente hacia clientes o conductores.
+    protected $hidden = ['smart_dispatch_snapshot'];
+
     protected $fillable = [
         'fleet_id',
         'cooperative_id',
@@ -45,6 +50,8 @@ class RideRequest extends Model
         'dispatch_pool',
         'offer_candidate_ids',
         'current_offer_expires_at',
+        'smart_dispatch_version',
+        'smart_dispatch_snapshot',
         'passenger_count',
         'needs_trunk',
         'notes',
@@ -65,6 +72,7 @@ class RideRequest extends Model
         'round_trip' => 'boolean',
         'offer_candidate_ids' => 'array',
         'current_offer_expires_at' => 'datetime',
+        'smart_dispatch_snapshot' => 'array',
         'cooperative_candidate_ids' => 'array',
         'cooperative_offer_expires_at' => 'datetime',
         'passenger_count' => 'integer',
