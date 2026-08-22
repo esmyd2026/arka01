@@ -314,9 +314,17 @@ const VERIFICATION_LABELS = {
                 <section class="overflow-hidden rounded-arka border border-arka-primary/20 bg-arka-card shadow-xl">
                     <div class="h-1.5 bg-gradient-to-r from-arka-primary via-arka-primary-bright to-arka-warning"></div>
                     <div class="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.35fr_1fr] lg:items-center">
-                        <div class="flex flex-col gap-5 sm:flex-row sm:items-center">
+                        <!-- Pedido explícito del usuario ("mejora esto el
+                             response en el perfil del conductor"): en
+                             pantallas angostas (`flex-col`, antes de `sm:`)
+                             quedaba todo pegado a la izquierda con un avatar
+                             grande de 24 — se ve mejor centrado como una
+                             tarjeta de identidad, con el avatar un poco más
+                             chico, y recién pasa a la fila horizontal
+                             alineada a la izquierda desde `sm:` en adelante. -->
+                        <div class="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:gap-5 sm:text-left">
                             <div class="relative shrink-0">
-                                <UserAvatar :user="$page.props.auth.user" size-class="h-24 w-24 text-3xl" />
+                                <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl sm:h-24 sm:w-24 sm:text-3xl" />
                                 <span
                                     v-if="driverProfile?.verification_status === 'approved'"
                                     class="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border-4 border-arka-card bg-arka-primary text-sm font-black text-arka-base"
@@ -324,8 +332,8 @@ const VERIFICATION_LABELS = {
                                 >✓</span>
                             </div>
                             <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="truncate text-2xl font-bold text-arka-text">{{ $page.props.auth.user.name }}</h3>
+                                <div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                                    <h3 class="truncate text-xl font-bold text-arka-text sm:text-2xl">{{ $page.props.auth.user.name }}</h3>
                                     <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                                         {{ assignedServiceCategory?.label ?? 'Categoría por asignar' }}
                                     </span>
@@ -333,10 +341,17 @@ const VERIFICATION_LABELS = {
                                 <p class="mt-1 text-sm text-arka-text-muted">
                                     @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
                                 </p>
-                                <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-arka-text-muted">
+                                <div class="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-arka-text-muted sm:justify-start">
                                     <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
                                     <span v-else>Sin calificaciones todavía</span>
-                                    <span v-if="driverProfile?.vehicle_make">🚘 {{ driverProfile.vehicle_make }} {{ driverProfile.vehicle_model }}</span>
+                                    <span v-if="driverProfile?.vehicle_make" class="inline-flex items-center gap-1.5">
+                                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3.5" y="6" width="17" height="12" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                            <circle cx="9" cy="12" r="1.75" stroke-linecap="round" stroke-linejoin="round" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M14 10.5h3M14 13.5h3" />
+                                        </svg>
+                                        {{ driverProfile.vehicle_make }} {{ driverProfile.vehicle_model }}
+                                    </span>
                                 </div>
                                 <p v-if="assignedServiceCategory" class="mt-3 max-w-xl text-sm leading-relaxed text-arka-text-muted">
                                     {{ assignedServiceCategory.description }} Categoría revisada y asignada por administración.

@@ -657,17 +657,27 @@ function startRide() {
     router.post(route('rides.start', props.ride.id), {}, { preserveScroll: true });
 }
 
-// Hitos "Ir por el pasajero" / "Iniciar destino" (pedido explícito del
-// usuario: "coloca los botones flotantes de ir por el pasajero y luego...
-// que aparezca iniciar destino. Y le mande al mapa de google map trazado el
-// destino"): antes eran CUATRO acciones separadas (Ya llegué / Ya recogí al
-// cliente / dos links de Google Maps sueltos en el panel "⋯") — ahora cada
-// tramo es un solo toque que navega Y avanza el estado a la vez, para que el
-// conductor no tenga que ir a buscar el link de Maps por separado.
-const markingArrived = ref(false);
-async function goToPassenger() {
+// "Ir por el pasajero" / "Ya llegué" (pedido explícito del usuario: "coloca
+// los botones flotantes de ir por el pasajero y luego... que aparezca
+// iniciar destino"). Bug real reportado por el usuario, con captura ("el
+// tiempo de espera se activó sin que el conductor haya llegado al sitio de
+// recogida"): la primera versión de esto marcaba `arrived_at` en el MISMO
+// toque que abría Google Maps — pero `arrived_at` es justo lo que dispara
+// el conteo de cortesía de 5 minutos que ve el cliente
+// (pickupWaitCountdown, más abajo), así que ese conteo arrancaba apenas el
+// conductor SALÍA para allá, no cuando de verdad llegaba — para un trayecto
+// de más de 5 minutos, el cliente veía "Tiempo cumplido" con el conductor
+// todavía manejando. Ahora son dos toques reales: "Ir por el pasajero" solo
+// abre la navegación, sin tocar el estado — recién "Ya llegué" (un segundo
+// toque, una vez ahí de verdad) marca `arrived_at`.
+const headingToPassenger = ref(false);
+function goToPassenger() {
     window.open(googleNavigateUrl(props.ride.origin_lat, props.ride.origin_lng), '_blank', 'noopener');
+    headingToPassenger.value = true;
+}
 
+const markingArrived = ref(false);
+async function confirmArrived() {
     markingArrived.value = true;
     const coords = await currentCoords();
     router.post(route('rides.arrived', props.ride.id), coords, {
@@ -1590,17 +1600,26 @@ function submitReview() {
                                 <button type="button" class="shrink-0 text-arka-text-muted hover:text-arka-text" aria-label="Cerrar aviso" @click="completionFeedback = ''">✕</button>
                             </div>
 
-                            <!-- Un solo toque por tramo: navega en Google Maps Y
-                                 avanza el estado a la vez (pedido explícito del
-                                 usuario) — ninguno bloquea "Marcar como completada"
-                                 si el conductor se los saltea. -->
+                            <!-- "Ir por el pasajero" (solo navega) y "Ya llegué"
+                                 (recién ahí marca arrived_at) son dos toques
+                                 reales — ver el comentario junto a goToPassenger()
+                                 sobre por qué no se pueden fusionar en uno solo.
+                                 Ninguno bloquea "Completar carrera" si el
+                                 conductor se los saltea. -->
                             <SecondaryButton
-                                v-if="!ride.arrived_at"
+                                v-if="!ride.arrived_at && !headingToPassenger"
                                 class="flex-1 justify-center"
-                                :disabled="markingArrived"
                                 @click="goToPassenger"
                             >
-                                📍 {{ markingArrived ? 'Ubicando…' : 'Ir por el pasajero' }}
+                                📍 Ir por el pasajero
+                            </SecondaryButton>
+                            <SecondaryButton
+                                v-else-if="!ride.arrived_at"
+                                class="flex-1 justify-center"
+                                :disabled="markingArrived"
+                                @click="confirmArrived"
+                            >
+                                ✅ {{ markingArrived ? 'Ubicando…' : 'Ya llegué' }}
                             </SecondaryButton>
                             <SecondaryButton
                                 v-else-if="!ride.picked_up_at"
