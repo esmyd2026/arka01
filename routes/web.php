@@ -402,6 +402,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/cooperativas/{cooperative}/rechazar', [AdminCooperativeController::class, 'reject'])->name('cooperatives.reject');
     Route::post('/cooperativas/{cooperative}/suspender', [AdminCooperativeController::class, 'suspend'])->name('cooperatives.suspend');
     Route::post('/cooperativas/{cooperative}/reactivar', [AdminCooperativeController::class, 'reactivate'])->name('cooperatives.reactivate');
+    Route::patch('/cooperativas/{cooperative}/whatsapp', [AdminCooperativeController::class, 'updateWhatsApp'])->name('cooperatives.whatsapp');
     Route::post('/cooperativas/documentos/{document}/revisar', [AdminCooperativeController::class, 'reviewDocument'])->name('cooperative-documents.review');
     // Perfil completo de un usuario (pedido explícito del usuario): toda la
     // información relevante de un conductor o cliente en una sola pantalla,
@@ -530,6 +531,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/conductores', [AdminDriverController::class, 'index'])->name('drivers.index');
     Route::post('/conductores/{driverProfile}/suspender', [AdminDriverController::class, 'suspend'])->name('drivers.suspend');
     Route::post('/conductores/{driverProfile}/reactivar', [AdminDriverController::class, 'reactivate'])->name('drivers.reactivate');
+    Route::patch('/conductores/{driverProfile}/whatsapp', [AdminDriverController::class, 'updateWhatsApp'])->name('drivers.whatsapp');
+    Route::patch('/conductores/{driverProfile}/categoria', [AdminDriverController::class, 'updateCategory'])->name('drivers.category');
 
     // Panel de clientes registrados (pedido explícito del usuario): mismo
     // criterio que el de conductores, del otro lado — ver Admin\ClientController.

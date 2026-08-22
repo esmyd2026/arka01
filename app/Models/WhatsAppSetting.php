@@ -28,6 +28,10 @@ class WhatsAppSetting extends Model
         'business_number',
         'webhook_verify_token',
         'app_secret',
+        'ride_notifications_enabled',
+        'driver_ride_actions_enabled',
+        'client_ride_booking_enabled',
+        'privacy_notice_text',
         'updated_by',
     ];
 
@@ -39,6 +43,9 @@ class WhatsAppSetting extends Model
         'token' => 'encrypted',
         'webhook_verify_token' => 'encrypted',
         'app_secret' => 'encrypted',
+        'ride_notifications_enabled' => 'boolean',
+        'driver_ride_actions_enabled' => 'boolean',
+        'client_ride_booking_enabled' => 'boolean',
     ];
 
     // Pedido explícito del usuario: "nunca exponer tokens completos en

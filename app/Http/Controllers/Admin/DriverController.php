@@ -9,9 +9,11 @@ use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Review;
 use App\Models\Ride;
+use App\Services\AdminAuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -117,6 +119,18 @@ class DriverController extends Controller
             'verification_status' => $profile->verification_status,
             'rides_rejected_count' => $profile->rides_rejected_count,
             'completed_rides_count' => $completedCounts->get($profile->user_id, 0),
+            'whatsapp_ride_actions_enabled' => $profile->whatsapp_ride_actions_enabled,
+            'service_category' => $profile->service_category,
+            'service_category_label' => $profile->serviceCategoryLabel(),
+            'vehicle' => trim(implode(' ', array_filter([
+                $profile->vehicle_make,
+                $profile->vehicle_model,
+                $profile->vehicle_year,
+            ]))),
+            'vehicle_amenities' => collect($profile->vehicle_amenities ?? [])->map(fn (string $amenity) => [
+                'key' => $amenity,
+                'label' => DriverProfile::vehicleAmenities()[$amenity]['label'] ?? $amenity,
+            ])->values(),
         ]);
 
         return Inertia::render('Admin/Drivers', [
@@ -124,6 +138,7 @@ class DriverController extends Controller
             'allDrivers' => $paginated,
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['q', 'city_id', 'status']),
+            'serviceCategories' => DriverProfile::serviceCategories(),
         ]);
     }
 
@@ -150,5 +165,42 @@ class DriverController extends Controller
         $driverProfile->forceFill(['suspended_at' => null])->save();
 
         return back()->with('status', 'Conductor reactivado.');
+    }
+
+    public function updateWhatsApp(Request $request, DriverProfile $driverProfile): RedirectResponse
+    {
+        $validated = $request->validate(['enabled' => ['required', 'boolean']]);
+        $driverProfile->forceFill(['whatsapp_ride_actions_enabled' => $validated['enabled']])->save();
+
+        return back()->with('status', $validated['enabled']
+            ? 'Operación por WhatsApp habilitada para el conductor.'
+            : 'El conductor recibirá avisos, pero no podrá operar carreras por WhatsApp.');
+    }
+
+    /**
+     * La categoría es una decisión administrativa: los checks del conductor
+     * sirven como evidencia, pero nunca se convierten automáticamente en una
+     * categoría comercial sin revisión humana.
+     */
+    public function updateCategory(Request $request, DriverProfile $driverProfile): RedirectResponse
+    {
+        $validated = $request->validate([
+            'service_category' => ['nullable', 'string', Rule::in(array_keys(DriverProfile::serviceCategories()))],
+        ]);
+
+        $previous = $driverProfile->service_category;
+        $driverProfile->forceFill(['service_category' => $validated['service_category']])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.service_category.update',
+            module: 'drivers',
+            oldValue: ['driver_profile_id' => $driverProfile->id, 'service_category' => $previous],
+            newValue: ['driver_profile_id' => $driverProfile->id, 'service_category' => $validated['service_category']],
+        );
+
+        return back()->with('status', $validated['service_category']
+            ? 'Categoría de servicio actualizada.'
+            : 'Categoría de servicio retirada.');
     }
 }

@@ -23,6 +23,10 @@ const form = useForm({
     business_number: props.settings.business_number ?? '',
     webhook_verify_token: '',
     app_secret: '',
+    ride_notifications_enabled: props.settings.ride_notifications_enabled,
+    driver_ride_actions_enabled: props.settings.driver_ride_actions_enabled,
+    client_ride_booking_enabled: props.settings.client_ride_booking_enabled,
+    privacy_notice_text: props.settings.privacy_notice_text ?? '',
 });
 
 const submit = () => {
@@ -53,6 +57,29 @@ function statusFor(hasInDb, envValue) {
                     </p>
 
                     <form @submit.prevent="submit" class="space-y-4">
+                        <div class="rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-4 space-y-4">
+                            <div>
+                                <h3 class="font-medium text-arka-text">Operación de carreras por WhatsApp</h3>
+                                <p class="mt-1 text-xs text-arka-text-muted">Estos controles no sustituyen la app. Definen qué puede hacerse dentro de una conversación abierta con el número oficial.</p>
+                            </div>
+                            <label class="flex items-start gap-3">
+                                <input v-model="form.ride_notifications_enabled" type="checkbox" class="mt-1 rounded border-arka-text-muted/30 text-arka-primary focus:ring-arka-primary" />
+                                <span><strong class="block text-sm text-arka-text">Notificar carreras</strong><small class="text-arka-text-muted">Avisa al conductor cuando el navegador está en segundo plano y existe una ventana de WhatsApp activa.</small></span>
+                            </label>
+                            <label class="flex items-start gap-3">
+                                <input v-model="form.driver_ride_actions_enabled" type="checkbox" class="mt-1 rounded border-arka-text-muted/30 text-arka-primary focus:ring-arka-primary" />
+                                <span><strong class="block text-sm text-arka-text">Permitir operar al conductor</strong><small class="text-arka-text-muted">Aceptar, rechazar y comunicarse con el cliente desde WhatsApp. También depende del permiso individual y de su cooperativa.</small></span>
+                            </label>
+                            <label class="flex items-start gap-3">
+                                <input v-model="form.client_ride_booking_enabled" type="checkbox" class="mt-1 rounded border-arka-text-muted/30 text-arka-primary focus:ring-arka-primary" />
+                                <span><strong class="block text-sm text-arka-text">Permitir solicitar carreras</strong><small class="text-arka-text-muted">Habilita el onboarding y la solicitud guiada para clientes por WhatsApp.</small></span>
+                            </label>
+                            <div>
+                                <InputLabel value="Aviso de privacidad para el primer uso" />
+                                <textarea v-model="form.privacy_notice_text" rows="4" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text" placeholder="Explique qué datos se usan para gestionar la solicitud y cómo consultar la política completa." />
+                                <InputError class="mt-1" :message="form.errors.privacy_notice_text" />
+                            </div>
+                        </div>
                         <div>
                             <div class="flex items-center justify-between">
                                 <InputLabel for="token" value="Token de acceso" />

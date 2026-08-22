@@ -33,6 +33,7 @@ class Cooperative extends Model
         'response_timeout_seconds',
         'automatic_assignment_enabled',
         'manual_assignment_timeout_seconds',
+        'whatsapp_ride_actions_enabled',
     ];
 
     protected $casts = [
@@ -43,6 +44,7 @@ class Cooperative extends Model
         'declared_driver_count' => 'integer',
         'declared_unit_count' => 'integer',
         'response_timeout_seconds' => 'integer',
+        'whatsapp_ride_actions_enabled' => 'boolean',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'suspended_at' => 'datetime',

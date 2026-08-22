@@ -71,6 +71,48 @@ class WhatsAppFreeformSender
         return $response->successful();
     }
 
+    /** @param array<int, array{id:string,title:string}> $buttons */
+    public static function sendButtons(string $phoneE164, string $message, array $buttons): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        $response = Http::withToken(WhatsAppConfig::token())
+            ->timeout(10)
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => ltrim($phoneE164, '+'),
+                'type' => 'interactive',
+                'interactive' => [
+                    'type' => 'button',
+                    'body' => ['text' => $message],
+                    'action' => ['buttons' => collect($buttons)->take(3)->map(fn ($button) => [
+                        'type' => 'reply',
+                        'reply' => ['id' => $button['id'], 'title' => mb_substr($button['title'], 0, 20)],
+                    ])->values()->all()],
+                ],
+            ]);
+
+        return $response->successful();
+    }
+
+    public static function sendLocation(string $phoneE164, float $lat, float $lng, string $name, ?string $address = null): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        return Http::withToken(WhatsAppConfig::token())
+            ->timeout(10)
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => ltrim($phoneE164, '+'),
+                'type' => 'location',
+                'location' => array_filter(['latitude' => $lat, 'longitude' => $lng, 'name' => $name, 'address' => $address]),
+            ])->successful();
+    }
+
     /**
      * Aviso de carrera nueva (pedido explícito del usuario) — nombre del
      * cliente, dirección de recogida, distancia y valor aproximado, con un
@@ -83,7 +125,7 @@ class WhatsAppFreeformSender
      */
     public static function sendNewRideAlert(User $driver, RideRequest $rideRequest): void
     {
-        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+        if (! WhatsAppRideAccess::notificationsEnabled() || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
             return;
         }
 
@@ -121,7 +163,37 @@ class WhatsAppFreeformSender
             // no alcanza con cerrarla o dejarla en segundo plano.
             ."\n\n¿No quiere más solicitudes? Desconéctese desde la app para dejar de recibirlas.";
 
-        self::sendText($driver->phone, $message);
+        if (WhatsAppRideAccess::driverCanOperate($driver)) {
+            self::sendButtons($driver->phone, $message, [
+                ['id' => 'ride_accept:'.$rideRequest->id, 'title' => 'Aceptar'],
+                ['id' => 'ride_reject:'.$rideRequest->id, 'title' => 'No tomar'],
+            ]);
+        } else {
+            self::sendText($driver->phone, $message);
+        }
+    }
+
+    public static function sendRideAcceptedToClient(Ride $ride): void
+    {
+        $client = $ride->client;
+        if (! self::notificationsEnabledFor($client)) {
+            return;
+        }
+
+        $profile = $ride->driver->driverProfile;
+        $message = "✅ {$ride->driver->name} aceptó su carrera y ya va en camino.\n"
+            .'Vehículo: '.trim(($profile?->vehicle_make ?? '').' '.($profile?->vehicle_model ?? '')).' · '.($profile?->vehicle_color ?? 'sin color')."\n"
+            .'Placa: '.($profile?->maskedPlate() ?? 'ver en la app')."\n\n"
+            .'Puede seguir el viaje en Arka01: '.route('rides.show', $ride);
+
+        self::sendText($client->phone, $message);
+    }
+
+    private static function notificationsEnabledFor(User $user): bool
+    {
+        return WhatsAppRideAccess::notificationsEnabled()
+            && filled($user->phone)
+            && $user->hasActiveWhatsAppSession();
     }
 
     public static function sendScheduledRideReminder(User $driver, Ride $ride): void

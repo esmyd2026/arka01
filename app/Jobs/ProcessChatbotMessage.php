@@ -23,10 +23,11 @@ class ProcessChatbotMessage implements ShouldQueue
         public readonly string $phoneE164,
         public readonly string $text,
         public readonly ?int $userId,
+        public readonly array $metadata = [],
     ) {}
 
     public function handle(ChatbotEngine $engine): void
     {
-        $engine->respondTo($this->phoneE164, $this->userId ? User::find($this->userId) : null, $this->text);
+        $engine->respondTo($this->phoneE164, $this->userId ? User::find($this->userId) : null, $this->text, $this->metadata);
     }
 }

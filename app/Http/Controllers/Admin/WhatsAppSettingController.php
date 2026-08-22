@@ -29,6 +29,8 @@ class WhatsAppSettingController extends Controller
     private const ALL_FIELDS = [
         'token', 'phone_number_id', 'verification_template',
         'business_number', 'webhook_verify_token', 'app_secret',
+        'ride_notifications_enabled', 'driver_ride_actions_enabled',
+        'client_ride_booking_enabled', 'privacy_notice_text',
     ];
 
     public function edit(): Response
@@ -45,6 +47,10 @@ class WhatsAppSettingController extends Controller
                 'business_number' => $settings->business_number,
                 'updated_at' => $settings->updated_at?->toIso8601String(),
                 'updated_by_name' => $settings->updatedBy?->name,
+                'ride_notifications_enabled' => $settings->ride_notifications_enabled,
+                'driver_ride_actions_enabled' => $settings->driver_ride_actions_enabled,
+                'client_ride_booking_enabled' => $settings->client_ride_booking_enabled,
+                'privacy_notice_text' => $settings->privacy_notice_text,
             ],
             // Para que la pantalla pueda avisar "tampoco hay nada en .env"
             // cuando ni la base ni el .env tienen un valor cargado — nunca
@@ -77,6 +83,12 @@ class WhatsAppSettingController extends Controller
             'business_number' => ['nullable', 'string', 'max:20'],
             'webhook_verify_token' => ['nullable', 'string', 'max:255'],
             'app_secret' => ['nullable', 'string', 'max:255'],
+            // `sometimes` conserva compatibilidad con actualizaciones
+            // parciales (token, número o plantilla) y con clientes antiguos.
+            'ride_notifications_enabled' => ['sometimes', 'boolean'],
+            'driver_ride_actions_enabled' => ['sometimes', 'boolean'],
+            'client_ride_booking_enabled' => ['sometimes', 'boolean'],
+            'privacy_notice_text' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $settings = WhatsAppSetting::current();

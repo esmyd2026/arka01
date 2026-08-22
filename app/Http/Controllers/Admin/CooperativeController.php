@@ -115,6 +115,16 @@ class CooperativeController extends Controller
         return back()->with('status', 'Cooperativa reactivada.');
     }
 
+    public function updateWhatsApp(Request $request, Cooperative $cooperative): RedirectResponse
+    {
+        $validated = $request->validate(['enabled' => ['required', 'boolean']]);
+        $cooperative->forceFill(['whatsapp_ride_actions_enabled' => $validated['enabled']])->save();
+
+        return back()->with('status', $validated['enabled']
+            ? 'Operación por WhatsApp habilitada para la cooperativa.'
+            : 'Operación por WhatsApp deshabilitada para todos sus conductores.');
+    }
+
     public function reviewDocument(Request $request, CooperativeDocument $document): RedirectResponse
     {
         $validated = $request->validate([

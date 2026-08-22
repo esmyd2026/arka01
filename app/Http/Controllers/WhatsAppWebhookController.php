@@ -111,7 +111,19 @@ class WhatsAppWebhookController extends Controller
             }
 
             $fromE164 = '+'.$from;
-            $text = $message['text']['body'] ?? '';
+            $text = $message['text']['body']
+                ?? $message['interactive']['button_reply']['id']
+                ?? $message['interactive']['list_reply']['id']
+                ?? (isset($message['location']) ? '[ubicacion]' : '');
+            $metadata = [
+                'type' => $message['type'] ?? 'text',
+                'location' => isset($message['location']) ? [
+                    'lat' => $message['location']['latitude'] ?? null,
+                    'lng' => $message['location']['longitude'] ?? null,
+                    'name' => $message['location']['name'] ?? null,
+                    'address' => $message['location']['address'] ?? null,
+                ] : null,
+            ];
             $refUserId = preg_match('/\(ref:(\d+)\)/', $text, $matches) ? (int) $matches[1] : null;
 
             $phoneOwner = User::query()->where('phone', $fromE164)->first();
@@ -135,7 +147,7 @@ class WhatsAppWebhookController extends Controller
                     continue;
                 }
 
-                $this->openWindowFor($phoneOwner, $text, isRecoveryPrompt: $this->isSessionRecoveryMessage($text));
+                $this->openWindowFor($phoneOwner, $text, isRecoveryPrompt: $this->isSessionRecoveryMessage($text), metadata: $metadata);
 
                 continue;
             }
@@ -152,7 +164,7 @@ class WhatsAppWebhookController extends Controller
                 // "quiero ser conductor" antes de registrarse) — antes esto
                 // se ignoraba en silencio.
                 Log::info('WhatsApp: mensaje entrante de un número sin cuenta asociada — pasa al chatbot.', ['from' => $from]);
-                ProcessChatbotMessage::dispatch($fromE164, $text, null);
+                ProcessChatbotMessage::dispatch($fromE164, $text, null, $metadata);
 
                 continue;
             }
@@ -192,7 +204,7 @@ class WhatsAppWebhookController extends Controller
         return response('', 200);
     }
 
-    private function openWindowFor(User $user, string $text, bool $isRecoveryPrompt = false): void
+    private function openWindowFor(User $user, string $text, bool $isRecoveryPrompt = false, array $metadata = []): void
     {
         WhatsAppSession::query()->create([
             'user_id' => $user->id,
@@ -213,7 +225,7 @@ class WhatsAppWebhookController extends Controller
         if ($isRecoveryPrompt) {
             SendWhatsAppSessionRecoveryPrompt::dispatch($user->id);
         } else {
-            ProcessChatbotMessage::dispatch($user->phone, $text, $user->id);
+            ProcessChatbotMessage::dispatch($user->phone, $text, $user->id, $metadata);
         }
     }
 }

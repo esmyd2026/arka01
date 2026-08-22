@@ -52,6 +52,7 @@ class User extends Authenticatable
         'registration_lng',
         'registration_neighborhood',
         'role',
+        'whatsapp_privacy_accepted_at',
         // Trazabilidad de referidos (pedido explícito del usuario): siempre
         // se pasa por RegisteredUserController::store() ya validado
         // (exists:users,id), nunca directo desde un formulario del propio
@@ -96,6 +97,7 @@ class User extends Authenticatable
         'phone_verification_expires_at' => 'datetime',
         'session_takeover_expires_at' => 'datetime',
         'locked_at' => 'datetime',
+        'whatsapp_privacy_accepted_at' => 'datetime',
         'onboarding_completed_at' => 'datetime',
         'password' => 'hashed',
         'password_set_at' => 'datetime',

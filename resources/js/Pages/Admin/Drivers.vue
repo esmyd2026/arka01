@@ -14,6 +14,7 @@ const props = defineProps({
     allDrivers: { type: Object, required: true },
     cities: { type: Array, required: true },
     filters: { type: Object, required: true },
+    serviceCategories: { type: Object, required: true },
 });
 
 // Filtros de la tabla completa (pedido explícito del usuario: paginado +
@@ -61,6 +62,18 @@ async function suspend(driver) {
 function reactivate(driver) {
     router.post(route('admin.drivers.reactivate', driver.id), {}, { preserveScroll: true });
 }
+
+function toggleWhatsApp(driver) {
+    router.patch(route('admin.drivers.whatsapp', driver.id), { enabled: !driver.whatsapp_ride_actions_enabled }, { preserveScroll: true });
+}
+
+function updateCategory(driver, value) {
+    router.patch(
+        route('admin.drivers.category', driver.id),
+        { service_category: value || null },
+        { preserveScroll: true }
+    );
+}
 </script>
 
 <template>
@@ -68,7 +81,7 @@ function reactivate(driver) {
 
     <AdminLayout title="Conductores">
         <div class="py-12">
-            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- Disponibles ahora, en el mapa (pedido explícito del usuario) -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
                     <h3 class="text-lg font-medium text-arka-text">Disponibles ahora ({{ availableDrivers.length }})</h3>
@@ -126,12 +139,14 @@ function reactivate(driver) {
                                 <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
                                     <th class="py-2 pr-3">Conductor</th>
                                     <th class="py-2 pr-3">Ciudad</th>
+                                    <th class="py-2 pr-3 min-w-[240px]">Vehículo y categoría</th>
                                     <th class="py-2 pr-3">Estado</th>
                                     <th class="py-2 pr-3">Carreras</th>
                                     <th class="py-2 pr-3">Rechazos</th>
                                     <th class="py-2 pr-3">Verificación</th>
                                     <th class="py-2 pr-3">Registro</th>
                                     <th class="py-2 pr-3">Última actividad</th>
+                                    <th class="py-2 pr-3">WhatsApp</th>
                                     <th class="py-2"></th>
                                 </tr>
                             </thead>
@@ -144,6 +159,30 @@ function reactivate(driver) {
                                         <p class="text-xs text-arka-text-muted">{{ d.email }}</p>
                                     </td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ d.city ?? '—' }}</td>
+                                    <td class="py-3 pr-3 align-top">
+                                        <p class="text-xs font-medium text-arka-text">{{ d.vehicle || 'Vehículo sin completar' }}</p>
+                                        <select
+                                            :value="d.service_category ?? ''"
+                                            class="mt-1 w-full rounded-arka border-arka-text-muted/30 bg-arka-card px-2 py-1 text-xs text-arka-text"
+                                            aria-label="Categoría de servicio"
+                                            @change="updateCategory(d, $event.target.value)"
+                                        >
+                                            <option value="">Sin categoría</option>
+                                            <option v-for="(category, key) in serviceCategories" :key="key" :value="key">
+                                                {{ category.label }}
+                                            </option>
+                                        </select>
+                                        <div v-if="d.vehicle_amenities.length" class="mt-2 flex max-w-[260px] flex-wrap gap-1">
+                                            <span
+                                                v-for="amenity in d.vehicle_amenities"
+                                                :key="amenity.key"
+                                                class="rounded-full bg-arka-primary/10 px-2 py-0.5 text-[10px] text-arka-primary-bright"
+                                            >
+                                                {{ amenity.label }}
+                                            </span>
+                                        </div>
+                                        <p v-else class="mt-1 text-[10px] text-arka-text-muted">Sin comodidades declaradas</p>
+                                    </td>
                                     <td class="py-2 pr-3">
                                         <span v-if="d.is_suspended" class="text-arka-danger font-medium">Suspendido</span>
                                         <span v-else-if="d.is_available" class="text-arka-primary-bright font-medium">Disponible</span>
@@ -154,6 +193,11 @@ function reactivate(driver) {
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ d.verification_status }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(d.registered_at) }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(d.last_active_at) }}</td>
+                                    <td class="py-2 pr-3">
+                                        <button type="button" class="text-xs font-medium" :class="d.whatsapp_ride_actions_enabled ? 'text-arka-primary' : 'text-arka-text-muted'" @click="toggleWhatsApp(d)">
+                                            {{ d.whatsapp_ride_actions_enabled ? 'Operación activa' : 'Solo avisos' }}
+                                        </button>
+                                    </td>
                                     <td class="py-2">
                                         <!-- Mismo criterio que Admin/Subscriptions.vue (pedido
                                              explícito del usuario: botones más chicos en tablas). -->

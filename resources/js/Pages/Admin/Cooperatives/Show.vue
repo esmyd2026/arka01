@@ -7,7 +7,7 @@ import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
-defineProps({ cooperative: { type: Object, required: true }, auditLogs: { type: Array, required: true } });
+const props = defineProps({ cooperative: { type: Object, required: true }, auditLogs: { type: Array, required: true } });
 const reason = ref('');
 const documentReasons = ref({});
 
@@ -17,6 +17,10 @@ function action(name, id, needsReason = false) {
 
 function reviewDocument(document, status) {
     router.post(route('admin.cooperative-documents.review', document.id), { status, reason: documentReasons.value[document.id] || null }, { preserveScroll: true });
+}
+
+function toggleWhatsApp() {
+    router.patch(route('admin.cooperatives.whatsapp', props.cooperative.id), { enabled: !props.cooperative.whatsapp_ride_actions_enabled }, { preserveScroll: true });
 }
 </script>
 
@@ -31,6 +35,15 @@ function reviewDocument(document, status) {
                     <Link :href="route('cooperatives.show', cooperative.id)" class="text-sm font-medium text-arka-primary">Vista pública →</Link>
                 </div>
                 <div class="grid gap-4 p-6 text-sm sm:grid-cols-2"><p><span class="text-arka-text-muted">Representante:</span> <span class="text-arka-text">{{ cooperative.legal_representative }}</span></p><p><span class="text-arka-text-muted">Contacto:</span> <span class="text-arka-text">{{ cooperative.phone }} · {{ cooperative.email }}</span></p><p><span class="text-arka-text-muted">Ubicación:</span> <span class="text-arka-text">{{ cooperative.main_address }}, {{ cooperative.city?.name }}, {{ cooperative.province }}</span></p><p><span class="text-arka-text-muted">Capacidad:</span> <span class="text-arka-text">{{ cooperative.declared_driver_count }} conductores · {{ cooperative.declared_unit_count }} unidades</span></p><p class="sm:col-span-2"><span class="text-arka-text-muted">Cobertura:</span> <span class="text-arka-text">{{ cooperative.geographic_coverage }}</span></p><p class="sm:col-span-2"><span class="text-arka-text-muted">Horario:</span> <span class="text-arka-text">{{ cooperative.operating_hours }}</span></p></div>
+            </section>
+
+            <section class="rounded-arka bg-arka-card p-6 shadow-xl">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div><h2 class="text-lg font-semibold text-arka-text">Carreras por WhatsApp</h2><p class="mt-1 text-sm text-arka-text-muted">Controla aceptar, rechazar y comunicarse desde WhatsApp para todos los conductores asociados.</p></div>
+                    <button type="button" class="rounded-arka border px-4 py-2 text-sm font-semibold" :class="cooperative.whatsapp_ride_actions_enabled ? 'border-arka-primary text-arka-primary' : 'border-arka-text-muted/30 text-arka-text-muted'" @click="toggleWhatsApp">
+                        {{ cooperative.whatsapp_ride_actions_enabled ? 'Operación habilitada' : 'Solo notificaciones' }}
+                    </button>
+                </div>
             </section>
 
             <section class="rounded-arka bg-arka-card p-6 shadow-xl">

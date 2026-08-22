@@ -30,12 +30,14 @@ class ChatbotEngine
         private readonly ResendVerificationCodeHandler $resendHandler,
         private readonly EscalateToSupportHandler $escalateHandler,
         private readonly AnswerFaqHandler $faqHandler,
+        private readonly WhatsAppRideActionHandler $rideActionHandler,
+        private readonly WhatsAppRideBookingHandler $rideBookingHandler,
     ) {}
 
-    public function respondTo(string $phoneE164, ?User $user, string $rawText): void
+    public function respondTo(string $phoneE164, ?User $user, string $rawText, array $metadata = []): void
     {
         try {
-            $this->process($phoneE164, $user, $rawText);
+            $this->process($phoneE164, $user, $rawText, $metadata);
         } catch (Throwable $e) {
             // Pedido explícito del usuario (sección 14): nunca mostrar
             // detalle técnico — y nunca dejar que un error del motor
@@ -56,11 +58,19 @@ class ChatbotEngine
         }
     }
 
-    private function process(string $phoneE164, ?User $user, string $rawText): void
+    private function process(string $phoneE164, ?User $user, string $rawText, array $metadata): void
     {
         $conversation = ChatbotConversation::forPhone($phoneE164);
         if ($user && ! $conversation->user_id) {
             $conversation->update(['user_id' => $user->id]);
+        }
+
+        if ($user && $this->rideActionHandler->handle($user, $rawText, $conversation)) {
+            return;
+        }
+
+        if ($this->rideBookingHandler->handle($phoneE164, $user, $rawText, $metadata, $conversation)) {
+            return;
         }
 
         // Solo cliente/conductor participan del catálogo con rol — un admin

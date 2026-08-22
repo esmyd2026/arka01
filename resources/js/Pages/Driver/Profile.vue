@@ -58,6 +58,8 @@ const props = defineProps({
     // confidencialidad en las pantallas públicas — este dato reemplaza a la
     // foto y a la placa completa como lo que sí se muestra al cliente).
     vehicleTypes: { type: Object, required: true },
+    vehicleAmenities: { type: Object, required: true },
+    serviceCategories: { type: Object, required: true },
     // Tarjeta de perfil "profesional" (pedido explícito del usuario, mismo
     // lenguaje visual que Referral/Show.vue).
     averageRating: { type: Number, required: true },
@@ -150,6 +152,7 @@ const form = useForm({
     // conductores por cantidad de pasajeros y cajuela al pedir una carrera.
     passenger_capacity: props.driverProfile?.passenger_capacity ?? '',
     has_trunk: props.driverProfile?.has_trunk ?? false,
+    vehicle_amenities: props.driverProfile?.vehicle_amenities ?? [],
     rate_per_km: props.driverProfile?.rate_per_km ?? '',
     minimum_fare: props.driverProfile?.minimum_fare ?? '',
     max_request_distance_km: props.driverProfile?.max_request_distance_km ?? '',
@@ -170,6 +173,10 @@ const vehicleColorOptions = computed(() => {
     const current = props.driverProfile?.vehicle_color;
     return current && !VEHICLE_COLORS.includes(current) ? [current, ...VEHICLE_COLORS] : VEHICLE_COLORS;
 });
+
+const assignedServiceCategory = computed(() => (
+    props.serviceCategories[props.driverProfile?.service_category] ?? null
+));
 
 // Mismo criterio que DriverProfile::hasCompleteVehicleInfo() (backend) —
 // duplicado acá nomás para el aviso, la validación real siempre la hace el
@@ -300,60 +307,70 @@ const VERIFICATION_LABELS = {
             </h2>
         </template>
 
-        <div class="py-12">
-            <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-                <div
-                    v-if="driverProfile && !canConnect"
-                    role="status"
-                    class="rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-4"
-                >
-                    <p class="font-semibold text-arka-warning">Aún no puede conectarse</p>
-                    <p class="mt-1 text-sm leading-relaxed text-arka-text-muted">{{ connectionBlockReason }}</p>
-                </div>
-                <div
-                    v-else-if="driverProfile && canConnect"
-                    role="status"
-                    class="rounded-arka border border-arka-primary/30 bg-arka-primary/10 p-4"
-                >
-                    <p class="font-semibold text-arka-primary-bright">Perfil aprobado y listo</p>
-                    <p class="mt-1 text-sm text-arka-text-muted">Ya puede regresar a Inicio y ponerse disponible.</p>
-                </div>
+        <div class="py-8 sm:py-10">
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <!-- Cabecera profesional: identidad, estado operativo y
+                     clasificación del servicio en una sola lectura. -->
+                <section class="overflow-hidden rounded-arka border border-arka-primary/20 bg-arka-card shadow-xl">
+                    <div class="h-1.5 bg-gradient-to-r from-arka-primary via-arka-primary-bright to-arka-warning"></div>
+                    <div class="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.35fr_1fr] lg:items-center">
+                        <div class="flex flex-col gap-5 sm:flex-row sm:items-center">
+                            <div class="relative shrink-0">
+                                <UserAvatar :user="$page.props.auth.user" size-class="h-24 w-24 text-3xl" />
+                                <span
+                                    v-if="driverProfile?.verification_status === 'approved'"
+                                    class="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border-4 border-arka-card bg-arka-primary text-sm font-black text-arka-base"
+                                    title="Conductor verificado"
+                                >✓</span>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="truncate text-2xl font-bold text-arka-text">{{ $page.props.auth.user.name }}</h3>
+                                    <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
+                                        {{ assignedServiceCategory?.label ?? 'Categoría por asignar' }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-sm text-arka-text-muted">
+                                    @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
+                                </p>
+                                <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-arka-text-muted">
+                                    <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
+                                    <span v-else>Sin calificaciones todavía</span>
+                                    <span v-if="driverProfile?.vehicle_make">🚘 {{ driverProfile.vehicle_make }} {{ driverProfile.vehicle_model }}</span>
+                                </div>
+                                <p v-if="assignedServiceCategory" class="mt-3 max-w-xl text-sm leading-relaxed text-arka-text-muted">
+                                    {{ assignedServiceCategory.description }} Categoría revisada y asignada por administración.
+                                </p>
+                                <p v-else class="mt-3 max-w-xl text-sm leading-relaxed text-arka-text-muted">
+                                    Complete las características del vehículo. Administración revisará la información y asignará la categoría adecuada.
+                                </p>
+                            </div>
+                        </div>
 
-                <!-- Tarjeta de perfil (pedido explícito del usuario: "algo así
-                     profesional como en las tarjetas cuando se comparten
-                     referidos") — mismo lenguaje visual que Referral/Show.vue,
-                     la misma tarjeta que ve un cliente cuando lo recomiendan. -->
-                <div class="max-w-sm mx-auto bg-arka-card shadow-md rounded-arka p-6 text-center space-y-3">
-                    <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl" />
-                    <div>
-                        <p class="text-lg font-semibold text-arka-text flex items-center justify-center gap-1.5">
-                            {{ $page.props.auth.user.name }}
-                            <span
-                                v-if="driverProfile?.verification_status === 'approved'"
-                                class="text-arka-primary-bright text-sm"
-                                title="Conductor verificado"
-                            >✓</span>
-                        </p>
-                        <p class="text-sm text-arka-text-muted">
-                            @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
-                        </p>
+                        <div
+                            role="status"
+                            class="rounded-arka border p-4"
+                            :class="driverProfile && canConnect
+                                ? 'border-arka-primary/30 bg-arka-primary/10'
+                                : 'border-arka-warning/30 bg-arka-warning/10'"
+                        >
+                            <div class="flex items-start gap-3">
+                                <span
+                                    class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg font-bold"
+                                    :class="driverProfile && canConnect ? 'bg-arka-primary/20 text-arka-primary-bright' : 'bg-arka-warning/20 text-arka-warning'"
+                                >{{ driverProfile && canConnect ? '✓' : '!' }}</span>
+                                <div>
+                                    <p class="font-semibold" :class="driverProfile && canConnect ? 'text-arka-primary-bright' : 'text-arka-warning'">
+                                        {{ driverProfile && canConnect ? 'Perfil aprobado y listo' : 'Perfil pendiente de completar' }}
+                                    </p>
+                                    <p class="mt-1 text-sm leading-relaxed text-arka-text-muted">
+                                        {{ driverProfile && canConnect ? 'Ya puede regresar a Inicio y ponerse disponible.' : (connectionBlockReason || 'Complete los datos para activar su perfil de conductor.') }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
-                    <p v-if="driverProfile?.vehicle_make" class="text-sm text-arka-text-muted">
-                        {{ driverProfile.vehicle_make }} {{ driverProfile.vehicle_model }}
-                    </p>
-                    <p class="text-sm text-arka-primary-bright font-medium">
-                        {{ driverProfile ? '🚗 Conductor en Arka01' : '🚗 Activando su perfil de conductor en Arka01' }}
-                    </p>
-                    <p class="text-sm text-arka-text-muted">
-                        Suma clientes de confianza y cobra sus viajes dentro de ese círculo, sin comisión de la
-                        plataforma.
-                    </p>
-                    <p class="text-xs text-arka-text-muted">
-                        Miembro desde
-                        {{ new Date($page.props.auth.user.created_at).toLocaleDateString('es-EC', { dateStyle: 'long' }) }}
-                    </p>
-                </div>
+                </section>
 
                 <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
                     <header class="mb-6">
@@ -503,6 +520,14 @@ const VERIFICATION_LABELS = {
                             <InputError class="mt-1" :message="form.errors.phone_local" />
                         </div>
 
+                        <div class="flex items-center gap-3 border-b border-arka-text-muted/10 pb-3">
+                            <span class="grid h-9 w-9 place-items-center rounded-full bg-arka-primary/10 text-lg">🪪</span>
+                            <div>
+                                <h3 class="font-semibold text-arka-text">Identificación del conductor</h3>
+                                <p class="text-xs text-arka-text-muted">Datos personales que revisará administración.</p>
+                            </div>
+                        </div>
+
                         <div>
                             <InputLabel for="license_number" value="Número de licencia" />
                             <TextInput
@@ -513,6 +538,14 @@ const VERIFICATION_LABELS = {
                                 required
                             />
                             <InputError class="mt-2" :message="form.errors.license_number" />
+                        </div>
+
+                        <div class="flex items-center gap-3 border-b border-arka-text-muted/10 pb-3">
+                            <span class="grid h-9 w-9 place-items-center rounded-full bg-arka-primary/10 text-lg">🚘</span>
+                            <div>
+                                <h3 class="font-semibold text-arka-text">Vehículo principal</h3>
+                                <p class="text-xs text-arka-text-muted">Información obligatoria para seguridad, capacidad y clasificación.</p>
+                            </div>
                         </div>
 
                         <!-- Datos del vehículo, TODOS obligatorios (pedido explícito del
@@ -617,6 +650,43 @@ const VERIFICATION_LABELS = {
                             <Checkbox v-model:checked="form.has_trunk" />
                             <span class="ms-2 text-sm text-arka-text">Tengo cajuela disponible para maletas</span>
                         </label>
+
+                        <!-- Comodidades opcionales: ayudan al admin a evaluar
+                             la categoría, pero no la asignan automáticamente. -->
+                        <section class="rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-4 sm:p-5">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <h3 class="font-semibold text-arka-text">Comodidades y experiencia</h3>
+                                    <p class="mt-1 text-sm text-arka-text-muted">
+                                        Marque únicamente lo que ofrece actualmente. Son datos opcionales y serán visibles para administración.
+                                    </p>
+                                </div>
+                                <span class="shrink-0 rounded-full bg-arka-card px-3 py-1 text-xs font-medium text-arka-primary-bright">
+                                    {{ form.vehicle_amenities.length }} seleccionada{{ form.vehicle_amenities.length === 1 ? '' : 's' }}
+                                </span>
+                            </div>
+
+                            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                <label
+                                    v-for="(amenity, key) in vehicleAmenities"
+                                    :key="key"
+                                    class="flex cursor-pointer items-start gap-3 rounded-arka border p-3 transition"
+                                    :class="form.vehicle_amenities.includes(key)
+                                        ? 'border-arka-primary/50 bg-arka-primary/10'
+                                        : 'border-arka-text-muted/15 bg-arka-card hover:border-arka-primary/30'"
+                                >
+                                    <Checkbox v-model:checked="form.vehicle_amenities" :value="key" class="mt-0.5" />
+                                    <span>
+                                        <span class="block text-sm font-medium text-arka-text">{{ amenity.label }}</span>
+                                        <span class="mt-0.5 block text-xs leading-relaxed text-arka-text-muted">{{ amenity.description }}</span>
+                                    </span>
+                                </label>
+                            </div>
+                            <InputError class="mt-2" :message="form.errors.vehicle_amenities" />
+                            <p class="mt-4 rounded-arka bg-arka-card/70 p-3 text-xs leading-relaxed text-arka-text-muted">
+                                La categoría no se obtiene solo por marcar checks. Administración también revisa año, capacidad, documentos y estado general del vehículo.
+                            </p>
+                        </section>
 
                         <!-- Tarifa y forma de pago: el conductor define su propio precio,
                              la plataforma no lo impone (sección 5 del alcance) -->

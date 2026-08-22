@@ -40,6 +40,8 @@ class DriverProfile extends Model
         'vehicle_year',
         'passenger_capacity',
         'has_trunk',
+        'vehicle_amenities',
+        'service_category',
         'vehicle_photo_path',
         'rate_per_km',
         'minimum_fare',
@@ -55,6 +57,7 @@ class DriverProfile extends Model
         'verified_at',
         'verified_by',
         'max_request_distance_km',
+        'whatsapp_ride_actions_enabled',
     ];
 
     protected $casts = [
@@ -73,6 +76,8 @@ class DriverProfile extends Model
         'deactivated_at' => 'datetime',
         'passenger_capacity' => 'integer',
         'has_trunk' => 'boolean',
+        'vehicle_amenities' => 'array',
+        'whatsapp_ride_actions_enabled' => 'boolean',
     ];
 
     protected static function booted(): void
@@ -189,6 +194,53 @@ class DriverProfile extends Model
             'van' => 'Van / Furgoneta',
             'otro' => 'Otro',
         ];
+    }
+
+    /**
+     * Comodidades opcionales que el conductor declara y administración
+     * revisa antes de asignar una categoría. Se guardan como claves en JSON
+     * para poder ampliar el catálogo sin agregar una columna por cada check.
+     *
+     * @return array<string, array{label: string, description: string}>
+     */
+    public static function vehicleAmenities(): array
+    {
+        return [
+            'air_conditioning' => ['label' => 'Aire acondicionado', 'description' => 'Climatización funcional para todos los pasajeros.'],
+            'four_doors' => ['label' => 'Cuatro puertas', 'description' => 'Acceso independiente y cómodo a la fila trasera.'],
+            'spacious_interior' => ['label' => 'Interior amplio', 'description' => 'Buen espacio para piernas y viaje cómodo.'],
+            'leather_seats' => ['label' => 'Asientos de cuero', 'description' => 'Tapicería de cuero o material equivalente.'],
+            'phone_charger' => ['label' => 'Cargador para celular', 'description' => 'Puerto USB o cargador disponible durante el viaje.'],
+            'wifi' => ['label' => 'Wi-Fi a bordo', 'description' => 'Conexión a internet disponible para pasajeros.'],
+            'smoke_free' => ['label' => 'Vehículo libre de humo', 'description' => 'No se fuma dentro y no conserva olor a cigarrillo.'],
+            'sanitized' => ['label' => 'Limpieza entre viajes', 'description' => 'Limpieza frecuente de superficies e interior.'],
+            'accepts_pets' => ['label' => 'Acepta mascotas', 'description' => 'Permite viajar con mascotas bajo coordinación.'],
+            'child_seat' => ['label' => 'Asiento infantil', 'description' => 'Cuenta con sistema de retención infantil.'],
+            'wheelchair_accessible' => ['label' => 'Accesibilidad', 'description' => 'Facilidades para pasajeros con movilidad reducida.'],
+        ];
+    }
+
+    /**
+     * Categoría comercial asignada por administración. No reemplaza la
+     * medalla por puntos: una describe el servicio/vehículo y la otra la
+     * trayectoria del conductor dentro de Arka01.
+     *
+     * @return array<string, array{label: string, description: string}>
+     */
+    public static function serviceCategories(): array
+    {
+        return [
+            'standard' => ['label' => 'Estándar', 'description' => 'Servicio cotidiano, seguro y funcional.'],
+            'comfort' => ['label' => 'Confort', 'description' => 'Vehículo moderno, climatizado y con interior cómodo.'],
+            'premium' => ['label' => 'Premium', 'description' => 'Experiencia superior, acabados y presentación premium.'],
+            'xl' => ['label' => 'XL', 'description' => 'Mayor capacidad para pasajeros o equipaje.'],
+            'accessible' => ['label' => 'Accesible', 'description' => 'Adaptado o equipado para movilidad reducida.'],
+        ];
+    }
+
+    public function serviceCategoryLabel(): ?string
+    {
+        return self::serviceCategories()[$this->service_category]['label'] ?? null;
     }
 
     public function vehicleTypeLabel(): ?string

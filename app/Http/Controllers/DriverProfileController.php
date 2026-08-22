@@ -76,6 +76,8 @@ class DriverProfileController extends Controller
             // Catálogo fijo para el selector de "Tipo de vehículo" (pedido
             // explícito del usuario) — ver DriverProfile::vehicleTypes().
             'vehicleTypes' => DriverProfile::vehicleTypes(),
+            'vehicleAmenities' => DriverProfile::vehicleAmenities(),
+            'serviceCategories' => DriverProfile::serviceCategories(),
             // La pantalla usa esto para mostrar (o no) el toggle de directorio
             // público, según si el plan vigente lo habilita (sección 7.2).
             'planLimits' => $this->planLimits->forDriver($request->user()),
@@ -155,6 +157,11 @@ class DriverProfileController extends Controller
             'vehicle_year' => ['required', 'integer', 'min:1970', 'max:'.(date('Y') + 1)],
             'passenger_capacity' => ['required', 'integer', 'min:1', 'max:8'],
             'has_trunk' => ['required', 'boolean'],
+            // Comodidades opcionales y autodeclaradas. Solo aceptamos claves
+            // del catálogo; la categoría final nunca llega desde este
+            // formulario porque la decide administración.
+            'vehicle_amenities' => ['sometimes', 'array'],
+            'vehicle_amenities.*' => ['string', Rule::in(array_keys(DriverProfile::vehicleAmenities()))],
             'rate_per_km' => ['required', 'numeric', 'min:0'],
             'minimum_fare' => ['nullable', 'numeric', 'min:0', 'max:'.$adminMinimumFare],
             // Zona de cobertura (pedido explícito del usuario): en blanco =
@@ -229,6 +236,14 @@ class DriverProfileController extends Controller
             }
         }
         unset($validated['country_code'], $validated['phone_local']);
+
+        // Normalizar el JSON evita duplicados y hace estable la comparación
+        // cuando el navegador manda los checks en un orden diferente.
+        $validated['vehicle_amenities'] = collect($validated['vehicle_amenities'] ?? [])
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
 
         // Si el plan vigente no incluye visibilidad pública, se ignora lo que
         // haya mandado el formulario: no se puede activar pagando cero.
@@ -320,11 +335,21 @@ class DriverProfileController extends Controller
         $reviewedFields = [
             'driver_type', 'license_number', 'vehicle_make', 'vehicle_model',
             'vehicle_color', 'vehicle_type', 'vehicle_plate', 'vehicle_year',
-            'passenger_capacity', 'has_trunk',
+            'passenger_capacity', 'has_trunk', 'vehicle_amenities',
         ];
         $reviewedInformationChanged = $existingProfile && collect($reviewedFields)->contains(
-            fn (string $field) => array_key_exists($field, $validated)
-                && (string) $validated[$field] !== (string) $existingProfile->{$field}
+            function (string $field) use ($validated, $existingProfile): bool {
+                if (! array_key_exists($field, $validated)) {
+                    return false;
+                }
+
+                if ($field === 'vehicle_amenities') {
+                    return collect($validated[$field])->sort()->values()->all()
+                        !== collect($existingProfile->{$field} ?? [])->sort()->values()->all();
+                }
+
+                return (string) $validated[$field] !== (string) $existingProfile->{$field};
+            }
         );
 
         if ($reviewedDocuments || $request->hasFile('profile_photo') || $reviewedInformationChanged) {
@@ -335,6 +360,13 @@ class DriverProfileController extends Controller
             $validated['verified_at'] = null;
             $validated['verified_by'] = null;
             $validated['is_available'] = false;
+
+            // Una categoría describe el vehículo que fue revisado. Si cambia
+            // información relevante, administración debe clasificarlo de
+            // nuevo en vez de conservar una etiqueta potencialmente obsoleta.
+            if ($reviewedInformationChanged) {
+                $validated['service_category'] = null;
+            }
         }
 
         // updateOrCreate porque un usuario tiene, como mucho, un solo perfil de

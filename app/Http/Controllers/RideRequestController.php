@@ -1046,6 +1046,7 @@ class RideRequestController extends Controller
         // conductor sale a buscar al cliente, avisarle") — cubre el caso de
         // que tenga la app cerrada, a diferencia del WebSocket de arriba.
         $ride->client->notify(new RideAcceptedPushNotification($ride));
+        WhatsAppFreeformSender::sendRideAcceptedToClient($ride);
 
         return redirect()->route('rides.show', $ride);
     }
