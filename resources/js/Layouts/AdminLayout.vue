@@ -20,6 +20,10 @@ const sections = [
     { route: 'admin.plans.index', match: 'admin.plans.*', label: 'Planes' },
     { route: 'admin.plan-promotions.index', match: 'admin.plan-promotions.*', label: 'Promociones' },
     { route: 'admin.pricing.edit', match: 'admin.pricing.*', label: 'Tarifas' },
+    // Configuración del sitio público (pedido explícito del usuario): la
+    // imagen de fondo del hero de Welcome.vue, entre otras cosas del sitio
+    // que puedan sumarse acá más adelante.
+    { route: 'admin.site.edit', match: 'admin.site.*', label: 'Sitio' },
     { route: 'admin.metrics.index', match: 'admin.metrics.*', label: 'Indicadores' },
     { route: 'admin.referrals.index', match: 'admin.referrals.*', label: 'Referidos' },
     { route: 'admin.drivers.index', match: 'admin.drivers.*', label: 'Conductores' },

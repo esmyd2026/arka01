@@ -331,9 +331,28 @@ const VERIFICATION_LABELS = {
                                     title="Conductor verificado"
                                 >✓</span>
                             </div>
-                            <div class="min-w-0">
+                            <!-- Bug real reportado por el usuario, con dos capturas
+                                 seguidas ("aun se sigue saliendo de la card"): sacar
+                                 `truncate` no alcanzaba — en móvil el contenedor
+                                 padre es `flex-col items-center`, y `items-center`
+                                 en el eje de un flex-col NO estira los hijos al
+                                 ancho completo, cada uno queda del ancho de SU
+                                 propio contenido. Sin `w-full` acá, este bloque de
+                                 texto se armaba tan ancho como el nombre completo en
+                                 una sola línea (nunca llegaba a necesitar wrapear) y
+                                 el `overflow-hidden` de la tarjeta de más arriba
+                                 cortaba en seco lo que sobraba — por eso `truncate`
+                                 O `break-words` daba igual, ninguno de los dos
+                                 llegaba a activarse. -->
+                            <div class="min-w-0 w-full sm:w-auto">
+                                <!-- `truncate` fuerza una sola línea y corta el nombre
+                                     a la mitad ("GREGORIO ENRIQUE OSORIO ANDRA...") en
+                                     vez de mostrarlo completo — acá no hay ningún
+                                     motivo para una sola línea (es SU propio nombre,
+                                     no una lista de muchos), así que se deja bajar
+                                     de línea normal. -->
                                 <div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                                    <h3 class="truncate text-xl font-bold text-arka-text sm:text-2xl">{{ $page.props.auth.user.name }}</h3>
+                                    <h3 class="break-words text-xl font-bold text-arka-text sm:text-2xl">{{ $page.props.auth.user.name }}</h3>
                                     <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                                         {{ assignedServiceCategory?.label ?? 'Categoría por asignar' }}
                                     </span>

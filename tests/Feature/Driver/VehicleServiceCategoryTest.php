@@ -30,10 +30,16 @@ class VehicleServiceCategoryTest extends TestCase
     public function test_a_driver_can_submit_optional_vehicle_amenities_for_admin_review(): void
     {
         $driver = User::factory()->create();
-        $profile = DriverProfile::factory()->for($driver)->create([
+        // El resto de los campos "revisados" (placa, marca, capacidad, etc.)
+        // tienen que coincidir EXACTO con lo que manda profilePayload() —
+        // si no, la factory les pone valores al azar y cualquiera de esos
+        // (no las comodidades) dispara igual el reseteo, enmascarando si el
+        // fix de acá abajo funciona de verdad.
+        $profile = DriverProfile::factory()->for($driver)->create(array_merge($this->profilePayload(), [
             'service_category' => 'comfort',
             'vehicle_amenities' => [],
-        ]);
+            'verification_status' => 'approved',
+        ]));
 
         $this->actingAs($driver)->post(route('driver.profile.update'), $this->profilePayload([
             'vehicle_amenities' => ['smoke_free', 'air_conditioning', 'phone_charger'],
@@ -45,8 +51,43 @@ class VehicleServiceCategoryTest extends TestCase
         $profile->refresh();
 
         $this->assertSame(['air_conditioning', 'phone_charger', 'smoke_free'], $profile->vehicle_amenities);
-        $this->assertNull($profile->service_category);
+        // Bug real corregido (pedido explícito del usuario, caso real: un
+        // conductor ya verificado tocó una comodidad opcional y quedó
+        // forzado a esperar una nueva verificación): las comodidades son
+        // datos opcionales — cambiarlas ya NO tira abajo una verificación
+        // aprobada ni borra la categoría ya asignada, solo deja un aviso
+        // informativo para administración.
+        $this->assertSame('comfort', $profile->service_category);
+        $this->assertSame('approved', $profile->verification_status);
+        $this->assertDatabaseHas('system_events', [
+            'event_type' => 'driver_amenities_updated',
+            'module' => 'driver_profile',
+            'severity' => 'info',
+            'user_id' => $driver->id,
+        ]);
+    }
+
+    public function test_changing_a_reviewed_field_still_resets_an_approved_verification(): void
+    {
+        // Contraprueba del fix de arriba: sacar `vehicle_amenities` de
+        // `$reviewedFields` no debería aflojar el resto — un dato de
+        // identidad/seguridad del vehículo (la placa, acá) sigue exigiendo
+        // una nueva revisión como siempre.
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'vehicle_plate' => 'ABC-1234',
+            'verification_status' => 'approved',
+            'is_available' => true,
+        ]);
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), $this->profilePayload([
+            'vehicle_plate' => 'XYZ-9999',
+        ]))->assertSessionHasNoErrors();
+
+        $profile->refresh();
+
         $this->assertSame('pending', $profile->verification_status);
+        $this->assertFalse((bool) $profile->is_available);
     }
 
     public function test_unknown_vehicle_amenities_are_rejected(): void

@@ -8,6 +8,7 @@ use App\Models\ChatbotConversation;
 use App\Models\ChatbotSetting;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Models\WhatsAppSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
@@ -96,6 +97,74 @@ class ChatbotWebhookTest extends TestCase
         $ticket = SupportTicket::query()->where('user_id', $user->id)->first();
         $this->assertNotNull($ticket);
         $this->assertTrue($ticket->messages()->where('body', 'like', '%quiero hablar con soporte%')->exists());
+        // Sin contacto de soporte configurado en /admin/chatbot (default de
+        // la semilla: ambos en null), no debería mandar ninguna tarjeta de
+        // contacto — solo el aviso de texto de siempre.
+        Http::assertNotSent(fn ($request) => ($request['type'] ?? null) === 'contacts');
+    }
+
+    public function test_hablar_con_soporte_sends_a_whatsapp_contact_card_when_configured(): void
+    {
+        // Pedido explícito del usuario: "cuando mande a soporte que mande un
+        // contacto, ese contacto que se actualice desde el panel admin" —
+        // configurado acá mismo que como lo dejaría un admin desde
+        // /admin/chatbot (Admin\ChatbotSettingController::update()).
+        ChatbotSetting::current()->update([
+            'support_contact_name' => 'Soporte Arka01',
+            'support_contact_phone' => '+593991112222',
+        ]);
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+
+        $this->sendInbound('593991234567', 'quiero hablar con soporte');
+
+        Http::assertSent(function ($request) {
+            if (($request['type'] ?? null) !== 'contacts') {
+                return false;
+            }
+
+            $contact = $request['contacts'][0] ?? [];
+
+            return ($contact['name']['formatted_name'] ?? null) === 'Soporte Arka01'
+                && ($contact['phones'][0]['phone'] ?? null) === '+593991112222';
+        });
+    }
+
+    public function test_selecting_pedir_carrera_from_the_menu_starts_the_button_based_booking_flow(): void
+    {
+        // Pedido explícito del usuario: "que por allí se pueda pedir
+        // también una carrera pero con botones" — el flujo con botones ya
+        // existía (WhatsAppRideBookingHandler, ver
+        // test_hablar_con_soporte_sends_a_whatsapp_contact_card_when_configured
+        // arriba para el patrón de asserts), lo que faltaba era que se
+        // pudiera arrancar tocando la opción del menú, no solo escribiendo
+        // "pedir carrera" de memoria. Contexto de menú armado a mano (mismo
+        // patrón que IntentDetectorTest) para no depender de en qué
+        // posición exacta cae la intención en el menú real.
+        $this->enableWhatsApp();
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $user = User::factory()->create(['phone' => '+593991234567', 'whatsapp_privacy_accepted_at' => now()]);
+        ChatbotConversation::create([
+            'phone' => '+593991234567',
+            'user_id' => $user->id,
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => ['PEDIR_CARRERA']],
+        ]);
+
+        $this->sendInbound('593991234567', '1');
+
+        // Ya aceptó la privacidad antes, así que el flujo arranca
+        // directo en "¿Para cuándo?" — con botones reales.
+        Http::assertSent(function ($request) {
+            if (($request['interactive']['type'] ?? null) !== 'button') {
+                return false;
+            }
+
+            $buttonIds = collect($request['interactive']['action']['buttons'] ?? [])->pluck('reply.id');
+
+            return $buttonIds->contains('wa_when_now');
+        });
+        $this->assertSame('WA_BOOKING_WHEN', ChatbotConversation::forPhone('+593991234567')->pending_intent);
     }
 
     public function test_gibberish_is_logged_as_unrecognized_and_gets_a_fallback_reply(): void

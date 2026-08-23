@@ -93,7 +93,21 @@ class ChatbotEngine
         $match = $this->detector->detect($rawText, $conversation, $role);
 
         if (! $match->isUnknown()) {
-            [$reply, $pendingIntent, $context] = $this->buildReply($match->intent, $user, $conversation, $rawText, $role);
+            // "Pedir una carrera" desde el menú (pedido explícito del
+            // usuario: "que por allí se pueda pedir también una carrera pero
+            // con botones") — el flujo con botones ya existía
+            // (WhatsAppRideBookingHandler), solo no se podía DESCUBRIR desde
+            // el menú, había que ya saber escribir "pedir carrera" a mano.
+            // Reusa el mismo `handle()` que dispara esa frase escrita
+            // directo — nada de lógica duplicada, y ya sabe manejar tanto
+            // cuentas existentes como números nuevos.
+            if ($match->intent->action === 'start_ride_booking') {
+                $this->rideBookingHandler->handle($phoneE164, $user, 'pedir carrera', $metadata, $conversation);
+
+                return;
+            }
+
+            [$reply, $pendingIntent, $context] = $this->buildReply($match->intent, $user, $conversation, $rawText, $role, $phoneE164);
             $this->resolve($conversation, $reply, $pendingIntent, $context);
 
             return;
@@ -115,12 +129,12 @@ class ChatbotEngine
     /**
      * @return array{0: string, 1: ?string, 2: ?array}
      */
-    private function buildReply(ChatbotIntent $intent, ?User $user, ChatbotConversation $conversation, string $rawText, ?string $role): array
+    private function buildReply(ChatbotIntent $intent, ?User $user, ChatbotConversation $conversation, string $rawText, ?string $role, string $phoneE164): array
     {
         return match ($intent->action) {
             'show_menu' => $this->menuReply($role),
             'resend_code' => [$this->resendHandler->handle($user), null, null],
-            'escalate_support' => [$this->escalateHandler->handle($user, $rawText), null, null],
+            'escalate_support' => [$this->escalateHandler->handle($user, $rawText, $phoneE164), null, null],
             'answer_faq' => $this->faqMenuReply($role),
             default => [$intent->reply_message ?? 'Listo.', null, null],
         };

@@ -32,6 +32,14 @@ class ChatbotSettingController extends Controller
             'fallback_escalation_message' => ['required', 'string', 'max:1000'],
             'farewell_message' => ['required', 'string', 'max:1000'],
             'max_fallback_attempts' => ['required', 'integer', 'min:1', 'max:5'],
+            // Contacto de soporte (pedido explícito del usuario): los dos son
+            // opcionales, pero si se completa uno, el otro pasa a ser
+            // obligatorio — un nombre sin teléfono (o al revés) no sirve para
+            // armar la tarjeta de contacto de WhatsApp.
+            'support_contact_name' => ['nullable', 'required_with:support_contact_phone', 'string', 'max:100'],
+            'support_contact_phone' => ['nullable', 'required_with:support_contact_name', 'string', 'regex:/^\+[1-9]\d{7,14}$/'],
+        ], [
+            'support_contact_phone.regex' => 'El teléfono va en formato internacional, con "+" y el código de país. Ej: +593991234567.',
         ]);
 
         ChatbotSetting::current()->update($validated + ['updated_by' => $request->user()->id]);

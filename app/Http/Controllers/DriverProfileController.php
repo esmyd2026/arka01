@@ -10,6 +10,7 @@ use App\Models\Ride;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\PlanLimits;
+use App\Services\SystemEventLogger;
 use App\Services\WhatsAppConfig;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Http\RedirectResponse;
@@ -332,25 +333,53 @@ class DriverProfileController extends Controller
         // después cambian datos sensibles (licencia, placa, tipo o capacidad)
         // o la foto/documentación, se necesita una revisión nueva. Tarifas,
         // cobertura y formas de pago pueden cambiar sin perder aprobación.
+        //
+        // Bug real reportado por el usuario (con caso real: un conductor YA
+        // verificado marcó/desmarcó una comodidad opcional del vehículo —
+        // aire acondicionado, WiFi, etc. — y quedó forzado a esperar una
+        // nueva verificación, desconectado mientras tanto): `vehicle_amenities`
+        // vivía en esta misma lista, pero el propio formulario ya las
+        // describe como "datos opcionales" que "ayudan a evaluar la
+        // categoría, pero no la asignan automáticamente" — no son un dato de
+        // identidad ni de seguridad del vehículo, así que cambiarlas no
+        // debería tirar abajo una verificación ya aprobada. Sigue avisando a
+        // administración (ver el aviso más abajo), solo que ya no bloquea.
         $reviewedFields = [
             'driver_type', 'license_number', 'vehicle_make', 'vehicle_model',
             'vehicle_color', 'vehicle_type', 'vehicle_plate', 'vehicle_year',
-            'passenger_capacity', 'has_trunk', 'vehicle_amenities',
+            'passenger_capacity', 'has_trunk',
         ];
         $reviewedInformationChanged = $existingProfile && collect($reviewedFields)->contains(
-            function (string $field) use ($validated, $existingProfile): bool {
-                if (! array_key_exists($field, $validated)) {
-                    return false;
-                }
-
-                if ($field === 'vehicle_amenities') {
-                    return collect($validated[$field])->sort()->values()->all()
-                        !== collect($existingProfile->{$field} ?? [])->sort()->values()->all();
-                }
-
-                return (string) $validated[$field] !== (string) $existingProfile->{$field};
-            }
+            fn (string $field) => array_key_exists($field, $validated)
+                && (string) $validated[$field] !== (string) $existingProfile->{$field}
         );
+
+        // Aviso liviano a administración cuando cambian las comodidades de un
+        // conductor YA verificado (pedido explícito del usuario: "que si me
+        // llegue una alerta al admin pero no lo bloquee") — visible en
+        // /admin/monitoreo, sin tocar `verification_status` ni sacarlo de
+        // línea. Solo tiene sentido avisar si ya estaba aprobado: si todavía
+        // está pendiente o rechazado, esto ya lo va a ver el admin en la cola
+        // de verificaciones de siempre.
+        if (
+            $existingProfile
+            && $existingProfile->verification_status === 'approved'
+            && array_key_exists('vehicle_amenities', $validated)
+            && collect($validated['vehicle_amenities'])->sort()->values()->all()
+                !== collect($existingProfile->vehicle_amenities ?? [])->sort()->values()->all()
+        ) {
+            SystemEventLogger::log(
+                eventType: 'driver_amenities_updated',
+                module: 'driver_profile',
+                message: "{$user->name} actualizó las comodidades de su vehículo (ya verificado) — no requiere una nueva revisión, solo FYI.",
+                severity: 'info',
+                context: [
+                    'anteriores' => $existingProfile->vehicle_amenities ?? [],
+                    'nuevas' => $validated['vehicle_amenities'],
+                ],
+                userId: $user->id,
+            );
+        }
 
         if ($reviewedDocuments || $request->hasFile('profile_photo') || $reviewedInformationChanged) {
             $validated['verification_status'] = 'pending';

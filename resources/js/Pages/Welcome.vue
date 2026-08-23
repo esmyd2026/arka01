@@ -27,6 +27,10 @@ const props = defineProps({
         type: Boolean,
     },
     guestCooperatives: { type: Array, default: () => [] },
+    // Imagen de fondo del hero (pedido explícito del usuario: configurable
+    // desde /admin/sitio, ver Admin\SiteSettingController) — null hasta que
+    // un admin suba una, el hero se ve con el fondo oscuro liso de siempre.
+    heroBackgroundUrl: { type: String, default: null },
 });
 
 const authUser = usePage().props.auth?.user ?? null;
@@ -152,7 +156,7 @@ function submitFeedback() {
     <Head title="Arka01 — Tu círculo. Tus viajes. Tu decisión." />
 
     <div class="arka-app-background min-h-screen">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
             <!-- Barra superior: ayuda + cuenta, solo si ya tiene sesión iniciada. -->
             <div class="flex justify-end items-center gap-3 mb-4">
                 <Link
@@ -177,89 +181,105 @@ function submitFeedback() {
             </div>
 
             <!-- Encabezado (pedido explícito del usuario: hero con mockup de
-                 teléfono, insignia y llamado a la acción "Crear mi círculo"). -->
-            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+                 teléfono, insignia y llamado a la acción "Crear mi círculo").
+                 Pedido explícito del usuario ("por lo menos haz que la
+                 pueda colocar desde la parte de configuración del admin"):
+                 la foto de fondo (ciudad de noche + puente + estelas
+                 verdes) ya no es una ruta fija — sale de
+                 `heroBackgroundUrl` (Admin\SiteSettingController, subida
+                 desde /admin/sitio). Sin ninguna subida todavía, queda sin
+                 imagen — el degradado solo ya se ve bien contra el fondo
+                 oscuro de siempre de toda la app. `bg-cover`/`bg-top` para
+                 que la parte de arriba (donde vive el texto) sea la que más
+                 se vea. -->
+            <div
+                v-else
+                class="relative isolate grid grid-cols-1 lg:grid-cols-2 gap-8 items-center overflow-hidden rounded-[2rem] px-4 py-6 sm:px-8 sm:py-9 bg-cover bg-top"
+                :style="heroBackgroundUrl
+                    ? `background-image: linear-gradient(180deg, rgba(7,17,13,0.35) 0%, rgba(7,17,13,0.55) 60%, rgba(7,17,13,0.85) 100%), url('${heroBackgroundUrl}')`
+                    : ''"
+            >
                 <div class="text-center lg:text-start">
-                    <ApplicationLogo size="h-14 sm:h-16" />
+                    <ApplicationLogo size="h-11 sm:h-14" />
 
-                    <p class="mt-5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arka-primary/10 text-arka-primary-bright text-xs font-medium">
+                    <p class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arka-primary/10 text-arka-primary-bright text-xs font-medium">
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
                         </svg>
                         Su círculo, sus viajes, su tranquilidad
                     </p>
 
-                    <h1 class="mt-4 text-3xl sm:text-4xl font-bold text-arka-text leading-tight">
-                        Viaje solo con conductores de su <span class="text-arka-primary">confianza</span>
+                    <!-- Pedido explícito del usuario ("quiero que el diseño
+                         quede tal cual te pase"): acá se sigue el tuteo
+                         informal de la imagen de referencia tal como la
+                         mandó, aunque el resto de la app (y la propia
+                         tarjeta de invitado de al lado) use "usted" —
+                         avisado en la respuesta, por si preferís unificarlo
+                         después. -->
+                    <h1 class="mt-4 text-4xl sm:text-5xl lg:text-6xl font-bold text-arka-text leading-[1.05]">
+                        Viaja con<br />
+                        <span class="text-arka-primary">quienes</span> confías
                     </h1>
-                    <p class="mt-3 text-arka-text-muted max-w-md mx-auto lg:mx-0">
-                        Cree su propia flota privada e invite a familiares, amigos o conductores de confianza. Cuando
-                        necesite un viaje, solicítelo dentro de su círculo.
-                    </p>
 
-                    <!-- Pedido explícito del usuario (con captura): una línea verde que
-                         una los 3 íconos, mismo criterio que las listas de "Para
-                         Clientes"/"Para Conductores" más abajo. -->
-                    <ul class="mt-6 space-y-1 max-w-md mx-auto lg:mx-0">
+                    <!-- 3 puntos exactos pedidos por el usuario, conectados
+                         con una línea vertical sólida — mismo patrón que la
+                         lista "Para Clientes" más abajo en #como-funciona,
+                         para que se lean como pasos de una misma experiencia
+                         y no como 3 datos sueltos. -->
+                    <ul class="mt-4 max-w-md mx-auto lg:mx-0">
                         <li class="flex items-start gap-3 text-start">
                             <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
-                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
+                                    <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.6-7-10.5A7 7 0 0 1 12 4a7 7 0 0 1 7 6.5C19 16.4 12 21 12 21Z" />
+                                        <circle cx="12" cy="10.5" r="2.3" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </span>
+                                <div class="w-0.5 flex-1 min-h-[0.75rem] bg-arka-primary/40 my-0.5 rounded-full"></div>
+                            </div>
+                            <p class="pt-1.5 text-sm font-semibold text-arka-text">Tranquilidad en cada viaje</p>
+                        </li>
+                        <li class="flex items-start gap-3 text-start">
+                            <div class="flex flex-col items-center self-stretch shrink-0">
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
+                                    <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <circle cx="9" cy="8" r="3" stroke-linecap="round" stroke-linejoin="round" />
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19a6.5 6.5 0 0 1 13 0" />
                                         <circle cx="17" cy="8" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 12.5c2.4 0 4.5 1.9 5 6.5" />
                                     </svg>
                                 </span>
-                                <div class="w-0.5 flex-1 min-h-[1.25rem] bg-arka-primary/50 my-1"></div>
+                                <div class="w-0.5 flex-1 min-h-[0.75rem] bg-arka-primary/40 my-0.5 rounded-full"></div>
                             </div>
-                            <div class="pb-3">
-                                <p class="text-sm font-medium text-arka-text">Usted decide quién forma parte de su flota</p>
-                                <p class="text-xs text-arka-text-muted">Invite solo a quienes usted conoce y confía.</p>
-                            </div>
+                            <p class="pt-1.5 text-sm font-semibold text-arka-text">Siempre cerca de los tuyos</p>
                         </li>
                         <li class="flex items-start gap-3 text-start">
                             <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
-                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v10M14.5 9.5a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.9-2.5 2s1.1 1.7 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2a2.5 2.5 0 0 1-2.5-1.5" />
-                                    </svg>
-                                </span>
-                                <div class="w-0.5 flex-1 min-h-[1.25rem] bg-arka-primary/50 my-1"></div>
-                            </div>
-                            <div class="pb-3">
-                                <p class="text-sm font-medium text-arka-text">Conozca el precio antes de aceptar el viaje</p>
-                                <p class="text-xs text-arka-text-muted">Transparencia total, sin costos ocultos.</p>
-                            </div>
-                        </li>
-                        <li class="flex items-start gap-3 text-start">
-                            <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="h-9 w-9 rounded-arka bg-arka-card border border-arka-text-muted/10 flex items-center justify-center shrink-0">
-                                    <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
+                                    <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" stroke-linecap="round" stroke-linejoin="round" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
                                     </svg>
                                 </span>
                             </div>
-                            <div>
-                                <p class="text-sm font-medium text-arka-text">Seguimiento en vivo y funciones de seguridad</p>
-                                <p class="text-xs text-arka-text-muted">Comparta su viaje y use el botón SOS si lo necesita.</p>
-                            </div>
+                            <p class="pt-1.5 text-sm font-semibold text-arka-text">Una nueva forma de moverte</p>
                         </li>
                     </ul>
 
-                    <div class="mt-7 flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
+                    <div class="mt-5 flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
                         <!-- Pedido explícito del usuario ("la gente se pierde"):
                              los dos en modo botón, iniciar sesión primero — quien
                              ya tiene cuenta es quien más se confundía antes, con
                              "crear mi círculo" como único botón grande y el
-                             login escondido en un texto chico debajo. -->
+                             login escondido en un texto chico debajo. Pedido
+                             explícito del usuario (con mockup de referencia):
+                             botones más grandes y directos. -->
                         <Link
                             v-if="canLogin"
                             :href="route('login')"
-                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright transition"
+                            class="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-arka-primary rounded-arka font-bold text-sm uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/20 hover:bg-arka-primary-bright transition"
                         >
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 8.5 15 12l-4 3.5M15 12H4" />
                             </svg>
@@ -275,46 +295,39 @@ function submitFeedback() {
                         <Link
                             v-if="canRegister"
                             :href="route('register')"
-                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-primary/50 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-primary-bright hover:bg-arka-primary/10 transition"
+                            class="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-transparent border border-arka-primary/50 rounded-arka font-bold text-sm uppercase tracking-wide text-arka-primary-bright hover:bg-arka-primary/10 transition"
                         >
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="9.5" cy="8.5" r="3" stroke-linecap="round" stroke-linejoin="round" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M18 8v6M15 11h6" />
                             </svg>
-                            Crear una cuenta
+                            Crear cuenta
                         </Link>
                         <!-- Ancla simple a la sección que ya existe más abajo — sin
                              duplicar contenido en una página aparte (pedido
                              explícito del usuario). -->
                         <a
                             href="#como-funciona"
-                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-semibold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
+                            class="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-bold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
                         >
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z" />
                             </svg>
                             ¿Cómo funciona?
                         </a>
                     </div>
 
-                    <div class="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-1.5 text-xs text-arka-text-muted">
-                        <span class="inline-flex items-center gap-1.5">
-                            <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
-                            </svg>
-                            Sus viajes, siempre privados
-                        </span>
-                        <span class="inline-flex items-center gap-1.5">
-                            <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
-                            </svg>
-                            Conductores verificados
-                        </span>
-                        <!-- Pedido explícito del usuario: sacar "Hecho en Ecuador"
-                             de esta fila — el resto se deja igual. -->
-                    </div>
+                    <!-- Pedido explícito del usuario (con la imagen de
+                         referencia): una sola línea con el mismo mensaje que
+                         ya tiene la tarjeta de invitado al lado, en vez de
+                         las dos insignias de antes. -->
+                    <p class="mt-5 flex items-center justify-center gap-1.5 text-xs text-arka-text-muted lg:justify-start">
+                        <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
+                        </svg>
+                        Sin correo ni contraseña. Solo validamos tu WhatsApp.
+                    </p>
                 </div>
 
                 <!-- Acceso urgente sin correo: conserva la identidad visual de
@@ -322,9 +335,7 @@ function submitFeedback() {
                 <div class="relative mx-auto w-full max-w-md rounded-[1.75rem] border border-arka-primary/15 bg-arka-card p-5 shadow-2xl sm:p-7">
                     <div class="mb-5 flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-arka-primary">Viaje como invitado</p>
-                            <h2 class="mt-1 text-2xl font-bold text-arka-text">¿A dónde vamos?</h2>
-                            <p class="mt-1 text-sm text-arka-text-muted">Sin correo ni contraseña. Solo validaremos su WhatsApp.</p>
+                            <h2 class="text-2xl font-bold text-arka-text">¿A dónde vamos?</h2>
                         </div>
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 text-arka-primary">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 17h14l-1.5-6h-11L5 17Zm2-6 2-4h6l2 4M7 17v2m10-2v2"/><circle cx="8" cy="15" r="1" fill="currentColor"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg>
@@ -538,19 +549,6 @@ function submitFeedback() {
                         <p class="text-xs text-arka-text-muted">{{ item.text }}</p>
                     </div>
                 </div>
-            </div>
-
-            <!-- Imagen de cierre de la página de inicio (pedido explícito del
-                 usuario, archivo provisto). Bug real reportado por el usuario
-                 (con captura): el archivo trae su propio fondo negro pintado
-                 (no es transparente) y a todo el ancho de la página se veía
-                 gigante y con un borde visible donde ese negro no calzaba con
-                 el fondo real de la app (#0a0f0c). Se achicó a modo tarjeta y
-                 el contenedor usa el mismo negro exacto de la imagen
-                 (#000304, tomado de la propia imagen) para que el borde
-                 desaparezca en vez de quedar como un remiendo. -->
-            <div class="mt-16 max-w-md sm:max-w-lg mx-auto rounded-arka overflow-hidden shadow-xl" style="background-color: #000304;">
-                <img src="/img/pagina%20de%20inicio%20footer.png" alt="Arka01" class="w-full h-auto" />
             </div>
 
             <!-- "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): barra

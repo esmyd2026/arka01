@@ -2,8 +2,10 @@
 
 namespace App\Services\Chatbot\IntentActionHandlers;
 
+use App\Models\ChatbotSetting;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Services\WhatsAppFreeformSender;
 
 /**
  * "Hablar con soporte" (pedido explícito del usuario, sección 13): reutiliza
@@ -14,7 +16,7 @@ use App\Models\User;
  */
 class EscalateToSupportHandler
 {
-    public function handle(?User $user, string $rawText): string
+    public function handle(?User $user, string $rawText, string $phoneE164): string
     {
         if (! $user) {
             return 'Para hablar con soporte hace falta tener una cuenta creada en Arka01 — ¿querés que te ayude a crear una? Si ya tenés cuenta, ingresá a la app y escribinos desde el número que declaraste ahí.';
@@ -31,6 +33,18 @@ class EscalateToSupportHandler
             'sender_user_id' => $user->id,
             'body' => "📋 Resumen automático del asistente de WhatsApp: \"{$rawText}\"",
         ]);
+
+        // Contacto humano de soporte (pedido explícito del usuario: "cuando
+        // mande a soporte que mande un contacto, ese contacto que se
+        // actualice desde el panel admin") — tarjeta de WhatsApp de verdad,
+        // no solo un número en texto, para que la persona pueda escribirle o
+        // llamarlo directo mientras espera respuesta en la app. Opcional: si
+        // no está completado en /admin/chatbot, se manda igual el aviso de
+        // texto de siempre, sin la tarjeta.
+        $settings = ChatbotSetting::current();
+        if ($settings->support_contact_name && $settings->support_contact_phone) {
+            WhatsAppFreeformSender::sendContact($phoneE164, $settings->support_contact_name, $settings->support_contact_phone);
+        }
 
         return 'Ya avisé a soporte con lo que me contaste — un admin va a responderte desde la sección de Soporte dentro de la app. ¿Necesitás algo más por acá mientras tanto?';
     }

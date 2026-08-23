@@ -21,6 +21,12 @@ class ChatbotSetting extends Model
         'fallback_escalation_message',
         'farewell_message',
         'max_fallback_attempts',
+        // Contacto humano de soporte (pedido explícito del usuario): editable
+        // desde /admin/chatbot, se manda como tarjeta de contacto de
+        // WhatsApp de verdad al escalar a soporte — ver
+        // WhatsAppFreeformSender::sendContact() y EscalateToSupportHandler.
+        'support_contact_name',
+        'support_contact_phone',
         'updated_by',
     ];
 

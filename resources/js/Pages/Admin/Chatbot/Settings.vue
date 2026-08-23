@@ -17,6 +17,8 @@ const form = useForm({
     fallback_escalation_message: props.settings.fallback_escalation_message,
     farewell_message: props.settings.farewell_message,
     max_fallback_attempts: props.settings.max_fallback_attempts,
+    support_contact_name: props.settings.support_contact_name ?? '',
+    support_contact_phone: props.settings.support_contact_phone ?? '',
 });
 
 function submit() {
@@ -85,6 +87,34 @@ function submit() {
                         <InputLabel value="Cuántos intentos sin entender antes de ofrecer soporte" />
                         <TextInput type="number" min="1" max="5" class="mt-1 block w-32" v-model.number="form.max_fallback_attempts" />
                         <InputError class="mt-1" :message="form.errors.max_fallback_attempts" />
+                    </div>
+
+                    <!-- Contacto de soporte (pedido explícito del usuario: "cuando
+                         mande a soporte que mande un contacto, ese contacto que
+                         se actualice desde el panel admin") — al escalar a
+                         soporte, el chatbot manda esto como una tarjeta de
+                         contacto de WhatsApp de verdad (no solo texto), para que
+                         la persona tenga a quién escribirle directo mientras
+                         espera respuesta. Los dos opcionales — sin completar,
+                         el chatbot sigue mandando solo el aviso de texto de
+                         siempre. -->
+                    <div class="grid gap-4 sm:grid-cols-2 rounded-arka border border-arka-text-muted/15 p-4">
+                        <div class="sm:col-span-2">
+                            <p class="text-sm font-medium text-arka-text">Contacto de soporte (tarjeta de WhatsApp)</p>
+                            <p class="mt-0.5 text-xs text-arka-text-muted">
+                                Se manda junto con el mensaje de soporte, como una tarjeta de contacto tocable — no solo texto.
+                            </p>
+                        </div>
+                        <div>
+                            <InputLabel value="Nombre" />
+                            <TextInput type="text" class="mt-1 block w-full" v-model="form.support_contact_name" placeholder="Ej: Soporte Arka01" />
+                            <InputError class="mt-1" :message="form.errors.support_contact_name" />
+                        </div>
+                        <div>
+                            <InputLabel value="Teléfono (formato internacional)" />
+                            <TextInput type="text" class="mt-1 block w-full" v-model="form.support_contact_phone" placeholder="+593991234567" />
+                            <InputError class="mt-1" :message="form.errors.support_contact_phone" />
+                        </div>
                     </div>
 
                     <div>

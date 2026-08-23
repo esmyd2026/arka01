@@ -36,7 +36,10 @@ class AdminChatbotTest extends TestCase
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page
             ->component('Admin/Chatbot/Intents')
-            ->has('intents', 13)
+            // 13 originales + PEDIR_CARRERA (pedido explícito del usuario:
+            // "que por allí se pueda pedir también una carrera", ver
+            // database/migrations/..._add_pedir_carrera_chatbot_intent.php).
+            ->has('intents', 14)
         );
     }
 
@@ -129,6 +132,53 @@ class AdminChatbotTest extends TestCase
         $this->assertSame('Bienvenido nuevo', $settings->welcome_message);
         $this->assertSame(3, $settings->max_fallback_attempts);
         $this->assertSame($admin->id, $settings->updated_by);
+    }
+
+    private function chatbotSettingsPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'welcome_message' => 'Bienvenido',
+            'help_message' => 'Ayuda',
+            'fallback_message' => 'No entendí',
+            'fallback_escalation_message' => 'Necesitás soporte',
+            'farewell_message' => 'Chau',
+            'max_fallback_attempts' => 2,
+        ], $overrides);
+    }
+
+    public function test_an_admin_can_set_the_support_contact_card(): void
+    {
+        // Pedido explícito del usuario: "cuando mande a soporte que mande un
+        // contacto, ese contacto que se actualice desde el panel admin".
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.chatbot.settings.update'), $this->chatbotSettingsPayload([
+            'support_contact_name' => 'Soporte Arka01',
+            'support_contact_phone' => '+593991112222',
+        ]))->assertRedirect();
+
+        $settings = ChatbotSetting::current();
+        $this->assertSame('Soporte Arka01', $settings->support_contact_name);
+        $this->assertSame('+593991112222', $settings->support_contact_phone);
+    }
+
+    public function test_the_support_contact_phone_needs_a_valid_international_format(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.chatbot.settings.update'), $this->chatbotSettingsPayload([
+            'support_contact_name' => 'Soporte Arka01',
+            'support_contact_phone' => '0991112222',
+        ]))->assertSessionHasErrors('support_contact_phone');
+    }
+
+    public function test_the_support_contact_name_is_required_if_the_phone_is_set(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.chatbot.settings.update'), $this->chatbotSettingsPayload([
+            'support_contact_phone' => '+593991112222',
+        ]))->assertSessionHasErrors('support_contact_name');
     }
 
     public function test_an_admin_can_list_and_mark_reviewed_unrecognized_messages(): void

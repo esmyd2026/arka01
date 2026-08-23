@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\PricingSettingController;
 use App\Http\Controllers\Admin\RatingReasonController;
 use App\Http\Controllers\Admin\ReferralController as AdminReferralController;
 use App\Http\Controllers\Admin\RideController as AdminRideController;
+use App\Http\Controllers\Admin\SiteSettingController;
 use App\Http\Controllers\Admin\SosAlertController as AdminSosAlertController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\SupportTicketController;
@@ -70,6 +71,7 @@ use App\Http\Controllers\TrustedContactController;
 use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
 use App\Models\Cooperative;
+use App\Models\SiteSetting;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -88,6 +90,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
+        // Pedido explícito del usuario: imagen de fondo del hero,
+        // configurable desde /admin/sitio — ver App\Models\SiteSetting.
+        'heroBackgroundUrl' => SiteSetting::current()->hero_background_url,
         'guestCooperatives' => Cooperative::query()
             ->where('status', 'approved')
             ->whereNull('suspended_at')
@@ -468,6 +473,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Mantenimiento del cálculo de precio sugerido (sección 5): recargo y horario nocturno.
     Route::get('/tarifas', [PricingSettingController::class, 'edit'])->name('pricing.edit');
     Route::patch('/tarifas', [PricingSettingController::class, 'update'])->name('pricing.update');
+
+    // Configuración del sitio público (pedido explícito del usuario: subir
+    // la imagen de fondo del hero de Welcome.vue desde acá, en vez de
+    // depender de copiarla a mano a public/img/) — POST, no PATCH: sube un
+    // archivo, mismo criterio que driver.profile.update.
+    Route::get('/sitio', [SiteSettingController::class, 'edit'])->name('site.edit');
+    Route::post('/sitio', [SiteSettingController::class, 'update'])->name('site.update');
 
     // Catálogo de "Motivos de Calificación" (pedido explícito del usuario):
     // administrable desde acá, sin tocar código — ver RatingReasonController.

@@ -114,6 +114,37 @@ class WhatsAppFreeformSender
     }
 
     /**
+     * Tarjeta de contacto de WhatsApp de verdad (pedido explícito del
+     * usuario: "cuando mande a soporte que mande un contacto") — a
+     * diferencia de mandar el número como texto, esto llega como una
+     * tarjeta tocable que la persona puede guardar o llamar directo desde
+     * WhatsApp, mismo tipo de mensaje `contacts` que usa la propia Meta
+     * Cloud API. Ver App\Models\ChatbotSetting (support_contact_name/phone,
+     * editable desde /admin/chatbot) y EscalateToSupportHandler, que es
+     * quien lo llama.
+     *
+     * @param  string  $contactPhoneE164  Ej. "+593991234567"
+     */
+    public static function sendContact(string $phoneE164, string $contactName, string $contactPhoneE164): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        return Http::withToken(WhatsAppConfig::token())
+            ->timeout(10)
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => ltrim($phoneE164, '+'),
+                'type' => 'contacts',
+                'contacts' => [[
+                    'name' => ['formatted_name' => $contactName, 'first_name' => $contactName],
+                    'phones' => [['phone' => $contactPhoneE164, 'type' => 'WORK']],
+                ]],
+            ])->successful();
+    }
+
+    /**
      * Aviso de carrera nueva (pedido explícito del usuario) — nombre del
      * cliente, dirección de recogida, distancia y valor aproximado, con un
      * link directo para abrir la app y aceptarla. Se usa tanto cuando se
