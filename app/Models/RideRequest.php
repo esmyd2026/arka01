@@ -38,6 +38,7 @@ class RideRequest extends Model
         'payment_method',
         'status',
         'current_offered_price',
+        'stops_price',
         'negotiation_round',
         'last_offer_made_by',
         'negotiating_driver_user_id',
@@ -64,6 +65,7 @@ class RideRequest extends Model
         'destination_lng' => 'decimal:7',
         'distance_km' => 'decimal:2',
         'current_offered_price' => 'decimal:2',
+        'stops_price' => 'decimal:2',
         'negotiation_round' => 'integer',
         'requested_at' => 'datetime',
         'responded_at' => 'datetime',
@@ -158,6 +160,16 @@ class RideRequest extends Model
     public function ride(): HasOne
     {
         return $this->hasOne(Ride::class);
+    }
+
+    /**
+     * Paradas intermedias (pedido explícito del usuario: hasta 4, cada una
+     * con su propio tramo/precio) — se copian a Ride::stops() al aceptar,
+     * ver RideRequestController::accept().
+     */
+    public function stops(): HasMany
+    {
+        return $this->hasMany(RideRequestStop::class)->orderBy('sequence');
     }
 
     /**

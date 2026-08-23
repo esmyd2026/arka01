@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\PriceCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -140,7 +141,11 @@ class ExpressRoute extends Model
      */
     public function pricePerPerson(): float
     {
-        return round((float) $this->offered_price / (1 + $this->acceptedCompanionsCount()), 2);
+        // Redondeado hacia arriba a los 10 centavos (pedido explícito del
+        // usuario) — este valor termina siendo el `price` real de cada
+        // carrera generada (ver GenerateExpressRides), no solo una
+        // referencia en pantalla.
+        return PriceCalculator::roundUpToDime((float) $this->offered_price / (1 + $this->acceptedCompanionsCount()));
     }
 
     /**

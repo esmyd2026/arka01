@@ -1394,25 +1394,8 @@ class RideRequestFlowTest extends TestCase
      * destino" — completar la carrera exige estar cerca del destino, no del
      * origen.
      */
-    public function test_completing_a_ride_is_blocked_when_the_driver_is_far_from_the_destination(): void
-    {
-        [$client, $driver] = $this->clientWithFleetDriver();
-
-        $ride = Ride::factory()->create([
-            'client_user_id' => $client->id,
-            'driver_user_id' => $driver->id,
-            'status' => 'in_progress',
-            'destination_lat' => -2.1614,
-            'destination_lng' => -79.8998,
-        ]);
-
-        $this->actingAs($driver)
-            ->post(route('rides.complete', $ride), ['lat' => -2.1962, 'lng' => -79.8862])
-            ->assertSessionHasErrors('ride');
-
-        $this->assertSame('in_progress', $ride->fresh()->status);
-    }
-
+    // Pedido explícito del usuario: dentro de 20 m del destino completa
+    // directo, como antes — sin necesidad de ningún motivo.
     public function test_completing_a_ride_succeeds_when_the_driver_is_near_the_destination(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
@@ -1426,8 +1409,102 @@ class RideRequestFlowTest extends TestCase
         ]);
 
         $this->actingAs($driver)
-            ->post(route('rides.complete', $ride), ['lat' => -2.1616, 'lng' => -79.8999])
+            ->post(route('rides.complete', $ride), ['lat' => -2.1614, 'lng' => -79.8998])
             ->assertRedirect();
+
+        $ride->refresh();
+        $this->assertSame('completed', $ride->status);
+        $this->assertNull($ride->completion_reason);
+    }
+
+    // Pedido explícito del usuario: más lejos de 20 m del destino, ya no se
+    // bloquea sin más (como antes con 1.5 km) — hace falta elegir un motivo.
+    public function test_completing_a_ride_far_from_the_destination_requires_a_reason(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'destination_lat' => -2.1614,
+            'destination_lng' => -79.8998,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.complete', $ride), ['lat' => -2.1962, 'lng' => -79.8862])
+            ->assertSessionHasErrors('completion_reason');
+
+        $this->assertSame('in_progress', $ride->fresh()->status);
+    }
+
+    public function test_completing_a_ride_far_from_the_destination_succeeds_with_a_reason_and_the_client_sees_it(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'destination_lat' => -2.1614,
+            'destination_lng' => -79.8998,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.complete', $ride), [
+                'lat' => -2.1962,
+                'lng' => -79.8862,
+                'completion_reason' => 'El cliente pidió terminar el viaje antes de llegar',
+                'completion_note' => 'Me pidió bajar antes en la esquina',
+            ])
+            ->assertRedirect();
+
+        $ride->refresh();
+        $this->assertSame('completed', $ride->status);
+        $this->assertSame('El cliente pidió terminar el viaje antes de llegar', $ride->completion_reason);
+        $this->assertSame('Me pidió bajar antes en la esquina', $ride->completion_note);
+
+        $this->actingAs($client)
+            ->get(route('rides.show', $ride))
+            ->assertInertia(fn ($page) => $page->where('ride.completion_reason', 'El cliente pidió terminar el viaje antes de llegar'));
+    }
+
+    public function test_completing_a_ride_rejects_a_reason_outside_the_fixed_list(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'destination_lat' => -2.1614,
+            'destination_lng' => -79.8998,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.complete', $ride), [
+                'lat' => -2.1962,
+                'lng' => -79.8862,
+                'completion_reason' => 'Motivo inventado que no está en la lista',
+            ])
+            ->assertSessionHasErrors('completion_reason');
+    }
+
+    // Sin coordenadas no se puede comprobar la cercanía — mismo criterio
+    // permisivo de siempre (assertNearRideLocation()): completa directo.
+    public function test_completing_a_ride_without_coordinates_is_not_blocked(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+            'destination_lat' => -2.1614,
+            'destination_lng' => -79.8998,
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
 
         $this->assertSame('completed', $ride->fresh()->status);
     }

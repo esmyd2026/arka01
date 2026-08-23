@@ -355,6 +355,18 @@ class RideRequestController extends Controller
             // "que exista un campo que el cliente meta una observación que
             // no sea obligatoria") — nunca obligatoria.
             'notes' => ['nullable', 'string', 'max:500'],
+            // Paradas adicionales (pedido explícito del usuario: "agregar
+            // una parada adicional... solo permitir 4 paradas", cada una
+            // cobrada por separado — ver stops_price más abajo). Nunca
+            // negociables: el precio de cada una lo calcula el sistema,
+            // solo el tramo final admite contraoferta (mismo criterio de
+            // siempre, sin cambios).
+            'stops' => ['sometimes', 'array', 'max:4'],
+            'stops.*.lat' => ['required_with:stops', 'numeric', 'between:-90,90'],
+            'stops.*.lng' => ['required_with:stops', 'numeric', 'between:-180,180'],
+            'stops.*.address' => ['nullable', 'string', 'max:255'],
+            'stops.*.sector_id' => ['nullable', 'integer', 'exists:sectors,id'],
+            'stops.*.route_distance_km' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $needsTrunk = (bool) ($validated['needs_trunk'] ?? false);
@@ -663,9 +675,20 @@ class RideRequestController extends Controller
         // que mande el navegador). Si no llegó o no pasa el chequeo, cae de
         // vuelta a Haversine — mismo criterio "gratis, sin key, con
         // respaldo si el servicio externo falla" que el resto de la app.
+        $stopsInput = $validated['stops'] ?? [];
+
+        // El tramo final (el que valida/paga/completa RideController::complete())
+        // arranca en la ÚLTIMA parada cuando hay paradas, o en el origen
+        // cuando no — pedido explícito del usuario: "cada parada se calcula
+        // diferente e individual". Mismo chequeo de cordura Haversine-vs-ruta
+        // real de siempre, solo que ahora el "origen" de ese chequeo puede
+        // no ser el origen real de la carrera.
+        $finalLegOriginLat = $stopsInput ? (float) end($stopsInput)['lat'] : (float) $validated['origin_lat'];
+        $finalLegOriginLng = $stopsInput ? (float) end($stopsInput)['lng'] : (float) $validated['origin_lng'];
+
         $haversineKm = round(Haversine::distanceKm(
-            (float) $validated['origin_lat'],
-            (float) $validated['origin_lng'],
+            $finalLegOriginLat,
+            $finalLegOriginLng,
             (float) $validated['destination_lat'],
             (float) $validated['destination_lng'],
         ), 2);
@@ -681,6 +704,44 @@ class RideRequestController extends Controller
                 ->whereNotNull('rate_per_km')
                 ->avg('rate_per_km')
             : $this->referenceRatePerKm($fleet, $driverUserId);
+        $driverMinimumFareForStops = $this->referenceMinimumFare($driverUserId);
+
+        // Cada parada es un tramo propio: mismo chequeo de cordura Haversine
+        // (contra el punto anterior: origen o la parada previa) y el mismo
+        // PriceCalculator que usa el tramo final, pero uno por parada —
+        // pedido explícito del usuario: "cada parada se calcula diferente e
+        // individual... puedan pagarle cada parada".
+        $stopsData = [];
+        $stopsPrice = 0.0;
+        $previousLat = (float) $validated['origin_lat'];
+        $previousLng = (float) $validated['origin_lng'];
+
+        foreach ($stopsInput as $index => $stopInput) {
+            $legHaversineKm = round(Haversine::distanceKm($previousLat, $previousLng, (float) $stopInput['lat'], (float) $stopInput['lng']), 2);
+            $legRouteDistanceKm = $stopInput['route_distance_km'] ?? null;
+            $legDistanceKm = ($legRouteDistanceKm !== null && $legRouteDistanceKm >= $legHaversineKm * 0.95 && $legRouteDistanceKm <= $legHaversineKm * 5)
+                ? round((float) $legRouteDistanceKm, 2)
+                : $legHaversineKm;
+
+            $legPrice = PriceCalculator::suggestedPrice($legDistanceKm, $ratePerKm, driverMinimumFare: $driverMinimumFareForStops)['total'];
+            $stopsPrice += $legPrice;
+
+            $stopsData[] = [
+                'sequence' => $index + 1,
+                'lat' => $stopInput['lat'],
+                'lng' => $stopInput['lng'],
+                'address' => $stopInput['address'] ?? null,
+                'sector_id' => $stopInput['sector_id'] ?? null,
+                'leg_distance_km' => $legDistanceKm,
+                'leg_price' => $legPrice,
+            ];
+
+            $previousLat = (float) $stopInput['lat'];
+            $previousLng = (float) $stopInput['lng'];
+        }
+
+        $stopsPrice = $stopsData ? PriceCalculator::roundUpToDime($stopsPrice) : null;
+
         $suggestedPrice = PriceCalculator::suggestedPrice(
             $distanceKm,
             $ratePerKm,
@@ -726,7 +787,7 @@ class RideRequestController extends Controller
             $validated, $fleet, $request, $distanceKm, $offeredPrice, $isScheduled, $scheduledAt,
             $driverUserId, $dispatchPool, $offerCandidateIds, $currentOfferExpiresAt, $needsTrunk, $passengerCount, $requestStatus,
             $cooperative, $cooperativeCandidateIds, $cooperativeOfferExpiresAt, $cooperativeAssignmentStatus,
-            $smartDispatchVersion, $smartDispatchSnapshot,
+            $smartDispatchVersion, $smartDispatchSnapshot, $stopsPrice, $stopsData,
         ) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
@@ -748,6 +809,7 @@ class RideRequestController extends Controller
                 'payment_method' => $validated['payment_method'] ?? 'efectivo',
                 'status' => $requestStatus,
                 'current_offered_price' => $offeredPrice,
+                'stops_price' => $stopsPrice,
                 'negotiation_round' => 0,
                 'last_offer_made_by' => 'client',
                 'requested_at' => now(),
@@ -769,6 +831,12 @@ class RideRequestController extends Controller
                 'offered_by_user_id' => $request->user()->id,
                 'offered_amount' => $offeredPrice,
             ]);
+
+            // Paradas adicionales (pedido explícito del usuario) — se copian
+            // a RideStop cuando un conductor acepte, ver accept() más abajo.
+            foreach ($stopsData as $stopData) {
+                $rideRequest->stops()->create($stopData);
+            }
 
             return $rideRequest;
         });
@@ -1013,6 +1081,9 @@ class RideRequestController extends Controller
                 // (sección 5), no se recalcula — puede ser el sugerido tal
                 // cual o el número en el que las partes terminaron de acuerdo.
                 'price' => $locked->current_offered_price,
+                // Paradas adicionales (pedido explícito del usuario) — la
+                // suma de sus tramos, ya calculada al pedir la carrera.
+                'stops_price' => $locked->stops_price,
                 // Una solicitud PROGRAMADA (consideración agregada al alcance)
                 // no puede arrancar "en curso" de una: el conductor quedaría
                 // "ocupado" desde que acepta hasta la hora programada, que
@@ -1022,6 +1093,21 @@ class RideRequestController extends Controller
                 'status' => $locked->is_scheduled ? 'scheduled' : 'in_progress',
                 'started_at' => $locked->is_scheduled ? null : now(),
             ]);
+
+            // Copia las paradas de la solicitud a la carrera ya aceptada,
+            // cada una arrancando "pending" — ver RideController::completeStop().
+            foreach ($locked->stops as $stop) {
+                $ride->stops()->create([
+                    'sequence' => $stop->sequence,
+                    'lat' => $stop->lat,
+                    'lng' => $stop->lng,
+                    'address' => $stop->address,
+                    'sector_id' => $stop->sector_id,
+                    'leg_distance_km' => $stop->leg_distance_km,
+                    'leg_price' => $stop->leg_price,
+                    'status' => 'pending',
+                ]);
+            }
 
             $locked->update([
                 'status' => 'accepted',

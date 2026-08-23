@@ -425,6 +425,17 @@ const mapMarkers = computed(() => {
         },
     ];
 
+    // Paradas adicionales (pedido explícito del usuario) — mismo pin ámbar
+    // "base" que ya usa Ride/Request.vue, con el estado en la etiqueta.
+    (props.ride.stops ?? []).forEach((stop) => {
+        markers.push({
+            id: 'base',
+            lat: Number(stop.lat),
+            lng: Number(stop.lng),
+            label: `Parada ${stop.sequence}${stop.status !== 'pending' ? ` (${stop.status === 'completed' ? 'completada' : 'cancelada'})` : ''}`,
+        });
+    });
+
     // Ícono de auto (pedido explícito del usuario: "que le muestre también
     // ahí en el mapa... tal y como se muestra en la imagen que te adjunto",
     // con captura de referencia estilo Uber/DiDi: auto + línea verde trazada
@@ -496,6 +507,24 @@ const pickupEta = computed(() => {
     return etaBetween(driverLat.value, driverLng.value, Number(props.ride.origin_lat), Number(props.ride.origin_lng));
 });
 
+// Pedido explícito del usuario: "permitir que el mapa se expanda más" — el
+// mapa del conductor arranca compacto (320px) y este toggle lo agranda a
+// 65vh, sin tocar FleetMap.vue (sigue siendo un simple string de altura).
+const mapExpanded = ref(false);
+
+// Pedido explícito del usuario: distancia y tiempo restantes en el mapa del
+// CONDUCTOR (liveRemainingKm/liveRemainingMin vienen de refreshLiveRoute(),
+// siguiendo la ruta real, no la línea recta) — se actualiza solo cada vez
+// que se recalcula la ruta en vivo, mismo ritmo que la polilínea.
+const driverRemainingLabel = computed(() => {
+    if (!props.isDriver || liveRemainingKm.value == null) return null;
+    const kmLabel = liveRemainingKm.value < 1
+        ? `${Math.round(liveRemainingKm.value * 1000)} m`
+        : `${liveRemainingKm.value.toFixed(1)} km`;
+    const minLabel = liveRemainingMin.value != null ? `${Math.max(1, Math.round(liveRemainingMin.value))} min` : null;
+    return minLabel ? `${kmLabel} · ${minLabel}` : kmLabel;
+});
+
 // Cinco minutos de cortesía desde la llegada automática/manual. El tiempo
 // base viene del servidor (`arrived_at`), por lo que cliente y conductor ven
 // el mismo conteo aunque abran la pantalla en momentos distintos.
@@ -518,6 +547,12 @@ const pickupWaitCountdown = computed(() => {
 // línea se va consumiendo y, si el conductor se desvía, Google/OSRM devuelve
 // una nueva trayectoria en vez de conservar el trazado inicial congelado.
 const liveRouteCoords = ref([]);
+// Pedido explícito del usuario: "colocar en el mapa del conductor la
+// cantidad de km que le falta y tiempo estimado... cada vez que actualice el
+// recorrido" — fetchOsrmRoute() YA calculaba esto en cada refresco de la
+// ruta en vivo, pero antes se tiraba (solo se guardaban las coordenadas).
+const liveRemainingKm = ref(null);
+const liveRemainingMin = ref(null);
 let liveRouteRequestSerial = 0;
 let lastLiveRouteRequestedAt = 0;
 let lastLiveRouteOrigin = null;
@@ -527,6 +562,8 @@ const LIVE_ROUTE_MIN_MOVEMENT_KM = 0.025;
 async function refreshLiveRoute(force = false) {
     if (props.ride.status !== 'in_progress' || driverLat.value == null || driverLng.value == null) {
         liveRouteCoords.value = [];
+        liveRemainingKm.value = null;
+        liveRemainingMin.value = null;
         return;
     }
 
@@ -544,6 +581,8 @@ async function refreshLiveRoute(force = false) {
     // metros agrega ruido. Se limpia hasta que cambie el siguiente tramo.
     if (distanceKm(origin.lat, origin.lng, target.lat, target.lng) < 0.03) {
         liveRouteCoords.value = [];
+        liveRemainingKm.value = 0;
+        liveRemainingMin.value = 0;
         return;
     }
 
@@ -554,7 +593,11 @@ async function refreshLiveRoute(force = false) {
 
     // Una respuesta lenta de una ubicación anterior nunca debe sobrescribir
     // la ruta más reciente.
-    if (serial === liveRouteRequestSerial) liveRouteCoords.value = routeResult.coords;
+    if (serial === liveRouteRequestSerial) {
+        liveRouteCoords.value = routeResult.coords;
+        liveRemainingKm.value = routeResult.distanceKm ?? null;
+        liveRemainingMin.value = routeResult.durationMin ?? null;
+    }
 }
 
 watch([driverLat, driverLng], () => refreshLiveRoute(false), { immediate: true });
@@ -615,6 +658,25 @@ function readableDistance(km) {
     return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
 
+// Pedido explícito del usuario: dentro de 20 m del destino completa directo,
+// como siempre. Más lejos de eso, en vez de bloquear sin más (como antes con
+// 1.5 km), se le pide elegir un motivo de una lista — esa info le llega
+// al cliente. Mismas opciones que RideController::EARLY_COMPLETION_REASONS.
+const COMPLETION_ARRIVAL_RADIUS_KM = 0.02;
+const EARLY_COMPLETION_REASONS = [
+    'El cliente pidió terminar el viaje antes de llegar',
+    'El cliente no colocó la ubicación de destino correcta',
+    'No se puede llegar hasta el punto exacto (acceso cerrado, obra, tráfico, etc.)',
+    'Problema con el GPS del celular',
+    'Otro motivo',
+];
+
+const showCompletionReasonForm = ref(false);
+const completionReason = ref('');
+const completionNote = ref('');
+const completionReasonError = ref('');
+let pendingCompletionCoords = {};
+
 async function complete() {
     completing.value = true;
     completionFeedback.value = '';
@@ -630,19 +692,44 @@ async function complete() {
             Number(props.ride.destination_lng)
         );
 
-        if (remainingKm > 1.5) {
-            completionFeedback.value = `Aún está a ${readableDistance(remainingKm)} del destino. Acérquese al punto marcado para completar la carrera.`;
+        if (remainingKm > COMPLETION_ARRIVAL_RADIUS_KM) {
+            pendingCompletionCoords = coords;
+            completionReason.value = '';
+            completionNote.value = '';
+            completionReasonError.value = '';
+            showCompletionReasonForm.value = true;
             completing.value = false;
             return;
         }
     }
 
-    router.post(route('rides.complete', props.ride.id), coords, {
+    submitCompletion(coords);
+}
+
+function submitCompletion(coords, extra = {}) {
+    router.post(route('rides.complete', props.ride.id), { ...coords, ...extra }, {
         preserveScroll: true,
+        onSuccess: () => {
+            showCompletionReasonForm.value = false;
+        },
         onError: (errors) => {
-            completionFeedback.value = errors.ride || 'No fue posible completar la carrera. Revise su ubicación e inténtelo nuevamente.';
+            const message = errors.completion_reason || errors.ride || 'No fue posible completar la carrera. Revise su ubicación e inténtelo nuevamente.';
+            if (showCompletionReasonForm.value) {
+                completionReasonError.value = message;
+            } else {
+                completionFeedback.value = message;
+            }
         },
         onFinish: () => (completing.value = false),
+    });
+}
+
+function confirmEarlyCompletion() {
+    if (!completionReason.value) return;
+    completing.value = true;
+    submitCompletion(pendingCompletionCoords, {
+        completion_reason: completionReason.value,
+        completion_note: completionNote.value.trim() || null,
     });
 }
 
@@ -695,6 +782,50 @@ async function startToDestination() {
     router.post(route('rides.picked-up', props.ride.id), coords, {
         preserveScroll: true,
         onFinish: () => (markingPickedUp.value = false),
+    });
+}
+
+// Paradas adicionales (pedido explícito del usuario: "cada parada se
+// calcula diferente e individual... si no llegan a una parada puedan
+// pagarle cada parada y cancelar la otra o iniciar la siguiente parada").
+// La próxima parada pendiente (ya vienen ordenadas por sequence desde el
+// backend, ver Ride::stops()) — null cuando no hay paradas o ya se
+// completaron/cancelaron todas, momento en que vuelve a aparecer el botón
+// normal de "Completar carrera" de siempre.
+const currentStop = computed(() => (props.ride.stops ?? []).find((stop) => stop.status === 'pending') ?? null);
+
+// Mismo criterio de dos toques que goToPassenger()/confirmArrived(): el
+// primero solo navega, el segundo (una vez ahí de verdad) abre la elección
+// de seguir o cobrar y cancelar el resto.
+const headingToStop = ref(false);
+function goToStop(stop) {
+    window.open(googleNavigateUrl(stop.lat, stop.lng), '_blank', 'noopener');
+    headingToStop.value = true;
+}
+
+const showStopChoice = ref(false);
+const completingStop = ref(false);
+const stopFeedback = ref('');
+
+function openStopChoice() {
+    stopFeedback.value = '';
+    showStopChoice.value = true;
+}
+
+async function confirmStop(cancelRest) {
+    if (!currentStop.value) return;
+    completingStop.value = true;
+    const coords = await currentCoords();
+    router.post(route('rides.stops.complete', [props.ride.id, currentStop.value.id]), { ...coords, cancel_rest: cancelRest }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showStopChoice.value = false;
+            headingToStop.value = false;
+        },
+        onError: (errors) => {
+            stopFeedback.value = errors.ride || 'No fue posible completar la parada. Revise su ubicación e inténtelo nuevamente.';
+        },
+        onFinish: () => (completingStop.value = false),
     });
 }
 
@@ -1411,8 +1542,14 @@ function submitReview() {
                 <!-- Mapa a todo el ancho, sin la tarjeta que lo contenía antes (rediseño
                      UX, con mockup de referencia estilo Uber/DiDi) — la tarjeta del
                      conductor/cliente de acá abajo flota encima, mismo patrón "-mt-6
-                     mx-3" que ya usa Ride/Request.vue para origen/destino. -->
-                <div class="-mx-4 sm:mx-0">
+                     mx-3" que ya usa Ride/Request.vue para origen/destino.
+                     Pedido explícito del usuario: "permitir que el mapa se expanda más
+                     y sea más claro el recorrido... que sea como Google Maps" — botón
+                     de expandir/achicar arriba a la derecha (mismo lugar que los
+                     controles propios de Google Maps) y la distancia/tiempo restante
+                     como una pastilla flotante abajo a la izquierda, igual que la
+                     tarjeta de navegación real. -->
+                <div class="-mx-4 sm:mx-0 relative">
                     <FleetMap
                         :markers="mapMarkers"
                         :route="visibleRouteCoords"
@@ -1420,8 +1557,33 @@ function submitReview() {
                         :fit-padding-top="55"
                         :fit-padding-bottom="55"
                         :zoom="15"
-                        height="320px"
+                        :height="mapExpanded ? '65vh' : '320px'"
+                        class="transition-[height] duration-300"
                     />
+
+                    <button
+                        type="button"
+                        class="absolute right-3 top-3 z-[400] flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-base shadow-lg hover:bg-gray-50 transition"
+                        :aria-label="mapExpanded ? 'Achicar mapa' : 'Expandir mapa'"
+                        @click="mapExpanded = !mapExpanded"
+                    >
+                        <svg v-if="!mapExpanded" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" />
+                        </svg>
+                        <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                        </svg>
+                    </button>
+
+                    <div
+                        v-if="isDriver && driverRemainingLabel"
+                        class="absolute left-3 bottom-3 z-[400] flex items-center gap-2 rounded-full bg-white px-4 py-2 text-arka-base shadow-lg"
+                    >
+                        <span class="text-arka-primary" aria-hidden="true">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3h-2v10h2V3Zm4.3 2.3-1.4 1.4A6.9 6.9 0 0 1 19 12a7 7 0 1 1-11.9-5l-1.4-1.4A9 9 0 1 0 21 12a8.9 8.9 0 0 0-3.7-6.7Z"/></svg>
+                        </span>
+                        <span class="text-sm font-semibold">{{ driverRemainingLabel }}</span>
+                    </div>
                 </div>
 
                 <!-- Tarjeta del conductor/cliente: antes esta info vivía repartida
@@ -1574,7 +1736,7 @@ function submitReview() {
                          scrollear para encontrarlo, sin importar en qué parte de la
                          pantalla esté mirando el conductor. -->
                     <div
-                        v-if="isDriver && !showCancelForm && ['scheduled', 'in_progress'].includes(ride.status)"
+                        v-if="isDriver && !showCancelForm && !showCompletionReasonForm && !showStopChoice && ['scheduled', 'in_progress'].includes(ride.status)"
                         class="fixed inset-x-0 bottom-0 z-20 p-3 bg-arka-card border-t border-arka-text-muted/10 shadow-2xl flex flex-wrap gap-2"
                         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom))"
                     >
@@ -1630,9 +1792,39 @@ function submitReview() {
                                 🏁 {{ markingPickedUp ? 'Ubicando…' : 'Iniciar destino' }}
                             </SecondaryButton>
 
+                            <!-- Paradas adicionales (pedido explícito del usuario):
+                                 mientras quede alguna pendiente, la próxima toma el
+                                 lugar de "Completar carrera" — mismo criterio de dos
+                                 toques (ir/llegué) que el resto de esta barra. -->
+                            <template v-else-if="currentStop">
+                                <div
+                                    v-if="stopFeedback"
+                                    class="w-full flex items-start gap-2 rounded-xl border border-arka-warning/35 bg-arka-warning/10 px-3 py-2.5 text-xs leading-relaxed text-arka-warning"
+                                    role="alert"
+                                >
+                                    <span class="text-base leading-none" aria-hidden="true">📍</span>
+                                    <span class="flex-1">{{ stopFeedback }}</span>
+                                    <button type="button" class="shrink-0 text-arka-text-muted hover:text-arka-text" aria-label="Cerrar aviso" @click="stopFeedback = ''">✕</button>
+                                </div>
+                                <SecondaryButton v-if="!headingToStop" class="flex-1 justify-center" @click="goToStop(currentStop)">
+                                    🚩 Ir a la parada {{ currentStop.sequence }}
+                                </SecondaryButton>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-arka-base shadow-lg shadow-arka-primary/20 transition hover:bg-arka-primary-bright active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
+                                    :disabled="completingStop"
+                                    @click="openStopChoice"
+                                >
+                                    ✅ Llegué a la parada {{ currentStop.sequence }}
+                                </button>
+                            </template>
+
                             <!-- Pedido explícito del usuario: la carrera la finaliza
-                                 ÚNICAMENTE el conductor. -->
+                                 ÚNICAMENTE el conductor — solo cuando ya no queda
+                                 ninguna parada pendiente. -->
                             <button
+                                v-else
                                 type="button"
                                 class="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-arka-base shadow-lg shadow-arka-primary/20 transition hover:bg-arka-primary-bright active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
                                 :disabled="completing"
@@ -1656,6 +1848,61 @@ function submitReview() {
                         </template>
                     </div>
                 </Teleport>
+
+                <!-- Motivo para completar lejos del destino (pedido explícito
+                     del usuario: "a unos 20 metros fuera... le pedirá que
+                     confirme el porque esta terminando la carrera"). Mismo
+                     patrón que el BottomSheet de cancelar, más abajo. -->
+                <BottomSheet v-if="isDriver" :show="showCompletionReasonForm" @close="showCompletionReasonForm = false">
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-arka-text">Todavía no está en el destino</h3>
+                            <p class="mt-1 text-sm text-arka-text-muted">Puede completar la carrera igual, pero indique por qué.</p>
+                        </div>
+                        <div>
+                            <InputLabel value="Motivo" />
+                            <select v-model="completionReason" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                <option value="" disabled>Seleccione un motivo</option>
+                                <option v-for="reason in EARLY_COMPLETION_REASONS" :key="reason" :value="reason">{{ reason }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <InputLabel value="Observación (opcional)" />
+                            <TextInput v-model="completionNote" type="text" class="mt-1 block w-full" maxlength="500" placeholder="Agregue un detalle si hace falta" />
+                        </div>
+                        <p v-if="completionReasonError" class="text-sm text-arka-danger">{{ completionReasonError }}</p>
+                        <div class="flex gap-3">
+                            <SecondaryButton type="button" class="flex-1 justify-center" @click="showCompletionReasonForm = false">Volver</SecondaryButton>
+                            <PrimaryButton type="button" class="flex-1 justify-center" :disabled="!completionReason || completing" @click="confirmEarlyCompletion">
+                                {{ completing ? 'Completando…' : 'Completar carrera' }}
+                            </PrimaryButton>
+                        </div>
+                    </div>
+                </BottomSheet>
+
+                <!-- Paradas adicionales (pedido explícito del usuario: "puedan
+                     pagarle cada parada y cancelar la otra o iniciar la
+                     siguiente parada") — la elección real pasa acá. -->
+                <BottomSheet v-if="isDriver" :show="showStopChoice" @close="showStopChoice = false">
+                    <div v-if="currentStop" class="p-4 space-y-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-arka-text">Parada {{ currentStop.sequence }} completada</h3>
+                            <p class="mt-1 text-sm text-arka-text-muted">
+                                ${{ Number(currentStop.leg_price).toFixed(2) }} de este tramo. ¿Sigue el viaje o lo cierra acá?
+                            </p>
+                        </div>
+                        <p v-if="stopFeedback" class="text-sm text-arka-danger">{{ stopFeedback }}</p>
+                        <div class="flex flex-col gap-3">
+                            <PrimaryButton type="button" class="justify-center" :disabled="completingStop" @click="confirmStop(false)">
+                                {{ completingStop ? 'Guardando…' : 'Continuar el viaje' }}
+                            </PrimaryButton>
+                            <DangerButton type="button" class="justify-center" :disabled="completingStop" @click="confirmStop(true)">
+                                {{ completingStop ? 'Guardando…' : 'Cobrar y cancelar el resto' }}
+                            </DangerButton>
+                            <SecondaryButton type="button" class="justify-center" @click="showStopChoice = false">Volver</SecondaryButton>
+                        </div>
+                    </div>
+                </BottomSheet>
 
                 <!-- Panel "⋯" del conductor: navegación, mensaje/chat, llamar,
                      seguimiento, SOS y cancelar, todo en un solo lugar. Dos
@@ -1854,7 +2101,28 @@ function submitReview() {
                 <div v-if="ride.status === 'completed'" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
                     <div>
                         <p class="text-sm text-arka-text-muted">Total del viaje</p>
-                        <p class="text-3xl font-semibold text-arka-primary-bright">${{ ride.price }}</p>
+                        <!-- Paradas adicionales (pedido explícito del usuario): con
+                             paradas, el total real cobrado es settled_price — puede
+                             ser menor a price+stops_price si se cerró antes de tiempo
+                             (ver RideController::completeStop()). Sin paradas, es
+                             simplemente ride.price de siempre. -->
+                        <p class="text-3xl font-semibold text-arka-primary-bright">${{ ride.settled_price ?? ride.price }}</p>
+                    </div>
+                    <!-- Desglose por parada, solo si hubo alguna. -->
+                    <div v-if="ride.stops?.length" class="pt-3 border-t border-arka-text-muted/10 space-y-2">
+                        <div v-for="stop in ride.stops" :key="stop.id" class="flex items-center justify-between text-sm">
+                            <span class="text-arka-text-muted">
+                                Parada {{ stop.sequence }}
+                                <span v-if="stop.status === 'cancelled'" class="text-arka-danger">(cancelada)</span>
+                            </span>
+                            <span :class="stop.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-text'">
+                                ${{ stop.leg_price }}
+                            </span>
+                        </div>
+                        <div v-if="ride.stops.some((stop) => stop.status !== 'cancelled') && !ride.stops.every((stop) => stop.status === 'completed')" class="flex items-center justify-between text-sm">
+                            <span class="text-arka-text-muted">Tramo final</span>
+                            <span class="text-arka-text-muted line-through">${{ ride.price }}</span>
+                        </div>
                     </div>
                     <div class="pt-3 border-t border-arka-text-muted/10 space-y-2">
                         <div class="flex items-center justify-between">
@@ -2073,6 +2341,15 @@ function submitReview() {
                          nada adentro. Mismo criterio que el mensaje de cancelada. -->
                     <p v-if="ride.status === 'completed'" class="text-sm text-arka-primary-bright">
                         ✅ Carrera completada{{ ride.completed_at ? ` el ${new Date(ride.completed_at).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' })}` : '' }}.
+                    </p>
+                    <!-- Pedido explícito del usuario: si el conductor completó
+                         lejos del destino, el motivo que eligió le llega acá
+                         al cliente (y también al propio conductor, como
+                         confirmación de lo que acaba de elegir). -->
+                    <p v-if="ride.completion_reason" class="text-sm text-arka-warning">
+                        📍 El conductor completó la carrera antes de llegar al destino.
+                        <span class="block text-arka-text-muted">Motivo: {{ ride.completion_reason }}</span>
+                        <span v-if="ride.completion_note" class="block text-arka-text-muted">"{{ ride.completion_note }}"</span>
                     </p>
                 </div>
 

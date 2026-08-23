@@ -13,10 +13,11 @@ import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { distanceKm } from '@/Utils/haversine';
-import { fetchOsrmRoute } from '@/Utils/osrmRoute';
+import { fetchOsrmRoute, fetchOsrmMultiRoute } from '@/Utils/osrmRoute';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import { etaMinutes } from '@/Utils/eta';
+import { roundUpToDime } from '@/Utils/currency';
 
 const props = defineProps({
     fleet: { type: Object, required: true },
@@ -272,6 +273,24 @@ const locationError = ref('');
 const destinationLat = ref(props.initialDestination?.lat ?? null);
 const destinationLng = ref(props.initialDestination?.lng ?? null);
 const destinationAddress = ref(props.initialDestination?.address ?? '');
+
+// Paradas adicionales (pedido explícito del usuario: "agregar una parada
+// adicional... solo permitir 4 paradas", cada una cobrada por separado —
+// ver el `watch` de ruta/precio más abajo y MAX_STOPS). Cada parada es
+// {lat, lng, address, sectorId}, mismo shape que origen/destino por
+// separado en vez de un objeto anidado, para reusar AddressAutocomplete tal
+// cual (v-model plano).
+const MAX_STOPS = 4;
+const stops = ref([]);
+
+function addStop() {
+    if (stops.value.length >= MAX_STOPS) return;
+    stops.value.push({ lat: null, lng: null, address: '', sectorId: null });
+}
+
+function removeStop(index) {
+    stops.value.splice(index, 1);
+}
 
 // Centro del mapa (consideración agregada al alcance): arranca en la
 // ubicación real del cliente (geolocalización); si cambia de ciudad a mano,
@@ -610,6 +629,14 @@ const mapMarkers = computed(() => {
         markers.push({ id: 'destination', lat: destinationLat.value, lng: destinationLng.value, label: 'Destino' });
     }
 
+    // Paradas adicionales (pedido explícito del usuario) — reusa el ícono
+    // "base" de FleetMap.vue (pin ámbar, ya definido y sin uso hoy), distinto
+    // de origen (verde) y destino (rojo), para distinguirlas de un vistazo.
+    stops.value.forEach((stop, index) => {
+        if (stop.lat == null) return;
+        markers.push({ id: 'base', lat: stop.lat, lng: stop.lng, label: `Parada ${index + 1}` });
+    });
+
     return markers;
 });
 
@@ -622,6 +649,17 @@ async function pickRoutePoint({ lat, lng }) {
         originSectorId.value = null;
         mapCenter.value = { lat, lng };
         if (address) originAddress.value = address;
+        return;
+    }
+
+    if (mapEditingPoint.value.startsWith('stop-')) {
+        const index = Number(mapEditingPoint.value.slice('stop-'.length));
+        const stop = stops.value[index];
+        if (!stop) return;
+        stop.lat = lat;
+        stop.lng = lng;
+        stop.sectorId = null;
+        if (address) stop.address = address;
         return;
     }
 
@@ -670,6 +708,24 @@ function clearDestination() {
     destinationSectorId.value = null;
 }
 
+// Mismo criterio que pickOriginFromAddress()/pickDestinationFromAddress()
+// para una parada puntual (pedido explícito del usuario).
+function pickStopFromAddress(index, { lat, lng, sectorId }) {
+    const stop = stops.value[index];
+    if (!stop) return;
+    stop.lat = lat;
+    stop.lng = lng;
+    if (sectorId) stop.sectorId = sectorId;
+}
+
+function clearStop(index) {
+    const stop = stops.value[index];
+    if (!stop) return;
+    stop.lat = null;
+    stop.lng = null;
+    stop.sectorId = null;
+}
+
 // --- Trazado real del recorrido (consideración agregada al alcance: "que
 // trace el recorrido"), con OSRM — gratis, sin API key (sección 9.3). Se pide
 // en cuanto hay origen y destino marcados — ver Utils/osrmRoute.js, mismo
@@ -695,22 +751,54 @@ const routeDurationMin = ref(null);
 // CAMBIO posterior, así que nunca llegaba a pedir la ruta en ese caso (sí
 // funcionaba viniendo del paso 'destination' de esta misma pantalla, donde
 // los valores sí cambian recién al elegir origen/destino a mano).
+// Tramos de las paradas (pedido explícito del usuario: "esto recalcule las
+// rutas y los costos siempre que existan paradas") — cada elemento es el
+// tramo que TERMINA en esa parada (origen→parada1, parada1→parada2, etc.),
+// espejo de lo que calcula RideRequestController::store() por tramo.
+// routeCoords/routeDistanceKm/routeDurationMin (de arriba) siguen
+// representando SOLO el tramo final (últimaParada→destino, u
+// origen→destino sin paradas) — mismo significado exacto que hoy, sin
+// paradas esto no cambia en nada.
+const stopLegs = ref([]);
+
 watch(
-    [originLat, originLng, destinationLat, destinationLng],
+    [originLat, originLng, destinationLat, destinationLng, stops],
     async () => {
         if (originLat.value == null || destinationLat.value == null) {
             routeCoords.value = [];
             routeDistanceKm.value = null;
             routeDurationMin.value = null;
+            stopLegs.value = [];
             return;
         }
 
-        const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
-        routeCoords.value = route.coords;
-        routeDistanceKm.value = route.distanceKm;
-        routeDurationMin.value = route.durationMin;
+        const resolvedStops = stops.value.filter((stop) => stop.lat != null);
+
+        if (!resolvedStops.length) {
+            const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+            routeCoords.value = route.coords;
+            routeDistanceKm.value = route.distanceKm;
+            routeDurationMin.value = route.durationMin;
+            stopLegs.value = [];
+            return;
+        }
+
+        const points = [
+            { lat: originLat.value, lng: originLng.value },
+            ...resolvedStops.map((stop) => ({ lat: stop.lat, lng: stop.lng })),
+            { lat: destinationLat.value, lng: destinationLng.value },
+        ];
+        const multiRoute = await fetchOsrmMultiRoute(points);
+        routeCoords.value = multiRoute.coords;
+
+        // El último tramo (últimaParada→destino) es el que sigue siendo
+        // "el" precio principal — los anteriores son los de las paradas.
+        const finalLeg = multiRoute.legs[multiRoute.legs.length - 1] ?? {};
+        routeDistanceKm.value = finalLeg.distanceKm ?? null;
+        routeDurationMin.value = finalLeg.durationMin ?? null;
+        stopLegs.value = multiRoute.legs.slice(0, -1);
     },
-    { immediate: true }
+    { immediate: true, deep: true }
 );
 
 // --- Precio sugerido (sección 5): distancia × tarifa de referencia. Es una
@@ -770,7 +858,10 @@ const referenceRatePerKm = computed(() => {
 // tiene sentido mostrarlo si no es lo que se termina cobrando).
 const rawPriceByDistance = computed(() => {
     if (estimatedDistanceKm.value == null) return null;
-    return Math.round(estimatedDistanceKm.value * referenceRatePerKm.value * 100) / 100;
+    // Pedido explícito del usuario: siempre redondeado hacia arriba a los 10
+    // centavos, para que lo mostrado acá ya sea el mismo número que termina
+    // guardando el backend (ver PriceCalculator::roundUpToDime()).
+    return roundUpToDime(estimatedDistanceKm.value * referenceRatePerKm.value);
 });
 
 // Pedido explícito del usuario: si el conductor elegido declaró SU PROPIA
@@ -792,13 +883,41 @@ const estimatedPrice = computed(() => {
     return Math.max(rawPriceByDistance.value, referenceMinimumFare.value);
 });
 
+// Paradas adicionales (pedido explícito del usuario: "esto recalcule las
+// rutas y los costos... cada parada se calcula diferente e individual") —
+// mismo criterio que estimatedPrice (redondeo hacia arriba + tarifa mínima),
+// aplicado a cada tramo de stopLegs por separado, espejo del backend.
+const stopsWithPrices = computed(() =>
+    stops.value
+        .filter((stop) => stop.lat != null)
+        .map((stop, index) => {
+            const legKm = stopLegs.value[index]?.distanceKm;
+            if (legKm == null) return { ...stop, price: null };
+            const raw = roundUpToDime(legKm * referenceRatePerKm.value);
+            return { ...stop, distanceKm: legKm, price: Math.max(raw, referenceMinimumFare.value) };
+        })
+);
+
+const stopsTotalPrice = computed(() => {
+    const prices = stopsWithPrices.value.map((stop) => stop.price).filter((price) => price != null);
+    return prices.length ? roundUpToDime(prices.reduce((a, b) => a + b, 0)) : null;
+});
+
+// Precio total del itinerario completo (pedido explícito del usuario) —
+// paradas + tramo final, mismo total que terminará guardando el backend
+// (Ride.stops_price + Ride.price).
+const estimatedTotalPrice = computed(() => {
+    if (estimatedPrice.value == null) return null;
+    return estimatedPrice.value + (stopsTotalPrice.value ?? 0);
+});
+
 // Precio estimado POR CONDUCTOR (rediseño UX, con mockup de referencia: cada
 // fila de la lista muestra su propio precio, no solo el del elegido) — mismo
 // cálculo que rawPriceByDistance/referenceMinimumFare de acá arriba, aplicado
 // a un conductor puntual en vez de al elegido o al promedio de la flota.
 function estimatedPriceForDriver(driver) {
     if (estimatedDistanceKm.value == null) return null;
-    const raw = Math.round(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0) * 100) / 100;
+    const raw = roundUpToDime(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0));
     const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
     return Math.max(raw, floor);
 }
@@ -821,7 +940,7 @@ const categoryStartingPrices = computed(() => {
             if (estimatedDistanceKm.value == null) return null;
             const rate = Number(cooperative.average_rate_per_km ?? 0);
             if (!rate) return null;
-            return Math.max(Math.round(estimatedDistanceKm.value * rate * 100) / 100, props.minimumFare);
+            return Math.max(roundUpToDime(estimatedDistanceKm.value * rate), props.minimumFare);
         })
         .filter((price) => Number.isFinite(price) && price > 0);
 
@@ -857,6 +976,9 @@ const form = useForm({
     destination_lng: null,
     destination_address: '',
     destination_sector_id: null,
+    // Paradas adicionales (pedido explícito del usuario) — se arma en
+    // submit(), ver stops (ref) más arriba.
+    stops: [],
     // Distancia real de manejo (OSRM), no la línea recta — pedido explícito
     // del usuario: "probá el mapa... en temas de km" (ver el bug real
     // documentado arriba, en routeDistanceKm). El backend la usa si es
@@ -1018,6 +1140,21 @@ function backToDestinationStep() {
     activeCategory.value = null;
 }
 
+// Pedido explícito del usuario: invertir origen y destino con un solo botón,
+// junto a "Cambiar" — el watch de [originLat, originLng, destinationLat,
+// destinationLng] de más abajo ya recalcula ruta/distancia/precio solo en
+// cuanto cambian estos refs, así que acá alcanza con intercambiarlos.
+function swapOriginDestination() {
+    [originLat.value, destinationLat.value] = [destinationLat.value, originLat.value];
+    [originLng.value, destinationLng.value] = [destinationLng.value, originLng.value];
+    [originAddress.value, destinationAddress.value] = [destinationAddress.value, originAddress.value];
+    [originSectorId.value, destinationSectorId.value] = [destinationSectorId.value, originSectorId.value];
+    // Paradas adicionales (pedido explícito del usuario): si hay paradas, el
+    // itinerario invertido tiene que recorrerlas en el orden contrario para
+    // seguir teniendo sentido.
+    stops.value = [...stops.value].reverse();
+}
+
 const canSubmit = computed(() => {
     if (originLat.value == null || destinationLat.value == null) return false;
     if (whenMode.value === 'scheduled') return Boolean(scheduledDate.value && scheduledTime.value);
@@ -1055,6 +1192,18 @@ function submit() {
     form.destination_lng = destinationLng.value;
     form.destination_address = destinationAddress.value;
     form.destination_sector_id = destinationSectorId.value;
+    // Paradas adicionales (pedido explícito del usuario) — misma distancia
+    // real por tramo que ya calculó stopLegs vía OSRM, para que el backend
+    // no tenga que confiar solo en la línea recta.
+    form.stops = stops.value
+        .filter((stop) => stop.lat != null)
+        .map((stop, index) => ({
+            lat: stop.lat,
+            lng: stop.lng,
+            address: stop.address || null,
+            sector_id: stop.sectorId,
+            route_distance_km: stopLegs.value[index]?.distanceKm ?? null,
+        }));
     form.route_distance_km = routeDistanceKm.value;
     form.offered_price = useCustomPrice.value ? customPrice.value : null;
     form.is_scheduled = whenMode.value === 'scheduled';
@@ -1289,6 +1438,37 @@ function submit() {
                         />
                     </div>
 
+                    <!-- Paradas adicionales (pedido explícito del usuario:
+                         "agregar una parada adicional... hasta 4 paradas",
+                         cada una cobrada por separado) — entre origen y
+                         destino, mismo AddressAutocomplete reusado. -->
+                    <div v-for="(stop, index) in stops" :key="index" class="relative pl-7">
+                        <span class="absolute left-0 top-7 h-3 w-3 rounded-full bg-amber-500 ring-4 ring-amber-50" aria-hidden="true"></span>
+                        <div class="flex items-center justify-between gap-2">
+                            <InputLabel :for="`stop_address_${index}`" :value="`Parada ${index + 1}`" light />
+                            <button type="button" class="text-xs text-arka-danger hover:underline shrink-0" @click="removeStop(index)">Quitar</button>
+                        </div>
+                        <AddressAutocomplete
+                            :id="`stop_address_${index}`"
+                            class="mt-1"
+                            v-model="stop.address"
+                            :city-bias="cityBias"
+                            :favorites="frequentPlaces"
+                            placeholder="¿Por dónde pasa antes de llegar?"
+                            light
+                            @place-selected="(place) => pickStopFromAddress(index, place)"
+                            @clear="clearStop(index)"
+                        />
+                    </div>
+                    <button
+                        v-if="stops.length < MAX_STOPS"
+                        type="button"
+                        class="pl-7 text-sm font-medium text-arka-primary hover:text-arka-primary-bright"
+                        @click="addStop"
+                    >
+                        + Agregar parada
+                    </button>
+
                     <div class="relative pl-7">
                         <span class="absolute left-0 top-7 h-3 w-3 rounded-sm bg-rose-500 ring-4 ring-rose-50" aria-hidden="true"></span>
                         <InputLabel for="destination_address" value="Destino" light />
@@ -1493,6 +1673,16 @@ function submit() {
                                         </div>
                                     </div>
 
+                                    <!-- Paradas adicionales (pedido explícito del usuario) —
+                                         mismos nodos conectados, entre origen y destino. -->
+                                    <div v-for="(stop, index) in stops" :key="index" class="relative mt-3 flex min-w-0 gap-3">
+                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-arka-card bg-amber-500 shadow-[0_0_0_2px_rgba(245,158,11,0.18)]"></span>
+                                        <div class="min-w-0 flex-1">
+                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">Parada {{ index + 1 }}</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-text">{{ stop.address || 'Parada marcada en el mapa' }}</p>
+                                        </div>
+                                    </div>
+
                                     <div class="relative mt-3 flex min-w-0 gap-3">
                                         <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border-2 border-arka-card bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.16)]"></span>
                                         <div class="min-w-0 flex-1">
@@ -1513,7 +1703,24 @@ function submit() {
                                     Calculando recorrido…
                                 </p>
                             </div>
-                            <SecondaryButton size="sm" class="shrink-0" @click="backToDestinationStep">Cambiar</SecondaryButton>
+                            <div class="flex shrink-0 items-center gap-1.5">
+                                <!-- Pedido explícito del usuario: invertir recoger/destino
+                                     con un ícono, sin tener que volver a escribir las dos
+                                     direcciones de nuevo. -->
+                                <button
+                                    type="button"
+                                    class="grid h-8 w-8 place-items-center rounded-arka border border-arka-text-muted/20 text-arka-text-muted transition hover:bg-arka-base hover:text-arka-text"
+                                    aria-label="Invertir recoger y destino"
+                                    title="Invertir recoger y destino"
+                                    :disabled="originLat == null || destinationLat == null"
+                                    @click="swapOriginDestination"
+                                >
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h11l-3-3M17 17H6l3 3" />
+                                    </svg>
+                                </button>
+                                <SecondaryButton size="sm" class="shrink-0" @click="backToDestinationStep">Cambiar</SecondaryButton>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1889,13 +2096,26 @@ function submit() {
                          tarifa, desglosado y editable — el cliente puede aceptarlo o
                          contraofertar. -->
                     <div v-if="estimatedPrice != null" class="pt-2 border-t border-arka-base/10 space-y-2">
+                        <!-- Desglose por parada (pedido explícito del usuario: "cada
+                             parada se calcula diferente e individual") — cada tramo
+                             con su propio precio, antes del tramo final. -->
+                        <div v-for="(stop, index) in stopsWithPrices" :key="index" class="flex items-center justify-between text-sm text-arka-base/50">
+                            <span>Parada {{ index + 1 }}{{ stop.distanceKm != null ? ` · ${stop.distanceKm.toFixed(1)} km` : '' }}</span>
+                            <span class="text-arka-base font-medium">{{ stop.price != null ? `$${stop.price.toFixed(2)}` : 'Calculando…' }}</span>
+                        </div>
+
                         <div class="flex items-center justify-between text-sm text-arka-base/50">
                             <!-- Si el mínimo configurado ya supera lo que daría distancia ×
                                  tarifa, mostrar ese cálculo sería engañoso — no es lo que se
                                  termina cobrando (fix reportado por el usuario). -->
                             <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
-                            <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km</span>
+                            <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km{{ stops.length ? ' (tramo final)' : '' }}</span>
                             <span class="text-arka-base font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
+                        </div>
+
+                        <div v-if="stopsTotalPrice != null" class="flex items-center justify-between text-sm font-semibold pt-1 border-t border-arka-base/10">
+                            <span class="text-arka-base">Total del recorrido</span>
+                            <span class="text-arka-primary-bright">${{ estimatedTotalPrice.toFixed(2) }}</span>
                         </div>
 
                         <label class="flex items-center gap-2">

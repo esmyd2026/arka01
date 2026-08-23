@@ -8,11 +8,18 @@ use Illuminate\Http\Request;
 class TrustProxies extends Middleware
 {
     /**
-     * The trusted proxies for this application.
+     * El servidor real ("VPS a mano", Nginx + PHP-FPM en la misma máquina,
+     * ver deploy/) no confiaba en ningún proxy por defecto (`$proxies` sin
+     * valor) — así Laravel nunca lee `X-Forwarded-Proto` y ve cada
+     * request como HTTP plano aunque el navegador esté en HTTPS de
+     * verdad, porque quien atiende PHP-FPM es Nginx en localhost, no el
+     * navegador directo. Se confía en '*' porque PHP-FPM no queda expuesto
+     * a Internet (solo Nginx sí) — si eso cambiara, esto habría que
+     * ajustarlo a la IP puntual del proxy.
      *
      * @var array<int, string>|string|null
      */
-    protected $proxies;
+    protected $proxies = '*';
 
     /**
      * The headers that should be used to detect proxies.

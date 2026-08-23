@@ -31,9 +31,16 @@ class RideCompletedPushNotification extends Notification implements ShouldQueue
 
     public function toWebPush($notifiable, $notification): WebPushMessage
     {
+        // Pedido explícito del usuario: si el conductor completó lejos del
+        // destino, el motivo que eligió también llega en este aviso — no
+        // solo como texto en pantalla dentro de la carrera.
+        $body = $this->ride->completion_reason
+            ? "Su carrera se marcó como completada antes de llegar al destino. Motivo: {$this->ride->completion_reason}."
+            : 'Su carrera se marcó como completada. Confirme el pago para cerrarla.';
+
         return (new WebPushMessage)
             ->title('Carrera completada')
-            ->body('Su carrera se marcó como completada. Confirme el pago para cerrarla.')
+            ->body($body)
             ->icon('/icons/icon.svg')
             ->data(['url' => "/carreras/{$this->ride->id}"])
             ->action('Ver', 'view');

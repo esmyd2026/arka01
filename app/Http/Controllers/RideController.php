@@ -16,6 +16,7 @@ use App\Models\RatingReason;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
+use App\Models\RideStop;
 use App\Notifications\RideArrivedPushNotification;
 use App\Notifications\RideCancelledPushNotification;
 use App\Notifications\RideCompletedPushNotification;
@@ -62,6 +63,21 @@ class RideController extends Controller
     ];
 
     /**
+     * Pedido explícito del usuario: si el conductor completa la carrera
+     * estando lejos del destino, tiene que decir por qué — misma lógica que
+     * CLIENT_CANCEL_REASONS/DRIVER_CANCEL_REASONS de arriba (lista fija en
+     * código, no un catálogo administrable: alcanza con unas pocas opciones
+     * reales, sin necesidad de mantenimiento desde el panel admin).
+     */
+    private const EARLY_COMPLETION_REASONS = [
+        'El cliente pidió terminar el viaje antes de llegar',
+        'El cliente no colocó la ubicación de destino correcta',
+        'No se puede llegar hasta el punto exacto (acceso cerrado, obra, tráfico, etc.)',
+        'Problema con el GPS del celular',
+        'Otro motivo',
+    ];
+
+    /**
      * Pedido explícito del usuario: "validá que las acciones del conductor
      * en una carrera... estén acorde a la ubicación de origen [o] destino" —
      * un radio generoso a propósito. El GPS de un celular en una ciudad
@@ -77,6 +93,15 @@ class RideController extends Controller
     // que el pin esté al otro lado de una cuadra, sin marcar llegada desde
     // una zona lejana.
     private const AUTOMATIC_PICKUP_ARRIVAL_RADIUS_KM = 0.15;
+
+    /**
+     * Pedido explícito del usuario: "el conductor podrá marcar como
+     * completada la carrera cuando se encuentre a unos 20 metros" del
+     * destino — mucho más estricto que RIDE_ACTION_LOCATION_TOLERANCE_KM
+     * (1.5 km, que sigue aplicando tal cual a arrived()/pickedUp()). Acá
+     * adentro de este radio no hace falta motivo; más lejos, sí.
+     */
+    private const RIDE_COMPLETION_ARRIVAL_RADIUS_KM = 0.02;
 
     /**
      * Pedido explícito del usuario: "validá que las acciones del
@@ -280,7 +305,9 @@ class RideController extends Controller
 
         // rideRequest: solo para leer `scheduled_at` cuando la carrera viene
         // de una solicitud PROGRAMADA (consideración agregada al alcance).
-        $ride->load(['client', 'driver.driverProfile', 'originSector', 'destinationSector', 'rideRequest']);
+        // stops: paradas adicionales (pedido explícito del usuario), vacío
+        // en la gran mayoría de las carreras.
+        $ride->load(['client', 'driver.driverProfile', 'originSector', 'destinationSector', 'rideRequest', 'stops']);
 
         // Calificación del conductor (pedido explícito del usuario, con
         // mockup de referencia): la tarjeta de "En camino" necesita mostrar
@@ -556,12 +583,39 @@ class RideController extends Controller
             ]);
         }
 
-        $this->assertNearRideLocation(
-            $request,
+        // Paradas adicionales (pedido explícito del usuario): la carrera
+        // solo se completa entera cuando ya no queda ninguna parada
+        // pendiente — evita saltarse el orden. El conductor completa las
+        // paradas una por una con completeStop() antes de llegar acá.
+        if ($ride->stops()->whereNotIn('status', ['completed', 'cancelled'])->exists()) {
+            throw ValidationException::withMessages([
+                'ride' => 'Todavía queda una parada pendiente antes de completar la carrera.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'completion_reason' => ['nullable', 'string', Rule::in(self::EARLY_COMPLETION_REASONS)],
+            'completion_note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        // Pedido explícito del usuario: dentro de 20 m del destino completa
+        // directo, como siempre. Más lejos (o sin coordenadas para
+        // comprobarlo — mismo criterio permisivo que assertNearRideLocation())
+        // hace falta elegir un motivo antes de dejarlo completar igual.
+        $isNearDestination = ! isset($validated['lat'], $validated['lng']) || Haversine::distanceKm(
             (float) $ride->destination_lat,
             (float) $ride->destination_lng,
-            'Parece que todavía no está en el destino — inténtelo cuando esté más cerca.',
-        );
+            (float) $validated['lat'],
+            (float) $validated['lng'],
+        ) <= self::RIDE_COMPLETION_ARRIVAL_RADIUS_KM;
+
+        if (! $isNearDestination && ! ($validated['completion_reason'] ?? null)) {
+            throw ValidationException::withMessages([
+                'completion_reason' => 'Parece que todavía no llegó al destino — elija un motivo para completar la carrera igual.',
+            ]);
+        }
 
         // Puntos por carrera completada (pedido explícito del usuario:
         // fidelizar el uso de la app — cada carrera pedida y cumplida por
@@ -575,6 +629,15 @@ class RideController extends Controller
             'status' => 'completed',
             'completed_at' => now(),
             'points_earned' => $pointsEarned,
+            // Solo se guarda si de verdad se completó lejos del destino — un
+            // conductor que completa normal, cerca, no deja rastro de motivo.
+            'completion_reason' => $isNearDestination ? null : $validated['completion_reason'] ?? null,
+            'completion_note' => $isNearDestination ? null : ($validated['completion_note'] ?? null),
+            // Monto real cobrado (pedido explícito del usuario): sin
+            // paradas, es simplemente el precio de siempre — con paradas
+            // (todas ya completadas, por el guard de arriba), se le suma lo
+            // cobrado en cada tramo.
+            'settled_price' => $ride->stops()->where('status', 'completed')->sum('leg_price') + $ride->price,
         ]);
 
         // increment() es atómico (sin condición de carrera si dos carreras
@@ -598,6 +661,82 @@ class RideController extends Controller
         // habilitadas en cada acción) — para que se entere y pueda calificar,
         // aunque tenga la app cerrada.
         $ride->client->notify(new RideCompletedPushNotification($ride));
+
+        return back();
+    }
+
+    /**
+     * Completa una parada intermedia (pedido explícito del usuario: "cada
+     * parada se calcula diferente e individual... si no llegan a una
+     * parada puedan pagarle cada parada y cancelar la otra o iniciar la
+     * siguiente parada"). Con `cancel_rest`, cierra la carrera entera ahí
+     * mismo (cobrando solo lo completado) — sin eso, la carrera sigue
+     * `in_progress` y el conductor sigue a la próxima parada o al destino.
+     */
+    public function completeStop(Request $request, Ride $ride, RideStop $stop): RedirectResponse
+    {
+        if ($ride->driver_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($stop->ride_id !== $ride->id) {
+            abort(404);
+        }
+
+        if ($ride->status !== 'in_progress' || ! $ride->picked_up_at) {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta carrera no está en curso, o todavía no se recogió al cliente.',
+            ]);
+        }
+
+        // No se puede saltear el orden: solo la próxima parada pendiente
+        // (la de menor `sequence` que no esté completada/cancelada) se
+        // puede completar ahora.
+        $nextPendingStop = $ride->stops()->whereNotIn('status', ['completed', 'cancelled'])->first();
+        if (! $nextPendingStop || $nextPendingStop->id !== $stop->id) {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta no es la próxima parada pendiente.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'cancel_rest' => ['sometimes', 'boolean'],
+        ]);
+
+        // Mismo radio/criterio permisivo que arrived()/pickedUp() (1.5 km) —
+        // el radio de 20 m de complete() quedó a propósito solo para el
+        // destino final, no para paradas intermedias.
+        $this->assertNearRideLocation(
+            $request,
+            (float) $stop->lat,
+            (float) $stop->lng,
+            'Parece que todavía no está en la parada — inténtelo cuando esté más cerca.',
+        );
+
+        $stop->update(['status' => 'completed', 'completed_at' => now()]);
+
+        if ($validated['cancel_rest'] ?? false) {
+            $ride->stops()
+                ->whereNotIn('status', ['completed', 'cancelled'])
+                ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+
+            $ride->update([
+                'status' => 'completed',
+                'completed_at' => now(),
+                // Solo lo que de verdad se recorrió y se cobró — el tramo
+                // final (hasta el destino) nunca pasó, así que `price` no
+                // entra acá (a diferencia de complete(), que sí lo suma).
+                'settled_price' => $ride->stops()->where('status', 'completed')->sum('leg_price'),
+                'points_earned' => $ride->distance_km >= 5 ? 2 : 1,
+            ]);
+
+            DriverProfile::where('user_id', $ride->driver_user_id)->increment('total_points', $ride->points_earned);
+            broadcast(new RideCompleted($ride))->toOthers();
+            RideDispatchAdvancer::activateNextWaitingRequest();
+            $ride->client->notify(new RideCompletedPushNotification($ride));
+        }
 
         return back();
     }

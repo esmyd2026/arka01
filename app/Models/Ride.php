@@ -30,12 +30,16 @@ class Ride extends Model
         'round_trip',
         'rate_per_km_snapshot',
         'price',
+        'stops_price',
+        'settled_price',
         'points_earned',
         'status',
         'started_at',
         'arrived_at',
         'picked_up_at',
         'completed_at',
+        'completion_reason',
+        'completion_note',
         'cancelled_at',
         'cancelled_by',
         'cancellation_reason',
@@ -53,6 +57,8 @@ class Ride extends Model
         'round_trip' => 'boolean',
         'rate_per_km_snapshot' => 'decimal:2',
         'price' => 'decimal:2',
+        'stops_price' => 'decimal:2',
+        'settled_price' => 'decimal:2',
         'points_earned' => 'integer',
         'started_at' => 'datetime',
         'arrived_at' => 'datetime',
@@ -117,6 +123,15 @@ class Ride extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(RideMessage::class);
+    }
+
+    /**
+     * Paradas intermedias (pedido explícito del usuario: hasta 4, cada una
+     * completada/cancelada por separado) — ver RideController::completeStop().
+     */
+    public function stops(): HasMany
+    {
+        return $this->hasMany(RideStop::class)->orderBy('sequence');
     }
 
     /**

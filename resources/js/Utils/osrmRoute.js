@@ -85,3 +85,33 @@ export async function fetchOsrmRoute(originLat, originLng, destinationLat, desti
         return { coords: [], distanceKm: null, durationMin: null };
     }
 }
+
+// Pedido explícito del usuario: paradas adicionales (hasta 4) — cada tramo
+// se calcula por separado. OSRM ya soporta varios waypoints en una sola
+// consulta y devuelve un array `legs` con la distancia/duración de CADA
+// tramo (entre cada par de puntos consecutivos), así que no hace falta
+// encadenar llamadas — misma URL pública que el respaldo de fetchOsrmRoute()
+// de arriba, sin pasar por el proxy de Google Routes (que solo acepta 2
+// puntos), a propósito para no tener que extender ese backend también.
+export async function fetchOsrmMultiRoute(points) {
+    if (!Array.isArray(points) || points.length < 2) {
+        return { coords: [], legs: [] };
+    }
+
+    try {
+        const coordsParam = points.map(({ lat, lng }) => `${lng},${lat}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const route = data?.routes?.[0];
+        const coords = (route?.geometry?.coordinates ?? []).map(([lng, lat]) => ({ lat, lng }));
+        const legs = (route?.legs ?? []).map((leg) => ({
+            distanceKm: typeof leg?.distance === 'number' ? leg.distance / 1000 : null,
+            durationMin: typeof leg?.duration === 'number' ? leg.duration / 60 : null,
+        }));
+
+        return { coords, legs };
+    } catch {
+        return { coords: [], legs: [] };
+    }
+}

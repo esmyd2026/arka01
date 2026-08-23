@@ -291,6 +291,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/carreras/{ride}/reprogramar/confirmar', [RideController::class, 'confirmReschedule'])->name('rides.reschedule.confirm');
     Route::post('/carreras/{ride}/reprogramar/rechazar', [RideController::class, 'rejectReschedule'])->name('rides.reschedule.reject');
     Route::post('/carreras/{ride}/completar', [RideController::class, 'complete'])->name('rides.complete');
+    Route::post('/carreras/{ride}/paradas/{stop}/completar', [RideController::class, 'completeStop'])->name('rides.stops.complete');
     // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras).
     Route::post('/carreras/{ride}/mensajes', [RideMessageController::class, 'store'])->name('ride-messages.store');
     Route::post('/carreras/{ride}/calificar', [ReviewController::class, 'store'])->name('reviews.store');

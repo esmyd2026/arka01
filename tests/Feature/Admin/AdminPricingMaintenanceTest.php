@@ -136,7 +136,9 @@ class AdminPricingMaintenanceTest extends TestCase
         $this->assertEquals(10.8, $result['base']);
         $this->assertEquals(2.16, $result['peak_surcharge']);
         $this->assertEquals(0.0, $result['night_surcharge']);
-        $this->assertEquals(12.96, $result['total']);
+        // 10.8 + 2.16 = 12.96, redondeado hacia arriba a la décima (pedido
+        // explícito del usuario) — ver PriceCalculator::roundUpToDime().
+        $this->assertEquals(13.0, $result['total']);
     }
 
     public function test_price_calculator_applies_the_peak_surcharge_in_the_evening_window(): void
@@ -146,7 +148,7 @@ class AdminPricingMaintenanceTest extends TestCase
         $result = PriceCalculator::suggestedPrice(10.0, 1.0, Carbon::parse('2026-01-15 18:00:00'));
 
         $this->assertTrue($result['is_peak']);
-        $this->assertEquals(12.96, $result['total']);
+        $this->assertEquals(13.0, $result['total']);
     }
 
     public function test_price_calculator_does_not_apply_the_peak_surcharge_outside_its_windows(): void

@@ -82,10 +82,28 @@ class PriceCalculator
             'base' => $base,
             'night_surcharge' => $nightSurcharge,
             'peak_surcharge' => $peakSurcharge,
-            'total' => round($base + $nightSurcharge + $peakSurcharge, 2),
+            // Pedido explícito del usuario: el monto final de la carrera
+            // siempre redondeado hacia ARRIBA a los 10 centavos (5.35→5.40,
+            // 5.92→6.00, 5.05→5.10) — nunca hacia abajo, para que el
+            // conductor no pierda centavos por el redondeo. El desglose
+            // (base/recargos) queda con su valor exacto para que se siga
+            // entendiendo de dónde sale el total, solo el total ya cobrado
+            // se ajusta a la décima.
+            'total' => self::roundUpToDime($base + $nightSurcharge + $peakSurcharge),
             'is_night' => $isNight,
             'is_peak' => $isPeak,
         ];
+    }
+
+    /**
+     * Redondea hacia arriba a los 10 centavos más cercanos (nunca hacia
+     * abajo). El `round(..., 4)` previo evita que un residuo de coma
+     * flotante (ej. 5.40 guardado como 5.399999999999) empuje de más al
+     * siguiente escalón.
+     */
+    public static function roundUpToDime(float $amount): float
+    {
+        return ceil(round($amount, 4) * 10) / 10;
     }
 
     /**
