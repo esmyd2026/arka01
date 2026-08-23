@@ -317,18 +317,15 @@ function submitFeedback() {
                             ¿Cómo funciona?
                         </a>
                     </div>
-
-                    <!-- Pedido explícito del usuario (con la imagen de
-                         referencia): una sola línea con el mismo mensaje que
-                         ya tiene la tarjeta de invitado al lado, en vez de
-                         las dos insignias de antes. -->
-                    <p class="mt-5 flex items-center justify-center gap-1.5 text-xs text-arka-text-muted lg:justify-start">
-                        <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
-                        </svg>
-                        Sin correo ni contraseña. Solo validamos tu WhatsApp.
-                    </p>
                 </div>
+
+                <!-- Separador entre el bloque de texto y la tarjeta de invitado
+                     (pedido explícito del usuario): horizontal cuando las 2
+                     columnas se apilan en móvil (fila propia del grid), y una
+                     línea vertical centrada — con desvanecido en los extremos,
+                     no un trazo duro — cuando van lado a lado en escritorio. -->
+                <div class="h-px w-full max-w-xs mx-auto bg-gradient-to-r from-transparent via-arka-primary/25 to-transparent lg:hidden"></div>
+                <div class="hidden lg:block absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-arka-primary/25 to-transparent"></div>
 
                 <!-- Acceso urgente sin correo: conserva la identidad visual de
                      la app y asigna la cooperativa más cercana al origen. -->
