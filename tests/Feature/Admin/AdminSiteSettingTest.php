@@ -103,4 +103,81 @@ class AdminSiteSettingTest extends TestCase
             ->where('heroBackgroundUrl', Storage::disk('public')->url($path))
         );
     }
+
+    // Fondo del panel de marca en login/registro (AuthBrandingPanel.vue,
+    // pedido explícito del usuario) — columna independiente de
+    // hero_background_path, mismo controlador y mismo helper interno
+    // (handleImageField), así que se prueba en paralelo al de arriba.
+    public function test_an_admin_can_upload_an_auth_background(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'auth_background' => UploadedFile::fake()->image('login-fondo.jpg'),
+        ])->assertRedirect();
+
+        $setting = SiteSetting::current();
+        $this->assertNotNull($setting->auth_background_path);
+        Storage::disk('public')->assertExists($setting->auth_background_path);
+    }
+
+    public function test_an_admin_can_remove_the_auth_background(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'auth_background' => UploadedFile::fake()->image('login-fondo.jpg'),
+        ]);
+        $path = SiteSetting::current()->auth_background_path;
+
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'remove_auth_background' => true,
+        ])->assertRedirect();
+
+        $this->assertNull(SiteSetting::current()->auth_background_path);
+        Storage::disk('public')->assertMissing($path);
+    }
+
+    // Uploading uno de los dos campos no debe tocar el otro — el bug que
+    // este test evita: un helper mal escrito que borrara/reseteara ambos
+    // campos por cada request en vez de solo el que trae archivo.
+    public function test_uploading_one_background_does_not_touch_the_other(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'hero_background' => UploadedFile::fake()->image('hero.jpg'),
+        ]);
+        $heroPath = SiteSetting::current()->hero_background_path;
+
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'auth_background' => UploadedFile::fake()->image('login-fondo.jpg'),
+        ]);
+
+        $setting = SiteSetting::current();
+        $this->assertSame($heroPath, $setting->hero_background_path);
+        $this->assertNotNull($setting->auth_background_path);
+        Storage::disk('public')->assertExists($heroPath);
+    }
+
+    public function test_the_login_page_exposes_the_configured_auth_background_url(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'auth_background' => UploadedFile::fake()->image('login-fondo.jpg'),
+        ]);
+        $path = SiteSetting::current()->auth_background_path;
+
+        // El login solo es visible sin sesión (RedirectIfAuthenticated) —
+        // hay que cerrarla, si no la respuesta ni siquiera es la del login.
+        $this->post(route('logout'));
+
+        $response = $this->get(route('login'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('authBackgroundUrl', Storage::disk('public')->url($path))
+        );
+    }
 }

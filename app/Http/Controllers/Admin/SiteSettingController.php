@@ -27,7 +27,7 @@ class SiteSettingController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
+        $request->validate([
             // 8MB: una foto de buena calidad para un fondo a pantalla
             // completa pesa bastante más que un avatar chico.
             'hero_background' => ['nullable', 'image', 'max:8192'],
@@ -35,26 +35,51 @@ class SiteSettingController extends Controller
             // ninguna imagen si un admin quiere volver al fondo liso de
             // siempre, sin tener que subir nada.
             'remove_hero_background' => ['sometimes', 'boolean'],
+            // Fondo del panel de marca en login/registro (pedido explícito
+            // del usuario) — mismo tamaño máximo, mismo criterio.
+            'auth_background' => ['nullable', 'image', 'max:8192'],
+            'remove_auth_background' => ['sometimes', 'boolean'],
         ]);
 
         $setting = SiteSetting::current();
 
-        if ($request->hasFile('hero_background')) {
-            if ($setting->hero_background_path) {
-                Storage::disk('public')->delete($setting->hero_background_path);
-            }
-            $validated['hero_background_path'] = $request->file('hero_background')->store('site', 'public');
-        } elseif ($request->boolean('remove_hero_background')) {
-            if ($setting->hero_background_path) {
-                Storage::disk('public')->delete($setting->hero_background_path);
-            }
-            $validated['hero_background_path'] = null;
-        }
+        $update = [
+            ...$this->handleImageField($request, $setting, 'hero_background'),
+            ...$this->handleImageField($request, $setting, 'auth_background'),
+        ];
 
-        unset($validated['hero_background'], $validated['remove_hero_background']);
-
-        $setting->update($validated + ['updated_by' => $request->user()->id]);
+        $setting->update($update + ['updated_by' => $request->user()->id]);
 
         return back()->with('status', 'Configuración del sitio actualizada.');
+    }
+
+    /**
+     * Sube/reemplaza/borra un campo de imagen del disco 'public', borrando
+     * siempre el archivo anterior primero — mismo patrón para
+     * hero_background y auth_background, sin duplicarlo por cada uno.
+     *
+     * @return array<string, string|null> vacío si no hubo cambio para ese campo
+     */
+    private function handleImageField(Request $request, SiteSetting $setting, string $field): array
+    {
+        $pathAttribute = "{$field}_path";
+
+        if ($request->hasFile($field)) {
+            if ($setting->{$pathAttribute}) {
+                Storage::disk('public')->delete($setting->{$pathAttribute});
+            }
+
+            return [$pathAttribute => $request->file($field)->store('site', 'public')];
+        }
+
+        if ($request->boolean("remove_{$field}")) {
+            if ($setting->{$pathAttribute}) {
+                Storage::disk('public')->delete($setting->{$pathAttribute});
+            }
+
+            return [$pathAttribute => null];
+        }
+
+        return [];
     }
 }

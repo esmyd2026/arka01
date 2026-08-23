@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\SiteSetting;
 use App\Services\PlanLimits;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -76,6 +77,12 @@ class HandleInertiaRequests extends Middleware
             // usuario ya completó las credenciales de OAuth en .env — así no
             // hay un botón roto mientras tanto.
             'googleLoginEnabled' => filled(config('services.google.client_id')) && filled(config('services.google.client_secret')),
+            // Fondo del panel de marca en login/registro (pedido explícito
+            // del usuario, configurable desde /admin/sitio) — compartido acá
+            // en vez de repetirlo en cada controlador de sesión/registro
+            // porque AuthBrandingPanel.vue vive dentro de GuestLayout.vue,
+            // usado por todos ellos por igual.
+            'authBackgroundUrl' => SiteSetting::current()->auth_background_url,
             // Mensajes flash tipo ->with('status', '...'), compartidos acá
             // porque antes cada página tenía que pasarlos a mano (y casi
             // ninguna lo hacía) — ver banner en AuthenticatedLayout.vue.

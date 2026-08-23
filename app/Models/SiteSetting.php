@@ -19,10 +19,11 @@ class SiteSetting extends Model
 
     protected $fillable = [
         'hero_background_path',
+        'auth_background_path',
         'updated_by',
     ];
 
-    protected $appends = ['hero_background_url'];
+    protected $appends = ['hero_background_url', 'auth_background_url'];
 
     public static function current(): self
     {
@@ -40,6 +41,15 @@ class SiteSetting extends Model
     {
         return $this->hero_background_path
             ? Storage::disk('public')->url($this->hero_background_path)
+            : null;
+    }
+
+    // Fondo del panel de marca en login/registro (AuthBrandingPanel.vue) —
+    // pedido explícito del usuario, columna independiente de la del hero.
+    public function getAuthBackgroundUrlAttribute(): ?string
+    {
+        return $this->auth_background_path
+            ? Storage::disk('public')->url($this->auth_background_path)
             : null;
     }
 }

@@ -278,12 +278,19 @@ async function confirmTakeover() {
                 <div class="flex-1 h-px bg-arka-text-muted/20" />
             </div>
 
+            <!-- Bug real reportado por el usuario ("se ve mal así chico"):
+                 el botón tenía casi la mitad del alto/tamaño de texto del de
+                 Auth/Register.vue, sin borde, con el ícono chico — quedaba
+                 apretado. Mejorado a un tamaño legible con borde sutil
+                 (mismo criterio visual que el botón oficial de Google), pero
+                 sin llegar a w-full como en Register.vue — pedido explícito
+                 del usuario: no tan grande que opaque a "Iniciar sesión". -->
             <div class="mt-5 flex justify-center">
                 <a
                     :href="route('auth.google.redirect')"
-                    class="flex items-center justify-center gap-2 px-4 py-1.5 rounded-arka bg-white text-gray-700 text-xs font-medium hover:bg-gray-100 transition"
+                    class="flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-arka bg-white border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-50 hover:shadow transition"
                 >
-                    <svg class="h-4 w-4" viewBox="0 0 24 24">
+                    <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.87c2.27-2.09 3.58-5.17 3.58-8.82Z" />
                         <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.94-2.91l-3.87-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.28v3.1A12 12 0 0 0 12 24Z" />
                         <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.56.38-2.28v-3.1H1.28A12 12 0 0 0 0 12c0 1.94.46 3.77 1.28 5.38l3.99-3.1Z" />

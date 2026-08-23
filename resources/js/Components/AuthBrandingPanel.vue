@@ -22,9 +22,13 @@ defineProps({
 </script>
 
 <template>
+    <!-- El fondo (foto opcional + degradado) ya lo pinta GuestLayout.vue
+         detrás de todo, para que se vea igual en móvil y escritorio (pedido
+         explícito del usuario) — acá solo queda un resalte sutil propio del
+         panel, transparente, que deja pasar esa misma capa. -->
     <div
         class="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 overflow-hidden"
-        style="background: radial-gradient(circle at 15% 15%, rgba(52, 211, 153, 0.16), transparent 45%), linear-gradient(160deg, #0a0f0c 0%, #0d1712 55%, #10251c 100%)"
+        style="background: radial-gradient(circle at 15% 15%, rgba(52, 211, 153, 0.12), transparent 45%)"
     >
         <!-- Pedido explícito del usuario (con captura): el lockup completo
              (isotipo + "Arka01") se veía mal acá — se usa solo el isotipo,
