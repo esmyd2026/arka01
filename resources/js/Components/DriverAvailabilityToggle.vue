@@ -222,12 +222,25 @@ onMounted(() => {
     if (props.initialAvailable && props.canConnect) {
         startWatching();
     }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 });
+
+// Pedido explícito del usuario: "el conductor se desconecta... se fue al
+// mapa, debería seguir conectado" — watchPosition() se pausa mientras la
+// pestaña está en segundo plano (ej. cambió a Google Maps para navegar).
+// En cuanto vuelve, se fuerza un ping ya mismo en vez de esperar al próximo
+// que dispare el navegador solo.
+function handleVisibilityChange() {
+    if (document.visibilityState === 'visible' && available.value) {
+        refreshNow();
+    }
+}
 
 onBeforeUnmount(() => {
     if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
     }
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 

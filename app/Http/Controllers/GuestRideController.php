@@ -29,6 +29,12 @@ class GuestRideController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // Pedido explícito del usuario: si escribe el 0 inicial (ej.
+        // "0988492339"), se lo quitamos solo en vez de rechazarlo.
+        $request->merge([
+            'phone_local' => ValidPhoneNumberLocal::normalize($request->input('country_code'), $request->input('phone_local')),
+        ]);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'country_code' => ['required', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
@@ -57,7 +63,7 @@ class GuestRideController extends Controller
             ]);
         }
 
-        $phone = $validated['country_code'].ltrim($validated['phone_local'], '0');
+        $phone = $validated['country_code'].$validated['phone_local'];
         $phoneAttemptKey = 'guest-ride-phone:'.hash('sha256', $phone);
 
         if (RateLimiter::tooManyAttempts($phoneAttemptKey, 3)) {

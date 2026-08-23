@@ -45,6 +45,12 @@ const guestForm = useForm({
     website: '',
 });
 
+// Pedido explícito del usuario: si el número ya tiene cuenta (mensaje
+// puntual de GuestRideController::store()), ofrecer el atajo a iniciar
+// sesión en vez de dejarlo trabado acá — mismo criterio ya usado en
+// Auth/Register.vue para el mismo caso.
+const showsAccountExistsError = computed(() => (guestForm.errors.phone_local ?? '').includes('ya tiene una cuenta'));
+
 const cooperativeOptions = computed(() => props.guestCooperatives.map((cooperative) => ({
     value: cooperative.id,
     label: `${cooperative.name} · ${cooperative.active_driver_memberships_count} unidades`,
@@ -652,6 +658,11 @@ function submitFeedback() {
                             <input v-model="guestForm.phone_local" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="999 000 222" class="min-w-0 rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
                         </div>
                         <p v-if="guestForm.errors.phone_local" class="mt-1 text-xs text-arka-danger">{{ guestForm.errors.phone_local }}</p>
+                        <p v-if="showsAccountExistsError" class="mt-1 text-sm">
+                            <Link :href="route('login')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                                Iniciar sesión →
+                            </Link>
+                        </p>
                     </div>
                     <div class="rounded-arka bg-arka-primary/10 p-3 text-xs leading-relaxed text-arka-text-muted">
                         Recibirá un código corto por WhatsApp. No necesita correo ni crear una contraseña.

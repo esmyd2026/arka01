@@ -81,4 +81,30 @@ class GuestRideTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['phone' => '+593991234567']);
     }
+
+    // Pedido explícito del usuario: "si pone el 09 quitemos el 0 delante" —
+    // en vez de rechazarlo, se normaliza antes de validar (ver
+    // ValidPhoneNumberLocal::normalize()).
+    public function test_a_leading_zero_is_stripped_instead_of_rejected(): void
+    {
+        $cooperative = $this->approvedCooperative();
+        $payload = $this->validPayload($cooperative);
+        $payload['phone_local'] = '0991234567';
+
+        $this->post(route('guest-rides.store'), $payload)->assertSessionDoesntHaveErrors('phone_local');
+
+        $this->assertDatabaseHas('users', ['phone' => '+593991234567']);
+    }
+
+    // Pedido explícito del usuario: "si el numero esta registrado entonces
+    // que lo lleve a iniciar sesion" — Welcome.vue detecta este mensaje
+    // exacto para ofrecer el atajo (ver showsAccountExistsError).
+    public function test_an_already_registered_phone_is_rejected_with_a_login_hint(): void
+    {
+        $cooperative = $this->approvedCooperative();
+        User::factory()->create(['phone' => '+593991234567']);
+
+        $this->post(route('guest-rides.store'), $this->validPayload($cooperative))
+            ->assertSessionHasErrors(['phone_local' => 'Este número ya tiene una cuenta. Inicie sesión para continuar de forma segura.']);
+    }
 }

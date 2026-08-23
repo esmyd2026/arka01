@@ -4,6 +4,7 @@ namespace Tests\Feature\Console;
 
 use App\Events\DriverLocationUpdated;
 use App\Models\DriverProfile;
+use App\Models\Ride;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -97,5 +98,46 @@ class SweepStaleDriverAvailabilityTest extends TestCase
 
         $this->assertTrue($profile->fresh()->is_available);
         Event::assertNotDispatched(DriverLocationUpdated::class);
+    }
+
+    /**
+     * Pedido explícito del usuario: "el conductor se desconecta cuando esta
+     * en una carrera... se fue al mapa [para navegar], debería seguir
+     * conectado" — el navegador pausa el ping de ubicación en segundo
+     * plano, pero con una carrera en curso eso no es una desconexión real.
+     */
+    public function test_a_stale_driver_with_an_in_progress_ride_is_left_available(): void
+    {
+        Event::fake([DriverLocationUpdated::class]);
+
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'is_available' => true,
+            'location_updated_at' => now()->subMinutes(5),
+        ]);
+        Ride::factory()->create(['driver_user_id' => $driver->id, 'status' => 'in_progress']);
+
+        $this->artisan('drivers:sweep-stale-availability');
+
+        $this->assertTrue($profile->fresh()->is_available);
+        Event::assertNotDispatched(DriverLocationUpdated::class);
+    }
+
+    // Una carrera COMPLETADA (o cancelada) del mismo conductor no debe
+    // proteger a un perfil realmente desconectado — solo `in_progress` cuenta.
+    public function test_a_stale_driver_with_only_a_completed_ride_is_still_marked_unavailable(): void
+    {
+        Event::fake([DriverLocationUpdated::class]);
+
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'is_available' => true,
+            'location_updated_at' => now()->subMinutes(5),
+        ]);
+        Ride::factory()->create(['driver_user_id' => $driver->id, 'status' => 'completed']);
+
+        $this->artisan('drivers:sweep-stale-availability');
+
+        $this->assertFalse($profile->fresh()->is_available);
     }
 }

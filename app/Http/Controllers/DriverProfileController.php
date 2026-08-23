@@ -130,6 +130,12 @@ class DriverProfileController extends Controller
         // que el admin definió como base general.
         $adminMinimumFare = (float) PricingSetting::current()->minimum_fare;
 
+        // Pedido explícito del usuario: si escribe el 0 inicial (ej.
+        // "0988492339"), se lo quitamos solo en vez de rechazarlo.
+        $request->merge([
+            'phone_local' => ValidPhoneNumberLocal::normalize($request->input('country_code'), $request->input('phone_local')),
+        ]);
+
         $validated = $request->validate([
             // Pedido explícito del usuario: el conductor puede corregir/cambiar
             // el número que declaró — es el que se valida contra el número

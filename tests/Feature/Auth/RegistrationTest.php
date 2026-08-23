@@ -267,6 +267,18 @@ class RegistrationTest extends TestCase
         $this->assertDatabaseCount('users', 0);
     }
 
+    // Pedido explícito del usuario: "si pone el 09 quitemos el 0 delante" —
+    // un celular de 9 dígitos con el 0 local de siempre delante (10
+    // caracteres en total) se normaliza en vez de rechazarse (ver
+    // App\Rules\ValidPhoneNumberLocal::normalize()) — distinto del caso de
+    // arriba, que es un número mal formado de 9 caracteres, no un celular
+    // real con el 0 puesto.
+    public function test_a_leading_zero_on_a_real_mobile_number_is_stripped_instead_of_rejected(): void
+    {
+        $this->registerWith('+593', '0992345671')->assertRedirect(RouteServiceProvider::HOME);
+        $this->assertDatabaseHas('users', ['phone' => '+593992345671']);
+    }
+
     public function test_an_obviously_fake_repeated_digit_ecuadorian_number_is_rejected(): void
     {
         $this->registerWith('+593', '999999999')->assertSessionHasErrors('phone_local');

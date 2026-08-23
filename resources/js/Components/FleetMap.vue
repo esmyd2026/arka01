@@ -21,7 +21,7 @@ defineProps({
     centerOffsetY: { type: Number, default: 0 },
 });
 
-const emit = defineEmits(['map-click']);
+const emit = defineEmits(['map-click', 'user-panned']);
 const implementation = ref(null);
 const mapRef = ref(null);
 
@@ -36,6 +36,6 @@ defineExpose({
 
 <template>
     <div v-if="!implementation" class="grid w-full place-items-center bg-arka-card text-xs text-arka-text-muted" :class="rounded ? 'rounded-arka' : ''" :style="{ height }">Cargando mapa…</div>
-    <GoogleFleetMap v-else-if="implementation === 'google'" ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" />
-    <LeafletFleetMap v-else ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" />
+    <GoogleFleetMap v-else-if="implementation === 'google'" ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" @user-panned="emit('user-panned')" />
+    <LeafletFleetMap v-else ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" @user-panned="emit('user-panned')" />
 </template>

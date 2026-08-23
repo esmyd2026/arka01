@@ -27,14 +27,16 @@ defineProps({
          explícito del usuario) — acá solo queda un resalte sutil propio del
          panel, transparente, que deja pasar esa misma capa. -->
     <div
-        class="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 overflow-hidden"
+        class="relative hidden lg:flex lg:w-1/2 flex-col justify-center gap-8 p-8 xl:p-10 overflow-hidden"
         style="background: radial-gradient(circle at 15% 15%, rgba(52, 211, 153, 0.12), transparent 45%)"
     >
-        <!-- Pedido explícito del usuario (con captura): el lockup completo
-             (isotipo + "Arka01") se veía mal acá — se usa solo el isotipo,
-             chico y proporcionado, para que el resto del contenido del panel
-             quede bien ubicado debajo. -->
-        <img src="/img/logo-arka01-icono.png" alt="Arka01" class="h-64 w-auto self-start" />
+        <!-- Pedido explícito del usuario ("que la pantalla se ajuste a la
+             dimensión del dispositivo, que no scrollee"): el isotipo estaba
+             a h-64 (256px) — con el padding y el resto del contenido, el
+             panel se pasaba de la altura real de la pantalla en monitores
+             normales y forzaba scroll en toda la página. Achicado a un
+             tamaño que sigue siendo protagonista sin desbordar. -->
+        <img src="/img/logo-arka01-icono.png" alt="Arka01" class="h-16 w-auto self-start" />
 
         <div class="max-w-md">
             <h2 class="text-3xl font-bold text-arka-text leading-tight">{{ title }}</h2>

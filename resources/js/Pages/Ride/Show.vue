@@ -168,6 +168,27 @@ watch(
     { immediate: true },
 );
 
+// Pedido explícito del usuario: "el conductor se desconecta... se fue al
+// mapa [para navegar], debería seguir conectado" — el navegador pausa
+// watchPosition() y hasta el setInterval() de respaldo mientras la pestaña
+// está en segundo plano (ej. cambió a la app de Google Maps), así que
+// location_updated_at se va quedando vieja mientras tanto. En cuanto vuelve
+// a esta pestaña, se fuerza un ping inmediato en vez de esperar al próximo
+// intervalo — reduce la ventana en la que parece desconectado. El barrido
+// del backend (SweepStaleDriverAvailability) ya no lo desconecta de verdad
+// mientras la carrera siga en curso, esto solo acorta cuánto tarda en
+// verse "al día" de nuevo.
+function handleVisibilityChange() {
+    if (document.visibilityState !== 'visible' || !props.isDriver || props.ride.status !== 'in_progress') return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => sendActiveRideLocation(position, true),
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
+    );
+}
+
 // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras): solo
 // existe mientras hay una relación de viaje vigente — mismo criterio que el
 // backend (Ride::chatIsOpen()), para no ofrecer escribir algo que el
@@ -287,6 +308,7 @@ async function sendChatMessage(text) {
 onMounted(() => {
     scrollChatToBottom();
     waitingClockTimer = window.setInterval(() => { waitingClock.value = Date.now(); }, 1000);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     // Canal específico del viaje: funciona también cuando el conductor es
     // de una cooperativa y no pertenece a la flota privada del cliente.
     rideChannel = window.Echo.private(`ride.${props.ride.id}`);
@@ -411,6 +433,7 @@ onBeforeUnmount(() => {
     window.Echo.leave(`ride.${props.ride.id}`);
     if (rideStatePoller) window.clearInterval(rideStatePoller);
     if (waitingClockTimer) window.clearInterval(waitingClockTimer);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     stopActiveRideLocationTracking();
 });
 
@@ -525,6 +548,33 @@ const driverRemainingLabel = computed(() => {
     return minLabel ? `${kmLabel} · ${minLabel}` : kmLabel;
 });
 
+// Paradas adicionales (pedido explícito del usuario: "cada parada se
+// calcula diferente e individual... si no llegan a una parada puedan
+// pagarle cada parada y cancelar la otra o iniciar la siguiente parada").
+// La próxima parada pendiente (ya vienen ordenadas por sequence desde el
+// backend, ver Ride::stops()) — null cuando no hay paradas o ya se
+// completaron/cancelaron todas, momento en que vuelve a aparecer el botón
+// normal de "Completar carrera" de siempre. Definida ACÁ (antes de
+// refreshLiveRoute()/currentNavigationTarget, más abajo) porque el watch
+// inmediato de esas funciones la necesita desde el primer render.
+const currentStop = computed(() => (props.ride.stops ?? []).find((stop) => stop.status === 'pending') ?? null);
+
+// Punto al que el conductor tiene que dirigirse AHORA MISMO (pedido
+// explícito del usuario: botón de navegación + ruta en vivo que tengan en
+// cuenta las paradas, no solo origen/destino) — antes de recoger, el
+// origen; después, la próxima parada pendiente si hay alguna, si no el
+// destino final. Reusado tanto por refreshLiveRoute() (la ruta que se
+// dibuja) como por el botón "Abrir en Google Maps" del mapa.
+const currentNavigationTarget = computed(() => {
+    if (!props.ride.picked_up_at) {
+        return { lat: Number(props.ride.origin_lat), lng: Number(props.ride.origin_lng) };
+    }
+    if (currentStop.value) {
+        return { lat: Number(currentStop.value.lat), lng: Number(currentStop.value.lng) };
+    }
+    return { lat: Number(props.ride.destination_lat), lng: Number(props.ride.destination_lng) };
+});
+
 // Cinco minutos de cortesía desde la llegada automática/manual. El tiempo
 // base viene del servidor (`arrived_at`), por lo que cliente y conductor ven
 // el mismo conteo aunque abran la pantalla en momentos distintos.
@@ -559,6 +609,15 @@ let lastLiveRouteOrigin = null;
 const LIVE_ROUTE_MIN_INTERVAL_MS = 12000;
 const LIVE_ROUTE_MIN_MOVEMENT_KM = 0.025;
 
+// Pedido explícito del usuario: "que el mapa haga zoom y se centre en cada
+// recalculo del recorrido" + "permitir que el conductor manipule el mapa" +
+// "un botón que centre la ubicación como Google Maps". `followDriver` arranca
+// en true (auto-centrado normal); se apaga solo si el conductor arrastra el
+// mapa a propósito (ver @user-panned en el template, viene de
+// LeafletFleetMap's `dragstart`) y el botón de recentrar lo vuelve a prender.
+const followDriver = ref(true);
+const fleetMapRef = ref(null);
+
 async function refreshLiveRoute(force = false) {
     if (props.ride.status !== 'in_progress' || driverLat.value == null || driverLng.value == null) {
         liveRouteCoords.value = [];
@@ -568,9 +627,7 @@ async function refreshLiveRoute(force = false) {
     }
 
     const origin = { lat: Number(driverLat.value), lng: Number(driverLng.value) };
-    const target = props.ride.picked_up_at
-        ? { lat: Number(props.ride.destination_lat), lng: Number(props.ride.destination_lng) }
-        : { lat: Number(props.ride.origin_lat), lng: Number(props.ride.origin_lng) };
+    const target = currentNavigationTarget.value;
     const movedKm = lastLiveRouteOrigin
         ? distanceKm(lastLiveRouteOrigin.lat, lastLiveRouteOrigin.lng, origin.lat, origin.lng)
         : Infinity;
@@ -597,7 +654,23 @@ async function refreshLiveRoute(force = false) {
         liveRouteCoords.value = routeResult.coords;
         liveRemainingKm.value = routeResult.distanceKm ?? null;
         liveRemainingMin.value = routeResult.durationMin ?? null;
+        recenterOnDriver();
     }
+}
+
+// Centra y hace zoom sobre la posición actual del conductor — automático en
+// cada recorrido nuevo mientras followDriver esté prendido, o a pedido
+// desde el botón de recentrar (que además reactiva el seguimiento).
+function recenterOnDriver(force = false) {
+    if (!props.isDriver) return;
+    if (!force && !followDriver.value) return;
+    if (driverLat.value == null || driverLng.value == null) return;
+    fleetMapRef.value?.setView(driverLat.value, driverLng.value, 16);
+}
+
+function recenterMapButton() {
+    followDriver.value = true;
+    recenterOnDriver(true);
 }
 
 watch([driverLat, driverLng], () => refreshLiveRoute(false), { immediate: true });
@@ -784,15 +857,6 @@ async function startToDestination() {
         onFinish: () => (markingPickedUp.value = false),
     });
 }
-
-// Paradas adicionales (pedido explícito del usuario: "cada parada se
-// calcula diferente e individual... si no llegan a una parada puedan
-// pagarle cada parada y cancelar la otra o iniciar la siguiente parada").
-// La próxima parada pendiente (ya vienen ordenadas por sequence desde el
-// backend, ver Ride::stops()) — null cuando no hay paradas o ya se
-// completaron/cancelaron todas, momento en que vuelve a aparecer el botón
-// normal de "Completar carrera" de siempre.
-const currentStop = computed(() => (props.ride.stops ?? []).find((stop) => stop.status === 'pending') ?? null);
 
 // Mismo criterio de dos toques que goToPassenger()/confirmArrived(): el
 // primero solo navega, el segundo (una vez ahí de verdad) abre la elección
@@ -1551,6 +1615,7 @@ function submitReview() {
                      tarjeta de navegación real. -->
                 <div class="-mx-4 sm:mx-0 relative">
                     <FleetMap
+                        ref="fleetMapRef"
                         :markers="mapMarkers"
                         :route="visibleRouteCoords"
                         :dark="false"
@@ -1559,21 +1624,63 @@ function submitReview() {
                         :zoom="15"
                         :height="mapExpanded ? '65vh' : '320px'"
                         class="transition-[height] duration-300"
+                        @user-panned="followDriver = false"
                     />
 
-                    <button
-                        type="button"
-                        class="absolute right-3 top-3 z-[400] flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-base shadow-lg hover:bg-gray-50 transition"
-                        :aria-label="mapExpanded ? 'Achicar mapa' : 'Expandir mapa'"
-                        @click="mapExpanded = !mapExpanded"
-                    >
-                        <svg v-if="!mapExpanded" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" />
-                        </svg>
-                        <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-                        </svg>
-                    </button>
+                    <div class="absolute right-3 top-3 z-[400] flex flex-col gap-2">
+                        <button
+                            type="button"
+                            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-base shadow-lg hover:bg-gray-50 transition"
+                            :aria-label="mapExpanded ? 'Achicar mapa' : 'Expandir mapa'"
+                            @click="mapExpanded = !mapExpanded"
+                        >
+                            <svg v-if="!mapExpanded" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" />
+                            </svg>
+                            <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                            </svg>
+                        </button>
+
+                        <!-- Pedido explícito del usuario: "un botón que centre la
+                             ubicación como Google Maps" — vuelve a centrar/hacer zoom
+                             sobre el conductor y reactiva el seguimiento automático si
+                             se había pausado al arrastrar el mapa a mano. -->
+                        <button
+                            v-if="isDriver"
+                            type="button"
+                            class="flex h-9 w-9 items-center justify-center rounded-full shadow-lg transition"
+                            :class="followDriver ? 'bg-arka-primary text-arka-base' : 'bg-white text-arka-base hover:bg-gray-50'"
+                            aria-label="Centrar mi ubicación"
+                            title="Centrar mi ubicación"
+                            @click="recenterMapButton"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3" />
+                                <path stroke-linecap="round" d="M12 2v3M12 19v3M22 12h-3M5 12H2" />
+                            </svg>
+                        </button>
+
+                        <!-- Pedido explícito del usuario: "botón de navegación en el
+                             mapa del conductor que lleve a Google Maps" — siempre
+                             disponible, sin depender de qué botón toque en la barra
+                             de abajo. Va al punto correcto según la etapa (origen,
+                             próxima parada, o destino — ver currentNavigationTarget). -->
+                        <a
+                            v-if="isDriver"
+                            :href="googleNavigateUrl(currentNavigationTarget.lat, currentNavigationTarget.lng)"
+                            target="_blank"
+                            rel="noopener"
+                            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-base shadow-lg hover:bg-gray-50 transition"
+                            aria-label="Abrir en Google Maps"
+                            title="Abrir en Google Maps"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.6-7-10.5A7 7 0 0 1 12 4a7 7 0 0 1 7 6.5C19 16.4 12 21 12 21Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m9.5 10.5 2-2 2 2-2 2-2-2Z" />
+                            </svg>
+                        </a>
+                    </div>
 
                     <div
                         v-if="isDriver && driverRemainingLabel"

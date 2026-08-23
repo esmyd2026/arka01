@@ -22,6 +22,23 @@ class ValidPhoneNumberLocal implements DataAwareRule, ValidationRule
 {
     protected array $data = [];
 
+    /**
+     * Pedido explícito del usuario: si escribe el 0 inicial de siempre
+     * (ej. "0988492339"), quitárselo solo en vez de rechazarlo — el 0 local
+     * no va acá, ya lo reemplaza el código de país (+593). Se llama ANTES
+     * de validar (`$request->merge(...)`) en cada controller que recibe
+     * country_code/phone_local, para que la regla de abajo ya vea el valor
+     * corregido.
+     */
+    public static function normalize(?string $countryCode, ?string $phoneLocal): ?string
+    {
+        if ($countryCode !== '+593' || $phoneLocal === null) {
+            return $phoneLocal;
+        }
+
+        return preg_match('/^0\d{9}$/', $phoneLocal) ? substr($phoneLocal, 1) : $phoneLocal;
+    }
+
     public function setData(array $data): static
     {
         $this->data = $data;

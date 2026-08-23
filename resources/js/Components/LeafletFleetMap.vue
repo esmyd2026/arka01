@@ -117,7 +117,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['map-click']);
+const emit = defineEmits(['map-click', 'user-panned']);
 
 const mapEl = ref(null);
 let map = null;
@@ -183,6 +183,16 @@ onMounted(() => {
     if (props.clickable) {
         map.on('click', (e) => emit('map-click', { lat: e.latlng.lat, lng: e.latlng.lng }));
     }
+
+    // Pedido explícito del usuario: "permitir que el conductor manipule el
+    // mapa" + "botón que centre la ubicación como Google Maps" — el mapa ya
+    // se puede arrastrar/hacer zoom (Leaflet lo permite por default), pero
+    // el auto-centrado en cada recorrido nuevo (ver Ride/Show.vue) lo
+    // pisaría a cada rato si no se pausa apenas el conductor toca el mapa a
+    // propósito. `dragstart` solo dispara con un arrastre real del usuario
+    // (nunca con `setView()`/`fitBounds()` programáticos), así que es una
+    // señal segura de "quiero mirar otra parte, dejá de seguirme".
+    map.on('dragstart', () => emit('user-panned'));
 
     // Bug real reportado por el usuario (con captura: el mapa se veía
     // "zoomeado" mal, mostrando un río en vez de calles, aunque los

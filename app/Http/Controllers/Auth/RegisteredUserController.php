@@ -53,6 +53,12 @@ class RegisteredUserController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        // Pedido explícito del usuario: si escribe el 0 inicial (ej.
+        // "0988492339"), se lo quitamos solo en vez de rechazarlo.
+        $request->merge([
+            'phone_local' => ValidPhoneNumberLocal::normalize($request->input('country_code'), $request->input('phone_local')),
+        ]);
+
         $validated = $request->validate([
             // Qué tipo de cuenta quiere crear (consideración agregada al alcance:
             // se pide primero, antes que ningún otro dato, porque cambia a dónde

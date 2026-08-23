@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Events\DriverLocationUpdated;
 use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Models\DriverProfile;
+use App\Models\Ride;
 use App\Services\DriverActivityTracker;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,6 +31,15 @@ use Illuminate\Database\Eloquent\Builder;
  * lo veían offline): si todavía tiene la ventana de WhatsApp de 24h abierta,
  * no se lo desconecta acá — sigue alcanzable por ese canal aunque el GPS del
  * navegador esté viejo (ver DriverProfile::isReachable()).
+ *
+ * Segunda excepción (pedido explícito del usuario: "el conductor se
+ * desconecta cuando esta en una carrera... se fue al mapa"): el celular
+ * deja de mandar el ping de ubicación mientras el navegador está en segundo
+ * plano (ej. el conductor abrió Google Maps para navegar) — un límite real
+ * del navegador, no algo que se pueda evitar del todo. Con una carrera
+ * `in_progress` de por medio, eso NO significa que se desconectó de
+ * verdad — está manejando, así que no se le apaga `is_available` mientras
+ * dure esa carrera, sin importar hace cuánto llegó su último ping.
  */
 class SweepStaleDriverAvailability extends Command
 {
@@ -61,8 +71,11 @@ class SweepStaleDriverAvailability extends Command
             ->get()
             // Pedido explícito del usuario: con la ventana de WhatsApp
             // todavía abierta, no se lo desconecta solo por quedarse sin
-            // ping de GPS — sigue tratándose como disponible de verdad.
-            ->reject(fn (DriverProfile $profile) => $profile->user?->hasActiveWhatsAppSession());
+            // ping de GPS — sigue tratándose como disponible de verdad. Lo
+            // mismo si tiene una carrera en curso: está manejando, no
+            // desconectado de verdad.
+            ->reject(fn (DriverProfile $profile) => $profile->user?->hasActiveWhatsAppSession()
+                || Ride::query()->where('driver_user_id', $profile->user_id)->where('status', 'in_progress')->exists());
 
         foreach ($stale as $profile) {
             $profile->update(['is_available' => false]);
