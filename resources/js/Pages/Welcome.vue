@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Modal from '@/Components/Modal.vue';
@@ -34,6 +34,19 @@ const props = defineProps({
 });
 
 const authUser = usePage().props.auth?.user ?? null;
+
+// Pedido explícito del usuario ("que no se vea tan brusco por temas de
+// carga de la imagen... lo hiciste en el login y me gustó"): mismo criterio
+// que GuestLayout.vue — la foto se precarga en JS y recién se hace visible
+// con un fundido suave una vez lista, en vez de aparecer de golpe cuando
+// pesa mucho. Mientras tanto se ve el fondo oscuro liso de siempre.
+const heroBackgroundLoaded = ref(false);
+onMounted(() => {
+    if (!props.heroBackgroundUrl) return;
+    const image = new Image();
+    image.onload = () => { heroBackgroundLoaded.value = true; };
+    image.src = props.heroBackgroundUrl;
+});
 
 // Encuesta corta (pedido explícito del usuario: "colocalo en la raíz
 // también") — en la página pública, además del Home y el login. Mismo
@@ -165,7 +178,9 @@ function submitFeedback() {
 </script>
 
 <template>
-    <Head title="Arka01 — Tu círculo. Tus viajes. Tu decisión." />
+    <Head title="Arka01 — Tu círculo. Tus viajes. Tu decisión.">
+        <link v-if="heroBackgroundUrl" rel="preload" as="image" :href="heroBackgroundUrl" fetchpriority="high" />
+    </Head>
 
     <div class="arka-app-background min-h-screen">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
@@ -206,11 +221,20 @@ function submitFeedback() {
                  se vea. -->
             <div
                 v-else
-                class="relative isolate grid grid-cols-1 lg:grid-cols-2 gap-8 items-center overflow-hidden rounded-[2rem] px-4 py-6 sm:px-8 sm:py-9 bg-cover bg-top"
-                :style="heroBackgroundUrl
-                    ? `background-image: linear-gradient(180deg, rgba(7,17,13,0.35) 0%, rgba(7,17,13,0.55) 60%, rgba(7,17,13,0.85) 100%), url('${heroBackgroundUrl}')`
-                    : ''"
+                class="relative isolate grid grid-cols-1 lg:grid-cols-2 gap-8 items-center overflow-hidden rounded-[2rem] px-4 py-6 sm:px-8 sm:py-9"
             >
+                <!-- Foto de fondo con fundido suave (pedido explícito del usuario:
+                     "que no se vea tan brusco... lo hiciste en el login y me
+                     gustó") — capa aparte que recién se hace visible cuando la
+                     imagen ya terminó de precargarse (ver heroBackgroundLoaded),
+                     en vez de pintarse de golpe como antes. -->
+                <div
+                    v-if="heroBackgroundUrl"
+                    class="pointer-events-none absolute inset-0 -z-10 bg-cover bg-top transition-opacity duration-700 ease-out"
+                    :class="heroBackgroundLoaded ? 'opacity-100' : 'opacity-0'"
+                    :style="{ backgroundImage: `linear-gradient(180deg, rgba(7,17,13,0.35) 0%, rgba(7,17,13,0.55) 60%, rgba(7,17,13,0.85) 100%), url('${heroBackgroundUrl}')` }"
+                />
+
                 <div class="text-center lg:text-start">
                     <ApplicationLogo size="h-11 sm:h-14" />
 
