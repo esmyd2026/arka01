@@ -58,6 +58,24 @@ function updatePoints() {
     pointsForm.patch(route('admin.users.update-points', props.profileUser.id), { preserveScroll: true });
 }
 
+// Activación manual de un conductor puntual (pedido explícito del usuario:
+// "permiteme colocar a un conductor activo asi no mande toda la
+// informacion... para que pueda operar y se pueda poner disponible") — ver
+// Admin\UserProfileController::forceActivate(). La nota es obligatoria:
+// salta un requisito de seguridad, tiene que quedar registrado por qué.
+const activationForm = useForm({ note: '' });
+function forceActivateDriver() {
+    activationForm.post(route('admin.users.force-activate-driver', props.profileUser.id), {
+        preserveScroll: true,
+        onSuccess: () => activationForm.reset(),
+    });
+}
+
+async function revokeForceActivate() {
+    if (!(await confirmDialog(`¿Revocar la activación manual de ${props.profileUser.name}? Volverá a exigírsele la información completa para operar.`))) return;
+    router.delete(route('admin.users.revoke-force-activate-driver', props.profileUser.id), { preserveScroll: true });
+}
+
 // Eliminar cuenta (pedido explícito del usuario): borra archivos y, por el
 // cascade que ya tienen las FKs, historial de carreras, flotas/membresías,
 // reseñas, suscripciones, tickets de soporte, etc. — ver
@@ -150,6 +168,32 @@ async function removeClient(member) {
                     <p v-if="profileUser.driver_profile.verification_rejection_reason" class="text-sm text-arka-danger">
                         Motivo del rechazo: {{ profileUser.driver_profile.verification_rejection_reason }}
                     </p>
+
+                    <!-- Activación manual (pedido explícito del usuario: "permiteme
+                         colocar a un conductor activo asi no mande toda la
+                         informacion... para que pueda operar y se pueda poner
+                         disponible") — salta el requisito de documentos/seguro
+                         completos solo para este conductor, con nota obligatoria
+                         (ver Admin\UserProfileController::forceActivate()). -->
+                    <div v-if="profileUser.driver_profile.admin_activated_at" class="p-3 rounded-arka bg-arka-warning/10 border border-arka-warning/30 space-y-2">
+                        <p class="text-sm text-arka-warning">
+                            ⚠️ Activado a mano el {{ new Date(profileUser.driver_profile.admin_activated_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                            por {{ profileUser.driver_profile.activated_by?.name ?? 'un admin' }} — no se le exige información completa.
+                        </p>
+                        <p class="text-sm text-arka-text-muted">Motivo: {{ profileUser.driver_profile.admin_activation_note }}</p>
+                        <SecondaryButton @click="revokeForceActivate">Revocar activación manual</SecondaryButton>
+                    </div>
+                    <form v-else @submit.prevent="forceActivateDriver" class="p-3 rounded-arka border border-arka-text-muted/15 space-y-2">
+                        <InputLabel for="activation_note" value="Activar a este conductor sin exigirle documentos/seguro completos" />
+                        <TextInput
+                            id="activation_note"
+                            class="w-full"
+                            v-model="activationForm.note"
+                            placeholder="Motivo (ej: ya vetado por su cooperativa, cuenta de demo)"
+                        />
+                        <InputError :message="activationForm.errors.note" />
+                        <SecondaryButton type="submit" :disabled="activationForm.processing">Activar igual</SecondaryButton>
+                    </form>
 
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         <dt class="text-arka-text-muted">Licencia</dt>

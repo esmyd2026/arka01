@@ -33,7 +33,7 @@ class UserProfileController extends Controller
 
     public function show(User $user): Response
     {
-        $user->load(['driverProfile.verifier', 'city']);
+        $user->load(['driverProfile.verifier', 'driverProfile.activatedBy', 'city']);
 
         $rating = round((float) $user->reviewsReceived()->avg('rating'), 1);
         $reviewCount = $user->reviewsReceived()->count();
@@ -156,6 +156,81 @@ class UserProfileController extends Controller
         ]);
 
         return back()->with('status', 'Puntos actualizados.');
+    }
+
+    /**
+     * Activación manual de un conductor puntual (pedido explícito del
+     * usuario: "permiteme colocar a un conductor activo asi no mande toda
+     * la informacion. para que pueda operar. y se pueda poner disponible")
+     * — salta el requisito de documentos/seguro completos SOLO para este
+     * conductor (ver DriverProfile::hasCompleteRegistrationInformation()),
+     * para casos puntuales (cuenta de demo, ya vetado por una cooperativa,
+     * etc.). La nota es obligatoria: es un salteo de un requisito de
+     * seguridad, tiene que quedar registrado por qué.
+     */
+    public function forceActivate(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->driverProfile, 404);
+
+        $validated = $request->validate(['note' => ['required', 'string', 'max:500']]);
+
+        $profile = $user->driverProfile;
+        $profile->forceFill([
+            'admin_activated_at' => now(),
+            'admin_activated_by' => $request->user()->id,
+            'admin_activation_note' => $validated['note'],
+            // Coherente con "que pueda operar": si todavía no estaba
+            // aprobado, queda aprobado también — availabilityBlockReason()
+            // sigue exigiendo verification_status=approved además del
+            // chequeo de información completa.
+            'verification_status' => 'approved',
+            'verification_rejection_reason' => null,
+            'verified_at' => $profile->verified_at ?? now(),
+            'verified_by' => $profile->verified_by ?? $request->user()->id,
+        ])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.force_activate',
+            module: 'usuarios',
+            newValue: ['user_id' => $user->id, 'note' => $validated['note']],
+        );
+
+        Log::warning('Conductor activado a mano por un admin, sin exigir información completa.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id, 'note' => $validated['note'],
+        ]);
+
+        return back()->with('status', 'Conductor activado — ya puede operar y ponerse disponible.');
+    }
+
+    /**
+     * Deshace la activación manual (vuelve a exigir información completa
+     * como a cualquier otro conductor) — no se pidió, pero un salteo de un
+     * requisito de seguridad necesita poder revertirse sin tener que
+     * tocar la base de datos a mano.
+     */
+    public function revokeForceActivate(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->driverProfile, 404);
+
+        $user->driverProfile->forceFill([
+            'admin_activated_at' => null,
+            'admin_activated_by' => null,
+            'admin_activation_note' => null,
+        ])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.force_activate.revoke',
+            module: 'usuarios',
+            oldValue: ['user_id' => $user->id],
+        );
+
+        Log::info('Activación manual de conductor revocada por un admin.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id,
+        ]);
+
+        return back()->with('status', 'Activación manual revocada — vuelve a exigirse la información completa.');
     }
 
     /**

@@ -281,9 +281,23 @@ class RideController extends Controller
             ->whereNull('left_at')
             ->pluck('fleet_id');
 
+        // Invitaciones de cooperativa pendientes (pedido explícito del
+        // usuario: "le deberia llegar en la pantalla de solicitudes al
+        // conductor tambien... como cuando un cliente le manda la
+        // solicitud") — antes solo vivían en /cooperativas/invitaciones,
+        // una pantalla aparte y fácil de no encontrar. Vacío para quien no
+        // es conductor (la relación es por driver_user_id, no hace falta
+        // gatear con isDriver()).
+        $pendingCooperativeInvitations = $request->user()->cooperativeDriverMemberships()
+            ->where('status', 'pending')
+            ->with('cooperative.city')
+            ->latest()
+            ->get();
+
         return Inertia::render('Ride/Index', [
             'pendingRequestsAsClient' => $pendingRequestsAsClient,
             'incomingRequestsAsDriver' => $incomingRequestsAsDriver,
+            'pendingCooperativeInvitations' => $pendingCooperativeInvitations,
             'activeRides' => $activeRides,
             'scheduledRides' => $scheduledRides,
             'rideHistory' => $rideHistory,

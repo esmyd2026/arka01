@@ -201,6 +201,81 @@ class AdminUserProfileTest extends TestCase
     }
 
     /**
+     * Activación manual (pedido explícito del usuario: "permiteme colocar
+     * a un conductor activo asi no mande toda la informacion... para que
+     * pueda operar y se pueda poner disponible") — un conductor SIN
+     * documentos ni seguro declarado queda igual habilitado para
+     * conectarse, una vez que un admin lo activa a mano con un motivo.
+     */
+    public function test_an_admin_can_force_activate_a_driver_missing_required_information(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'identity_document_path' => null,
+            'license_photo_path' => null,
+            'police_record_path' => null,
+            'has_insurance' => false,
+            'verification_status' => null,
+        ]);
+
+        $this->assertFalse($profile->hasCompleteRegistrationInformation());
+
+        $response = $this->actingAs($admin)->post(route('admin.users.force-activate-driver', $driver), [
+            'note' => 'Ya vetado por su cooperativa, se activa mientras completa la documentación.',
+        ]);
+
+        $response->assertRedirect();
+        $profile->refresh();
+        $this->assertNotNull($profile->admin_activated_at);
+        $this->assertSame($admin->id, $profile->admin_activated_by);
+        $this->assertTrue($profile->hasCompleteRegistrationInformation());
+        $this->assertTrue($profile->canBecomeAvailable());
+        $this->assertSame('approved', $profile->verification_status);
+        $this->assertDatabaseHas('admin_audit_logs', ['action' => 'driver.force_activate']);
+    }
+
+    public function test_force_activating_a_driver_requires_a_note(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.users.force-activate-driver', $driver), ['note' => ''])
+            ->assertSessionHasErrors('note');
+    }
+
+    public function test_a_regular_user_cannot_force_activate_a_driver(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($user)
+            ->post(route('admin.users.force-activate-driver', $driver), ['note' => 'motivo'])
+            ->assertForbidden();
+    }
+
+    public function test_revoking_the_manual_activation_restores_the_normal_requirement(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'identity_document_path' => null,
+            'has_insurance' => false,
+        ]);
+        $this->actingAs($admin)->post(route('admin.users.force-activate-driver', $driver), ['note' => 'motivo']);
+
+        $this->actingAs($admin)->delete(route('admin.users.revoke-force-activate-driver', $driver))->assertRedirect();
+
+        $profile->refresh();
+        $this->assertNull($profile->admin_activated_at);
+        $this->assertFalse($profile->hasCompleteRegistrationInformation());
+        $this->assertDatabaseHas('admin_audit_logs', ['action' => 'driver.force_activate.revoke']);
+    }
+
+    /**
      * Pedido explícito del usuario: "ver el detalle de los clientes que
      * tiene cada conductor" desde el admin.
      */

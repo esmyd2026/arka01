@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -12,6 +13,7 @@ import { waitingMessage as sharedWaitingMessage, secondsLeft as sharedSecondsLef
 const props = defineProps({
     pendingRequestsAsClient: { type: Array, required: true },
     incomingRequestsAsDriver: { type: Array, required: true },
+    pendingCooperativeInvitations: { type: Array, required: true },
     activeRides: { type: Array, required: true },
     scheduledRides: { type: Array, required: true },
     rideHistory: { type: Array, required: true },
@@ -27,6 +29,15 @@ function formatScheduledAt(iso) {
 
 function startRide(id) {
     router.post(route('rides.start', id), {}, { preserveScroll: true });
+}
+
+// Invitación de cooperativa (pedido explícito del usuario: "le deberia
+// llegar en la pantalla de solicitudes al conductor tambien... como
+// cuando un cliente le manda la solicitud") — mismo endpoint que ya usaba
+// Cooperative/DriverInvitations.vue, solo que ahora también se puede
+// responder desde acá sin tener que encontrar esa pantalla aparte.
+function respondToCooperativeInvitation(id, decision) {
+    router.post(route('cooperative-driver-invitations.respond', id), { decision }, { preserveScroll: true });
 }
 
 // Pedido explícito del usuario: "el cliente no tiene más que solo cambian
@@ -520,6 +531,41 @@ function confirmRaiseOffer(id) {
                             <Link v-else :href="route('rides.show', ride.id)" class="text-arka-primary-bright text-sm shrink-0">
                                 Ver &rarr;
                             </Link>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Invitaciones de cooperativa (pedido explícito del usuario: que le
+                     llegue en esta misma pantalla, como una solicitud de carrera más,
+                     no solo escondida en /cooperativas/invitaciones). -->
+                <div v-if="pendingCooperativeInvitations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <h3 class="text-lg font-medium text-arka-text mb-3">Invitaciones de cooperativa</h3>
+                    <ul class="space-y-4">
+                        <li
+                            v-for="invitation in pendingCooperativeInvitations"
+                            :key="invitation.id"
+                            class="overflow-hidden rounded-2xl border border-arka-text-muted/15 bg-arka-base/35 p-4 shadow-lg"
+                        >
+                            <div class="flex items-start gap-3">
+                                <img
+                                    v-if="invitation.cooperative.logo_url"
+                                    :src="invitation.cooperative.logo_url"
+                                    class="h-12 w-12 shrink-0 rounded-xl bg-white object-contain p-1"
+                                    alt="Logo"
+                                />
+                                <div class="min-w-0 flex-1">
+                                    <p class="font-medium text-arka-text">{{ invitation.cooperative.name }}</p>
+                                    <p class="text-sm text-arka-text-muted">
+                                        {{ invitation.cooperative.city?.name }}
+                                        <span v-if="invitation.cooperative.geographic_coverage"> · {{ invitation.cooperative.geographic_coverage }}</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-sm text-arka-text-muted">Quiere vincularlo como conductor afiliado.</p>
+                            <div class="mt-3 flex justify-end gap-2">
+                                <DangerButton @click="respondToCooperativeInvitation(invitation.id, 'reject')">Rechazar</DangerButton>
+                                <PrimaryButton @click="respondToCooperativeInvitation(invitation.id, 'accept')">Aceptar vínculo</PrimaryButton>
+                            </div>
                         </li>
                     </ul>
                 </div>

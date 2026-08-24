@@ -431,6 +431,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Ajuste manual de puntos de un conductor (pedido explícito del usuario)
     // — ver Admin\UserProfileController::updatePoints().
     Route::patch('/usuarios/{user}/puntos', [AdminUserProfileController::class, 'updatePoints'])->name('users.update-points');
+    // Activación manual de un conductor puntual (pedido explícito del
+    // usuario) — ver Admin\UserProfileController::forceActivate().
+    Route::post('/usuarios/{user}/activar-conductor', [AdminUserProfileController::class, 'forceActivate'])->name('users.force-activate-driver');
+    Route::delete('/usuarios/{user}/activar-conductor', [AdminUserProfileController::class, 'revokeForceActivate'])->name('users.revoke-force-activate-driver');
     // Pedido explícito del usuario: ver el detalle de los clientes de un
     // conductor desde el admin, y poder sacarlo de esa flota — ver
     // AdminUserProfileController::removeDriverClient().

@@ -80,6 +80,7 @@ class DriverProfile extends Model
         'has_insurance' => 'boolean',
         'vehicle_amenities' => 'array',
         'whatsapp_ride_actions_enabled' => 'boolean',
+        'admin_activated_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -276,6 +277,16 @@ class DriverProfile extends Model
     }
 
     /**
+     * Admin que forzó la activación de este conductor puntual (pedido
+     * explícito del usuario) — ver hasCompleteRegistrationInformation() y
+     * Admin\UserProfileController::forceActivate().
+     */
+    public function activatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_activated_by');
+    }
+
+    /**
      * Cuántas flotas activas integra este conductor ahora mismo (sus "clientes
      * de confianza" vigentes). Se usa contra el límite del plan Gratis del
      * conductor (sección 7.2 / config/arka.php) antes de aceptar una invitación nueva.
@@ -397,6 +408,17 @@ class DriverProfile extends Model
      */
     public function hasCompleteRegistrationInformation(): bool
     {
+        // Activación manual de un admin para un conductor puntual (pedido
+        // explícito del usuario: "permiteme colocar a un conductor activo
+        // asi no mande toda la informacion... para que pueda operar") —
+        // salta TODO el resto de este chequeo. El admin asume la
+        // responsabilidad del caso (cuenta de demo, ya vetado por una
+        // cooperativa, etc.) — ver Admin\UserProfileController::forceActivate(),
+        // que exige dejar por qué como nota obligatoria.
+        if ($this->admin_activated_at !== null) {
+            return true;
+        }
+
         return filled($this->driver_type)
             && filled($this->license_number)
             && $this->hasCompleteVehicleInfo()

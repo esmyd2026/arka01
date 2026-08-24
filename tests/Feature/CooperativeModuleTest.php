@@ -100,6 +100,37 @@ class CooperativeModuleTest extends TestCase
             && str_contains($request['text']['body'] ?? '', 'vincularlo'));
     }
 
+    /**
+     * Pedido explícito del usuario: "le deberia llegar en la pantalla de
+     * solicitudes al conductor tambien. como cuando un cliente le manda la
+     * solicitud" — antes la invitación solo vivía en
+     * /cooperativas/invitaciones, una pantalla aparte y fácil de no
+     * encontrar. Ahora también aparece en /carreras (RideController::index()).
+     */
+    public function test_a_pending_cooperative_invitation_shows_up_on_the_driver_ride_requests_screen(): void
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Norte']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->create(['user_id' => $driver->id, 'driver_type' => 'independent']);
+        $membership = CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('rides.index'));
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->has('pendingCooperativeInvitations', 1)
+            ->where('pendingCooperativeInvitations.0.id', $membership->id)
+            ->where('pendingCooperativeInvitations.0.cooperative.name', 'Coop Norte')
+        );
+    }
+
     public function test_cooperative_profile_can_be_saved_as_an_incomplete_draft(): void
     {
         $user = User::factory()->create();
