@@ -5,7 +5,7 @@ namespace App\Services;
 use InvalidArgumentException;
 
 /**
- * Preguntas fijas de la encuesta corta de conductor/pasajero. Es
+ * Preguntas fijas de la encuesta corta de pasajero/conductor/cooperativa. Es
  * investigación de mercado PREVIA al lanzamiento (Arka01 todavía no está en
  * el mercado) sobre la experiencia ACTUAL de la gente con el transporte que
  * ya usa hoy — nunca se nombra ninguna otra plataforma (pedido explícito
@@ -55,13 +55,14 @@ use InvalidArgumentException;
  */
 class SurveyQuestions
 {
-    public const ROLES = ['pasajero', 'conductor'];
+    public const ROLES = ['pasajero', 'conductor', 'cooperativa'];
 
     /**
      * Estas 3 preguntas comparten la misma `key` (y, para las dos últimas,
-     * las mismas opciones) en AMBOS roles a propósito — así
+     * las mismas opciones) en LOS 3 ROLES a propósito — así
      * Admin\SurveyMetricsController puede armar un indicador destacado
-     * combinando pasajero + conductor sin casos especiales por rol.
+     * combinando pasajero + conductor + cooperativa sin casos especiales
+     * por rol.
      */
     public const MAIN_PROBLEM_QUESTION_KEY = 'mayor_problema';
 
@@ -81,6 +82,7 @@ class SurveyQuestions
         return match ($role) {
             'pasajero' => self::passengerQuestions(),
             'conductor' => self::driverQuestions(),
+            'cooperativa' => self::cooperativeQuestions(),
             default => throw new InvalidArgumentException("Rol de encuesta inválido: {$role}"),
         };
     }
@@ -273,6 +275,122 @@ class SurveyQuestions
                     ['key' => 'me_interesa', 'label' => 'Sí, me interesa'],
                     ['key' => 'tal_vez', 'label' => 'Tal vez'],
                     ['key' => 'prefiero_bolsa_general', 'label' => 'Prefiero la bolsa general'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * A diferencia de pasajero/conductor, acá quien responde no viaja ni
+     * maneja — gestiona una flota de conductores/unidades afiliados. Las
+     * preguntas de seguridad/inseguridad país se preguntan sobre SU FLOTA
+     * (no en primera persona), y el equivalente al "tiempo de espera" de
+     * los otros roles es el tiempo que la cooperativa pierde hoy
+     * coordinando manualmente en vez de con un sistema digital.
+     */
+    private static function cooperativeQuestions(): array
+    {
+        return [
+            [
+                'key' => self::MAIN_PROBLEM_QUESTION_KEY,
+                'text' => '¿Cuál es el mayor problema que enfrenta la cooperativa hoy?',
+                'multi' => true,
+                'options' => [
+                    ['key' => 'coordinacion', 'label' => 'Coordinar y controlar a los conductores afiliados'],
+                    ['key' => 'visibilidad', 'label' => 'No tener visibilidad de la flota en tiempo real'],
+                    ['key' => 'inseguridad', 'label' => 'La inseguridad de conductores y pasajeros'],
+                    ['key' => 'competencia', 'label' => 'Competencia desleal o pérdida de socios'],
+                    ['key' => 'sin_sistema', 'label' => 'No contar con un sistema digital de gestión'],
+                    ['key' => 'ninguno', 'label' => 'No tenemos problemas'],
+                ],
+            ],
+            [
+                'key' => 'seguridad_actual',
+                'text' => '¿Qué tan segura considera que está la operación de sus conductores hoy?',
+                'options' => [
+                    ['key' => 'muy_inseguro', 'label' => 'Muy insegura'],
+                    ['key' => 'algo_inseguro', 'label' => 'Algo insegura'],
+                    ['key' => 'algo_seguro', 'label' => 'Algo segura'],
+                    ['key' => 'muy_seguro', 'label' => 'Muy segura'],
+                ],
+            ],
+            [
+                'key' => self::NIGHT_SAFETY_QUESTION_KEY,
+                'text' => '¿Qué tan seguros considera que están sus conductores trabajando de noche?',
+                'options' => [
+                    ['key' => 'evito', 'label' => 'Evitamos asignar turnos de noche'],
+                    ['key' => 'muy_inseguro', 'label' => 'Muy inseguros'],
+                    ['key' => 'algo_inseguro', 'label' => 'Algo inseguros'],
+                    ['key' => 'algo_seguro', 'label' => 'Algo seguros'],
+                    ['key' => 'muy_seguro', 'label' => 'Muy seguros'],
+                ],
+            ],
+            [
+                'key' => self::INSECURITY_PERCEPTION_QUESTION_KEY,
+                'text' => '¿Cómo calificaría la situación de inseguridad en el país hoy?',
+                'options' => [
+                    ['key' => 'muy_alta', 'label' => 'Muy alta'],
+                    ['key' => 'alta', 'label' => 'Alta'],
+                    ['key' => 'moderada', 'label' => 'Moderada'],
+                    ['key' => 'baja', 'label' => 'Baja'],
+                ],
+            ],
+            [
+                'key' => 'tiempo_gestion',
+                'text' => '¿Cuánto tiempo le dedica al día a coordinar manualmente a sus conductores (radio, llamadas, planillas)?',
+                'options' => [
+                    ['key' => 'mas_2h', 'label' => 'Más de 2 horas'],
+                    ['key' => 'muy_variable', 'label' => 'Muy variable, nunca sé cuánto'],
+                    ['key' => 'entre_30m_2h', 'label' => 'Entre 30 minutos y 2 horas'],
+                    ['key' => 'menos_30m', 'label' => 'Menos de 30 minutos'],
+                ],
+            ],
+            [
+                'key' => 'costo_gestion',
+                'text' => '¿Qué tan justo le parece lo que paga hoy por herramientas de gestión o control de flota (si paga algo)?',
+                'options' => [
+                    ['key' => 'muy_alto', 'label' => 'Muy alto'],
+                    ['key' => 'alto', 'label' => 'Alto'],
+                    ['key' => 'justo', 'label' => 'Justo'],
+                    ['key' => 'no_pago', 'label' => 'No pago nada'],
+                ],
+            ],
+            [
+                'key' => 'confianza_control',
+                'text' => '¿Confía en que tiene control real y visibilidad de lo que hacen sus conductores afiliados en la calle?',
+                'options' => [
+                    ['key' => 'no_confio', 'label' => 'No confío'],
+                    ['key' => 'dudas', 'label' => 'Tengo dudas'],
+                    ['key' => 'confio', 'label' => 'Sí, confío'],
+                ],
+            ],
+            [
+                'key' => 'plataformas_externas',
+                'text' => '¿Qué tanta visibilidad de su flota le quita que sus conductores trabajen también con otras plataformas de transporte?',
+                'options' => [
+                    ['key' => 'mucha', 'label' => 'Me quita mucha visibilidad'],
+                    ['key' => 'algo', 'label' => 'Me quita algo de visibilidad'],
+                    ['key' => 'poca', 'label' => 'Me quita poca visibilidad'],
+                    ['key' => 'no_trabajan_otras', 'label' => 'Mis conductores no trabajan con otras plataformas'],
+                ],
+            ],
+            [
+                'key' => 'digitalizacion_actual',
+                'text' => '¿Qué tan digitalizada está la gestión de su cooperativa hoy?',
+                'options' => [
+                    ['key' => 'nada', 'label' => 'Nada digitalizada'],
+                    ['key' => 'algo', 'label' => 'Algo digitalizada'],
+                    ['key' => 'bastante', 'label' => 'Bastante digitalizada'],
+                    ['key' => 'totalmente', 'label' => 'Totalmente digitalizada'],
+                ],
+            ],
+            [
+                'key' => 'interes_panel',
+                'text' => '¿Le gustaría contar con un panel propio para gestionar y dar visibilidad a sus conductores y unidades afiliadas?',
+                'options' => [
+                    ['key' => 'me_interesa_mucho', 'label' => 'Sí, me interesa mucho'],
+                    ['key' => 'tal_vez', 'label' => 'Tal vez'],
+                    ['key' => 'no_me_importa', 'label' => 'No me importa'],
                 ],
             ],
         ];

@@ -2,15 +2,15 @@
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { Head } from '@inertiajs/vue3';
 
-// Panel de indicadores de la encuesta corta de conductor/pasajero (pedido
-// explícito del usuario: "indicadores que me ayuden a determinar decisiones
-// y fortalecer que estoy cubriendo un problema") — mismo estilo que
-// Admin/Metrics.vue (tarjetas + tablas simples, sin librería de gráficos).
+// Panel de indicadores de la encuesta corta de pasajero/conductor/cooperativa
+// (pedido explícito del usuario: "indicadores que me ayuden a determinar
+// decisiones y fortalecer que estoy cubriendo un problema") — mismo estilo
+// que Admin/Metrics.vue (tarjetas + tablas simples, sin librería de gráficos).
 defineProps({
-    roles: { type: Object, required: true }, // { pasajero: {...}, conductor: {...} }
+    roles: { type: Object, required: true }, // { pasajero: {...}, conductor: {...}, cooperativa: {...} }
 });
 
-const ROLE_LABELS = { pasajero: 'Pasajeros', conductor: 'Conductores' };
+const ROLE_LABELS = { pasajero: 'Pasajeros', conductor: 'Conductores', cooperativa: 'Cooperativas' };
 </script>
 
 <template>
@@ -20,7 +20,7 @@ const ROLE_LABELS = { pasajero: 'Pasajeros', conductor: 'Conductores' };
         <div class="py-12">
             <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- Totales de un vistazo. -->
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div v-for="(role, key) in roles" :key="key" class="p-4 bg-arka-card shadow rounded-arka text-center">
                         <p class="text-2xl font-semibold text-arka-text">{{ role.total }}</p>
                         <p class="text-xs text-arka-text-muted">Respuestas de {{ ROLE_LABELS[key] }}</p>

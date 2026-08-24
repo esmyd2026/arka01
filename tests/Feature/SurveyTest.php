@@ -20,17 +20,23 @@ class SurveyTest extends TestCase
     // Las preguntas `multi` (pedido explícito del usuario: "en las que
     // puede existir varios problemas que se junten") reciben un array de
     // opciones en vez de una sola — se arma acá para que este helper siga
-    // sirviendo sin importar qué pregunta se marque `multi` más adelante.
-    private function passengerAnswers(): array
+    // sirviendo sin importar qué pregunta se marque `multi` más adelante, y
+    // para cualquiera de los 3 roles (pasajero/conductor/cooperativa).
+    private function answersFor(string $role): array
     {
         $answers = [];
-        foreach (SurveyQuestions::forRole('pasajero') as $question) {
+        foreach (SurveyQuestions::forRole($role) as $question) {
             $answers[$question['key']] = ($question['multi'] ?? false)
                 ? [$question['options'][0]['key']]
                 : $question['options'][0]['key'];
         }
 
         return $answers;
+    }
+
+    private function passengerAnswers(): array
+    {
+        return $this->answersFor('pasajero');
     }
 
     public function test_the_show_page_returns_no_questions_without_a_role(): void
@@ -48,6 +54,16 @@ class SurveyTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->where('role', 'conductor')
             ->has('questions', count(SurveyQuestions::forRole('conductor')))
+        );
+    }
+
+    public function test_the_show_page_returns_the_right_questions_for_the_cooperative_role(): void
+    {
+        $response = $this->get(route('survey.show', ['rol' => 'cooperativa']));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('role', 'cooperativa')
+            ->has('questions', count(SurveyQuestions::forRole('cooperativa')))
         );
     }
 
@@ -79,6 +95,17 @@ class SurveyTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('survey_responses', ['role' => 'pasajero', 'user_id' => $user->id]);
+    }
+
+    public function test_a_cooperative_can_submit_the_survey(): void
+    {
+        $response = $this->post(route('survey.store'), [
+            'role' => 'cooperativa',
+            'answers' => $this->answersFor('cooperativa'),
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('survey_responses', ['role' => 'cooperativa', 'user_id' => null]);
     }
 
     public function test_an_invalid_option_for_a_question_is_rejected(): void

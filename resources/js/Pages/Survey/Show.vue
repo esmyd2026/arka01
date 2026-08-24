@@ -131,7 +131,7 @@ const whatsappShareUrl = computed(() => {
         <div v-if="!role">
             <h2 class="text-xl font-bold text-arka-text text-center">Estamos por lanzar Arka01</h2>
             <p class="mt-1.5 text-sm text-arka-text-muted text-center">
-                Antes de armar todo, queremos entender tu experiencia ACTUAL con el transporte que ya usas.
+                Antes de armar todo, queremos entender tu experiencia ACTUAL con el transporte en Ecuador hoy.
                 Menos de 2 minutos. No hace falta tener cuenta.
             </p>
 
@@ -162,6 +162,20 @@ const whatsappShareUrl = computed(() => {
                         </svg>
                     </span>
                     <span class="block font-semibold text-arka-text">Soy conductor</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="flex items-center gap-3 rounded-arka border border-arka-primary/30 bg-arka-base/60 p-4 text-start transition hover:border-arka-primary hover:bg-arka-primary/10"
+                    @click="chooseRole('cooperativa')"
+                >
+                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 text-arka-primary">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="3.5" width="14" height="17" rx="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 7.5h1.5M14 7.5h1.5M8.5 11h1.5M14 11h1.5M8.5 14.5h1.5M14 14.5h1.5M10.5 20.5V17a1.5 1.5 0 0 1 1.5-1.5 1.5 1.5 0 0 1 1.5 1.5v3.5" />
+                        </svg>
+                    </span>
+                    <span class="block font-semibold text-arka-text">Soy cooperativa</span>
                 </button>
             </div>
         </div>
