@@ -658,14 +658,19 @@ async function refreshLiveRoute(force = false) {
     }
 }
 
-// Centra y hace zoom sobre la posición actual del conductor — automático en
-// cada recorrido nuevo mientras followDriver esté prendido, o a pedido
-// desde el botón de recentrar (que además reactiva el seguimiento).
+// Encuadra al conductor JUNTO con el punto al que se dirige — automático en
+// cada recorrido nuevo mientras followDriver esté prendido, o a pedido desde
+// el botón de recentrar (que además reactiva el seguimiento). Pedido
+// explícito del usuario ("es muy mínimo y no se logra detallar la ruta en
+// la que voy"): centrar solo en el punto del conductor con un zoom fijo no
+// mostraba hacia dónde iba — fitTo() ajusta el zoom para que los dos puntos
+// entren siempre, ni muy lejos ni muy cerca.
 function recenterOnDriver(force = false) {
     if (!props.isDriver) return;
     if (!force && !followDriver.value) return;
     if (driverLat.value == null || driverLng.value == null) return;
-    fleetMapRef.value?.setView(driverLat.value, driverLng.value, 16);
+    const origin = { lat: Number(driverLat.value), lng: Number(driverLng.value) };
+    fleetMapRef.value?.fitTo([origin, currentNavigationTarget.value]);
 }
 
 function recenterMapButton() {

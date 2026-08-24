@@ -31,6 +31,7 @@ onMounted(async () => {
 
 defineExpose({
     setView: (lat, lng, zoom) => mapRef.value?.setView(lat, lng, zoom),
+    fitTo: (points, options) => mapRef.value?.fitTo(points, options),
 });
 </script>
 

@@ -58,6 +58,12 @@ const isAdmin = usePage().props.auth.user.is_admin;
 // superior a acá, a la izquierda, en el lugar donde antes decía "Inicio").
 const firstName = (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] ?? '';
 
+// Encuesta corta (pedido explícito del usuario: "un botón que me ayuda ir a
+// una encuestas... bien ubicada" — visible directo en el Home, no solo
+// dentro de "Más opciones") — mismo criterio de localStorage que Login.vue
+// para no insistir a quien ya respondió.
+const surveyDone = ref(typeof window !== 'undefined' && window.localStorage.getItem('arka01_survey_done') === '1');
+
 const TRIP_STATUS = {
     pending: { label: 'Pendiente', class: 'bg-arka-warning/15 text-arka-warning' },
     confirmed: { label: 'Confirmado', class: 'bg-arka-primary/15 text-arka-primary-bright' },
@@ -468,7 +474,18 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
             <div class="flex items-center justify-between gap-3 flex-wrap">
                 <!-- Pedido explícito del usuario: el saludo baja de la barra
                      superior a acá (donde antes decía "Inicio"), a la izquierda. -->
-                <h2 class="font-semibold text-xl text-arka-text leading-tight">¡Hola, {{ firstName }}! 👋</h2>
+                <div class="text-start">
+                    <h2 class="font-semibold text-xl text-arka-text leading-tight">¡Hola, {{ firstName }}! 👋</h2>
+                    <!-- Encuesta corta (pedido explícito del usuario: "al lado
+                         izquierdo") — mismo lado que el saludo, debajo. -->
+                    <Link
+                        v-if="!surveyDone"
+                        :href="route('survey.show')"
+                        class="text-xs font-medium text-arka-primary hover:text-arka-primary-bright"
+                    >
+                        Cuentanos tu experiencia (2 min) →
+                    </Link>
+                </div>
 
                 <div
                     v-if="driverStats"
@@ -905,6 +922,17 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                         </svg>
                     </button>
+
+                    <!-- Encuesta corta (pedido explícito del usuario: "al lado
+                         izquierdo") — mismo lado que la insignia de
+                         "conductores cerca" de arriba, debajo para no pisarla. -->
+                    <Link
+                        v-if="!surveyDone"
+                        :href="route('survey.show')"
+                        class="absolute left-3 top-[7.25rem] z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-arka-base/75 py-2 pl-3 pr-3.5 text-xs font-semibold text-arka-primary-bright shadow-lg backdrop-blur-md hover:bg-arka-base/90 transition"
+                    >
+                        Encuesta (2 min) →
+                    </Link>
 
                     <!-- Sin esto, un permiso de ubicación denegado no dejaba
                          ningún rastro visible — el botón de arriba "no hacía

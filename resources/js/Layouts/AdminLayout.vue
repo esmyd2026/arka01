@@ -25,6 +25,10 @@ const sections = [
     // que puedan sumarse acá más adelante.
     { route: 'admin.site.edit', match: 'admin.site.*', label: 'Sitio' },
     { route: 'admin.metrics.index', match: 'admin.metrics.*', label: 'Indicadores' },
+    // Encuesta corta de conductor/pasajero (pedido explícito del usuario):
+    // "indicadores que me ayuden a determinar decisiones" — cerca de
+    // Indicadores, es el mismo tipo de panel.
+    { route: 'admin.survey-metrics.index', match: 'admin.survey-metrics.*', label: 'Encuestas' },
     { route: 'admin.referrals.index', match: 'admin.referrals.*', label: 'Referidos' },
     { route: 'admin.drivers.index', match: 'admin.drivers.*', label: 'Conductores' },
     { route: 'admin.clients.index', match: 'admin.clients.*', label: 'Clientes' },

@@ -68,11 +68,11 @@ class AnswerFaqHandler
         $faqs = $this->activeFaqs($role)->take(6);
 
         if ($faqs->isEmpty()) {
-            return 'Todavía no tengo preguntas frecuentes cargadas — contame directamente tu duda y te ayudo.';
+            return 'Todavía no tengo preguntas frecuentes cargadas — cuéntame directamente tu duda y te ayudo.';
         }
 
         $list = $faqs->map(fn (Faq $faq, int $i) => ($i + 1).'. '.$faq->question)->implode("\n");
 
-        return "Estas son algunas preguntas frecuentes:\n\n{$list}\n\nEscribime el número, o preguntá directamente con tus palabras.";
+        return "Estas son algunas preguntas frecuentes:\n\n{$list}\n\nEscríbeme el número, o pregunta directamente con tus palabras.";
     }
 }

@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\SiteSettingController;
 use App\Http\Controllers\Admin\SosAlertController as AdminSosAlertController;
 use App\Http\Controllers\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Admin\SupportTicketController;
+use App\Http\Controllers\Admin\SurveyMetricsController;
 use App\Http\Controllers\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Admin\SystemEventController;
 use App\Http\Controllers\Admin\UserLocationsController;
@@ -67,6 +68,7 @@ use App\Http\Controllers\SavedRouteController;
 use App\Http\Controllers\SosAlertController;
 use App\Http\Controllers\SubscriptionRequestController;
 use App\Http\Controllers\SupportController;
+use App\Http\Controllers\SurveyController;
 use App\Http\Controllers\TrustedContactController;
 use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
@@ -114,6 +116,16 @@ Route::post('/viajar-como-invitado', [GuestRideController::class, 'store'])
 Route::post('/opiniones', [PlatformFeedbackController::class, 'store'])
     ->middleware('throttle:6,1')
     ->name('platform-feedback.store');
+
+// Encuesta corta de conductor/pasajero (pedido explícito del usuario:
+// "no necesita tener usuario para hacer la encuesta") — pública, accesible
+// desde el Home y desde el login por igual, con o sin sesión iniciada. Sin
+// middleware 'guest' a propósito (a diferencia de guest-rides.store, más
+// arriba): alguien YA logueado también tiene que poder responderla desde el Home.
+Route::get('/encuesta', [SurveyController::class, 'show'])->name('survey.show');
+Route::post('/encuesta', [SurveyController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('survey.store');
 
 // Páginas legales (pedido explícito del usuario, gap identificado antes del
 // despliegue): públicas, sin necesidad de sesión — hace falta poder verlas
@@ -443,6 +455,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/pedidos-plan/{subscriptionRequest}/rechazar', [AdminSubscriptionController::class, 'rejectRequest'])->name('subscription-requests.reject');
 
     Route::get('/metricas', [MetricsController::class, 'index'])->name('metrics.index');
+    Route::get('/encuestas', [SurveyMetricsController::class, 'index'])->name('survey-metrics.index');
 
     // Trazabilidad de referidos (pedido explícito del usuario): quién invitó
     // a quién a registrarse — ver App\Models\User::referredBy()/referrals().

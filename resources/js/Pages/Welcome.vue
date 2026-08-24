@@ -35,6 +35,12 @@ const props = defineProps({
 
 const authUser = usePage().props.auth?.user ?? null;
 
+// Encuesta corta (pedido explícito del usuario: "colocalo en la raíz
+// también") — en la página pública, además del Home y el login. Mismo
+// criterio de localStorage que las otras dos para no insistir a quien ya
+// respondió.
+const surveyDone = ref(typeof window !== 'undefined' && window.localStorage.getItem('arka01_survey_done') === '1');
+
 const showingGuestIdentity = ref(false);
 const guestLocationMessage = ref('');
 const guestForm = useForm({
@@ -323,6 +329,15 @@ function submitFeedback() {
                             ¿Cómo funciona?
                         </a>
                     </div>
+
+                    <!-- Encuesta corta (pedido explícito del usuario: "en la
+                         raíz también") — mismo lado izquierdo que el resto
+                         del bloque (hereda text-center lg:text-start). -->
+                    <p v-if="!surveyDone" class="mt-4">
+                        <Link :href="route('survey.show')" class="text-sm font-medium text-arka-primary hover:text-arka-primary-bright">
+                            Cuentanos tu experiencia con el transporte hoy (2 min) →
+                        </Link>
+                    </p>
                 </div>
 
                 <!-- Separador entre el bloque de texto y la tarjeta de invitado

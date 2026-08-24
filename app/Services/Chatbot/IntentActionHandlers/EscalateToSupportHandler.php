@@ -19,7 +19,7 @@ class EscalateToSupportHandler
     public function handle(?User $user, string $rawText, string $phoneE164): string
     {
         if (! $user) {
-            return 'Para hablar con soporte hace falta tener una cuenta creada en Arka01 — ¿querés que te ayude a crear una? Si ya tenés cuenta, ingresá a la app y escribinos desde el número que declaraste ahí.';
+            return 'Para hablar con soporte hace falta tener una cuenta creada en Arka01 — ¿quieres que te ayude a crear una? Si ya tienes cuenta, ingresa a la app y escríbenos desde el número que declaraste ahí.';
         }
 
         $ticket = SupportTicket::openOrCreateFor($user);
@@ -46,6 +46,6 @@ class EscalateToSupportHandler
             WhatsAppFreeformSender::sendContact($phoneE164, $settings->support_contact_name, $settings->support_contact_phone);
         }
 
-        return 'Ya avisé a soporte con lo que me contaste — un admin va a responderte desde la sección de Soporte dentro de la app. ¿Necesitás algo más por acá mientras tanto?';
+        return 'Ya avisé a soporte con lo que me contaste — un admin va a responderte desde la sección de Soporte dentro de la app. ¿Necesitas algo más por acá mientras tanto?';
     }
 }

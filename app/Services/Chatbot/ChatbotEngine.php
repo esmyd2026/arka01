@@ -53,7 +53,7 @@ class ChatbotEngine
 
             WhatsAppFreeformSender::sendText(
                 $phoneE164,
-                'Algo falló de nuestro lado procesando tu mensaje. Podés intentarlo de nuevo, o escribir "soporte" para hablar con alguien.'
+                'Algo falló de nuestro lado procesando tu mensaje. Puedes intentarlo de nuevo, o escribir "soporte" para hablar con alguien.'
             );
         }
     }
@@ -166,7 +166,7 @@ class ChatbotEngine
         }
 
         $list = $faqs->values()->map(fn (Faq $faq, int $i) => ($i + 1).'. '.$faq->question)->implode("\n");
-        $text = "Estas son algunas preguntas frecuentes:\n\n{$list}\n\nEscribime el número, o preguntá directamente con tus palabras.";
+        $text = "Estas son algunas preguntas frecuentes:\n\n{$list}\n\nEscríbeme el número, o pregunta directamente con tus palabras.";
 
         return [$text, 'AWAITING_FAQ_CHOICE', ['faq_ids' => $faqs->pluck('id')->all()]];
     }

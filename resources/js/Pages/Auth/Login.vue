@@ -35,6 +35,10 @@ const props = defineProps({
 
 const sessionRecoveryWhatsAppUrl = computed(() => buildSessionRecoveryWhatsAppUrl(props.whatsappBusinessNumber));
 
+// Encuesta corta (pedido explícito del usuario) — mismo criterio que el
+// banner del Home, ver Survey/Show.vue.
+const surveyDone = ref(typeof window !== 'undefined' && window.localStorage.getItem('arka01_survey_done') === '1');
+
 const form = useForm({
     login: props.loginHint ?? '',
     password: '',
@@ -300,5 +304,16 @@ async function confirmTakeover() {
                 </a>
             </div>
         </template>
+
+        <!-- Encuesta corta de conductor/pasajero (pedido explícito del
+             usuario: "no necesita tener usuario... debe estar en el home y
+             en el login... al lado izquierdo") — mismo criterio de
+             localStorage que el banner del Home para no insistir a quien ya
+             respondió. -->
+        <p v-if="!surveyDone" class="mt-6 text-start text-sm">
+            <Link :href="route('survey.show')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                Cuentanos tu experiencia con Arka01 (2 min) →
+            </Link>
+        </p>
     </GuestLayout>
 </template>

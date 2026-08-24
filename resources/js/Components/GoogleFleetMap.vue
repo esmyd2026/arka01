@@ -18,7 +18,7 @@ const props = defineProps({
     centerOffsetY: { type: Number, default: 0 },
 });
 
-const emit = defineEmits(['map-click']);
+const emit = defineEmits(['map-click', 'user-panned']);
 const mapEl = ref(null);
 let map = null;
 let routeLine = null;
@@ -135,6 +135,17 @@ onMounted(() => {
         zoomControlOptions: { position: google.maps.ControlPosition.LEFT_TOP },
     });
     if (props.clickable) listeners.push(map.addListener('click', (event) => emit('map-click', { lat: event.latLng.lat(), lng: event.latLng.lng() })));
+
+    // Bug real encontrado (pedido explícito del usuario: "el conductor no
+    // puede mover el mapa"): la app tiene configurada la API key de Google
+    // Maps (VITE_GOOGLE_MAPS_API_KEY), así que ESTA implementación es la que
+    // corre de verdad — la pausa de seguimiento al arrastrar (Ride/Show.vue,
+    // followDriver) se había agregado solo en LeafletFleetMap.vue, que en la
+    // práctica nunca se usa acá. `dragstart` de Google Maps, igual que el de
+    // Leaflet, solo dispara con un arrastre real del usuario, nunca con
+    // `setCenter()`/`fitBounds()` programáticos.
+    listeners.push(map.addListener('dragstart', () => emit('user-panned')));
+
     drawMarkers();
     drawRoute();
 });
@@ -151,7 +162,24 @@ onBeforeUnmount(() => {
     map = null;
 });
 
-defineExpose({ setView: applyView });
+// Pedido explícito del usuario ("es muy mínimo y no se logra detallar la
+// ruta en la que voy"): centrar solo en la posición del conductor con un
+// zoom fijo dejaba el destino/próxima parada fuera de vista si quedaba
+// lejos, o de más cerca de lo necesario si ya estaba encima — encuadra los
+// dos puntos juntos cada vez, para que siempre se vea el tramo que falta,
+// no un zoom arbitrario. `maxZoom` evita que se acerque demasiado si el
+// conductor ya está casi encima del objetivo.
+function fitTo(points, { maxZoom = 17 } = {}) {
+    if (!map || points.length < 2) return;
+    const bounds = new google.maps.LatLngBounds();
+    points.forEach((point) => bounds.extend({ lat: Number(point.lat), lng: Number(point.lng) }));
+    map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+    google.maps.event.addListenerOnce(map, 'idle', () => {
+        if ((map?.getZoom() ?? 0) > maxZoom) map.setZoom(maxZoom);
+    });
+}
+
+defineExpose({ setView: applyView, fitTo });
 </script>
 
 <template>

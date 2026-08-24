@@ -442,10 +442,27 @@ watch(
     }
 );
 
+// Pedido explícito del usuario ("es muy mínimo y no se logra detallar la
+// ruta en la que voy"): centrar solo en la posición del conductor con un
+// zoom fijo dejaba el destino/próxima parada fuera de vista si quedaba
+// lejos, o de más cerca de lo necesario si ya estaba encima — encuadra los
+// dos puntos juntos cada vez, para que siempre se vea el tramo que falta,
+// no un zoom arbitrario. `maxZoom` evita que se acerque demasiado si el
+// conductor ya está casi encima del objetivo.
+function fitTo(points, { maxZoom = 17 } = {}) {
+    if (!map || points.length < 2) return;
+    map.fitBounds(L.latLngBounds(points.map((point) => [point.lat, point.lng])), {
+        paddingTopLeft: [50, 50],
+        paddingBottomRight: [50, 50],
+        maxZoom,
+    });
+}
+
 defineExpose({
     // Permite que la página centre el mapa en la ubicación del usuario una
     // vez que el navegador se la da (ej. al elegir origen de una carrera).
     setView: applyView,
+    fitTo,
 });
 </script>
 

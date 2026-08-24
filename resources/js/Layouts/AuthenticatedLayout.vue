@@ -236,6 +236,11 @@ const quickLinks = computed(() =>
             clientOnly: true,
             help: 'Explore y reserve un asiento en las salidas programadas que publican los conductores.',
         },
+        {
+            route: 'survey.show',
+            label: 'Encuesta',
+            help: 'Cuentanos tu experiencia con Arka01 — menos de 2 minutos, sin necesidad de cuenta.',
+        },
     ].filter(
         (item) =>
             hasRoute(item.route) &&
@@ -1032,6 +1037,23 @@ onBeforeUnmount(() => {
                             <span class="text-arka-text">Cupones y beneficios</span>
                         </Link>
                         <HelpTip text="Promos de comercios aliados, separadas para clientes y para conductores." />
+                    </div>
+
+                    <!-- Encuesta corta de conductor/pasajero (pedido explícito del
+                         usuario: "un botón que me ayuda ir a una encuesta... bien
+                         ubicada") — sin restricción de rol, sirve para los dos. -->
+                    <div v-if="hasRoute('survey.show')" class="flex items-center gap-1">
+                        <Link
+                            :href="route('survey.show')"
+                            @click="showingQuickActions = false"
+                            class="flex-1 flex items-center gap-3 px-3 py-3 rounded-arka hover:bg-arka-base min-h-[44px]"
+                        >
+                            <svg class="h-6 w-6 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 11.5h6M9 15h4M6.5 4.5h11a2 2 0 0 1 2 2V19l-3.5-2H6.5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" />
+                            </svg>
+                            <span class="text-arka-text">Encuesta</span>
+                        </Link>
+                        <HelpTip text="Cuentanos tu experiencia con Arka01 — menos de 2 minutos, sin necesidad de cuenta." />
                     </div>
                 </div>
             </div>

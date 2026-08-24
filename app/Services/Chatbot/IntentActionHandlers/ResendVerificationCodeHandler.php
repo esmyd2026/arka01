@@ -19,7 +19,7 @@ class ResendVerificationCodeHandler
     public function handle(?User $user): string
     {
         if (! $user) {
-            return 'No encontré ninguna cuenta con este número, así que no hay ningún código pendiente. ¿Querés que te ayude a crear una cuenta? Escribime "crear cuenta".';
+            return 'No encontré ninguna cuenta con este número, así que no hay ningún código pendiente. ¿Quieres que te ayude a crear una cuenta? Escríbeme "crear cuenta".';
         }
 
         if (! $user->phone) {
@@ -27,7 +27,7 @@ class ResendVerificationCodeHandler
         }
 
         if ($user->phone_verified_at) {
-            return 'Tu número ya está verificado, no hace falta ningún código para eso. ¿Tenías otro problema? Contame.';
+            return 'Tu número ya está verificado, no hace falta ningún código para eso. ¿Tenías otro problema? Cuéntame.';
         }
 
         $code = $user->issuePhoneVerificationCode();
@@ -43,7 +43,7 @@ class ResendVerificationCodeHandler
                 'phone_verification_expires_at' => null,
             ])->save();
 
-            return 'No pudimos mandarte el código por WhatsApp en este momento, así que ya quedó verificado igual — podés seguir usando la app sin problema.';
+            return 'No pudimos mandarte el código por WhatsApp en este momento, así que ya quedó verificado igual — puedes seguir usando la app sin problema.';
         }
 
         return 'Listo, te mandé un código nuevo por WhatsApp — puede tardar unos segundos en llegar.';
