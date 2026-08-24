@@ -25,6 +25,24 @@ use Throwable;
  */
 class ChatbotEngine
 {
+    /**
+     * Pseudo-acción del botón "Más opciones" (pedido explícito del usuario:
+     * "chatbot mas pro... los primeros 3 con lo mas importante... y el
+     * otro más. y alli se abre el de seleccion") — NO es un ChatbotIntent
+     * real en la base de datos, solo un `id` de botón que este motor
+     * reconoce directo, antes de pasar por IntentDetector (mismo criterio
+     * que rideActionHandler/rideBookingHandler abajo).
+     */
+    private const MORE_OPTIONS_ACTION = 'WA_MAS_OPCIONES';
+
+    /**
+     * Las 2 intenciones promovidas a botón propio en el menú principal
+     * (pedido explícito del usuario: "lo mas importante que es pedir una
+     * carrera y el otro crear cuenta") — el resto de las intenciones
+     * `show_in_menu` quedan en la lista de "Más opciones".
+     */
+    private const PROMOTED_MENU_CODES = ['PEDIR_CARRERA', 'REGISTRO'];
+
     public function __construct(
         private readonly IntentDetector $detector,
         private readonly ResendVerificationCodeHandler $resendHandler,
@@ -77,6 +95,15 @@ class ChatbotEngine
         // (o un número sin cuenta) ve el contenido "ambos" nada más.
         $role = in_array($user?->role, ['cliente', 'conductor'], true) ? $user->role : null;
 
+        // Botón "Más opciones" del menú principal (pedido explícito del
+        // usuario) — pseudo-acción, se resuelve directo sin pasar por
+        // IntentDetector (no es un ChatbotIntent real, ver la constante).
+        if ($rawText === self::MORE_OPTIONS_ACTION) {
+            $this->sendMoreOptionsList($conversation, $phoneE164, $role);
+
+            return;
+        }
+
         // Elegir una FAQ de la mini-lista que se le ofreció recién (ver
         // AnswerFaqHandler::menuText()) — resolución previa a la detección
         // normal, mismo principio de "el contexto manda" pero con una forma
@@ -107,6 +134,16 @@ class ChatbotEngine
                 return;
             }
 
+            // El menú principal (pedido explícito del usuario: "chatbot mas
+            // pro... con botones") ya no es una respuesta de TEXTO como el
+            // resto de buildReply() — es un mensaje interactivo aparte.
+            if ($match->intent->action === 'show_menu') {
+                $conversation->update(['unresolved_attempts' => 0]);
+                $this->sendMainMenu($conversation, $phoneE164, ChatbotSetting::current()->welcome_message, $role);
+
+                return;
+            }
+
             [$reply, $pendingIntent, $context] = $this->buildReply($match->intent, $user, $conversation, $rawText, $role, $phoneE164);
             $this->resolve($conversation, $reply, $pendingIntent, $context);
 
@@ -132,23 +169,14 @@ class ChatbotEngine
     private function buildReply(ChatbotIntent $intent, ?User $user, ChatbotConversation $conversation, string $rawText, ?string $role, string $phoneE164): array
     {
         return match ($intent->action) {
-            'show_menu' => $this->menuReply($role),
+            // 'show_menu' ya no pasa por acá — ver el chequeo en process(),
+            // el menú principal ahora es un mensaje interactivo de botones
+            // (sendMainMenu()), no una respuesta de texto.
             'resend_code' => [$this->resendHandler->handle($user), null, null],
             'escalate_support' => [$this->escalateHandler->handle($user, $rawText, $phoneE164), null, null],
             'answer_faq' => $this->faqMenuReply($role),
             default => [$intent->reply_message ?? 'Listo.', null, null],
         };
-    }
-
-    /**
-     * @return array{0: string, 1: string, 2: array}
-     */
-    private function menuReply(?string $role): array
-    {
-        $settings = ChatbotSetting::current();
-        [$menuText, $codes] = $this->buildMenu($role);
-
-        return [trim($settings->welcome_message."\n\n".$menuText), 'AWAITING_MENU_CHOICE', ['menu_options' => $codes]];
     }
 
     /**
@@ -186,20 +214,71 @@ class ChatbotEngine
     }
 
     /**
-     * @return array{0: string, 1: array<int, string>}
+     * Menú principal con botones nativos de WhatsApp (pedido explícito del
+     * usuario: "chatbot mas pro... los primeros 3 con lo mas importante
+     * que es pedir una carrera y el otro crear cuenta y el otro más...
+     * evitar que confirmen con numeros o escriban"). Máximo 3 botones por
+     * mensaje (límite de la API de Meta) — PEDIR_CARRERA y REGISTRO solo se
+     * incluyen si esa intención existe, está activa y aplica al rol de
+     * quien escribe (mismo filtro que ya usaba el menú de texto); "Más
+     * opciones" siempre va, para llegar al resto sin escribir nada.
      */
-    private function buildMenu(?string $role): array
+    private function sendMainMenu(ChatbotConversation $conversation, string $phone, string $introText, ?string $role): void
+    {
+        $promoted = ChatbotIntent::query()
+            ->whereIn('code', self::PROMOTED_MENU_CODES)
+            ->where('is_active', true)
+            ->forRole($role)
+            ->get()
+            ->keyBy('code');
+
+        $buttons = collect(self::PROMOTED_MENU_CODES)
+            ->filter(fn (string $code) => $promoted->has($code))
+            ->map(fn (string $code) => ['id' => $code, 'title' => $promoted[$code]->label])
+            ->values()
+            ->push(['id' => self::MORE_OPTIONS_ACTION, 'title' => 'Más opciones'])
+            ->all();
+
+        WhatsAppFreeformSender::sendButtons($phone, trim($introText), $buttons);
+
+        // `unresolved_attempts` queda afuera a propósito: quien llama a
+        // este método decide si corresponde resetearlo (un saludo/menú
+        // pedido de verdad) o conservarlo (fallback() ya viene contando
+        // intentos fallidos, ver ahí abajo).
+        $conversation->update([
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => array_column($buttons, 'id')],
+            'last_message_at' => now(),
+        ]);
+    }
+
+    /**
+     * Lista de WhatsApp con el resto de las intenciones del menú (todo lo
+     * que no se promovió a botón propio) — se abre al tocar "Más opciones".
+     */
+    private function sendMoreOptionsList(ChatbotConversation $conversation, string $phone, ?string $role): void
     {
         $intents = ChatbotIntent::query()
             ->where('is_active', true)
             ->where('show_in_menu', true)
+            ->whereNotIn('code', self::PROMOTED_MENU_CODES)
             ->forRole($role)
             ->orderBy('sort_order')
             ->get();
 
-        $lines = $intents->values()->map(fn (ChatbotIntent $intent, int $i) => ($i + 1).'. '.($intent->menu_label ?? $intent->label))->implode("\n");
+        WhatsAppFreeformSender::sendList(
+            $phone,
+            'Elegí una opción de la lista:',
+            'Ver opciones',
+            $intents->map(fn (ChatbotIntent $intent) => ['id' => $intent->code, 'title' => $intent->menu_label ?? $intent->label])->all()
+        );
 
-        return [$lines, $intents->pluck('code')->all()];
+        $conversation->update([
+            'unresolved_attempts' => 0,
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => $intents->pluck('code')->all()],
+            'last_message_at' => now(),
+        ]);
     }
 
     private function resolve(ChatbotConversation $conversation, string $reply, ?string $pendingIntent, ?array $context): void
@@ -241,23 +320,17 @@ class ChatbotEngine
                 'last_message_at' => now(),
             ]);
 
-            WhatsAppFreeformSender::sendText(
-                $phoneE164,
-                trim($settings->fallback_escalation_message."\n\n1. 💬 Hablar con soporte")
-            );
+            WhatsAppFreeformSender::sendButtons($phoneE164, trim($settings->fallback_escalation_message), [
+                ['id' => 'SOPORTE', 'title' => 'Hablar con soporte'],
+            ]);
 
             return;
         }
 
-        [$menuText] = $this->buildMenu($role);
-
-        $conversation->update([
-            'unresolved_attempts' => $attempts,
-            'pending_intent' => null,
-            'context' => null,
-            'last_message_at' => now(),
-        ]);
-
-        WhatsAppFreeformSender::sendText($phoneE164, trim($settings->fallback_message."\n\n".$menuText));
+        // Mismo menú de botones que el saludo (pedido explícito del
+        // usuario: "chatbot mas pro") — sendMainMenu() ya deja el estado
+        // AWAITING_MENU_CHOICE armado, no hace falta duplicarlo acá.
+        $conversation->update(['unresolved_attempts' => $attempts]);
+        $this->sendMainMenu($conversation, $phoneE164, $settings->fallback_message, $role);
     }
 }

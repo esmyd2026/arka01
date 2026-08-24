@@ -98,6 +98,17 @@ const viewingDocument = ref(null);
                             >
                                 Ver antecedentes
                             </button>
+                            <!-- Pedido explícito del usuario: seguro autodeclarado con un
+                                 checkbox, sin documento adjunto — acá se muestra como
+                                 indicador de solo lectura, no hay nada que "ver". -->
+                            <p
+                                class="rounded-arka border p-3 text-sm font-medium"
+                                :class="profile.has_insurance
+                                    ? 'border-arka-primary/30 text-arka-primary-bright'
+                                    : 'border-arka-danger/30 text-arka-danger'"
+                            >
+                                {{ profile.has_insurance ? '✓ Cuenta con seguro' : '✗ Sin seguro declarado' }}
+                            </p>
                         </div>
 
                         <div v-if="rejectingProfileId !== profile.id" class="flex gap-2">

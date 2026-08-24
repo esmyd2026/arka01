@@ -30,6 +30,17 @@ const ROLE_BADGE_CLASS = {
     cliente: 'bg-arka-lime/10 text-arka-lime',
 };
 
+// De qué lado (owner_type de SubscriptionPlan) es un pedido de plan — ahora
+// que las cooperativas también pueden pedir el suyo (pedido explícito del
+// usuario: pantalla "Mi plan de cooperativa"), ya no alcanza con el
+// driver/cliente binario que había antes acá.
+const OWNER_TYPE_LABELS = { driver: 'Conductor', client: 'Cliente', cooperative: 'Cooperativa' };
+const OWNER_TYPE_BADGE_CLASS = {
+    driver: 'bg-arka-primary/15 text-arka-primary-bright',
+    client: 'bg-arka-lime/15 text-arka-lime',
+    cooperative: 'bg-arka-warning/15 text-arka-warning',
+};
+
 // Comprobantes de pago esperando revisión (consideración agregada al alcance).
 const rejectingRequestId = ref(null);
 const rejectNote = ref('');
@@ -194,9 +205,9 @@ function clientPlanOf(user) {
                                      conocía el catálogo de memoria. -->
                                 <span
                                     class="px-2 py-0.5 rounded-full text-xs font-medium"
-                                    :class="req.plan.owner_type === 'driver' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'bg-arka-lime/15 text-arka-lime'"
+                                    :class="OWNER_TYPE_BADGE_CLASS[req.plan.owner_type]"
                                 >
-                                    {{ req.plan.owner_type === 'driver' ? 'Conductor' : 'Cliente' }}
+                                    {{ OWNER_TYPE_LABELS[req.plan.owner_type] }}
                                 </span>
                             </div>
                             <p class="text-sm text-arka-text-muted">{{ req.user.email }}</p>
@@ -209,6 +220,13 @@ function clientPlanOf(user) {
                                  saberlo desde acá. -->
                             <p v-if="req.plan_promotion" class="text-sm text-arka-lime mt-0.5">
                                 🎁 Promoción "{{ req.plan_promotion.label }}" — correspondía ${{ req.plan_promotion.promo_price }}/mes
+                            </p>
+                            <!-- Descuento por cooperativa (pedido explícito del usuario):
+                                 mismo criterio que la promoción de arriba — sin esto el
+                                 admin esperaría el precio de lista completo. -->
+                            <p v-else-if="req.cooperative_discount" class="text-sm text-arka-primary-bright mt-0.5">
+                                🏢 Descuento por cooperativa ({{ req.cooperative_discount.percent }}%) — correspondía
+                                ${{ req.cooperative_discount.discounted_price }}/mes
                             </p>
                             <button
                                 v-if="req.payment_proof_url"
@@ -268,11 +286,19 @@ function clientPlanOf(user) {
 
                         <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                             <dt class="text-arka-text-muted">Se suscribe como</dt>
-                            <dd class="text-arka-text">{{ viewingRequest.plan.owner_type === 'driver' ? 'Conductor' : 'Cliente' }}</dd>
+                            <dd class="text-arka-text">{{ OWNER_TYPE_LABELS[viewingRequest.plan.owner_type] }}</dd>
                             <dt class="text-arka-text-muted">Plan solicitado</dt>
                             <dd class="text-arka-text">{{ viewingRequest.plan.name }}</dd>
                             <dt class="text-arka-text-muted">Monto a transferir</dt>
-                            <dd class="text-arka-text font-semibold">${{ viewingRequest.plan.monthly_price }}/mes</dd>
+                            <dd class="text-arka-text font-semibold">
+                                ${{
+                                    viewingRequest.plan_promotion
+                                        ? viewingRequest.plan_promotion.promo_price
+                                        : viewingRequest.cooperative_discount
+                                          ? viewingRequest.cooperative_discount.discounted_price
+                                          : viewingRequest.plan.monthly_price
+                                }}/mes
+                            </dd>
                             <dt class="text-arka-text-muted">Comprobante subido</dt>
                             <dd class="text-arka-text">{{ new Date(viewingRequest.updated_at).toLocaleString('es-EC') }}</dd>
                         </dl>

@@ -32,6 +32,7 @@ class DriverProfile extends Model
         'license_photo_path',
         'identity_document_path',
         'police_record_path',
+        'has_insurance',
         'vehicle_make',
         'vehicle_model',
         'vehicle_color',
@@ -76,6 +77,7 @@ class DriverProfile extends Model
         'deactivated_at' => 'datetime',
         'passenger_capacity' => 'integer',
         'has_trunk' => 'boolean',
+        'has_insurance' => 'boolean',
         'vehicle_amenities' => 'array',
         'whatsapp_ride_actions_enabled' => 'boolean',
     ];
@@ -403,7 +405,11 @@ class DriverProfile extends Model
             && ($this->accepts_cash || $this->accepts_transfer)
             && filled($this->identity_document_path)
             && filled($this->license_photo_path)
-            && filled($this->police_record_path);
+            && filled($this->police_record_path)
+            // Pedido explícito del usuario: seguro que lo proteja a él, a
+            // los pasajeros y al vehículo — autodeclarado con un checkbox,
+            // sin documento adjunto (a diferencia de los 3 de arriba).
+            && $this->has_insurance;
     }
 
     /**

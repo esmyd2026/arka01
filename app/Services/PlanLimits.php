@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CooperativeDriverMembership;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 
@@ -94,18 +95,67 @@ class PlanLimits
             'plan_name' => $plan->name,
             'plan_sort_order' => $plan->sort_order,
             'max_units' => $subscription?->custom_max_units ?? $plan->max_units,
+            // Descuento que este plan de cooperativa le da a SU conductor
+            // afiliado en el plan INDIVIDUAL del conductor (pedido explícito
+            // del usuario) — ver cooperativeDriverDiscountPercent() abajo,
+            // que es quien realmente lo aplica.
+            'driver_discount_percent' => (int) $plan->driver_discount_percent,
             'subscription_status' => $subscription?->status,
             'expires_at' => $subscription?->expires_at?->toIso8601String(),
         ];
     }
 
+    /**
+     * Descuento (0-100) que le corresponde HOY a este conductor en su propio
+     * plan individual, por estar afiliado a una cooperativa activa y
+     * aprobada (pedido explícito del usuario: "si un conductor... es de una
+     * cooperativa... ella paga su parte por cantidad de conductores... el
+     * conductor puede tener un descuento"). Se recalcula siempre desde la
+     * relación viva, nunca se guarda — mismo criterio que las promociones de
+     * PlanPromotion: si el conductor deja la cooperativa, el descuento deja
+     * de aplicar solo.
+     */
+    public function cooperativeDriverDiscountPercent(User $driver): int
+    {
+        $membership = CooperativeDriverMembership::query()
+            ->where('driver_user_id', $driver->id)
+            ->where('status', 'accepted')
+            ->whereNull('ended_at')
+            ->whereNull('suspended_at')
+            ->with('cooperative.user')
+            ->first();
+
+        if (! $membership || ! $membership->cooperative->isApproved()) {
+            return 0;
+        }
+
+        return $this->forCooperative($membership->cooperative->user)['driver_discount_percent'];
+    }
+
+    /**
+     * Forma completa del descuento (porcentaje + precio ya calculado) para
+     * un plan de conductor puntual — única fuente de esto, reusada por
+     * MyPlanController (catálogo y pedido pendiente) y
+     * Admin\SubscriptionController (monto esperado por el admin al revisar
+     * un comprobante).
+     *
+     * @return array{percent: int, discounted_price: float}|null
+     */
+    public function driverDiscountFor(SubscriptionPlan $plan, User $driver): ?array
+    {
+        $percent = $this->cooperativeDriverDiscountPercent($driver);
+
+        return $percent > 0 ? [
+            'percent' => $percent,
+            'discounted_price' => round((float) $plan->monthly_price * (1 - $percent / 100), 2),
+        ] : null;
+    }
+
     private function freePlan(string $ownerType): SubscriptionPlan
     {
-        $baseCode = $ownerType === 'cooperative' ? 'basico' : 'gratis';
-
         return SubscriptionPlan::query()
             ->where('owner_type', $ownerType)
-            ->where('code', $baseCode)
+            ->where('code', 'gratis')
             ->firstOrFail();
     }
 }

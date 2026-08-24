@@ -17,9 +17,13 @@ const uploadForm = useForm({ payment_proof: null });
 // Bug real reportado por el usuario: este panel siempre mostraba el precio
 // de LISTA del plan, aunque el pedido se haya hecho con una promoción
 // vigente — el monto a transferir tiene que ser el que realmente se
-// prometió al elegir el plan (Plan/Driver.vue y Plan/Client.vue).
+// prometió al elegir el plan (Plan/Driver.vue y Plan/Client.vue). Mismo
+// criterio para el descuento por cooperativa (pedido explícito del
+// usuario) — el backend ya prioriza la promoción si hay una vigente.
 function effectivePrice(request) {
-    return request.plan_promotion ? request.plan_promotion.promo_price : request.plan.monthly_price;
+    if (request.plan_promotion) return request.plan_promotion.promo_price;
+    if (request.cooperative_discount) return request.cooperative_discount.discounted_price;
+    return request.plan.monthly_price;
 }
 
 function submitProof() {
@@ -68,6 +72,13 @@ async function cancelRequest() {
             <p class="text-xs text-arka-lime font-medium">
                 🎁 Promoción aplicada: {{ pendingRequest.plan_promotion.label }} — pague
                 ${{ Number(pendingRequest.plan_promotion.promo_price).toFixed(2) }}/mes en vez de
+                ${{ Number(pendingRequest.plan.monthly_price).toFixed(2) }}/mes.
+            </p>
+        </div>
+        <div v-else-if="pendingRequest.cooperative_discount" class="p-2 rounded-arka bg-arka-primary/10 border border-arka-primary/30">
+            <p class="text-xs text-arka-primary-bright font-medium">
+                🏢 Descuento por cooperativa aplicado: pague ${{ Number(pendingRequest.cooperative_discount.discounted_price).toFixed(2) }}/mes
+                ({{ pendingRequest.cooperative_discount.percent }}% menos) en vez de
                 ${{ Number(pendingRequest.plan.monthly_price).toFixed(2) }}/mes.
             </p>
         </div>

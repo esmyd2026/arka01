@@ -46,6 +46,12 @@ class ChatbotWebhookTest extends TestCase
         $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
     }
 
+    /**
+     * Pedido explícito del usuario ("chatbot mas pro... con botones"): el
+     * saludo ya no es texto con una lista numerada — es un mensaje
+     * interactivo de botones, con "Pedir carrera", "Crear cuenta" y "Más
+     * opciones" (el pseudo-botón que abre la lista con el resto).
+     */
     public function test_a_greeting_from_a_registered_user_gets_a_real_menu_reply_not_the_old_fixed_text(): void
     {
         $this->enableWhatsApp();
@@ -54,11 +60,19 @@ class ChatbotWebhookTest extends TestCase
         $this->sendInbound('593991234567', 'Hola');
 
         Http::assertSent(function ($request) {
-            $body = $request['text']['body'] ?? '';
+            if (($request['interactive']['type'] ?? null) !== 'button') {
+                return false;
+            }
+
+            $body = $request['interactive']['body']['text'] ?? '';
+            $buttonIds = collect($request['interactive']['action']['buttons'] ?? [])->pluck('reply.id');
 
             return str_contains($request->url(), 'graph.facebook.com')
                 && str_contains($body, 'asistente virtual')
-                && ! str_contains($body, 'Ya quedó conectado y activo');
+                && ! str_contains($body, 'Ya quedó conectado y activo')
+                && $buttonIds->contains('PEDIR_CARRERA')
+                && $buttonIds->contains('REGISTRO')
+                && $buttonIds->contains('WA_MAS_OPCIONES');
         });
 
         $this->assertDatabaseHas('chatbot_conversations', ['phone' => '+593991234567', 'pending_intent' => 'AWAITING_MENU_CHOICE']);
@@ -179,7 +193,11 @@ class ChatbotWebhookTest extends TestCase
             'user_id' => $user->id,
             'message' => 'asdfg qwerty zzz',
         ]);
-        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'no logré identificar'));
+        // Mismo menú de botones que el saludo (pedido explícito del
+        // usuario: "chatbot mas pro") — el fallback no-final ya no pega el
+        // texto numerado, manda el mismo mensaje interactivo.
+        Http::assertSent(fn ($request) => ($request['interactive']['type'] ?? null) === 'button'
+            && str_contains($request['interactive']['body']['text'] ?? '', 'no logré identificar'));
     }
 
     public function test_repeated_unrecognized_messages_escalate_to_a_support_offer(): void
@@ -193,7 +211,19 @@ class ChatbotWebhookTest extends TestCase
         $this->sendInbound('593991234567', 'asdfg primero');
         $this->sendInbound('593991234567', 'qwerty segundo');
 
-        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'atención más específica'));
+        // Escalamiento final (pedido explícito del usuario: "chatbot mas
+        // pro") — un solo botón "Hablar con soporte" en vez de texto con
+        // "1. 💬 Hablar con soporte" pegado al final.
+        Http::assertSent(function ($request) {
+            if (($request['interactive']['type'] ?? null) !== 'button') {
+                return false;
+            }
+
+            $body = $request['interactive']['body']['text'] ?? '';
+            $buttonIds = collect($request['interactive']['action']['buttons'] ?? [])->pluck('reply.id');
+
+            return str_contains($body, 'atención más específica') && $buttonIds->contains('SOPORTE');
+        });
 
         $conversation = ChatbotConversation::query()->where('phone', '+593991234567')->first();
         $this->assertSame(2, $conversation->unresolved_attempts);
@@ -212,6 +242,86 @@ class ChatbotWebhookTest extends TestCase
 
         Bus::assertDispatched(SendWhatsAppSessionRecoveryPrompt::class);
         Bus::assertNotDispatched(ProcessChatbotMessage::class);
+    }
+
+    /**
+     * Pedido explícito del usuario ("chatbot mas pro"): tocar "Más
+     * opciones" abre una lista de WhatsApp con el resto de las intenciones
+     * del menú (las que no se promovieron a botón propio), sin que la
+     * persona tenga que escribir nada.
+     */
+    public function test_touching_more_options_opens_a_whatsapp_list_with_the_rest_of_the_menu(): void
+    {
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+        ChatbotConversation::create([
+            'phone' => '+593991234567',
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => ['PEDIR_CARRERA', 'REGISTRO', 'WA_MAS_OPCIONES']],
+        ]);
+
+        $this->sendInbound('593991234567', 'WA_MAS_OPCIONES');
+
+        Http::assertSent(function ($request) {
+            if (($request['interactive']['type'] ?? null) !== 'list') {
+                return false;
+            }
+
+            $rowIds = collect($request['interactive']['action']['sections'][0]['rows'] ?? [])->pluck('id');
+
+            return $rowIds->contains('SOPORTE')
+                && $rowIds->contains('CODIGO_NO_RECIBIDO')
+                && ! $rowIds->contains('PEDIR_CARRERA')
+                && ! $rowIds->contains('REGISTRO');
+        });
+
+        $conversation = ChatbotConversation::forPhone('+593991234567');
+        $this->assertSame('AWAITING_MENU_CHOICE', $conversation->pending_intent);
+        $this->assertContains('SOPORTE', $conversation->context['menu_options']);
+    }
+
+    /**
+     * Tocar una fila de esa lista resuelve la intención por el `id` exacto
+     * que devuelve WhatsApp, sin pasar por texto libre.
+     */
+    public function test_touching_a_row_from_the_more_options_list_resolves_the_right_intent(): void
+    {
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567', 'phone_verified_at' => null]);
+        ChatbotConversation::create([
+            'phone' => '+593991234567',
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => ['CODIGO_NO_RECIBIDO', 'SOPORTE']],
+        ]);
+
+        $this->sendInbound('593991234567', 'CODIGO_NO_RECIBIDO');
+
+        // Mismo flujo real de reenvío de código que ya prueba
+        // test_no_me_llego_el_codigo_triggers_the_real_resend_flow — acá lo
+        // que importa es que se disparó por el ID exacto del botón/fila,
+        // no por texto libre reconocido por palabras clave.
+        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'template');
+    }
+
+    /**
+     * Tocar "Crear cuenta" desde el menú principal resuelve esa intención
+     * real por su código exacto — confirma que el matching por botón
+     * también funciona para las 2 intenciones promovidas, no solo para el
+     * pseudo-botón "Más opciones".
+     */
+    public function test_touching_the_crear_cuenta_button_answers_with_its_reply_message(): void
+    {
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+        ChatbotConversation::create([
+            'phone' => '+593991234567',
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => ['PEDIR_CARRERA', 'REGISTRO', 'WA_MAS_OPCIONES']],
+        ]);
+
+        $this->sendInbound('593991234567', 'REGISTRO');
+
+        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'Crear una cuenta es rápido'));
     }
 
     public function test_a_faq_style_question_without_a_dedicated_intent_still_gets_answered(): void

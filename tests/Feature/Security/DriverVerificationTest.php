@@ -86,6 +86,39 @@ class DriverVerificationTest extends TestCase
         $this->assertNull($driver->driverProfile()->first());
     }
 
+    /**
+     * Pedido explícito del usuario: seguro que lo proteja a él, a los
+     * pasajeros y al vehículo — autodeclarado con un checkbox, sin
+     * documento, pero igual obligatorio para solicitar verificación (mismo
+     * criterio que cédula/licencia/antecedentes).
+     */
+    public function test_solicitar_verificacion_sin_declarar_seguro_es_rechazado(): void
+    {
+        Storage::fake('local');
+        Storage::fake('public');
+        $driver = User::factory()->create();
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), [
+            'license_number' => 'LIC-001',
+            'vehicle_make' => 'Chevrolet',
+            'vehicle_model' => 'Spark',
+            'vehicle_color' => 'Blanco',
+            'vehicle_type' => 'sedan',
+            'vehicle_plate' => 'ABC-1234',
+            'vehicle_year' => 2020,
+            'passenger_capacity' => 4,
+            'has_trunk' => true,
+            'rate_per_km' => 0.5,
+            'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
+            'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
+            'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
+            'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+            // has_insurance deliberadamente ausente.
+        ])->assertSessionHasErrors('has_insurance');
+
+        $this->assertNull($driver->driverProfile()->first());
+    }
+
     public function test_an_admin_can_approve_a_pending_verification(): void
     {
         Notification::fake();
@@ -112,6 +145,22 @@ class DriverVerificationTest extends TestCase
         $profile = DriverProfile::factory()->for($driver)->create([
             'verification_status' => 'pending',
             'vehicle_plate' => null,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.driver-verifications.approve', $profile))
+            ->assertSessionHasErrors('verification');
+
+        $this->assertSame('pending', $profile->fresh()->verification_status);
+    }
+
+    public function test_an_admin_cannot_approve_a_driver_profile_without_declared_insurance(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create([
+            'verification_status' => 'pending',
+            'has_insurance' => false,
         ]);
 
         $this->actingAs($admin)

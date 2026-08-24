@@ -210,6 +210,12 @@ const quickLinks = computed(() =>
             help: 'Su plan vigente y sus beneficios como cliente.',
         },
         {
+            route: 'cooperative.plan.edit',
+            label: 'Mi plan de cooperativa',
+            cooperativeOnly: true,
+            help: 'Su plan vigente, cuántas unidades puede afiliar, y el descuento que reciben sus conductores en su propio plan mientras estén afiliados.',
+        },
+        {
             route: 'trusted-contacts.index',
             label: 'Contactos de confianza',
             help: 'A quién avisa el botón SOS si lo activa durante un viaje.',

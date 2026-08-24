@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Checkbox from '@/Components/Checkbox.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -30,6 +31,7 @@ const form = useForm({
     legal_representative: props.cooperative.legal_representative ?? '',
     declared_driver_count: props.cooperative.declared_driver_count ?? 0,
     declared_unit_count: props.cooperative.declared_unit_count ?? 0,
+    has_insurance: props.cooperative.has_insurance ?? false,
     geographic_coverage: props.cooperative.geographic_coverage ?? '',
     operating_hours: props.cooperative.operating_hours ?? '',
     response_timeout_seconds: props.cooperative.response_timeout_seconds ?? 30,
@@ -125,7 +127,10 @@ function uploadLogo(event) {
                                 </div>
                                 <div>
                                     <h1 class="text-xl font-semibold text-arka-text">{{ form.name || 'Complete el nombre de la cooperativa' }}</h1>
-                                    <p class="mt-1 text-sm text-arka-text-muted">Plan {{ planLimits.plan_name }} · {{ planLimits.max_units ?? 'sin límite' }} unidades</p>
+                                    <p class="mt-1 text-sm text-arka-text-muted">
+                                        Plan {{ planLimits.plan_name }} · {{ planLimits.max_units ?? 'sin límite' }} unidades ·
+                                        <Link :href="route('cooperative.plan.edit')" class="text-arka-primary hover:text-arka-primary-bright">Ver planes</Link>
+                                    </p>
                                 </div>
                             </div>
                             <span
@@ -255,6 +260,19 @@ function uploadLogo(event) {
                                 @change="form[`${type}_document`] = $event.target.files[0]"
                             />
                             <InputError class="mt-1" :message="form.errors[`${type}_document`]" />
+                        </div>
+
+                        <!-- Pedido explícito del usuario: seguro que proteja al
+                             representante/dueño, a los conductores afiliados y a los
+                             vehículos — autodeclarado con un checkbox, sin documento
+                             adjunto (a diferencia de los 4 de arriba). Se exige marcado
+                             recién al enviar a validación, ver submitForReview(). -->
+                        <div class="rounded-arka border border-arka-text-muted/15 p-4 sm:col-span-2">
+                            <label class="flex items-start gap-2">
+                                <Checkbox v-model:checked="form.has_insurance" class="mt-0.5" />
+                                <span class="text-sm text-arka-text">Contamos con un seguro vigente que protege al representante/dueño, a los conductores afiliados y a los vehículos</span>
+                            </label>
+                            <InputError class="mt-1" :message="form.errors.has_insurance" />
                         </div>
 
                         <div class="rounded-arka border border-dashed border-arka-text-muted/20 p-4 sm:col-span-2">

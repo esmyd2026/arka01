@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PlanPromotion;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
+use App\Services\PlanLimits;
 use App\Services\SubscriptionActivator;
 use App\Services\SubscriptionPlanEligibility;
 use Illuminate\Http\RedirectResponse;
@@ -25,6 +26,7 @@ class SubscriptionRequestController extends Controller
     public function __construct(
         private readonly SubscriptionPlanEligibility $eligibility,
         private readonly SubscriptionActivator $activator,
+        private readonly PlanLimits $planLimits,
     ) {}
 
     /**
@@ -78,7 +80,17 @@ class SubscriptionRequestController extends Controller
             }
         }
 
-        $effectivePrice = $promotion ? (float) $promotion->promo_price : (float) $plan->monthly_price;
+        // Descuento por cooperativa (pedido explícito del usuario) — nunca
+        // se confía en lo que mandó el navegador, se recalcula acá igual
+        // que la promoción. Solo aplica del lado conductor, y solo si no
+        // hay promoción de por medio (la promoción de precio fijo gana).
+        $cooperativeDiscountPercent = (! $promotion && $plan->owner_type === 'driver')
+            ? $this->planLimits->cooperativeDriverDiscountPercent($user)
+            : 0;
+
+        $effectivePrice = $promotion
+            ? (float) $promotion->promo_price
+            : (float) $plan->monthly_price * (1 - $cooperativeDiscountPercent / 100);
 
         // Un precio en $0 no tiene nada que transferir — pedirle un
         // comprobante no tiene sentido, así que se activa directo sin pasar

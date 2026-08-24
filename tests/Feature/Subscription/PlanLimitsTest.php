@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Subscription;
 
+use App\Models\Cooperative;
+use App\Models\CooperativeDriverMembership;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
@@ -152,5 +154,107 @@ class PlanLimitsTest extends TestCase
 
         $this->assertSame('multiflota', $limits['plan_code']);
         $this->assertSame(5, $limits['max_fleets']);
+    }
+
+    // Descuento cruzado cooperativa -> conductor afiliado (pedido explícito
+    // del usuario: "si un conductor... es de una cooperativa... ella paga su
+    // parte... el conductor puede tener un descuento"). Se recalcula siempre
+    // desde la relación viva (membresía + cooperativa aprobada + plan
+    // vigente de la cooperativa), nunca se guarda.
+
+    private function createApprovedCooperativeOnPlan(string $planCode): Cooperative
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop de prueba']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $plan = SubscriptionPlan::query()->where('owner_type', 'cooperative')->where('code', $planCode)->firstOrFail();
+        Subscription::factory()->for($cooperativeUser)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
+
+        return $cooperative;
+    }
+
+    public function test_a_driver_affiliated_to_an_approved_basico_cooperative_gets_its_discount(): void
+    {
+        $cooperative = $this->createApprovedCooperativeOnPlan('basico');
+        $driver = User::factory()->create();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+        ]);
+
+        $this->assertSame(10, $this->planLimits->cooperativeDriverDiscountPercent($driver));
+    }
+
+    public function test_a_driver_affiliated_to_an_approved_profesional_cooperative_gets_its_bigger_discount(): void
+    {
+        $cooperative = $this->createApprovedCooperativeOnPlan('profesional');
+        $driver = User::factory()->create();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+        ]);
+
+        $this->assertSame(20, $this->planLimits->cooperativeDriverDiscountPercent($driver));
+    }
+
+    public function test_a_driver_with_no_cooperative_membership_gets_no_discount(): void
+    {
+        $driver = User::factory()->create();
+
+        $this->assertSame(0, $this->planLimits->cooperativeDriverDiscountPercent($driver));
+    }
+
+    public function test_a_driver_in_a_cooperative_not_yet_approved_gets_no_discount(): void
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Pendiente']);
+        // Status por defecto es 'pending' — nunca se aprobó.
+
+        $plan = SubscriptionPlan::query()->where('owner_type', 'cooperative')->where('code', 'basico')->firstOrFail();
+        Subscription::factory()->for($cooperativeUser)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
+
+        $driver = User::factory()->create();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+        ]);
+
+        $this->assertSame(0, $this->planLimits->cooperativeDriverDiscountPercent($driver));
+    }
+
+    public function test_a_driver_whose_membership_already_ended_gets_no_discount(): void
+    {
+        $cooperative = $this->createApprovedCooperativeOnPlan('basico');
+        $driver = User::factory()->create();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+            'ended_at' => now()->subDay(),
+        ]);
+
+        $this->assertSame(0, $this->planLimits->cooperativeDriverDiscountPercent($driver));
+    }
+
+    public function test_a_driver_on_the_free_cooperative_plan_gets_no_discount(): void
+    {
+        $cooperative = $this->createApprovedCooperativeOnPlan('gratis');
+        $driver = User::factory()->create();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+        ]);
+
+        $this->assertSame(0, $this->planLimits->cooperativeDriverDiscountPercent($driver));
     }
 }

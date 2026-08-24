@@ -30,7 +30,7 @@ class IntentDetector
         // sección 8): si el bot acaba de mostrar un menú y la respuesta
         // encaja con una de esas opciones, no hace falta correr el
         // reconocimiento genérico — se resuelve directo con confianza total.
-        $contextMatch = $this->matchFromContext($normalized, $conversation);
+        $contextMatch = $this->matchFromContext($rawMessage, $normalized, $conversation);
         if ($contextMatch) {
             return $contextMatch;
         }
@@ -38,7 +38,7 @@ class IntentDetector
         return $this->matchByKeywords($normalized, $role);
     }
 
-    private function matchFromContext(string $normalized, ?ChatbotConversation $conversation): ?IntentMatch
+    private function matchFromContext(string $rawMessage, string $normalized, ?ChatbotConversation $conversation): ?IntentMatch
     {
         if (! $conversation || $conversation->pending_intent !== 'AWAITING_MENU_CHOICE') {
             return null;
@@ -49,8 +49,17 @@ class IntentDetector
             return null;
         }
 
-        // Eligió por número ("1", "2"...) — el orden en que se mostró el menú.
-        if (ctype_digit($normalized) && isset($menuOptions[((int) $normalized) - 1])) {
+        // Tocó un botón o una fila de lista (pedido explícito del usuario:
+        // "chatbot mas pro... evitar que confirmen con numeros o
+        // escriban") — WhatsApp devuelve el `id` tal cual se mandó
+        // (WhatsAppWebhookController::receive()), sin pasar por
+        // MessageNormalizer (le rompería los guiones bajos de un código
+        // como PEDIR_CARRERA). Se compara ANTES que el resto, que sigue
+        // sirviendo de respaldo para quien prefiere escribir a mano.
+        if (in_array($rawMessage, $menuOptions, true)) {
+            $code = $rawMessage;
+        } elseif (ctype_digit($normalized) && isset($menuOptions[((int) $normalized) - 1])) {
+            // Eligió por número ("1", "2"...) — el orden en que se mostró el menú.
             $code = $menuOptions[((int) $normalized) - 1];
         } else {
             // O escribió (parte de) la etiqueta del botón tal cual.

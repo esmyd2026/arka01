@@ -9,6 +9,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
 use App\Services\PlanLimits;
+use App\Services\WhatsAppConfig;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -27,7 +28,7 @@ class MyPlanController extends Controller
 
     private function pendingRequestFor(int $userId, string $ownerType): ?SubscriptionRequest
     {
-        return SubscriptionRequest::query()
+        $request = SubscriptionRequest::query()
             ->where('user_id', $userId)
             ->whereIn('status', ['awaiting_proof', 'pending_review', 'rejected'])
             ->whereHas('plan', fn ($query) => $query->where('owner_type', $ownerType))
@@ -36,9 +37,18 @@ class MyPlanController extends Controller
             // pedido usaba una promoción, y siempre mostraba el precio de
             // LISTA del plan en vez del precio promocional que el usuario
             // efectivamente eligió.
-            ->with(['plan', 'planPromotion'])
+            ->with(['plan', 'planPromotion', 'user'])
             ->latest()
             ->first();
+
+        // Mismo criterio que la promoción de arriba, pero para el descuento
+        // por cooperativa (pedido explícito del usuario) — solo aplica del
+        // lado conductor, y solo si no hay promoción (la promoción gana).
+        if ($request && $ownerType === 'driver' && ! $request->planPromotion) {
+            $request->cooperative_discount = $this->planLimits->driverDiscountFor($request->plan, $request->user);
+        }
+
+        return $request;
     }
 
     /**
@@ -110,6 +120,21 @@ class MyPlanController extends Controller
         return $plans;
     }
 
+    /**
+     * Descuento por cooperativa (pedido explícito del usuario) — solo para
+     * planes de conductor, y solo si ese plan no tiene ya una promoción
+     * vigente (la promoción de precio fijo gana, para no mezclar los dos
+     * criterios a la vez).
+     */
+    private function attachCooperativeDiscount(Collection $plans, User $driver): Collection
+    {
+        $plans->each(function (SubscriptionPlan $plan) use ($driver) {
+            $plan->cooperative_discount = $plan->active_promotion ? null : $this->planLimits->driverDiscountFor($plan, $driver);
+        });
+
+        return $plans;
+    }
+
     public function driver(Request $request): Response
     {
         $user = $request->user();
@@ -133,8 +158,10 @@ class MyPlanController extends Controller
             ->orderBy('sort_order')
             ->get();
 
+        $plans = $this->attachEarningsProjection($this->attachActivePromotions($plans, $user));
+
         return Inertia::render('Plan/Driver', [
-            'plans' => $this->attachEarningsProjection($this->attachActivePromotions($plans, $user)),
+            'plans' => $this->attachCooperativeDiscount($plans, $user),
             'currentPlan' => $limits,
             'usedClients' => $activeClientCount,
             'changes' => $user->subscriptionChanges()
@@ -184,6 +211,51 @@ class MyPlanController extends Controller
                 ->get(),
             'pendingRequest' => $this->pendingRequestFor($user->id, 'client'),
             'requestHistory' => $this->requestHistoryFor($user->id, 'client'),
+        ]);
+    }
+
+    /**
+     * "Mi plan" de cooperativa (pedido explícito del usuario: "dame los
+     * beneficios de cada plan y muéstralo en los planes de cada
+     * cooperativa") — no existía ninguna pantalla de catálogo/cambio de
+     * plan para este rol, solo la etiqueta de solo lectura en
+     * Cooperative/Profile.vue. Mismo patrón que client(), sin proyección de
+     * ganancias (no aplica: la cooperativa no "gana" por su propio plan).
+     */
+    public function cooperative(Request $request): Response
+    {
+        $user = $request->user();
+        $limits = $this->planLimits->forCooperative($user);
+
+        $usedUnits = $user->cooperative?->activeDriverMemberships()->count() ?? 0;
+
+        // Mismo criterio que los catálogos de conductor/cliente: nunca se
+        // manda un plan de nivel inferior al vigente (sección 19), y un
+        // plan discontinuado (ej. el ex "Empresarial") sigue viéndose para
+        // quien ya lo tenía contratado.
+        $plans = SubscriptionPlan::query()
+            ->where('owner_type', 'cooperative')
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('code', $limits['plan_code']))
+            ->where('sort_order', '>=', $limits['plan_sort_order'])
+            ->orderBy('sort_order')
+            ->get();
+
+        return Inertia::render('Plan/Cooperative', [
+            'plans' => $this->attachActivePromotions($plans, $user),
+            'currentPlan' => $limits,
+            'usedUnits' => $usedUnits,
+            'changes' => $user->subscriptionChanges()
+                ->whereHas('newPlan', fn ($query) => $query->where('owner_type', 'cooperative'))
+                ->with(['oldPlan', 'newPlan'])
+                ->latest()
+                ->get(),
+            'pendingRequest' => $this->pendingRequestFor($user->id, 'cooperative'),
+            'requestHistory' => $this->requestHistoryFor($user->id, 'cooperative'),
+            // Tarjeta "Hablemos" para cooperativas grandes (pedido explícito
+            // del usuario: "una opción de negociación" en vez de un plan de
+            // precio fijo "sin límite") — sin número configurado, la
+            // tarjeta simplemente no muestra el botón de contacto.
+            'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
         ]);
     }
 }

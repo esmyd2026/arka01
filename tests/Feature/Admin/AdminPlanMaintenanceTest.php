@@ -140,6 +140,28 @@ class AdminPlanMaintenanceTest extends TestCase
         $this->assertDatabaseHas('subscription_plans', ['id' => $freePlan->id]);
     }
 
+    /**
+     * Ahora que la cooperativa tiene un `gratis` real (pedido explícito del
+     * usuario: agregar el descuento cruzado + un plan gratuito de 5
+     * unidades), es ESE el que no se puede borrar — `basico` ya no es un
+     * caso especial (antes lo era, porque hacía de plan base sin haber un
+     * `gratis` de verdad para ese lado).
+     */
+    public function test_the_cooperative_free_plan_cannot_be_deleted_but_basico_now_can(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $freePlan = SubscriptionPlan::query()->where('owner_type', 'cooperative')->where('code', 'gratis')->firstOrFail();
+        $basicoPlan = SubscriptionPlan::query()->where('owner_type', 'cooperative')->where('code', 'basico')->firstOrFail();
+
+        $this->actingAs($admin)
+            ->delete(route('admin.plans.destroy', $freePlan))
+            ->assertSessionHasErrors('plan');
+        $this->assertDatabaseHas('subscription_plans', ['id' => $freePlan->id]);
+
+        $this->actingAs($admin)->delete(route('admin.plans.destroy', $basicoPlan))->assertRedirect();
+        $this->assertDatabaseMissing('subscription_plans', ['id' => $basicoPlan->id]);
+    }
+
     public function test_a_plan_with_subscribers_cannot_be_deleted(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

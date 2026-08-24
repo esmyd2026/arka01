@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CooperativeDriverMembership;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
@@ -91,6 +92,46 @@ class WhatsAppFreeformSender
                         'type' => 'reply',
                         'reply' => ['id' => $button['id'], 'title' => mb_substr($button['title'], 0, 20)],
                     ])->values()->all()],
+                ],
+            ]);
+
+        return $response->successful();
+    }
+
+    /**
+     * Lista de WhatsApp (pedido explícito del usuario: "chatbot mas pro...
+     * evitar que confirmen con numeros o escriban") — para cuando hay más de
+     * 3 opciones, que es el máximo de botones reales que admite la API (ver
+     * sendButtons() arriba). Mismo patrón de un solo POST a `/messages`.
+     *
+     * @param  array<int, array{id:string,title:string}>  $rows  Hasta 10 en total (límite de Meta).
+     */
+    public static function sendList(string $phoneE164, string $message, string $buttonLabel, array $rows): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        $response = Http::withToken(WhatsAppConfig::token())
+            ->timeout(10)
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => ltrim($phoneE164, '+'),
+                'type' => 'interactive',
+                'interactive' => [
+                    'type' => 'list',
+                    'body' => ['text' => $message],
+                    'action' => [
+                        'button' => mb_substr($buttonLabel, 0, 20),
+                        'sections' => [[
+                            'rows' => collect($rows)->take(10)->map(fn ($row) => [
+                                'id' => $row['id'],
+                                // Límite duro de la API (fila de lista, no botón): 24
+                                // caracteres — distinto del límite de 20 de sendButtons().
+                                'title' => mb_substr($row['title'], 0, 24),
+                            ])->values()->all(),
+                        ]],
+                    ],
                 ],
             ]);
 
@@ -202,6 +243,28 @@ class WhatsAppFreeformSender
         } else {
             self::sendText($driver->phone, $message);
         }
+    }
+
+    /**
+     * Aviso de invitación de cooperativa (bug reportado por el usuario: "el
+     * conductor que no le llega la solicitud que le manda la cooperativa
+     * para que se una") — antes solo se mandaba por Web Push
+     * (CooperativeDriverInvitationPushNotification), que falla en
+     * silencio si el conductor nunca dio permiso o no tiene el service
+     * worker activo. Mismo criterio que sendNewRideAlert(): si tiene la
+     * ventana de 24h abierta, también le llega por WhatsApp, que no
+     * depende de ningún permiso del navegador.
+     */
+    public static function sendCooperativeInvitationAlert(User $driver, CooperativeDriverMembership $membership): void
+    {
+        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+            return;
+        }
+
+        $message = "🤝 {$membership->cooperative->name} quiere vincularlo como conductor afiliado.\n\n"
+            .'Revise la invitación en Arka01: '.route('cooperative-driver-invitations.index');
+
+        self::sendText($driver->phone, $message);
     }
 
     public static function sendRideAcceptedToClient(Ride $ride): void

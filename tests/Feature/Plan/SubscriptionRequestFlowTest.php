@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Plan;
 
+use App\Models\Cooperative;
+use App\Models\CooperativeDriverMembership;
 use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\PlanPromotion;
@@ -487,6 +489,110 @@ class SubscriptionRequestFlowTest extends TestCase
                     && (float) $projection['monthly_earnings'] === 450.0
                     && (float) $projection['ticket'] === 3.0;
             })
+        );
+    }
+
+    // Descuento cruzado cooperativa -> conductor afiliado (pedido explícito
+    // del usuario) — mismo estilo que las pruebas de promoción de arriba.
+
+    private function affiliateDriverToApprovedCooperative(User $driver, string $cooperativePlanCode): void
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop de prueba']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $plan = SubscriptionPlan::query()->where('owner_type', 'cooperative')->where('code', $cooperativePlanCode)->firstOrFail();
+        Subscription::factory()->for($cooperativeUser)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
+
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id,
+            'status' => 'accepted',
+        ]);
+    }
+
+    public function test_the_driver_plan_catalog_exposes_the_cooperative_discount(): void
+    {
+        $driver = User::factory()->create();
+        $this->affiliateDriverToApprovedCooperative($driver, 'basico');
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+
+        $response = $this->actingAs($driver)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('plans', function ($plans) use ($plan) {
+                $discount = collect($plans)->firstWhere('code', 'plus')['cooperative_discount'];
+
+                return $discount['percent'] === 10
+                    && (float) $discount['discounted_price'] === round((float) $plan->monthly_price * 0.9, 2);
+            })
+        );
+    }
+
+    /**
+     * Nunca conviven promoción de precio fijo y descuento por cooperativa a
+     * la vez en un mismo plan — la promoción gana, para no mezclar los dos
+     * criterios (pedido explícito del usuario, resuelto al diseñar la
+     * funcionalidad).
+     */
+    public function test_an_active_promotion_takes_precedence_over_the_cooperative_discount(): void
+    {
+        $driver = User::factory()->create();
+        $this->affiliateDriverToApprovedCooperative($driver, 'profesional');
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanPromotion::query()->create([
+            'subscription_plan_id' => $plan->id,
+            'label' => '1 mes gratis',
+            'promo_price' => 0,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('plans', fn ($plans) => collect($plans)->firstWhere('code', 'plus')['cooperative_discount'] === null)
+        );
+    }
+
+    public function test_the_effective_price_used_to_auto_activate_a_free_plan_ignores_the_cooperative_discount_when_already_free(): void
+    {
+        // Caso borde simple: un plan ya gratis con descuento por cooperativa
+        // sigue auto-activándose igual (0% de $0 sigue siendo $0).
+        $driver = User::factory()->create();
+        $this->affiliateDriverToApprovedCooperative($driver, 'basico');
+        $freePlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'gratis')->firstOrFail();
+
+        $this->actingAs($driver)
+            ->post(route('subscription-requests.store'), ['subscription_plan_id' => $freePlan->id])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscriptions', [
+            'user_id' => $driver->id,
+            'subscription_plan_id' => $freePlan->id,
+            'status' => 'active',
+        ]);
+    }
+
+    /**
+     * Bug real que hubiera pasado sin esto: el panel de "pedido en curso"
+     * seguía mostrando el precio de LISTA aunque el pedido se haya hecho con
+     * el descuento de la cooperativa — mismo criterio que ya se corrigió
+     * para las promociones (ver test_the_pending_request_exposes_the_promotion...).
+     */
+    public function test_the_pending_request_exposes_the_cooperative_discount_it_was_created_with(): void
+    {
+        $driver = User::factory()->create();
+        $this->affiliateDriverToApprovedCooperative($driver, 'basico');
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+
+        $this->actingAs($driver)->post(route('subscription-requests.store'), ['subscription_plan_id' => $plan->id]);
+
+        $response = $this->actingAs($driver)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('pendingRequest.cooperative_discount.percent', 10)
+            ->where('pendingRequest.cooperative_discount.discounted_price', fn ($value) => (float) $value === round((float) $plan->monthly_price * 0.9, 2))
         );
     }
 

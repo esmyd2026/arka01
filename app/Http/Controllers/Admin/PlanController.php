@@ -62,7 +62,7 @@ class PlanController extends Controller
      */
     public function destroy(SubscriptionPlan $plan): RedirectResponse
     {
-        if ($plan->code === 'gratis' || ($plan->owner_type === 'cooperative' && $plan->code === 'basico')) {
+        if ($plan->code === 'gratis') {
             throw ValidationException::withMessages([
                 'plan' => 'El plan Gratis no se puede eliminar: es la base a la que cae cualquiera sin suscripción.',
             ]);
@@ -94,6 +94,10 @@ class PlanController extends Controller
             ],
             'name' => ['required', 'string', 'max:100'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
+            // Descuento que este plan de COOPERATIVA le da al conductor
+            // afiliado en su propio plan individual (pedido explícito del
+            // usuario) — sin efecto en planes de conductor/cliente.
+            'driver_discount_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
             'max_clients' => ['nullable', 'integer', 'min:0'],
             'estimated_monthly_rides' => ['nullable', 'integer', 'min:0'],
             'public_visibility' => ['boolean'],
@@ -109,6 +113,7 @@ class PlanController extends Controller
             'sort_order' => ['integer', 'min:0'],
         ]);
 
+        $validated['driver_discount_percent'] ??= 0;
         $validated['public_visibility'] ??= false;
         $validated['priority_listing'] ??= false;
         $validated['verified_badge'] ??= false;

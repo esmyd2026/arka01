@@ -327,6 +327,7 @@ Route::middleware('auth')->group(function () {
     // conductor y otro de cliente al mismo tiempo (sección 3.1).
     Route::get('/mi-plan/conductor', [MyPlanController::class, 'driver'])->name('driver.plan.edit');
     Route::get('/mi-plan/cliente', [MyPlanController::class, 'client'])->name('client.plan.edit');
+    Route::get('/mi-plan/cooperativa', [MyPlanController::class, 'cooperative'])->name('cooperative.plan.edit');
 
     // Elegir un plan + subir comprobante de pago (consideración agregada al
     // alcance) — sigue sin haber pasarela de pago, esto solo junta el pedido

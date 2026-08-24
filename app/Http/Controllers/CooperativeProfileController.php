@@ -10,9 +10,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -64,6 +64,12 @@ class CooperativeProfileController extends Controller
             'legal_representative' => ['nullable', 'string', 'max:150'],
             'declared_driver_count' => ['required', 'integer', 'min:0', 'max:100000'],
             'declared_unit_count' => ['required', 'integer', 'min:0', 'max:100000'],
+            // Pedido explícito del usuario: seguro que proteja al
+            // representante/dueño, a los conductores afiliados y a los
+            // vehículos — autodeclarado con un checkbox, sin documento
+            // adjunto. Se puede guardar en false en un borrador; recién se
+            // exige marcado al enviar a validación (ver submitForReview()).
+            'has_insurance' => ['sometimes', 'boolean'],
             'geographic_coverage' => ['nullable', 'string', 'max:2000'],
             'operating_hours' => ['nullable', 'string', 'max:1000'],
             'response_timeout_seconds' => ['required', 'integer', Rule::in([15, 30, 60])],
@@ -128,6 +134,12 @@ class CooperativeProfileController extends Controller
             'city_id' => ['required'], 'province' => ['required'], 'phone' => ['required'],
             'email' => ['required', 'email'], 'legal_representative' => ['required'],
             'geographic_coverage' => ['required'], 'operating_hours' => ['required'],
+            // Pedido explícito del usuario: recién al enviar a validación se
+            // exige tenerlo marcado — mismo criterio que los documentos
+            // obligatorios de más abajo.
+            'has_insurance' => ['accepted'],
+        ], [
+            'has_insurance.accepted' => 'Falta declarar que cuenta con un seguro que proteja al representante, a los conductores y a los vehículos.',
         ])->validate();
 
         foreach (self::REQUIRED_DOCUMENTS as $type => $label) {

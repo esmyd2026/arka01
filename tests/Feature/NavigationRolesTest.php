@@ -96,6 +96,7 @@ class NavigationRolesTest extends TestCase
                 'passenger_capacity' => 4,
                 'has_trunk' => true,
                 'rate_per_km' => 0.4,
+                'has_insurance' => true,
                 'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
                 'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
                 'license_photo' => UploadedFile::fake()->image('licencia.jpg'),

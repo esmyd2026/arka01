@@ -45,6 +45,7 @@ class DriverProfileFactory extends Factory
             'identity_document_path' => 'driver-documents/test-identity.pdf',
             'license_photo_path' => 'driver-documents/test-license.jpg',
             'police_record_path' => 'driver-documents/test-police-record.pdf',
+            'has_insurance' => true,
             // El código de invitación se genera solo en el evento "creating" del
             // modelo (App\Models\DriverProfile::booted), no hace falta acá.
         ];

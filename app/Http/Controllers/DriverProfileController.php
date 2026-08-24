@@ -176,6 +176,12 @@ class DriverProfileController extends Controller
             'max_request_distance_km' => ['nullable', 'integer', 'min:1', 'max:500'],
             'accepts_cash' => ['boolean'],
             'accepts_transfer' => ['boolean'],
+            // Pedido explícito del usuario: seguro que lo proteja a él, a
+            // los pasajeros y al vehículo — igual que los documentos de más
+            // abajo, solo se EXIGE marcado al solicitar verificación (ver
+            // $isSubmittingVerification más abajo), no en cada guardado
+            // parcial del perfil.
+            'has_insurance' => ['sometimes', 'boolean'],
             // Visibilidad en el directorio público (sección 3.4), gateada por el
             // plan Plus/Pro/Institucional (sección 7.2). Se valida la forma acá,
             // pero el valor final se fuerza abajo según el plan real del usuario
@@ -275,6 +281,15 @@ class DriverProfileController extends Controller
                         $input => 'Este documento es obligatorio para solicitar la verificación.',
                     ]);
                 }
+            }
+
+            // Pedido explícito del usuario: seguro que lo proteja a él, a
+            // los pasajeros y al vehículo — autodeclarado, sin documento,
+            // pero igual obligatorio para solicitar verificación.
+            if (! ($validated['has_insurance'] ?? $existingProfile?->has_insurance ?? false)) {
+                throw ValidationException::withMessages([
+                    'has_insurance' => 'Debe declarar que cuenta con un seguro vigente para solicitar la verificación.',
+                ]);
             }
         }
 

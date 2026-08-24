@@ -158,6 +158,7 @@ const form = useForm({
     max_request_distance_km: props.driverProfile?.max_request_distance_km ?? '',
     accepts_cash: props.driverProfile?.accepts_cash ?? true,
     accepts_transfer: props.driverProfile?.accepts_transfer ?? false,
+    has_insurance: props.driverProfile?.has_insurance ?? false,
     is_public: props.driverProfile?.is_public ?? false,
     driver_type: props.driverProfile?.driver_type ?? 'independent',
     profile_photo: null,
@@ -251,7 +252,7 @@ const statusItems = computed(() => {
             : p.verification_status === 'rejected'
               ? `Su verificación fue rechazada${p.verification_rejection_reason ? `: "${p.verification_rejection_reason}"` : ''} — corrija eso y vuelva a subir sus fotos más abajo.`
               : p.verification_status == null
-                ? 'Todavía no subió sus documentos — complete la cédula, licencia, antecedente penal y foto de perfil más abajo.'
+                ? 'Todavía no subió sus documentos — complete la cédula, licencia, antecedente penal, seguro y foto de perfil más abajo.'
                 : p.verification_status !== 'approved'
                   ? `Su verificación está "${VERIFICATION_LABELS[p.verification_status]}" — revise los documentos obligatorios más abajo.`
                   : 'Ya está verificado, pero su plan actual no incluye la insignia — hace falta un plan superior.',
@@ -926,6 +927,16 @@ const VERIFICATION_LABELS = {
                                 </div>
                             </div>
                             <p class="text-xs text-arka-text-muted">No solicitamos fotografía del vehículo. Los datos técnicos del auto se validan en el perfil.</p>
+
+                            <!-- Pedido explícito del usuario: seguro que lo proteja a él,
+                                 a los pasajeros y al vehículo — autodeclarado con un
+                                 checkbox, sin documento adjunto (a diferencia de los 3
+                                 de arriba). Forma parte de lo que evalúa administración. -->
+                            <label class="mt-4 flex items-start gap-2">
+                                <Checkbox v-model:checked="form.has_insurance" class="mt-0.5" />
+                                <span class="text-sm text-arka-text">Cuento con un seguro vigente que me protege a mí, a los pasajeros y al vehículo</span>
+                            </label>
+                            <InputError class="mt-2" :message="form.errors.has_insurance" />
                         </div>
 
                         <div>

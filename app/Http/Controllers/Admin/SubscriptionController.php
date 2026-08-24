@@ -9,6 +9,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
 use App\Notifications\SubscriptionRequestRejectedPushNotification;
+use App\Services\PlanLimits;
 use App\Services\SubscriptionActivator;
 use App\Services\SubscriptionPlanEligibility;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,6 +30,7 @@ class SubscriptionController extends Controller
     public function __construct(
         private readonly SubscriptionPlanEligibility $eligibility,
         private readonly SubscriptionActivator $activator,
+        private readonly PlanLimits $planLimits,
     ) {}
 
     /**
@@ -115,7 +117,15 @@ class SubscriptionController extends Controller
             // correspondía revisar en el comprobante, no el precio de lista.
             ->with(['user', 'plan', 'planPromotion'])
             ->latest()
-            ->get();
+            ->get()
+            // Descuento por cooperativa (pedido explícito del usuario): sin
+            // esto, el admin esperaría el precio de lista completo y
+            // podría rechazar un comprobante legítimo por un monto menor.
+            ->each(function (SubscriptionRequest $subscriptionRequest) {
+                $subscriptionRequest->cooperative_discount = (! $subscriptionRequest->planPromotion && $subscriptionRequest->plan->owner_type === 'driver')
+                    ? $this->planLimits->driverDiscountFor($subscriptionRequest->plan, $subscriptionRequest->user)
+                    : null;
+            });
 
         return Inertia::render('Admin/Subscriptions', [
             'users' => $users,
@@ -168,6 +178,16 @@ class SubscriptionController extends Controller
         if ($plan->owner_type === 'client' && ! $user->isClient()) {
             throw ValidationException::withMessages([
                 'subscription_plan_id' => 'Este usuario no es cliente (es conductor o admin) — no se le puede dar un plan de ese lado.',
+            ]);
+        }
+
+        // Mismo criterio que los dos de arriba, ahora que la cooperativa
+        // también tiene sus propios planes reales (pedido explícito del
+        // usuario) — antes no hacía falta, no existía forma de activarle
+        // un plan de cooperativa a nadie desde acá con sentido.
+        if ($plan->owner_type === 'cooperative' && ! $user->isCooperative()) {
+            throw ValidationException::withMessages([
+                'subscription_plan_id' => 'Este usuario no es una cooperativa — no se le puede dar un plan de ese lado.',
             ]);
         }
 

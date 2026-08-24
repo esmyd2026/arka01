@@ -8,9 +8,12 @@ use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Models\WhatsAppSession;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -68,6 +71,35 @@ class CooperativeModuleTest extends TestCase
         $this->assertSame('public_transport', $driver->driverProfile->fresh()->driver_type);
     }
 
+    /**
+     * Bug reportado por el usuario ("no le llega la solicitud que le manda
+     * la cooperativa para que se una"): la invitación solo se mandaba por
+     * Web Push, que falla en silencio sin permiso del navegador — ahora
+     * también le llega por WhatsApp si tiene la ventana de 24h abierta,
+     * mismo criterio que WhatsAppFreeformSender::sendNewRideAlert().
+     */
+    public function test_a_driver_with_an_active_whatsapp_session_also_gets_the_invitation_by_whatsapp(): void
+    {
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Uno']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create(['phone' => '+593991234567']);
+        DriverProfile::factory()->create(['user_id' => $driver->id, 'driver_type' => 'independent']);
+        WhatsAppSession::query()->create(['user_id' => $driver->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        $this->actingAs($cooperativeUser)
+            ->post(route('cooperative.drivers.invite'), ['driver_user_id' => $driver->id])
+            ->assertRedirect();
+
+        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'Coop Uno')
+            && str_contains($request['text']['body'] ?? '', 'vincularlo'));
+    }
+
     public function test_cooperative_profile_can_be_saved_as_an_incomplete_draft(): void
     {
         $user = User::factory()->create();
@@ -92,6 +124,57 @@ class CooperativeModuleTest extends TestCase
         $this->assertSame('-2.1450000', $cooperative->stand_lat);
         $this->assertNull($cooperative->geographic_coverage);
         $this->assertNull($cooperative->submitted_at);
+    }
+
+    /**
+     * Documentos legales de más los datos obligatorios que ya exige
+     * submitForReview() — deja la cooperativa lista para enviar a
+     * validación salvo por lo que el test decida omitir (ej. el seguro).
+     */
+    private function completeCooperativeDocuments(Cooperative $cooperative): void
+    {
+        foreach (['ruc' => 'RUC', 'legal_appointment' => 'Nombramiento', 'operating_authorization' => 'Habilitante', 'operating_permit' => 'Permiso'] as $type => $label) {
+            $cooperative->documents()->create([
+                'type' => $type, 'label' => $label, 'path' => "cooperative-documents/{$cooperative->id}/{$type}.pdf",
+                'original_name' => "{$type}.pdf", 'mime_type' => 'application/pdf', 'size_bytes' => 1024, 'status' => 'pending',
+            ]);
+        }
+    }
+
+    /**
+     * Pedido explícito del usuario: la cooperativa declara con un checkbox
+     * si cuenta con un seguro que proteja al representante, a los
+     * conductores y a los vehículos — se exige recién al enviar a
+     * validación, no en cada guardado parcial.
+     */
+    public function test_submitting_for_review_requires_declaring_insurance(): void
+    {
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $user->id, 'name' => 'Coop Sur', 'legal_name' => 'Coop Sur S.A.', 'ruc' => '1234567890001',
+            'main_address' => 'Av. Principal', 'stand_lat' => -2.17, 'stand_lng' => -79.92, 'city_id' => null,
+            'province' => 'Guayas', 'phone' => '0999999999', 'email' => 'coop@example.com', 'legal_representative' => 'Juan Pérez',
+            'geographic_coverage' => 'Guayaquil', 'operating_hours' => '24 horas',
+        ]);
+        $this->completeCooperativeDocuments($cooperative);
+
+        $this->actingAs($user)->post(route('cooperative.profile.submit-review'))
+            ->assertSessionHasErrors('has_insurance');
+
+        $this->assertNull($cooperative->fresh()->submitted_at);
+    }
+
+    public function test_an_admin_cannot_approve_a_cooperative_without_declared_insurance(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Norte']);
+        $this->completeCooperativeDocuments($cooperative);
+
+        $this->actingAs($admin)->post(route('admin.cooperatives.approve', $cooperative))
+            ->assertSessionHasErrors('cooperative');
+
+        $this->assertNotSame('approved', $cooperative->fresh()->status);
     }
 
     public function test_a_client_can_request_a_ride_from_an_attached_cooperative(): void

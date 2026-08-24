@@ -15,6 +15,11 @@ class SubscriptionPlan extends Model
         'code',
         'name',
         'monthly_price',
+        // Descuento (0-100) que un plan de COOPERATIVA le da a su conductor
+        // afiliado en el plan individual del conductor (pedido explícito
+        // del usuario) — ver PlanLimits::cooperativeDriverDiscountPercent().
+        // Sin efecto en planes de conductor/cliente.
+        'driver_discount_percent',
         'max_clients',
         // Proyección informativa de carreras mensuales (pedido explícito del
         // usuario): junto con PricingSetting::average_ticket_price arma la
@@ -40,6 +45,7 @@ class SubscriptionPlan extends Model
 
     protected $casts = [
         'monthly_price' => 'decimal:2',
+        'driver_discount_percent' => 'integer',
         'estimated_monthly_rides' => 'integer',
         'public_visibility' => 'boolean',
         'priority_listing' => 'boolean',

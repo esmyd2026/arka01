@@ -82,6 +82,14 @@ class CooperativeController extends Controller
             throw ValidationException::withMessages(['cooperative' => 'No se puede aprobar mientras exista documentación rechazada.']);
         }
 
+        // Pedido explícito del usuario: seguro que proteja al
+        // representante/dueño, a los conductores y a los vehículos —
+        // autodeclarado, sin documento adjunto, pero igual bloquea la
+        // aprobación si no está marcado (mismo criterio que los documentos).
+        if (! $cooperative->has_insurance) {
+            throw ValidationException::withMessages(['cooperative' => 'No se puede aprobar: falta declarar que cuenta con un seguro que proteja al representante, a los conductores y a los vehículos.']);
+        }
+
         $cooperative->documents()->where('status', 'pending')->update([
             'status' => 'approved',
             'reviewed_at' => now(),

@@ -37,6 +37,7 @@ class RoleSwitchingTest extends TestCase
             'passenger_capacity' => 4,
             'has_trunk' => true,
             'rate_per_km' => 0.5,
+            'has_insurance' => true,
         ];
     }
 

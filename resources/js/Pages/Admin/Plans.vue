@@ -31,6 +31,10 @@ const blankForm = (ownerType) => ({
     code: '',
     name: '',
     monthly_price: 0,
+    // Solo tiene efecto en planes de COOPERATIVA (pedido explícito del
+    // usuario): descuento que le da a su conductor afiliado en el plan
+    // individual del conductor — ver PlanLimits::driverDiscountFor().
+    driver_discount_percent: 0,
     max_clients: '',
     estimated_monthly_rides: '',
     public_visibility: false,
@@ -59,6 +63,7 @@ function startEdit(plan) {
     form.code = plan.code;
     form.name = plan.name;
     form.monthly_price = plan.monthly_price;
+    form.driver_discount_percent = plan.driver_discount_percent ?? 0;
     form.max_clients = plan.max_clients ?? '';
     form.estimated_monthly_rides = plan.estimated_monthly_rides ?? '';
     form.public_visibility = plan.public_visibility;
@@ -149,6 +154,9 @@ async function destroyPlan(plan) {
                                             </template>
                                             <template v-else>
                                                 {{ plan.max_units ?? 'sin límite' }} unidades/conductores
+                                                <span v-if="plan.driver_discount_percent > 0" class="text-arka-primary-bright">
+                                                    · {{ plan.driver_discount_percent }}% descuento al conductor
+                                                </span>
                                             </template>
                                             <span class="text-xs"> · {{ plan.subscriptions_count }} suscriptor(es) histórico(s)</span>
                                         </p>
@@ -212,6 +220,13 @@ async function destroyPlan(plan) {
                                             <div>
                                                 <InputLabel value="Máx. unidades/conductores (vacío = sin límite)" />
                                                 <TextInput type="number" min="0" class="mt-1 block w-full" v-model="form.max_units" />
+                                            </div>
+                                            <div>
+                                                <InputLabel value="% descuento al conductor afiliado" />
+                                                <TextInput type="number" min="0" max="100" class="mt-1 block w-full" v-model="form.driver_discount_percent" />
+                                                <p class="mt-1 text-xs text-arka-text-muted">
+                                                    Descuento que este plan le da al conductor en SU propio plan individual, mientras esté afiliado a una cooperativa aprobada con este plan.
+                                                </p>
                                             </div>
                                         </template>
                                     </div>

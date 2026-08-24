@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\CooperativeDriverInvitationPushNotification;
 use App\Notifications\CooperativeDriverResponsePushNotification;
 use App\Services\PlanLimits;
+use App\Services\WhatsAppFreeformSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -165,6 +166,10 @@ class CooperativeDriverController extends Controller
 
         $membership->load('cooperative');
         $driver->notify(new CooperativeDriverInvitationPushNotification($membership));
+        // Bug reportado por el usuario ("no le llega la solicitud"): el
+        // Web Push solo falla en silencio si el conductor nunca dio
+        // permiso — WhatsApp no depende de ningún permiso del navegador.
+        WhatsAppFreeformSender::sendCooperativeInvitationAlert($driver, $membership);
 
         return back()->with('status', 'Invitación enviada al conductor.');
     }

@@ -5,14 +5,40 @@ import SubscriptionRequestPanel from '@/Components/SubscriptionRequestPanel.vue'
 import SubscriptionRequestHistory from '@/Components/SubscriptionRequestHistory.vue';
 import { Head, router } from '@inertiajs/vue3';
 
+// "Mi plan" de cooperativa (pedido explícito del usuario: "dame los
+// beneficios de cada plan y muéstralo en los planes de cada cooperativa") —
+// mismo patrón que Plan/Client.vue, sin proyección de ganancias (no aplica:
+// la cooperativa no "gana" por su propio plan).
 const props = defineProps({
     plans: { type: Array, required: true },
     currentPlan: { type: Object, required: true },
-    usedClients: { type: Number, required: true },
+    usedUnits: { type: Number, required: true },
     changes: { type: Array, required: true },
     pendingRequest: { type: Object, default: null },
     requestHistory: { type: Array, required: true },
+    whatsappBusinessNumber: { type: String, default: null },
 });
+
+// Beneficios por plan (pedido explícito del usuario) — texto fijo por
+// código, igual criterio que RideController::CLIENT_CANCEL_REASONS: no
+// justifica un catálogo administrable para 3 planes curados a mano.
+const BENEFITS = {
+    gratis: [
+        'Hasta 5 conductores afiliados',
+        'Panel básico de gestión y visibilidad de su flota',
+        'Sin descuento cruzado para sus conductores',
+    ],
+    basico: [
+        'Hasta 10 conductores afiliados',
+        'Panel completo de gestión y despacho',
+        'Sus conductores acceden a 10% de descuento en su propio plan individual mientras estén afiliados',
+    ],
+    profesional: [
+        'Hasta 50 conductores afiliados',
+        'Panel completo de gestión y despacho + soporte prioritario',
+        'Sus conductores acceden a 20% de descuento en su propio plan individual mientras estén afiliados',
+    ],
+};
 
 function selectPlan(plan) {
     router.post(route('subscription-requests.store'), {
@@ -26,19 +52,26 @@ function formatDate(value) {
 }
 
 // Mismo criterio que App\Services\SubscriptionPlanEligibility (backend): no
-// tiene sentido mostrar "Elegir" activo para un plan que ya no te alcanza
-// con los clientes de confianza que tenés ahora mismo.
+// tiene sentido mostrar "Elegir" activo para un plan que ya no alcanza con
+// los conductores afiliados que ya tiene.
 function fitsCurrentUsage(plan) {
-    return plan.max_clients === null || props.usedClients <= plan.max_clients;
+    return plan.max_units === null || props.usedUnits <= plan.max_units;
 }
+
+// Tarjeta "Hablemos" (pedido explícito del usuario: "una opción de
+// negociación" en vez de un tramo de precio fijo "sin límite") — mismo
+// patrón wa.me/?text= que el resto de la app, sin número apunta a nada.
+const talkToUsUrl = props.whatsappBusinessNumber
+    ? `https://wa.me/${props.whatsappBusinessNumber}?text=${encodeURIComponent('Hola, somos una cooperativa y necesitamos más de 50 unidades en Arka01. Nos gustaría conversar un plan a medida.')}`
+    : null;
 </script>
 
 <template>
-    <Head title="Mi plan de conductor" />
+    <Head title="Mi plan de cooperativa" />
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="font-semibold text-xl text-arka-text leading-tight">Mi plan de conductor</h2>
+            <h2 class="font-semibold text-xl text-arka-text leading-tight">Mi plan de cooperativa</h2>
         </template>
 
         <div class="py-12">
@@ -48,29 +81,12 @@ function fitsCurrentUsage(plan) {
                     <div class="flex items-center justify-between">
                         <h3 class="text-lg font-medium text-arka-text">Plan {{ currentPlan.plan_name }}</h3>
                         <span class="text-sm text-arka-text-muted">
-                            {{ usedClients }} de {{ currentPlan.max_clients ?? '∞' }} clientes de confianza
+                            {{ usedUnits }} de {{ currentPlan.max_units ?? '∞' }} unidades
                         </span>
                     </div>
-                    <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                        <span
-                            class="px-2 py-1 rounded-arka"
-                            :class="currentPlan.public_visibility ? 'bg-arka-primary/10 text-arka-primary-bright' : 'bg-arka-text-muted/10 text-arka-text-muted'"
-                        >
-                            Directorio público
-                        </span>
-                        <span
-                            class="px-2 py-1 rounded-arka"
-                            :class="currentPlan.priority_listing ? 'bg-arka-primary/10 text-arka-primary-bright' : 'bg-arka-text-muted/10 text-arka-text-muted'"
-                        >
-                            Prioridad en el directorio
-                        </span>
-                        <span
-                            class="px-2 py-1 rounded-arka"
-                            :class="currentPlan.verified_badge ? 'bg-arka-primary/10 text-arka-primary-bright' : 'bg-arka-text-muted/10 text-arka-text-muted'"
-                        >
-                            Insignia de verificado
-                        </span>
-                    </div>
+                    <p v-if="currentPlan.driver_discount_percent > 0" class="mt-2 text-sm text-arka-text-muted">
+                        Sus conductores afiliados acceden a {{ currentPlan.driver_discount_percent }}% de descuento en su propio plan individual.
+                    </p>
                 </div>
 
                 <!-- Pedido en curso (consideración agregada al alcance): "botón de
@@ -82,10 +98,10 @@ function fitsCurrentUsage(plan) {
                      nivel inferior al vigente, así que si la lista solo trae el
                      plan actual, es porque ya es el más alto disponible. -->
                 <p v-if="plans.length === 1" class="text-sm text-arka-text-muted px-1">
-                    Ya tiene el plan de mayor nivel disponible para conductores.
+                    Ya tiene el plan de mayor nivel disponible para cooperativas.
                 </p>
 
-                <!-- Catálogo (sección 7.2) -->
+                <!-- Catálogo -->
                 <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
                     <div
                         v-for="plan in plans"
@@ -98,37 +114,17 @@ function fitsCurrentUsage(plan) {
                                 {{ plan.name }}
                                 <span v-if="plan.code === currentPlan.plan_code" class="text-xs text-arka-primary-bright">(su plan actual)</span>
                             </p>
-                            <p class="text-sm text-arka-text-muted">
-                                Hasta {{ plan.max_clients ?? 'clientes a medida (convenio)' }}
-                                {{ plan.max_clients ? 'clientes de confianza' : '' }}
-                                <span v-if="plan.public_visibility"> · directorio público</span>
-                                <span v-if="plan.priority_listing"> · prioridad</span>
-                                <span v-if="plan.verified_badge"> · insignia de verificado</span>
-                                <!-- Pedido explícito del usuario ("ninguno tiene algo que
-                                     me diga cuál sería"): el dato ya llegaba del backend
-                                     (plan.van_trips_enabled / plan.express_enabled, ver
-                                     App\Models\SubscriptionPlan), solo faltaba mostrarlo acá
-                                     — mismo criterio que el resto de la lista. -->
-                                <span v-if="plan.express_enabled"> · Expresos</span>
-                                <span v-if="plan.van_trips_enabled"> · Rutas y Turismo</span>
-                            </p>
 
-                            <!-- Proyección de ganancia (pedido explícito del usuario: "que
-                                 indique las carreras estimadas y un estimado a ganar
-                                 mensualmente") — carreras × ticket promedio, ya resuelto
-                                 desde el backend (MyPlanController::attachEarningsProjection()),
-                                 ambos valores editables desde el panel admin sin tocar código. -->
-                            <p v-if="plan.earnings_projection" class="mt-1 text-xs text-arka-text-muted">
-                                📊 Proyección: ~{{ plan.earnings_projection.monthly_rides }} carreras/mes ≈
-                                <span class="text-arka-lime font-medium">${{ plan.earnings_projection.monthly_earnings.toFixed(2) }}/mes</span>
-                                (ticket promedio ${{ plan.earnings_projection.ticket.toFixed(2) }}/carrera).
-                            </p>
+                            <ul class="mt-1 space-y-0.5">
+                                <li v-for="benefit in BENEFITS[plan.code] ?? []" :key="benefit" class="text-sm text-arka-text-muted flex items-start gap-1.5">
+                                    <span class="text-arka-primary mt-0.5">✓</span>
+                                    <span>{{ benefit }}</span>
+                                </li>
+                            </ul>
 
                             <!-- Promoción vigente (pedido explícito del usuario: "pagá tanto
                                  y ahorrá tanto... después de tal fecha pagarías el valor
-                                 real") — ya viene resuelta y validada desde el backend
-                                 (MyPlanController::attachActivePromotions()), acá solo se
-                                 muestra. -->
+                                 real") — ya viene resuelta y validada desde el backend. -->
                             <div v-if="plan.active_promotion" class="mt-2 p-2 rounded-arka bg-arka-lime/10 border border-arka-lime/30 max-w-sm">
                                 <p class="text-xs text-arka-lime font-medium">
                                     🎁 {{ plan.active_promotion.label }}: pague ${{ plan.active_promotion.promo_price.toFixed(2) }}/mes y ahorre
@@ -138,31 +134,13 @@ function fitsCurrentUsage(plan) {
                                     Válido hasta {{ formatDate(plan.active_promotion.ends_at) }} — después pagaría ${{ plan.monthly_price }}/mes.
                                 </p>
                             </div>
-
-                            <!-- Descuento por pertenecer a una cooperativa activa (pedido
-                                 explícito del usuario) — ya viene resuelto y validado desde
-                                 el backend (PlanLimits::driverDiscountFor()), acá solo se
-                                 muestra. Nunca convive con una promoción (el backend ya
-                                 prioriza la promoción si hay una vigente). -->
-                            <div v-if="plan.cooperative_discount" class="mt-2 p-2 rounded-arka bg-arka-primary/10 border border-arka-primary/30 max-w-sm">
-                                <p class="text-xs text-arka-primary-bright font-medium">
-                                    🏢 Descuento por su cooperativa: pague ${{ plan.cooperative_discount.discounted_price.toFixed(2) }}/mes
-                                    ({{ plan.cooperative_discount.percent }}% menos) mientras siga afiliado.
-                                </p>
-                            </div>
                         </div>
                         <div class="text-right shrink-0">
                             <p class="text-arka-text font-semibold">
-                                <span v-if="plan.active_promotion || plan.cooperative_discount" class="text-xs text-arka-text-muted line-through mr-1">
+                                <span v-if="plan.active_promotion" class="text-xs text-arka-text-muted line-through mr-1">
                                     ${{ plan.monthly_price }}
                                 </span>
-                                ${{
-                                    plan.active_promotion
-                                        ? plan.active_promotion.promo_price.toFixed(2)
-                                        : plan.cooperative_discount
-                                          ? plan.cooperative_discount.discounted_price.toFixed(2)
-                                          : plan.monthly_price
-                                }}/mes
+                                ${{ plan.active_promotion ? plan.active_promotion.promo_price.toFixed(2) : plan.monthly_price }}/mes
                             </p>
                             <PrimaryButton
                                 v-if="plan.code !== currentPlan.plan_code && !pendingRequest && fitsCurrentUsage(plan)"
@@ -175,9 +153,28 @@ function fitsCurrentUsage(plan) {
                                 v-else-if="plan.code !== currentPlan.plan_code && !pendingRequest"
                                 class="mt-1 text-xs text-arka-warning max-w-[10rem]"
                             >
-                                No le alcanza con sus {{ usedClients }} clientes de confianza actuales
+                                No le alcanza con sus {{ usedUnits }} unidades actuales
                             </p>
                         </div>
+                    </div>
+
+                    <!-- Tarjeta "Hablemos" (pedido explícito del usuario): en vez de un
+                         tramo de precio fijo "sin límite", cooperativas más grandes se
+                         negocian caso por caso — no es una fila de subscription_plans. -->
+                    <div class="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <p class="text-arka-text font-medium">¿Más de 50 unidades?</p>
+                            <p class="text-sm text-arka-text-muted">Conversemos un plan a medida para su cooperativa.</p>
+                        </div>
+                        <a
+                            v-if="talkToUsUrl"
+                            :href="talkToUsUrl"
+                            target="_blank"
+                            rel="noopener"
+                            class="shrink-0 inline-flex items-center justify-center rounded-arka border border-arka-primary px-4 py-2 text-sm font-semibold text-arka-primary hover:bg-arka-primary/10 transition"
+                        >
+                            Hablemos por WhatsApp
+                        </a>
                     </div>
                 </div>
 
