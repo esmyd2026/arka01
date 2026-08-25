@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import AuthBrandingPanel from '@/Components/AuthBrandingPanel.vue';
+import SocialLinks from '@/Components/SocialLinks.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 
 // Fondo opcional configurable desde /admin/sitio (pedido explícito del
@@ -68,12 +69,16 @@ onMounted(() => {
 
                 <!-- Pedido explícito del usuario (gap identificado antes del
                      despliegue): enlaces a Términos y Privacidad, visibles
-                     antes de registrarse. -->
-                <p class="mt-6 text-center text-xs text-arka-text-muted">
-                    <Link :href="route('legal.terms')" class="hover:text-arka-primary-bright">Términos</Link>
-                    <span class="mx-2">·</span>
-                    <Link :href="route('legal.privacy')" class="hover:text-arka-primary-bright">Privacidad</Link>
-                </p>
+                     antes de registrarse. Redes sociales agregadas después,
+                     mismo pedido explícito que en Welcome.vue y Survey/Show.vue. -->
+                <div class="mt-6 flex flex-col items-center gap-3">
+                    <SocialLinks size="sm" />
+                    <p class="text-center text-xs text-arka-text-muted">
+                        <Link :href="route('legal.terms')" class="hover:text-arka-primary-bright">Términos</Link>
+                        <span class="mx-2">·</span>
+                        <Link :href="route('legal.privacy')" class="hover:text-arka-primary-bright">Privacidad</Link>
+                    </p>
+                </div>
             </div>
         </div>
     </div>

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import SocialLinks from '@/Components/SocialLinks.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 
 // Encuesta corta de conductor/pasajero (pedido explícito del usuario:
@@ -257,6 +258,13 @@ const whatsappShareUrl = computed(() => {
                     </svg>
                     Ir al inicio
                 </Link>
+
+                <!-- "Síguenos" (pedido explícito del usuario) — mismo componente
+                     de redes que ya usan Welcome.vue y GuestLayout.vue. -->
+                <div class="mt-6 flex flex-col items-center gap-3">
+                    <p class="text-xs font-medium uppercase tracking-wide text-arka-text-muted">Síguenos</p>
+                    <SocialLinks size="sm" />
+                </div>
             </div>
         </div>
     </GuestLayout>

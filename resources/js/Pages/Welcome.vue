@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Modal from '@/Components/Modal.vue';
+import SocialLinks from '@/Components/SocialLinks.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
@@ -614,11 +615,16 @@ function submitFeedback() {
                 </span>
             </button>
 
-            <p class="mt-10 text-center text-xs text-arka-text-muted">
-                <Link href="/terminos" class="hover:text-arka-primary-bright">Términos</Link>
-                <span class="mx-2">·</span>
-                <Link href="/privacidad" class="hover:text-arka-primary-bright">Privacidad</Link>
-            </p>
+            <!-- Footer con redes sociales (pedido explícito del usuario) — mismo
+                 componente que usan GuestLayout.vue y Survey/Show.vue. -->
+            <div class="mt-10 flex flex-col items-center gap-4">
+                <SocialLinks />
+                <p class="text-center text-xs text-arka-text-muted">
+                    <Link href="/terminos" class="hover:text-arka-primary-bright">Términos</Link>
+                    <span class="mx-2">·</span>
+                    <Link href="/privacidad" class="hover:text-arka-primary-bright">Privacidad</Link>
+                </p>
+            </div>
         </div>
 
         <Modal :show="showingFeedback" max-width="md" @close="showingFeedback = false">
