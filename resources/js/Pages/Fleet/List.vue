@@ -8,7 +8,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import FleetRoster from '@/Components/FleetRoster.vue';
 import ReferFleetModal from '@/Components/ReferFleetModal.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 
 // Pedido explícito del usuario ("que no vaya un paso más... que ahí ya salga
 // su flota, y los botones de agregar los acomodes por ahí"): antes cada
@@ -27,6 +27,8 @@ const props = defineProps({
     planCode: { type: String, required: true },
     planName: { type: String, required: true },
     cooperatives: { type: Array, default: () => [] },
+    // null = sin límite de cooperativas.
+    maxCooperatives: { type: Number, default: null },
 });
 
 const atLimit = props.maxFleets !== null && props.fleets.length >= props.maxFleets;
@@ -37,6 +39,16 @@ const filteredCooperatives = computed(() => {
     return props.cooperatives.filter((cooperative) => !term || cooperative.name.toLocaleLowerCase('es').includes(term));
 });
 const attachedCooperatives = computed(() => props.cooperatives.filter((cooperative) => cooperative.is_attached));
+// Bug real reportado por el usuario ("aqui los botones no funcionan"): al
+// llegar al cupo de cooperativas del plan, "Agregar" mandaba igual el POST —
+// CooperativeDirectoryController::attach() lo rechazaba (ValidationException),
+// pero nada en esta pantalla mostraba ese error, así que el botón parecía
+// simplemente no hacer nada. Mismo criterio que "Crear otra flota" más abajo:
+// al llegar al cupo, el botón lleva directo a subir de plan en vez de
+// quedarse mudo.
+const cooperativesAtLimit = computed(
+    () => props.maxCooperatives !== null && attachedCooperatives.value.length >= props.maxCooperatives
+);
 
 const form = useForm({ name: '' });
 
@@ -64,6 +76,10 @@ function handleCreateClick() {
 function toggleCooperative(cooperative) {
     if (cooperative.is_attached) {
         router.delete(route('cooperatives.detach', cooperative.id), { preserveScroll: true });
+        return;
+    }
+    if (cooperativesAtLimit.value) {
+        router.visit(route('client.plan.edit'));
         return;
     }
     router.post(route('cooperatives.attach', cooperative.id), {}, { preserveScroll: true });
@@ -96,25 +112,35 @@ const referModalFleet = computed(() => props.fleets.find((f) => f.fleet.id === r
                      conductores quedan de una en esta misma pantalla, sin tocar
                      nada más. -->
                 <div v-for="fleetData in fleets" :key="fleetData.fleet.id" class="space-y-3">
+                    <!-- Pedido explícito del usuario (con captura: "esto se ve
+                         muy mal no transmite orden") — antes "Pedir una
+                         carrera" vivía suelto arriba de FleetRoster.vue y
+                         "Recomendar mi flota" acá, cada uno en su propia fila
+                         justificada a la derecha: quedaban apilados sin
+                         relación visual entre sí. Ahora es un solo grupo,
+                         tamaño compacto (mismo criterio "sm" que ya usan
+                         PrimaryButton/SecondaryButton), con Pedir carrera
+                         como la acción principal. -->
                     <div class="flex items-center justify-between gap-3">
                         <div v-if="fleets.length > 1">
                             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-arka-primary">Su flota</p>
                             <h3 class="mt-0.5 text-lg font-semibold text-arka-text">{{ fleetData.fleet.name }}</h3>
                         </div>
                         <div v-else class="h-1"></div>
-                        <SecondaryButton
-                            v-if="fleetData.fleet.active_members?.length > 0"
-                            class="shrink-0 gap-1.5"
-                            @click="referModalFleetId = fleetData.fleet.id"
-                        >
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="18" cy="6" r="2.5" />
-                                <circle cx="6" cy="12" r="2.5" />
-                                <circle cx="18" cy="18" r="2.5" />
-                                <path stroke-linecap="round" d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6" />
-                            </svg>
-                            Recomendar mi flota
-                        </SecondaryButton>
+                        <div v-if="fleetData.fleet.active_members?.length > 0" class="flex shrink-0 items-center gap-2">
+                            <SecondaryButton size="sm" class="gap-1.5" @click="referModalFleetId = fleetData.fleet.id">
+                                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="18" cy="6" r="2.5" />
+                                    <circle cx="6" cy="12" r="2.5" />
+                                    <circle cx="18" cy="18" r="2.5" />
+                                    <path stroke-linecap="round" d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6" />
+                                </svg>
+                                Recomendar
+                            </SecondaryButton>
+                            <Link :href="route('ride-requests.create', { flota: fleetData.fleet.id })">
+                                <PrimaryButton size="sm">Pedir carrera</PrimaryButton>
+                            </Link>
+                        </div>
                     </div>
                     <FleetRoster :fleet="fleetData.fleet" :max-drivers-per-fleet="maxDriversPerFleet" :member-stats="fleetData.memberStats" />
                 </div>
@@ -133,16 +159,38 @@ const referModalFleet = computed(() => props.fleets.find((f) => f.fleet.id === r
 
                     <p v-if="!cooperatives.length" class="mt-4 rounded-arka border border-arka-text-muted/10 p-4 text-sm text-arka-text-muted">No existen cooperativas aprobadas disponibles en este momento.</p>
                     <p v-else-if="!filteredCooperatives.length" class="mt-4 text-sm text-arka-text-muted">No encontramos una cooperativa con ese nombre.</p>
+                    <!-- Mismo estilo de tarjeta que "Conductores en su flota"
+                         (pedido explícito del usuario, con una captura de
+                         referencia): foto grande arriba, insignia + acción abajo. -->
                     <div v-else class="mt-4 grid gap-3 sm:grid-cols-2">
-                        <article v-for="cooperative in filteredCooperatives" :key="cooperative.id" class="flex items-center gap-3 rounded-arka border p-3" :class="cooperative.is_attached ? 'border-arka-primary/40 bg-arka-primary/5' : 'border-arka-text-muted/15'">
-                            <img v-if="cooperative.logo_url" :src="cooperative.logo_url" :alt="`Logo de ${cooperative.name}`" class="h-11 w-11 rounded-xl bg-white object-contain p-1" />
-                            <div v-else class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-arka-primary/15 font-bold text-arka-primary">{{ cooperative.name.charAt(0) }}</div>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate font-semibold text-arka-text">{{ cooperative.name }}</p>
-                                <p class="truncate text-xs text-arka-text-muted">{{ cooperative.main_address || 'Parada por confirmar' }}</p>
-                                <p class="mt-0.5 text-xs text-arka-primary">{{ cooperative.active_drivers }} conductores activos</p>
+                        <article
+                            v-for="cooperative in filteredCooperatives"
+                            :key="cooperative.id"
+                            class="rounded-2xl border p-4 transition"
+                            :class="cooperative.is_attached ? 'border-arka-primary/40 bg-arka-primary/5' : 'border-arka-text-muted/10 bg-arka-base hover:border-arka-primary/30'"
+                        >
+                            <!-- Pedido explícito del usuario: ver el perfil público
+                                 de la cooperativa tocando el logo o el nombre, sin
+                                 un botón aparte que le compita al de Agregar/Retirar. -->
+                            <Link :href="route('cooperatives.show', cooperative.id)" target="_blank" class="flex items-center gap-3">
+                                <img v-if="cooperative.logo_url" :src="cooperative.logo_url" :alt="`Logo de ${cooperative.name}`" class="h-14 w-14 rounded-2xl bg-white object-contain p-1.5 shrink-0" />
+                                <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-arka-primary/15 text-lg font-bold text-arka-primary">{{ cooperative.name.charAt(0) }}</div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate font-semibold text-arka-text hover:text-arka-primary-bright">{{ cooperative.name }}</p>
+                                    <p class="truncate text-xs text-arka-text-muted">{{ cooperative.main_address || 'Parada por confirmar' }}</p>
+                                </div>
+                            </Link>
+                            <div class="mt-4 flex items-center justify-between gap-2">
+                                <span class="rounded-full bg-arka-primary/15 px-2.5 py-1 text-xs font-semibold text-arka-primary">{{ cooperative.active_drivers }} conductores activos</span>
+                                <button
+                                    type="button"
+                                    class="shrink-0 rounded-full px-3 py-2 text-xs font-semibold"
+                                    :class="cooperative.is_attached ? 'border border-arka-text-muted/20 text-arka-text-muted' : 'bg-arka-primary text-arka-base'"
+                                    @click="toggleCooperative(cooperative)"
+                                >
+                                    {{ cooperative.is_attached ? 'Retirar' : (cooperativesAtLimit ? 'Subir de plan' : 'Agregar') }}
+                                </button>
                             </div>
-                            <button type="button" class="shrink-0 rounded-full px-3 py-2 text-xs font-semibold" :class="cooperative.is_attached ? 'border border-arka-text-muted/20 text-arka-text-muted' : 'bg-arka-primary text-arka-base'" @click="toggleCooperative(cooperative)">{{ cooperative.is_attached ? 'Retirar' : 'Agregar' }}</button>
                         </article>
                     </div>
                 </section>

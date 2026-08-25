@@ -47,12 +47,13 @@ class ChatbotWebhookTest extends TestCase
     }
 
     /**
-     * Pedido explícito del usuario ("seria bueno que comience Soy Pasajero,
-     * Soy Conductor, Mas Info"): el saludo ya no es texto con una lista
-     * numerada — es un mensaje interactivo de botones. Un cliente conocido
-     * (role_scope de SOY_CONDUCTOR es 'conductor') solo ve "Soy Pasajero" +
-     * "Más Info" — "Soy Conductor" queda afuera, mismo criterio que ya
-     * filtraba PEDIR_CARRERA para conductores.
+     * Pedido explícito del usuario, tras probar el bot de verdad: "primero
+     * el soy cliente debe ir al inicio... soy conductor, soy cliente y mas
+     * informacion". El saludo es un mensaje interactivo de botones. Un
+     * cliente conocido (role_scope de SOY_CONDUCTOR es 'conductor') solo ve
+     * "Soy cliente" (INFORMACION_CLIENTE) + "Más Info" — "Soy Conductor"
+     * queda afuera, mismo criterio que ya filtraba PEDIR_CARRERA para
+     * conductores antes de que se sacara del menú principal.
      */
     public function test_a_greeting_from_a_registered_user_gets_a_real_menu_reply_not_the_old_fixed_text(): void
     {
@@ -72,7 +73,7 @@ class ChatbotWebhookTest extends TestCase
             return str_contains($request->url(), 'graph.facebook.com')
                 && str_contains($body, 'asistente virtual')
                 && ! str_contains($body, 'Ya quedó conectado y activo')
-                && $buttonIds->contains('PEDIR_CARRERA')
+                && $buttonIds->contains('INFORMACION_CLIENTE')
                 && ! $buttonIds->contains('SOY_CONDUCTOR')
                 && $buttonIds->contains('WA_MAS_OPCIONES');
         });
@@ -259,7 +260,7 @@ class ChatbotWebhookTest extends TestCase
         ChatbotConversation::create([
             'phone' => '+593991234567',
             'pending_intent' => 'AWAITING_MENU_CHOICE',
-            'context' => ['menu_options' => ['PEDIR_CARRERA', 'SOY_CONDUCTOR', 'WA_MAS_OPCIONES']],
+            'context' => ['menu_options' => ['INFORMACION_CLIENTE', 'SOY_CONDUCTOR', 'WA_MAS_OPCIONES']],
         ]);
 
         $this->sendInbound('593991234567', 'WA_MAS_OPCIONES');
@@ -271,12 +272,14 @@ class ChatbotWebhookTest extends TestCase
 
             $rowIds = collect($request['interactive']['action']['sections'][0]['rows'] ?? [])->pluck('id');
 
-            // REGISTRO ya no está promovido a botón propio (lo reemplazó
-            // SOY_CONDUCTOR) — vuelve a aparecer acá, en "Más Info".
+            // REGISTRO y PEDIR_CARRERA ya no están promovidos a botón propio
+            // (los reemplazaron INFORMACION_CLIENTE/SOY_CONDUCTOR) — vuelven
+            // a aparecer acá, en "Más Info".
             return $rowIds->contains('SOPORTE')
                 && $rowIds->contains('CODIGO_NO_RECIBIDO')
                 && $rowIds->contains('REGISTRO')
-                && ! $rowIds->contains('PEDIR_CARRERA')
+                && $rowIds->contains('PEDIR_CARRERA')
+                && ! $rowIds->contains('INFORMACION_CLIENTE')
                 && ! $rowIds->contains('SOY_CONDUCTOR');
         });
 
@@ -327,6 +330,43 @@ class ChatbotWebhookTest extends TestCase
         $this->sendInbound('593991234567', 'REGISTRO');
 
         Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'Crear una cuenta es rápido'));
+    }
+
+    /**
+     * "Soy cliente" (pedido explícito del usuario, tras probar el bot: "el
+     * soy cliente no funciona esta caido"): antes era texto fijo con una
+     * pregunta sin ningún botón real — ahora manda botones de verdad
+     * (Pedir carrera / Crear cuenta), y tocar cualquiera de los dos sigue
+     * su propio flujo real, sin caer en el fallback genérico.
+     */
+    public function test_touching_soy_cliente_offers_real_buttons_instead_of_a_dead_end(): void
+    {
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+        ChatbotConversation::create([
+            'phone' => '+593991234567',
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => ['INFORMACION_CLIENTE', 'SOY_CONDUCTOR', 'WA_MAS_OPCIONES']],
+        ]);
+
+        $this->sendInbound('593991234567', 'INFORMACION_CLIENTE');
+
+        Http::assertSent(function ($request) {
+            if (($request['interactive']['type'] ?? null) !== 'button') {
+                return false;
+            }
+
+            $buttonIds = collect($request['interactive']['action']['buttons'] ?? [])->pluck('reply.id');
+
+            return str_contains($request['interactive']['body']['text'] ?? '', 'flota de confianza')
+                && $buttonIds->contains('PEDIR_CARRERA')
+                && $buttonIds->contains('REGISTRO');
+        });
+
+        $this->assertSame(
+            ['PEDIR_CARRERA', 'REGISTRO'],
+            ChatbotConversation::forPhone('+593991234567')->context['menu_options']
+        );
     }
 
     public function test_a_faq_style_question_without_a_dedicated_intent_still_gets_answered(): void

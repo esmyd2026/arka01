@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import DangerButton from '@/Components/DangerButton.vue';
+import Dropdown from '@/Components/Dropdown.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
@@ -81,8 +81,18 @@ const runSearch = () => {
     }, 300);
 };
 
+// Bug real reportado por el usuario (con captura: "Compartir invitación"
+// aparecía solo, sin haber buscado nada) — con todo en su estado inicial
+// (searchTerm/lastSearchedTerm en '', searchResults en []) esta condición ya
+// daba `true` de entrada: '' === '' y 0 === 0, sin que nadie hubiera escrito
+// un solo carácter. Ahora exige que de verdad se haya intentado una
+// búsqueda (mismo umbral de 2 caracteres que runSearch()).
 const showNotRegisteredYet = computed(
-    () => !searching.value && lastSearchedTerm.value === searchTerm.value && searchResults.value.length === 0
+    () =>
+        !searching.value &&
+        searchTerm.value.trim().length >= 2 &&
+        lastSearchedTerm.value === searchTerm.value &&
+        searchResults.value.length === 0
 );
 
 // Invitar a alguien que TODAVÍA NO tiene cuenta en Arka01 (pedido explícito
@@ -204,12 +214,6 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="space-y-6">
-        <div v-if="memberCount > 0" class="flex justify-end">
-            <Link :href="route('ride-requests.create', { flota: fleet.id })">
-                <PrimaryButton>Pedir una carrera</PrimaryButton>
-            </Link>
-        </div>
-
         <!-- Buscador para invitar conductores -->
         <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
             <!-- Pedido explícito del usuario ("manejar la privacidad...
@@ -306,77 +310,115 @@ onBeforeUnmount(() => {
                 </Link>.
             </p>
 
-            <ul v-else class="divide-y divide-arka-text-muted/10">
-                <!-- Bug reportado por el usuario (con captura: diseño roto en
-                     móvil, botones superpuestos y nombre cortado) — la fila era
-                     `flex items-center` sin apilar en pantallas angostas, y los
-                     tres botones de acción (shrink-0) le comían todo el ancho al
-                     bloque de nombre/datos, sin importar cuánto min-w-0 tuviera.
-                     Mismo patrón "apilar en mobile" que ya se usa en el resto del
-                     panel admin para filas con acciones al costado. -->
-                <li
+            <!-- Pedido explícito del usuario (con una captura de referencia):
+                 tarjetas de verdad en vez de filas separadas por una línea —
+                 foto grande, nombre + medalla arriba, calificación destacada
+                 abajo, acciones al pie de cada tarjeta. -->
+            <div v-else class="grid gap-3 sm:grid-cols-2">
+                <div
                     v-for="member in fleet.active_members"
                     :key="member.id"
-                    class="py-3 px-2 -mx-2 rounded-arka flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-arka-base/40 transition-colors"
+                    class="rounded-2xl border border-arka-text-muted/10 bg-arka-base p-4 transition hover:border-arka-primary/30"
                 >
-                    <div class="flex items-center gap-3 min-w-0">
-                        <UserAvatar :user="member.driver" size-class="h-11 w-11 text-sm shrink-0" />
-                        <div class="min-w-0">
+                    <div class="flex items-center gap-3">
+                        <UserAvatar :user="member.driver" size-class="h-14 w-14 text-base shrink-0" />
+                        <div class="min-w-0 flex-1">
                             <Link
                                 :href="route('profiles.show', member.driver.id)"
-                                class="text-arka-text font-medium hover:text-arka-primary-bright flex items-center gap-1.5 flex-wrap"
+                                class="font-semibold text-arka-text hover:text-arka-primary-bright flex items-center gap-1.5 flex-wrap"
                             >
                                 {{ member.driver.name }}
                                 <span
                                     v-if="memberStats[member.driver.id]"
-                                    class="text-xs"
+                                    class="rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-semibold text-arka-primary"
                                 >
                                     {{ tierLabel(memberStats[member.driver.id].tier) }}
                                 </span>
                             </Link>
                             <!-- Pedido explícito del usuario: no mostrar el teléfono acá
                                  (privacidad) — solo la tarifa. -->
-                            <p v-if="member.driver.driver_profile" class="text-sm text-arka-text-muted">
+                            <p v-if="member.driver.driver_profile" class="text-xs text-arka-text-muted">
                                 ${{ member.driver.driver_profile.rate_per_km }}/km
-                            </p>
-                            <p v-if="memberStats[member.driver.id]" class="text-xs text-arka-text-muted">
-                                <span v-if="memberStats[member.driver.id].review_count > 0" class="text-arka-lime">
-                                    ★ {{ memberStats[member.driver.id].average_rating.toFixed(1) }}
-                                </span>
-                                <span v-else>Sin calificaciones</span>
-                                · {{ memberStats[member.driver.id].rides_count }} carrera(s) completada(s)
-                                · {{ memberStats[member.driver.id].active_clients_count }} cliente(s)
                             </p>
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
-                        <!-- Pedido explícito del usuario: elegir un conductor de
-                             la flota tiene que ofrecer pedirle una carrera directo.
-                             Mismas clases que SecondaryButton, pero es una navegación
-                             (Link → <a>), no puede envolver un <button> adentro. -->
+                    <div v-if="memberStats[member.driver.id]" class="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
+                        <template v-if="memberStats[member.driver.id].review_count > 0">
+                            <span class="text-arka-lime">★</span>
+                            <span class="font-semibold text-arka-text">{{ memberStats[member.driver.id].average_rating.toFixed(2) }}</span>
+                            <span class="text-xs text-arka-text-muted">({{ memberStats[member.driver.id].review_count }})</span>
+                        </template>
+                        <span v-else class="text-xs text-arka-text-muted">Sin calificaciones</span>
+                        <span class="text-xs text-arka-text-muted">· {{ memberStats[member.driver.id].rides_count }} carrera(s) · {{ memberStats[member.driver.id].active_clients_count }} cliente(s)</span>
+                    </div>
+
+                    <!-- Pedido explícito del usuario (con captura: "esos
+                         botones tan grandes"): un solo botón visible
+                         (la acción de siempre, Pedir carrera, con ícono y
+                         tamaño compacto — mismo criterio "sm" que ya usan
+                         PrimaryButton/DangerButton) y el resto (Recomendar,
+                         Sacar) detrás de un menú de 3 puntos — mismo
+                         Dropdown.vue del menú de cuenta del header. -->
+                    <div class="mt-4 flex items-center gap-2">
+                        <!-- Mismas clases que SecondaryButton size="sm", pero es
+                             una navegación (Link → <a>), no puede envolver un
+                             <button> adentro. -->
                         <Link
                             :href="route('ride-requests.create', { flota: fleet.id, conductor: member.driver.id })"
-                            class="inline-flex items-center px-4 py-2 bg-arka-card border border-arka-text-muted/30 rounded-arka font-semibold text-xs text-arka-text uppercase tracking-widest shadow-sm hover:bg-arka-base focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150"
+                            class="inline-flex flex-1 items-center justify-center gap-1.5 px-2.5 py-1.5 bg-arka-card border border-arka-text-muted/30 rounded-arka font-semibold text-[11px] tracking-wide text-arka-text shadow-sm hover:bg-arka-base focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150"
                         >
+                            <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5v-3.2a2 2 0 0 1 .2-.9l1.6-3.3a2 2 0 0 1 1.8-1.1h8.8a2 2 0 0 1 1.8 1.1l1.6 3.3a2 2 0 0 1 .2.9v3.2" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5h16M6 16.5v1.8M18 16.5v1.8" />
+                                <circle cx="7.5" cy="14" r=".1" stroke-linecap="round" />
+                                <circle cx="16.5" cy="14" r=".1" stroke-linecap="round" />
+                            </svg>
                             Pedir carrera
                         </Link>
-                        <a
-                            v-if="member.driver.driver_profile"
-                            :href="whatsappReferralUrl(member)"
-                            target="_blank"
-                            rel="noopener"
-                            class="inline-flex items-center gap-1.5 px-4 py-2 bg-arka-card border border-arka-text-muted/30 rounded-arka font-semibold text-xs text-arka-text uppercase tracking-widest shadow-sm hover:bg-arka-base focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150"
-                        >
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
-                            </svg>
-                            Recomendar
-                        </a>
-                        <DangerButton @click="removeMember(member.id)">Sacar</DangerButton>
+
+                        <Dropdown align="right" width="48">
+                            <template #trigger>
+                                <button
+                                    type="button"
+                                    class="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-arka-text-muted/30 text-arka-text-muted hover:border-arka-primary/50 hover:text-arka-primary transition"
+                                    aria-label="Más opciones"
+                                >
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                        <circle cx="5" cy="12" r="1.8" />
+                                        <circle cx="12" cy="12" r="1.8" />
+                                        <circle cx="19" cy="12" r="1.8" />
+                                    </svg>
+                                </button>
+                            </template>
+                            <template #content>
+                                <a
+                                    v-if="member.driver.driver_profile"
+                                    :href="whatsappReferralUrl(member)"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="flex items-center gap-2 px-4 py-2 text-sm text-arka-text hover:bg-arka-base transition"
+                                >
+                                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
+                                    </svg>
+                                    Recomendar
+                                </a>
+                                <button
+                                    type="button"
+                                    class="flex w-full items-center gap-2 px-4 py-2 text-start text-sm text-arka-danger hover:bg-arka-base transition"
+                                    @click="removeMember(member.id)"
+                                >
+                                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 .8 12a2 2 0 0 0 2 1.9h4.4a2 2 0 0 0 2-1.9L18 7" />
+                                    </svg>
+                                    Sacar de la flota
+                                </button>
+                            </template>
+                        </Dropdown>
                     </div>
-                </li>
-            </ul>
+                </div>
+            </div>
         </div>
 
         <!-- Invitaciones pendientes de respuesta -->

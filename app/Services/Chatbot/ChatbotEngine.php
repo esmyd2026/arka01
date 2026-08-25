@@ -36,15 +36,17 @@ class ChatbotEngine
     private const MORE_OPTIONS_ACTION = 'WA_MAS_OPCIONES';
 
     /**
-     * Las 2 intenciones promovidas a botón propio en el menú principal
-     * (pedido explícito del usuario: "seria bueno que comience Soy
-     * Pasajero, Soy Conductor, Mas Info") — PEDIR_CARRERA pasa a mostrarse
-     * como "Soy Pasajero" (mismo code/flujo de siempre, solo cambia el
-     * texto del botón) y SOY_CONDUCTOR es nuevo (ver
-     * WhatsAppDriverConnectHandler). El resto de las intenciones
-     * `show_in_menu` quedan en la lista de "Más Info".
+     * Las 2 intenciones promovidas a botón propio en el menú principal.
+     * Pedido explícito del usuario, después de probar el bot de verdad:
+     * "primero el soy cliente debe ir al inicio... y deberia estar en mas
+     * informacion solicitar carrera" — INFORMACION_CLIENTE ("Soy cliente")
+     * reemplaza a PEDIR_CARRERA acá; PEDIR_CARRERA vuelve a la lista de
+     * "Más Info" (mismo criterio que REGISTRO desde que se sacó de acá),
+     * pero sigue ofreciéndose como uno de los 2 botones que manda
+     * sendClientMenu() al tocar "Soy cliente" — no hace falta ir a "Más
+     * Info" para pedir una carrera, solo ya no es EL botón principal.
      */
-    private const PROMOTED_MENU_CODES = ['PEDIR_CARRERA', 'SOY_CONDUCTOR'];
+    private const PROMOTED_MENU_CODES = ['INFORMACION_CLIENTE', 'SOY_CONDUCTOR'];
 
     public function __construct(
         private readonly IntentDetector $detector,
@@ -148,6 +150,19 @@ class ChatbotEngine
             // etiqueta del botón, en vez de "conectarme").
             if ($match->intent->action === 'driver_menu') {
                 $this->driverConnectHandler->handle($phoneE164, $user, 'soy conductor', $conversation);
+
+                return;
+            }
+
+            // "Soy cliente" (pedido explícito del usuario, tras probar el
+            // bot: "el soy cliente no funciona esta caido") — antes era
+            // texto fijo terminando en una pregunta sin ningún botón real,
+            // así que cualquier respuesta después caía al fallback
+            // genérico. Ahora manda los mismos 2 botones reales que ya
+            // tienen flujo propio (Pedir carrera / Crear cuenta), en vez de
+            // dejar la conversación en un callejón sin salida.
+            if ($match->intent->action === 'client_menu') {
+                $this->sendClientMenu($conversation, $phoneE164, $match->intent);
 
                 return;
             }
@@ -264,6 +279,30 @@ class ChatbotEngine
         // pedido de verdad) o conservarlo (fallback() ya viene contando
         // intentos fallidos, ver ahí abajo).
         $conversation->update([
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => array_column($buttons, 'id')],
+            'last_message_at' => now(),
+        ]);
+    }
+
+    /**
+     * "Soy cliente": el texto informativo de siempre (`reply_message`) más 2
+     * botones reales — Pedir carrera (mismo flujo de WhatsAppRideBookingHandler
+     * de siempre, con o sin cuenta) y Crear cuenta (REGISTRO). Antes esto
+     * terminaba en una pregunta sin ningún botón, un callejón sin salida
+     * (pedido explícito del usuario, tras probar el bot: "esta caido").
+     */
+    private function sendClientMenu(ChatbotConversation $conversation, string $phone, ChatbotIntent $intent): void
+    {
+        $buttons = [
+            ['id' => 'PEDIR_CARRERA', 'title' => 'Pedir carrera'],
+            ['id' => 'REGISTRO', 'title' => 'Crear cuenta'],
+        ];
+
+        WhatsAppFreeformSender::sendButtons($phone, trim($intent->reply_message ?? '¿Qué desea hacer?'), $buttons);
+
+        $conversation->update([
+            'unresolved_attempts' => 0,
             'pending_intent' => 'AWAITING_MENU_CHOICE',
             'context' => ['menu_options' => array_column($buttons, 'id')],
             'last_message_at' => now(),

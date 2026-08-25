@@ -18,6 +18,23 @@ const backgroundUrl = computed(() => usePage().props.authBackgroundUrl);
 // no se repitan dos veces en la misma pantalla.
 defineProps({
     showSocialLinks: { type: Boolean, default: true },
+    // Bug real reportado por el usuario (con captura: "tienes full espacio y
+    // lo tienes todo alli agrupado"): este layout se diseñó para formularios
+    // angostos (login/registro), con la tarjeta capada a `sm:max-w-md`
+    // (448px) sin importar qué tan ancha fuera la pantalla. Cooperative/Show.vue
+    // lo reusa para una página de contenido rico (grilla de estadísticas,
+    // conductores, reseñas) que necesita mucho más ancho — antes quedaba
+    // todo apretado en esos 448px en cualquier pantalla ≥640px.
+    maxWidthClass: { type: String, default: 'sm:max-w-md' },
+    // El panel de marca decorativo (mitad de la pantalla en escritorio) tiene
+    // sentido en login/registro, no en una página de contenido que ya
+    // necesita todo el ancho disponible.
+    showBrandingPanel: { type: Boolean, default: true },
+    // La tarjeta blanca que envuelve el slot tiene sentido para un
+    // formulario chico — una página con sus propias tarjetas internas
+    // (Cooperative/Show.vue) no necesita quedar OTRA vez envuelta en una
+    // tarjeta más, se vería como una tarjeta dentro de otra tarjeta.
+    wrapContent: { type: Boolean, default: true },
 });
 
 // Pedido explícito del usuario ("que no se note que se está cargando la
@@ -63,17 +80,18 @@ onMounted(() => {
             <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(7,17,13,0.25) 0%, rgba(7,17,13,0.45) 55%, rgba(7,17,13,0.78) 100%)" />
         </div>
 
-        <AuthBrandingPanel />
+        <AuthBrandingPanel v-if="showBrandingPanel" />
 
         <div class="flex-1 flex flex-col justify-center items-center px-6 py-12">
-            <div class="w-full sm:max-w-md">
+            <div class="w-full" :class="maxWidthClass">
                 <Link href="/" class="lg:hidden flex justify-center mb-6">
                     <ApplicationLogo size="h-10" />
                 </Link>
 
-                <div class="w-full px-6 py-4 bg-arka-card shadow-md overflow-hidden rounded-arka">
+                <div v-if="wrapContent" class="w-full px-6 py-4 bg-arka-card shadow-md overflow-hidden rounded-arka">
                     <slot />
                 </div>
+                <slot v-else />
 
                 <!-- Pedido explícito del usuario (gap identificado antes del
                      despliegue): enlaces a Términos y Privacidad, visibles

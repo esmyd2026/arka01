@@ -74,6 +74,11 @@ class FleetController extends Controller
             // null = sin límite de flotas.
             'maxFleets' => $limits['max_fleets'],
             'maxDriversPerFleet' => $limits['max_drivers_per_fleet'],
+            // null = sin límite de cooperativas (pedido explícito del usuario:
+            // el botón "Agregar" no avisaba nada al chocar con este límite —
+            // CooperativeDirectoryController::attach() ya lo rechazaba, pero
+            // en silencio, sin ningún mensaje en pantalla).
+            'maxCooperatives' => $limits['max_cooperatives'],
             'planCode' => $limits['plan_code'],
             'planName' => $limits['plan_name'],
             // Cooperativas son una red del cliente (compartida entre sus flotas),

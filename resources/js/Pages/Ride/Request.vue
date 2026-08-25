@@ -995,19 +995,44 @@ const form = useForm({
     notes: '',
 });
 
-// Si "toda mi flota" no tiene a quién ofrecerle la carrera, el aviso sugiere
-// ampliar a otra categoría (ver nextNonEmptyCategory() y el botón que ya
-// muestra el propio mensaje de error en el paso 'driver') — acá solo hace
-// falta volver a ese paso si el envío se disparó desde 'confirm' (más
-// adelante) y asegurarse de que quede alguna categoría abierta.
+// Si "toda mi flota" (o la categoría que esté abierta) no tiene a quién
+// ofrecerle la carrera, se salta SOLO a la siguiente categoría con
+// candidatos — pedido explícito del usuario ("esto deberia ser automatico...
+// la idea es evitar hacer tantos click"): antes, si ya había una categoría
+// elegida (ej. el cliente ya estaba en "Mi flota"), el aviso de error se
+// quedaba ahí mismo mostrando un botón "Pruebe con X" que había que tocar
+// aparte — el salto automático solo pasaba si NINGUNA categoría estaba
+// abierta todavía. `driverErrorFallbackLabel` es lo que el aviso de abajo
+// (paso 'driver') usa para explicar el salto, en vez de pedir otro clic.
+const driverErrorFallbackLabel = ref('');
 watch(
     () => form.errors.driver_user_id,
     (error) => {
-        if (!error) return;
+        if (!error) {
+            driverErrorFallbackLabel.value = '';
+            return;
+        }
         step.value = 'driver';
-        if (!activeCategory.value) activeCategory.value = recommendCategory();
+        const fallback = activeCategory.value ? nextNonEmptyCategory(activeCategory.value) : recommendCategory();
+        if (fallback && fallback !== activeCategory.value) {
+            activeCategory.value = fallback;
+            driverErrorFallbackLabel.value = CATEGORY_META[fallback].label.toLowerCase();
+        } else {
+            driverErrorFallbackLabel.value = '';
+        }
     }
 );
+
+// Elegir una tarjeta de categoría a mano (pedido explícito del usuario, en
+// el mismo pedido de arriba): limpia el aviso de "ningún conductor
+// conectado" de un intento anterior — sin esto, ese aviso (con la sugerencia
+// de otra categoría que ya no aplica) se quedaba pegado en pantalla aunque
+// el cliente ya hubiera elegido otra cosa a mano.
+function selectCategory(category) {
+    activeCategory.value = activeCategory.value === category ? null : category;
+    driverErrorFallbackLabel.value = '';
+    form.clearErrors('driver_user_id');
+}
 
 // "Ahora mismo" (default) o "programada" para una fecha/hora futura, con la
 // opción de ida y vuelta (consideración agregada al alcance, pedido
@@ -1755,14 +1780,7 @@ function submit() {
                     <InputError :message="form.errors.cooperative_id" />
                     <p v-if="form.errors.driver_user_id" class="text-sm text-arka-danger">
                         {{ form.errors.driver_user_id }}
-                        <button
-                            v-if="activeCategory && nextNonEmptyCategory(activeCategory)"
-                            type="button"
-                            class="underline hover:text-arka-danger/80"
-                            @click="activeCategory = nextNonEmptyCategory(activeCategory)"
-                        >
-                            Pruebe con {{ CATEGORY_META[nextNonEmptyCategory(activeCategory)].label.toLowerCase() }}.
-                        </button>
+                        <span v-if="driverErrorFallbackLabel">Mostrando {{ driverErrorFallbackLabel }} en su lugar.</span>
                     </p>
 
                     <!-- Tarjetas de categoría (sección 8): tocarla despliega o
@@ -1775,7 +1793,7 @@ function submit() {
                             type="button"
                             class="w-full flex items-center gap-3 p-3 rounded-arka border transition text-start"
                             :class="activeCategory === category ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white hover:border-arka-primary/40'"
-                            @click="activeCategory = activeCategory === category ? null : category"
+                            @click="selectCategory(category)"
                         >
                             <!-- Ícono por categoría (pedido explícito del usuario, con el
                                  bosquejo como referencia). -->

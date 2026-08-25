@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import AdminNavIcon from '@/Components/AdminNavIcon.vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -19,6 +20,7 @@ import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/inc
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { resetStartupSplash } from '@/Utils/startupSplash';
+import { ADMIN_NAV_GROUPS as adminNavGroups } from '@/Utils/adminNav';
 
 // Pedido explícito del usuario (documento formal de ajuste UX): en Inicio
 // del pasajero, el mapa debe llegar hasta arriba de la pantalla con la nav
@@ -849,9 +851,42 @@ onBeforeUnmount(() => {
             </div>
         </nav>
 
-        <!-- Bottom sheet de accesos rápidos (sección 9.9/9.10: "que la web se sienta app de verdad") -->
+        <!-- Bottom sheet de accesos rápidos (sección 9.9/9.10: "que la web se sienta app de verdad").
+             Pedido explícito del usuario (con captura de la nav admin: "en
+             movil que salga desde abajo en el signo ese +"): para un admin
+             este mismo cajón mostraba `quickLinks`, que es 100% de
+             cliente/conductor/cooperativa — ni un solo ítem de admin, así
+             que el botón "+" no servía de nada en esa cuenta. Ahora, si es
+             admin, muestra las secciones agrupadas de Utils/adminNav.js
+             (misma agrupación que el dropdown de escritorio y las tarjetas
+             del Inicio) en vez del contenido de siempre. -->
         <BottomSheet :show="showingQuickActions" @close="showingQuickActions = false">
-            <div class="p-4 pb-6">
+            <div v-if="isAdmin" class="p-4 pb-6">
+                <h3 class="text-center text-arka-text font-medium mb-4">Panel admin</h3>
+
+                <!-- Pedido explícito del usuario: "que tenga su scroll claro
+                     porque son muchos, pero divilo en secciones". -->
+                <div class="max-h-[65vh] space-y-5 overflow-y-auto pr-1">
+                    <div v-for="group in adminNavGroups" :key="group.key">
+                        <p class="mb-1.5 flex items-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-arka-text-muted">
+                            <span class="h-3.5 w-3.5 shrink-0"><AdminNavIcon :icon="group.icon" /></span>
+                            {{ group.label }}
+                        </p>
+                        <Link
+                            v-for="item in group.items"
+                            :key="item.route"
+                            :href="route(item.route)"
+                            @click="showingQuickActions = false"
+                            class="block px-3 py-2.5 rounded-arka text-sm min-h-[44px] flex items-center"
+                            :class="route().current(item.match) ? 'text-arka-primary-bright bg-arka-base' : 'text-arka-text hover:bg-arka-base'"
+                        >
+                            {{ item.label }}
+                        </Link>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else class="p-4 pb-6">
                 <h3 class="text-center text-arka-text font-medium mb-4">Accesos rápidos</h3>
 
                 <div class="space-y-1">

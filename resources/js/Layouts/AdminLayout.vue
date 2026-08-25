@@ -1,5 +1,8 @@
 <script setup>
+import AdminNavIcon from '@/Components/AdminNavIcon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Dropdown from '@/Components/Dropdown.vue';
+import { ADMIN_NAV_GROUPS } from '@/Utils/adminNav';
 import { Link } from '@inertiajs/vue3';
 
 // Layout compartido por todas las pantallas de /admin/* (sección 9.5-C):
@@ -7,52 +10,19 @@ import { Link } from '@inertiajs/vue3';
 // ("Indicadores · Planes · Alertas SOS..."), duplicada y fácil de olvidar
 // actualizar. Ahora es una sola sub-nav persistente, coherente con el resto
 // de la app (mismas pastillas redondeadas que la nav principal).
+//
+// Pedido explícito del usuario (con captura: "28 enlaces sueltos... no
+// transmite orden"): la fila plana de siempre pasa a 6 dropdowns agrupados
+// por tema — ver Utils/adminNav.js, la misma agrupación que usan el bottom
+// sheet del FAB en móvil (AuthenticatedLayout.vue) y las tarjetas del Inicio
+// (Dashboard.vue), para no repetir esta lista de 28 rutas en 3 lugares.
 defineProps({
     title: { type: String, required: true },
 });
 
-const sections = [
-    { route: 'admin.cooperatives.index', match: 'admin.cooperatives.*', label: 'Cooperativas' },
-    // Depurar carreras de prueba (pedido explícito del usuario) — cerca del
-    // resto de mantenimiento operativo, antes que Suscripciones.
-    { route: 'admin.rides.index', match: 'admin.rides.*', label: 'Carreras' },
-    { route: 'admin.subscriptions.index', match: 'admin.subscriptions.*', label: 'Suscripciones' },
-    { route: 'admin.plans.index', match: 'admin.plans.*', label: 'Planes' },
-    { route: 'admin.plan-promotions.index', match: 'admin.plan-promotions.*', label: 'Promociones' },
-    { route: 'admin.pricing.edit', match: 'admin.pricing.*', label: 'Tarifas' },
-    // Configuración del sitio público (pedido explícito del usuario): la
-    // imagen de fondo del hero de Welcome.vue, entre otras cosas del sitio
-    // que puedan sumarse acá más adelante.
-    { route: 'admin.site.edit', match: 'admin.site.*', label: 'Sitio' },
-    { route: 'admin.metrics.index', match: 'admin.metrics.*', label: 'Indicadores' },
-    // Encuesta corta de conductor/pasajero (pedido explícito del usuario):
-    // "indicadores que me ayuden a determinar decisiones" — cerca de
-    // Indicadores, es el mismo tipo de panel.
-    { route: 'admin.survey-metrics.index', match: 'admin.survey-metrics.*', label: 'Encuestas' },
-    { route: 'admin.referrals.index', match: 'admin.referrals.*', label: 'Referidos' },
-    { route: 'admin.drivers.index', match: 'admin.drivers.*', label: 'Conductores' },
-    { route: 'admin.clients.index', match: 'admin.clients.*', label: 'Clientes' },
-    { route: 'admin.user-locations.index', match: 'admin.user-locations.*', label: 'Registros por ubicación' },
-    { route: 'admin.driver-tiers.index', match: 'admin.driver-tiers.*', label: 'Medallas' },
-    { route: 'admin.operations.index', match: 'admin.operations.*', label: 'Operaciones' },
-    { route: 'admin.driver-verifications.index', match: 'admin.driver-verifications.*', label: 'Verificaciones' },
-    { route: 'admin.rating-reasons.index', match: 'admin.rating-reasons.*', label: 'Motivos de calificación' },
-    { route: 'admin.ad-banners.index', match: 'admin.ad-banners.*', label: 'Banners' },
-    { route: 'admin.coupons.index', match: 'admin.coupons.*', label: 'Cupones' },
-    { route: 'admin.sos-alerts.index', match: 'admin.sos-alerts.*', label: 'Alertas SOS' },
-    { route: 'admin.locations.index', match: 'admin.locations.*', label: 'Zonas' },
-    { route: 'admin.system.index', match: 'admin.system.*', label: 'Sistema' },
-    // Roadmap de mejoras, secciones 8, 9, 11 y 12.
-    { route: 'admin.integrations.whatsapp.edit', match: 'admin.integrations.*', label: 'Integraciones' },
-    { route: 'admin.monitoring.index', match: 'admin.monitoring.*', label: 'Monitoreo' },
-    { route: 'admin.faqs.index', match: 'admin.faqs.*', label: 'Preguntas frecuentes' },
-    { route: 'admin.support-tickets.index', match: 'admin.support-tickets.*', label: 'Soporte' },
-    // Asistente virtual sobre WhatsApp (pedido explícito del usuario) — a
-    // propósito separado de "Integraciones" (esa es la config transaccional
-    // cruda de WhatsApp, nunca se mezclan).
-    { route: 'admin.chatbot.intents.index', match: 'admin.chatbot.*', label: 'Chatbot' },
-    { route: 'admin.platform-feedback.index', match: 'admin.platform-feedback.*', label: 'Opiniones' },
-];
+function groupIsActive(group) {
+    return group.items.some((item) => route().current(item.match));
+}
 </script>
 
 <template>
@@ -67,20 +37,37 @@ const sections = [
                 </div>
                 <h2 class="font-semibold text-xl text-arka-text leading-tight">{{ title }}</h2>
 
-                <nav class="flex flex-wrap gap-1 bg-arka-base/60 rounded-full p-1 w-fit max-w-full overflow-x-auto">
-                    <Link
-                        v-for="section in sections"
-                        :key="section.route"
-                        :href="route(section.route)"
-                        class="px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition"
-                        :class="
-                            route().current(section.match)
-                                ? 'bg-arka-primary/15 text-arka-primary-bright'
-                                : 'text-arka-text-muted hover:text-arka-text'
-                        "
-                    >
-                        {{ section.label }}
-                    </Link>
+                <nav class="flex flex-wrap gap-1.5">
+                    <Dropdown v-for="group in ADMIN_NAV_GROUPS" :key="group.key" align="left" width="56">
+                        <template #trigger>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs sm:text-sm font-medium transition"
+                                :class="
+                                    groupIsActive(group)
+                                        ? 'bg-arka-primary/15 text-arka-primary-bright'
+                                        : 'bg-arka-base/60 text-arka-text-muted hover:text-arka-text'
+                                "
+                            >
+                                <span class="h-4 w-4 shrink-0"><AdminNavIcon :icon="group.icon" /></span>
+                                {{ group.label }}
+                                <svg class="h-3 w-3 shrink-0 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                                </svg>
+                            </button>
+                        </template>
+                        <template #content>
+                            <Link
+                                v-for="item in group.items"
+                                :key="item.route"
+                                :href="route(item.route)"
+                                class="block px-4 py-2 text-sm transition"
+                                :class="route().current(item.match) ? 'text-arka-primary-bright bg-arka-base' : 'text-arka-text hover:bg-arka-base'"
+                            >
+                                {{ item.label }}
+                            </Link>
+                        </template>
+                    </Dropdown>
                 </nav>
             </div>
         </template>

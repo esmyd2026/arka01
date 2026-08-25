@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import AdminNavIcon from '@/Components/AdminNavIcon.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -13,6 +14,18 @@ import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { etaMinutes } from '@/Utils/eta';
 import { saveClientLocation } from '@/Utils/sessionLocation';
+import { ADMIN_NAV_GROUPS } from '@/Utils/adminNav';
+
+// Pedido explícito del usuario (con captura del Inicio del admin, casi
+// vacío): "coloca recuadro con las opciones que son agrupadas... y allí
+// dentro incluyes" — mismas 6 secciones que ya arma Utils/adminNav.js para
+// el dropdown de escritorio y el bottom sheet del FAB en móvil, acá como
+// tarjetas tipo acordeón (tocar una la abre y cierra las demás), sin modal
+// ni pantalla aparte.
+const expandedAdminGroup = ref(null);
+function toggleAdminGroup(key) {
+    expandedAdminGroup.value = expandedAdminGroup.value === key ? null : key;
+}
 
 const props = defineProps({
     driverStats: { type: Object, default: null },
@@ -551,6 +564,41 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         >
                             Ir al panel admin &rarr;
                         </Link>
+                    </div>
+                </div>
+
+                <!-- Secciones agrupadas del panel admin (pedido explícito del
+                     usuario): tocar una tarjeta la expande mostrando sus
+                     enlaces debajo, y colapsa cualquier otra que estuviera
+                     abierta. -->
+                <div v-if="isAdmin" class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <div
+                        v-for="group in ADMIN_NAV_GROUPS"
+                        :key="group.key"
+                        class="rounded-2xl border transition"
+                        :class="expandedAdminGroup === group.key ? 'border-arka-warning/40 bg-arka-warning/5 col-span-2 sm:col-span-3' : 'border-arka-text-muted/10 bg-arka-card hover:border-arka-warning/30'"
+                    >
+                        <button
+                            type="button"
+                            class="flex w-full flex-col items-center gap-2 p-4 text-center"
+                            @click="toggleAdminGroup(group.key)"
+                        >
+                            <span class="grid h-11 w-11 place-items-center rounded-full bg-arka-warning/15 text-arka-warning">
+                                <span class="h-5 w-5"><AdminNavIcon :icon="group.icon" /></span>
+                            </span>
+                            <span class="text-sm font-semibold text-arka-text">{{ group.label }}</span>
+                        </button>
+
+                        <div v-if="expandedAdminGroup === group.key" class="grid gap-1 border-t border-arka-text-muted/10 p-2 sm:grid-cols-2">
+                            <Link
+                                v-for="item in group.items"
+                                :key="item.route"
+                                :href="route(item.route)"
+                                class="rounded-arka px-3 py-2 text-sm text-arka-text-muted hover:bg-arka-base hover:text-arka-text"
+                            >
+                                {{ item.label }}
+                            </Link>
+                        </div>
                     </div>
                 </div>
 
