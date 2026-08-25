@@ -238,6 +238,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/flota/{fleet}/invitaciones', [FleetInvitationController::class, 'store'])->name('fleet.invitations.store');
     Route::delete('/flota/invitaciones/{invitation}', [FleetInvitationController::class, 'destroy'])->name('fleet.invitations.destroy');
     Route::delete('/flota/miembros/{member}', [FleetMemberController::class, 'destroy'])->name('fleet.members.destroy');
+    // "Recomendar mi flota" (pedido explícito del usuario): buscar a un
+    // amigo (otro cliente) y recomendarle uno o varios conductores de esta
+    // misma flota — mismo límite de auditoría de seguridad que el resto de
+    // los buscadores por código.
+    Route::get('/flota/{fleet}/referir/buscar-amigo', [FleetInvitationController::class, 'searchFriends'])
+        ->middleware('throttle:30,1')
+        ->name('fleet.referral.search-friends');
+    Route::post('/flota/{fleet}/referir', [FleetInvitationController::class, 'storeReferral'])->name('fleet.referral.store');
     // Pedido explícito del usuario: un conductor busca clientes y les manda
     // una solicitud para unirse a su flota — dirección opuesta a la de
     // siempre, ver FleetInvitationController::storeFromDriver().

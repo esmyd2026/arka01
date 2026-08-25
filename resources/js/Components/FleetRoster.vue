@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Buscador para invitar conductores -->
-        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
             <!-- Pedido explícito del usuario ("manejar la privacidad...
                  limitemos la búsqueda por código nada más, porque
                  chocarían con millones de personas"): buscar por
@@ -295,7 +295,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Conductores activos en la flota -->
-        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
             <h3 class="text-lg font-medium text-arka-text mb-4">Conductores en su flota</h3>
 
             <p v-if="!fleet.active_members?.length" class="text-sm text-arka-text-muted">
@@ -317,7 +317,7 @@ onBeforeUnmount(() => {
                 <li
                     v-for="member in fleet.active_members"
                     :key="member.id"
-                    class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    class="py-3 px-2 -mx-2 rounded-arka flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-arka-base/40 transition-colors"
                 >
                     <div class="flex items-center gap-3 min-w-0">
                         <UserAvatar :user="member.driver" size-class="h-11 w-11 text-sm shrink-0" />
@@ -380,7 +380,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Invitaciones pendientes de respuesta -->
-        <div v-if="invitations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+        <div v-if="invitations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
             <h3 class="text-lg font-medium text-arka-text mb-4">Invitaciones pendientes</h3>
 
             <ul class="divide-y divide-arka-text-muted/10">
@@ -402,6 +402,18 @@ onBeforeUnmount(() => {
                             <PrimaryButton @click="acceptFromDriver(invitation.id)">Aceptar</PrimaryButton>
                             <SecondaryButton @click="rejectFromDriver(invitation.id)">Rechazar</SecondaryButton>
                         </div>
+                    </template>
+
+                    <!-- La mandó otro cliente recomendando a este conductor para MI
+                         flota ("Recomendar mi flota", pedido explícito del usuario) —
+                         yo (dueño de la flota) puedo cancelarla igual que una que
+                         hubiera mandado yo mismo (ver FleetInvitationPolicy::cancel()). -->
+                    <template v-else-if="invitation.initiated_by === 'referral'">
+                        <div class="min-w-0">
+                            <p class="text-arka-text">{{ invitation.driver.name }}</p>
+                            <p class="text-xs text-arka-primary">Recomendado por {{ invitation.inviter?.name }}</p>
+                        </div>
+                        <SecondaryButton @click="cancelInvitation(invitation.id)">Cancelar</SecondaryButton>
                     </template>
 
                     <!-- Invitación mandada por el propio cliente: puede cancelarla. -->

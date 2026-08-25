@@ -23,10 +23,18 @@ class FleetInvitationPolicy
     /**
      * Solo quien mandó la invitación/solicitud puede cancelarla mientras
      * sigue pendiente — sin importar la dirección, `invited_by` es siempre
-     * quien la inició.
+     * quien la inició. Excepción: una recomendación ("Recomendar mi flota",
+     * pedido explícito del usuario) la manda un tercero a nombre de otro
+     * cliente — quien de verdad la ve pendiente en su propia pantalla es el
+     * DUEÑO de la flota destino (mi amigo), no quien la mandó, así que
+     * también puede cancelarla.
      */
     public function cancel(User $user, FleetInvitation $invitation): bool
     {
+        if ($invitation->initiated_by === 'referral') {
+            return $user->id === $invitation->invited_by || $user->id === $invitation->fleet->owner_user_id;
+        }
+
         return $user->id === $invitation->invited_by;
     }
 }

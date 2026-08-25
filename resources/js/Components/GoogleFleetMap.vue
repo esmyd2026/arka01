@@ -153,6 +153,18 @@ onMounted(() => {
 watch(() => props.markers, drawMarkers, { deep: true });
 watch(() => props.route, drawRoute, { deep: true });
 watch(() => [props.center?.lat, props.center?.lng], ([lat, lng]) => applyView(lat, lng, props.zoom));
+// Bug real reportado por el usuario (captura de un iPhone: "no se nota el
+// mapa con la ubicación"): `center` casi siempre ya está fijado ANTES de que
+// el bottom sheet termine de medir su alto real (Dashboard.vue lo mide con
+// ResizeObserver después del primer render) — sin este watcher, ese primer
+// applyView() corría con centerOffsetY todavía en 0 (sin correr el punto
+// hacia arriba), y como nada volvía a llamar a applyView() cuando el alto
+// real llegaba, el punto de "mi ubicación" quedaba centrado en el
+// contenedor COMPLETO — pegado al borde de lo que de verdad se alcanza a
+// ver, tapado casi entero por el sheet. En Safari además el alto real del
+// sheet puede cambiar solo (usa `dvh`, que se recalcula cuando la barra de
+// direcciones se oculta/aparece), así que esto también corrige ese caso.
+watch(() => props.centerOffsetY, () => applyView(props.center?.lat, props.center?.lng, props.zoom));
 watch(() => props.dark, (dark) => map?.setOptions({ styles: dark ? DARK_STYLES : LIGHT_STYLES }));
 
 onBeforeUnmount(() => {

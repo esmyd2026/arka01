@@ -40,7 +40,11 @@ class DriverInvitationController extends Controller
         $pendingInvitations = FleetInvitation::query()
             ->where('driver_user_id', $userId)
             ->where('status', 'pending')
-            ->with(['fleet.owner'])
+            // 'inviter' (pedido explícito del usuario, "Recomendar mi
+            // flota"): permite mostrarle al conductor "Recomendado por X"
+            // cuando quien invitó no es el dueño de la flota (ver
+            // Driver/Invitations.vue).
+            ->with(['fleet.owner', 'inviter'])
             ->latest()
             ->get()
             ->map(fn (FleetInvitation $invitation) => array_merge(

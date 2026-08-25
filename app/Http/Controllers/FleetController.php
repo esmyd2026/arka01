@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DriverProfile;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
+use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\FleetMember;
@@ -163,7 +163,11 @@ class FleetController extends Controller
     {
         $fleet->load([
             'activeMembers.driver.driverProfile',
-            'invitations' => fn ($query) => $query->where('status', 'pending')->with('driver'),
+            // 'inviter' además de 'driver' (pedido explícito del usuario,
+            // "Recomendar mi flota"): en una recomendación quien invitó no es
+            // el dueño de la flota, así que la pantalla necesita mostrar
+            // quién la mandó de verdad (ver FleetRoster.vue).
+            'invitations' => fn ($query) => $query->where('status', 'pending')->with(['driver', 'inviter']),
         ]);
 
         $driverIds = $fleet->activeMembers->pluck('driver_user_id');

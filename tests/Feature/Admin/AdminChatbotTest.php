@@ -38,8 +38,10 @@ class AdminChatbotTest extends TestCase
             ->component('Admin/Chatbot/Intents')
             // 13 originales + PEDIR_CARRERA (pedido explícito del usuario:
             // "que por allí se pueda pedir también una carrera", ver
-            // database/migrations/..._add_pedir_carrera_chatbot_intent.php).
-            ->has('intents', 14)
+            // database/migrations/..._add_pedir_carrera_chatbot_intent.php)
+            // + SOY_CONDUCTOR (menú Soy Pasajero/Soy Conductor/Más Info, ver
+            // ..._add_soy_conductor_chatbot_intent_and_relabel_menu.php).
+            ->has('intents', 15)
         );
     }
 

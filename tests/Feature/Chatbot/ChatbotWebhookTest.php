@@ -47,10 +47,12 @@ class ChatbotWebhookTest extends TestCase
     }
 
     /**
-     * Pedido explícito del usuario ("chatbot mas pro... con botones"): el
-     * saludo ya no es texto con una lista numerada — es un mensaje
-     * interactivo de botones, con "Pedir carrera", "Crear cuenta" y "Más
-     * opciones" (el pseudo-botón que abre la lista con el resto).
+     * Pedido explícito del usuario ("seria bueno que comience Soy Pasajero,
+     * Soy Conductor, Mas Info"): el saludo ya no es texto con una lista
+     * numerada — es un mensaje interactivo de botones. Un cliente conocido
+     * (role_scope de SOY_CONDUCTOR es 'conductor') solo ve "Soy Pasajero" +
+     * "Más Info" — "Soy Conductor" queda afuera, mismo criterio que ya
+     * filtraba PEDIR_CARRERA para conductores.
      */
     public function test_a_greeting_from_a_registered_user_gets_a_real_menu_reply_not_the_old_fixed_text(): void
     {
@@ -71,7 +73,7 @@ class ChatbotWebhookTest extends TestCase
                 && str_contains($body, 'asistente virtual')
                 && ! str_contains($body, 'Ya quedó conectado y activo')
                 && $buttonIds->contains('PEDIR_CARRERA')
-                && $buttonIds->contains('REGISTRO')
+                && ! $buttonIds->contains('SOY_CONDUCTOR')
                 && $buttonIds->contains('WA_MAS_OPCIONES');
         });
 
@@ -257,7 +259,7 @@ class ChatbotWebhookTest extends TestCase
         ChatbotConversation::create([
             'phone' => '+593991234567',
             'pending_intent' => 'AWAITING_MENU_CHOICE',
-            'context' => ['menu_options' => ['PEDIR_CARRERA', 'REGISTRO', 'WA_MAS_OPCIONES']],
+            'context' => ['menu_options' => ['PEDIR_CARRERA', 'SOY_CONDUCTOR', 'WA_MAS_OPCIONES']],
         ]);
 
         $this->sendInbound('593991234567', 'WA_MAS_OPCIONES');
@@ -269,10 +271,13 @@ class ChatbotWebhookTest extends TestCase
 
             $rowIds = collect($request['interactive']['action']['sections'][0]['rows'] ?? [])->pluck('id');
 
+            // REGISTRO ya no está promovido a botón propio (lo reemplazó
+            // SOY_CONDUCTOR) — vuelve a aparecer acá, en "Más Info".
             return $rowIds->contains('SOPORTE')
                 && $rowIds->contains('CODIGO_NO_RECIBIDO')
+                && $rowIds->contains('REGISTRO')
                 && ! $rowIds->contains('PEDIR_CARRERA')
-                && ! $rowIds->contains('REGISTRO');
+                && ! $rowIds->contains('SOY_CONDUCTOR');
         });
 
         $conversation = ChatbotConversation::forPhone('+593991234567');

@@ -7,6 +7,7 @@ import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import FleetRoster from '@/Components/FleetRoster.vue';
+import ReferFleetModal from '@/Components/ReferFleetModal.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 
 // Pedido explícito del usuario ("que no vaya un paso más... que ahí ya salga
@@ -67,6 +68,12 @@ function toggleCooperative(cooperative) {
     }
     router.post(route('cooperatives.attach', cooperative.id), {}, { preserveScroll: true });
 }
+
+// "Recomendar mi flota" (pedido explícito del usuario): un botón por cada
+// flota, no uno global — guarda el id de la flota cuyo modal está abierto,
+// nunca más de uno a la vez.
+const referModalFleetId = ref(null);
+const referModalFleet = computed(() => props.fleets.find((f) => f.fleet.id === referModalFleetId.value)?.fleet ?? null);
 </script>
 
 <template>
@@ -76,7 +83,7 @@ function toggleCooperative(cooperative) {
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="font-semibold text-xl text-arka-text leading-tight">Mis flotas</h2>
-                <span class="text-sm text-arka-text-muted">
+                <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary">
                     Plan {{ planName }} · {{ fleets.length }} de {{ maxFleets ?? '∞' }} flotas
                 </span>
             </div>
@@ -89,11 +96,30 @@ function toggleCooperative(cooperative) {
                      conductores quedan de una en esta misma pantalla, sin tocar
                      nada más. -->
                 <div v-for="fleetData in fleets" :key="fleetData.fleet.id" class="space-y-3">
-                    <h3 v-if="fleets.length > 1" class="text-lg font-medium text-arka-text">{{ fleetData.fleet.name }}</h3>
+                    <div class="flex items-center justify-between gap-3">
+                        <div v-if="fleets.length > 1">
+                            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-arka-primary">Su flota</p>
+                            <h3 class="mt-0.5 text-lg font-semibold text-arka-text">{{ fleetData.fleet.name }}</h3>
+                        </div>
+                        <div v-else class="h-1"></div>
+                        <SecondaryButton
+                            v-if="fleetData.fleet.active_members?.length > 0"
+                            class="shrink-0 gap-1.5"
+                            @click="referModalFleetId = fleetData.fleet.id"
+                        >
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="18" cy="6" r="2.5" />
+                                <circle cx="6" cy="12" r="2.5" />
+                                <circle cx="18" cy="18" r="2.5" />
+                                <path stroke-linecap="round" d="M8.2 10.8 15.8 7.2M8.2 13.2l7.6 3.6" />
+                            </svg>
+                            Recomendar mi flota
+                        </SecondaryButton>
+                    </div>
                     <FleetRoster :fleet="fleetData.fleet" :max-drivers-per-fleet="maxDriversPerFleet" :member-stats="fleetData.memberStats" />
                 </div>
 
-                <section class="rounded-arka bg-arka-card p-4 shadow sm:p-6">
+                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow sm:p-6">
                     <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-arka-primary">Cooperativas de confianza</p>
@@ -126,7 +152,7 @@ function toggleCooperative(cooperative) {
                      deshabilitado con solo un texto de ayuda al costado (fácil de
                      pasar por alto), el botón queda siempre activo — si no alcanza el
                      plan, lleva directo a "Mi plan" a subirlo. -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
                     <div v-if="!showCreateForm" class="flex items-center justify-between gap-4">
                         <p class="text-sm text-arka-text-muted">
                             <span v-if="atLimit">
@@ -158,5 +184,12 @@ function toggleCooperative(cooperative) {
                 </div>
             </div>
         </div>
+
+        <ReferFleetModal
+            v-if="referModalFleet"
+            :show="referModalFleet !== null"
+            :fleet="referModalFleet"
+            @close="referModalFleetId = null"
+        />
     </AuthenticatedLayout>
 </template>

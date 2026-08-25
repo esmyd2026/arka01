@@ -43,6 +43,21 @@ class FleetInvitationPushNotification extends Notification implements ShouldQueu
 
         $ownerName = $this->invitation->fleet->owner->name;
 
+        // "Recomendar mi flota" (pedido explícito del usuario): acá quien
+        // invita (invited_by) NO es el dueño de la flota destino, es un
+        // tercero recomendando — el mensaje de arriba ("X te invitó a SU
+        // flota") sería falso en este caso.
+        if ($this->invitation->initiated_by === 'referral') {
+            $inviterName = $this->invitation->inviter->name;
+
+            return (new WebPushMessage)
+                ->title('Te recomendaron para una flota')
+                ->body("{$inviterName} te recomendó unirse a la flota de {$ownerName}.")
+                ->icon('/icons/icon.svg')
+                ->data(['url' => '/mis-clientes'])
+                ->action('Ver', 'view');
+        }
+
         return (new WebPushMessage)
             ->title('Nueva invitación a una flota')
             ->body("{$ownerName} te invitó a su flota de confianza.")

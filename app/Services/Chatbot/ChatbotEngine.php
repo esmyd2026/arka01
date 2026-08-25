@@ -37,11 +37,14 @@ class ChatbotEngine
 
     /**
      * Las 2 intenciones promovidas a botón propio en el menú principal
-     * (pedido explícito del usuario: "lo mas importante que es pedir una
-     * carrera y el otro crear cuenta") — el resto de las intenciones
-     * `show_in_menu` quedan en la lista de "Más opciones".
+     * (pedido explícito del usuario: "seria bueno que comience Soy
+     * Pasajero, Soy Conductor, Mas Info") — PEDIR_CARRERA pasa a mostrarse
+     * como "Soy Pasajero" (mismo code/flujo de siempre, solo cambia el
+     * texto del botón) y SOY_CONDUCTOR es nuevo (ver
+     * WhatsAppDriverConnectHandler). El resto de las intenciones
+     * `show_in_menu` quedan en la lista de "Más Info".
      */
-    private const PROMOTED_MENU_CODES = ['PEDIR_CARRERA', 'REGISTRO'];
+    private const PROMOTED_MENU_CODES = ['PEDIR_CARRERA', 'SOY_CONDUCTOR'];
 
     public function __construct(
         private readonly IntentDetector $detector,
@@ -50,6 +53,7 @@ class ChatbotEngine
         private readonly AnswerFaqHandler $faqHandler,
         private readonly WhatsAppRideActionHandler $rideActionHandler,
         private readonly WhatsAppRideBookingHandler $rideBookingHandler,
+        private readonly WhatsAppDriverConnectHandler $driverConnectHandler,
     ) {}
 
     public function respondTo(string $phoneE164, ?User $user, string $rawText, array $metadata = []): void
@@ -84,6 +88,10 @@ class ChatbotEngine
         }
 
         if ($user && $this->rideActionHandler->handle($user, $rawText, $conversation)) {
+            return;
+        }
+
+        if ($this->driverConnectHandler->handle($phoneE164, $user, $rawText, $conversation)) {
             return;
         }
 
@@ -130,6 +138,16 @@ class ChatbotEngine
             // cuentas existentes como números nuevos.
             if ($match->intent->action === 'start_ride_booking') {
                 $this->rideBookingHandler->handle($phoneE164, $user, 'pedir carrera', $metadata, $conversation);
+
+                return;
+            }
+
+            // Mismo criterio que start_ride_booking de arriba: cubre el caso
+            // de un match por texto/etiqueta que no cayó en el guard propio
+            // del handler (ej. alguien escribe "Soy Conductor" tal cual la
+            // etiqueta del botón, en vez de "conectarme").
+            if ($match->intent->action === 'driver_menu') {
+                $this->driverConnectHandler->handle($phoneE164, $user, 'soy conductor', $conversation);
 
                 return;
             }
@@ -236,7 +254,7 @@ class ChatbotEngine
             ->filter(fn (string $code) => $promoted->has($code))
             ->map(fn (string $code) => ['id' => $code, 'title' => $promoted[$code]->label])
             ->values()
-            ->push(['id' => self::MORE_OPTIONS_ACTION, 'title' => 'Más opciones'])
+            ->push(['id' => self::MORE_OPTIONS_ACTION, 'title' => 'Más Info'])
             ->all();
 
         WhatsAppFreeformSender::sendButtons($phone, trim($introText), $buttons);

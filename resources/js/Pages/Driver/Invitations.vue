@@ -307,6 +307,16 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="invitation.fleet.owner" size-class="h-12 w-12 text-base shrink-0" />
                                 <div class="min-w-0">
+                                    <!-- "Recomendar mi flota" (pedido explícito del usuario): si
+                                         quien invitó no es el dueño de la flota, es una
+                                         recomendación de un tercero — el conductor necesita
+                                         saber quién lo recomendó antes de aceptar o rechazar. -->
+                                    <p
+                                        v-if="invitation.inviter && invitation.inviter.id !== invitation.fleet.owner_user_id"
+                                        class="mb-1 inline-block rounded-full bg-arka-primary/10 px-2 py-0.5 text-xs font-semibold text-arka-primary"
+                                    >
+                                        Recomendado por {{ invitation.inviter.name }}
+                                    </p>
                                     <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
                                         {{ invitation.fleet.owner.name }}
                                         <span v-if="invitation.client_review_count > 0" class="text-xs text-arka-lime">
