@@ -12,6 +12,14 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 // el panel de marca queda transparente y deja ver esta misma capa detrás.
 const backgroundUrl = computed(() => usePage().props.authBackgroundUrl);
 
+// Redes sociales en el pie (pedido explícito del usuario) — apagable para
+// pantallas que ya traen su propio apartado de redes más arriba (ej.
+// Survey/Show.vue: "Síguenos" después de compartir/ir al inicio), para que
+// no se repitan dos veces en la misma pantalla.
+defineProps({
+    showSocialLinks: { type: Boolean, default: true },
+});
+
 // Pedido explícito del usuario ("que no se note que se está cargando la
 // imagen si pesa mucho"): en vez de dejar que el navegador la pinte de
 // golpe en cuanto termina de bajar (un "pop" notorio con un archivo
@@ -72,7 +80,7 @@ onMounted(() => {
                      antes de registrarse. Redes sociales agregadas después,
                      mismo pedido explícito que en Welcome.vue y Survey/Show.vue. -->
                 <div class="mt-6 flex flex-col items-center gap-3">
-                    <SocialLinks size="sm" />
+                    <SocialLinks v-if="showSocialLinks" size="sm" />
                     <p class="text-center text-xs text-arka-text-muted">
                         <Link :href="route('legal.terms')" class="hover:text-arka-primary-bright">Términos</Link>
                         <span class="mx-2">·</span>

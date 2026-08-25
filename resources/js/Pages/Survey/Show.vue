@@ -125,7 +125,7 @@ const whatsappShareUrl = computed(() => {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout :show-social-links="false">
         <Head title="Encuesta Arka01" />
 
         <!-- Paso 0: elegir rol. -->

@@ -51,12 +51,12 @@ defineProps({
             class="flex items-center justify-center rounded-full border border-arka-text-muted/20 text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
             :class="size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'"
         >
-            <svg :class="size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6.3 17.7 4 20l2.3-2.3A8 8 0 1 1 6.3 17.7Z" />
+            <svg :class="size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Z" />
                 <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9.2 9.6c0 3 2.6 5.6 5.6 5.6l1.1-1.7c.2-.3.1-.7-.2-.9l-1.5-.9c-.3-.2-.6-.1-.8.1l-.5.5c-.9-.5-1.7-1.3-2.2-2.2l.5-.5c.2-.2.3-.5.1-.8l-.9-1.5c-.2-.3-.6-.4-.9-.2Z"
+                    fill="currentColor"
+                    stroke="none"
+                    d="M9.2 8.5c.3-.7 1-1.1 1.7-.9l1 .3c.6.2 1 .8.9 1.4l-.2.9c-.1.3 0 .6.2.8.6.7 1.3 1.2 2.1 1.6.3.1.6.1.8-.1l.7-.6c.4-.4 1.1-.4 1.5 0l1 .8c.5.4.6 1.1.2 1.6-.4.5-1 .8-1.6.8-4 0-7.2-3.2-7.2-7.2 0-.4.1-.7.3-1Z"
                 />
             </svg>
         </a>
