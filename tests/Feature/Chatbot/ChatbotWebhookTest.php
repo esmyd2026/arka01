@@ -187,6 +187,24 @@ class ChatbotWebhookTest extends TestCase
         Http::assertNothingSent();
     }
 
+    /**
+     * Pedido explícito del usuario ("poder responder desde allí yo también
+     * o activar el bot o no") — control manual desde el inbox de WhatsApp
+     * (Admin\WhatsAppInboxController::toggleBot()), independiente de si hay
+     * o no un ticket de soporte de por medio.
+     */
+    public function test_a_message_to_a_manually_paused_conversation_gets_no_bot_reply(): void
+    {
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+        ChatbotConversation::forPhone('+593991234567')->update(['bot_paused' => true]);
+
+        $this->sendInbound('593991234567', 'Hola');
+
+        Http::assertNothingSent();
+        $this->assertDatabaseHas('chatbot_messages', ['phone' => '+593991234567', 'direction' => 'in', 'body' => 'Hola']);
+    }
+
     public function test_hablar_con_soporte_sends_a_whatsapp_contact_card_when_configured(): void
     {
         // Pedido explícito del usuario: "cuando mande a soporte que mande un

@@ -72,3 +72,10 @@ Broadcast::channel('support-ticket.{ticketId}', function ($user, $ticketId) {
 Broadcast::channel('admins', function ($user) {
     return (bool) $user->is_admin;
 });
+
+// Canal de UNA conversación de WhatsApp puntual (pedido explícito del
+// usuario: "tener a todos los que me escriben y poder responder desde
+// allí") — solo admins, mismo criterio que el canal `admins` de arriba.
+Broadcast::channel('whatsapp-conversation.{conversationId}', function ($user) {
+    return (bool) $user->is_admin;
+});

@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Events\ChatbotMessageLogged;
+use App\Models\ChatbotConversation;
 use App\Models\ChatbotMessage;
 use App\Models\CooperativeDriverMembership;
 use App\Models\Ride;
@@ -37,13 +39,19 @@ class WhatsAppFreeformSender
      */
     private static function logOutbound(string $phoneE164, string $body, bool $successful, array $meta = []): void
     {
-        ChatbotMessage::query()->create([
+        $message = ChatbotMessage::query()->create([
             'phone' => $phoneE164,
             'user_id' => User::query()->where('phone', $phoneE164)->value('id'),
             'direction' => 'out',
             'body' => $body,
             'meta' => array_merge($meta, ['successful' => $successful]),
         ]);
+
+        // Pedido explícito del usuario ("tener a todos los que me escriben y
+        // poder responder desde allí") — el inbox del admin se actualiza en
+        // vivo con TODO lo que sale, no solo lo que un admin escribe a mano:
+        // también los avisos automáticos del bot y de carreras.
+        broadcast(new ChatbotMessageLogged($message, ChatbotConversation::forPhone($phoneE164)->id))->toOthers();
     }
 
     /**

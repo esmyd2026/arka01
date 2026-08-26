@@ -77,6 +77,7 @@ export const ADMIN_NAV_GROUPS = [
             { route: 'admin.metrics.index', match: 'admin.metrics.*', label: 'Indicadores' },
             { route: 'admin.system.index', match: 'admin.system.*', label: 'Sistema' },
             { route: 'admin.integrations.whatsapp.edit', match: 'admin.integrations.*', label: 'Integraciones' },
+            { route: 'admin.whatsapp-inbox.index', match: 'admin.whatsapp-inbox.*', label: 'WhatsApp' },
             { route: 'admin.support-tickets.index', match: 'admin.support-tickets.*', label: 'Soporte' },
             { route: 'admin.chatbot.intents.index', match: 'admin.chatbot.*', label: 'Chatbot' },
         ],

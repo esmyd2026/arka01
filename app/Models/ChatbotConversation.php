@@ -24,12 +24,14 @@ class ChatbotConversation extends Model
         'context',
         'unresolved_attempts',
         'last_message_at',
+        'bot_paused',
     ];
 
     protected $casts = [
         'context' => 'array',
         'unresolved_attempts' => 'integer',
         'last_message_at' => 'datetime',
+        'bot_paused' => 'boolean',
     ];
 
     public function user(): BelongsTo

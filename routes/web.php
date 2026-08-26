@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\SystemController as AdminSystemController;
 use App\Http\Controllers\Admin\SystemEventController;
 use App\Http\Controllers\Admin\UserLocationsController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
+use App\Http\Controllers\Admin\WhatsAppInboxController;
 use App\Http\Controllers\Admin\WhatsAppSettingController;
 use App\Http\Controllers\CooperativeDashboardController;
 use App\Http\Controllers\CooperativeDirectoryController;
@@ -529,6 +530,16 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/soporte/{supportTicket}', [SupportTicketController::class, 'show'])->name('support-tickets.show');
     Route::post('/soporte/{supportTicket}/mensajes', [SupportTicketController::class, 'reply'])->name('support-tickets.reply');
     Route::patch('/soporte/{supportTicket}/estado', [SupportTicketController::class, 'updateStatus'])->name('support-tickets.update-status');
+
+    // Inbox de WhatsApp (pedido explícito del usuario: "tener a todos los
+    // que me escriben y poder responder desde allí yo también o activar el
+    // bot o no") — a diferencia de /soporte de arriba, acá aparece
+    // CUALQUIER número que le haya escrito, no solo los que pidieron
+    // soporte — ver Admin\WhatsAppInboxController.
+    Route::get('/whatsapp', [WhatsAppInboxController::class, 'index'])->name('whatsapp-inbox.index');
+    Route::get('/whatsapp/{conversation}', [WhatsAppInboxController::class, 'show'])->name('whatsapp-inbox.show');
+    Route::post('/whatsapp/{conversation}/mensajes', [WhatsAppInboxController::class, 'reply'])->name('whatsapp-inbox.reply');
+    Route::patch('/whatsapp/{conversation}/bot', [WhatsAppInboxController::class, 'toggleBot'])->name('whatsapp-inbox.toggle-bot');
 
     // Chatbot / asistente virtual (pedido explícito del usuario): a
     // propósito separado de /admin/integraciones/whatsapp (esa es la

@@ -92,6 +92,17 @@ class ChatbotEngine
             $conversation->update(['user_id' => $user->id]);
         }
 
+        // Pedido explícito del usuario ("poder responder desde allí yo
+        // también o activar el bot o no") — control manual por conversación
+        // desde el inbox de WhatsApp del admin (Admin\WhatsAppInboxController::
+        // toggleBot()), independiente del pausado automático por ticket de
+        // soporte de abajo. El mensaje ya quedó logueado en ChatbotMessage
+        // (ver WhatsAppWebhookController::receive()) — acá solo se corta el
+        // pipeline, no hace falta hacer nada más.
+        if ($conversation->bot_paused) {
+            return;
+        }
+
         // Pedido explícito del usuario ("ayudame a ver la trazabilidad...
         // y tomar control humana"): si ya hay un admin atendiendo el
         // ticket de este usuario, el bot se calla del todo — el mensaje se

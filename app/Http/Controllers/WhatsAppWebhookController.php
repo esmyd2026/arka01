@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\ChatbotMessageLogged;
 use App\Jobs\ProcessChatbotMessage;
 use App\Jobs\SendWhatsAppNumberAlreadyRegisteredNotice;
 use App\Jobs\SendWhatsAppPhoneMismatchNotice;
 use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
+use App\Models\ChatbotConversation;
 use App\Models\ChatbotMessage;
 use App\Models\User;
 use App\Models\WhatsAppSession;
@@ -134,13 +136,17 @@ class WhatsAppWebhookController extends Controller
             // cualquier ramificación de abajo, para que quede el mensaje
             // tal cual llegó sin importar qué termine pasando con él
             // (número sin cuenta, referencia inválida, etc.).
-            ChatbotMessage::query()->create([
+            $chatbotMessage = ChatbotMessage::query()->create([
                 'phone' => $fromE164,
                 'user_id' => $phoneOwner?->id,
                 'direction' => 'in',
                 'body' => $text,
                 'meta' => $metadata,
             ]);
+
+            // Inbox del admin en vivo (pedido explícito del usuario: "tener
+            // a todos los que me escriben y poder responder desde allí").
+            broadcast(new ChatbotMessageLogged($chatbotMessage, ChatbotConversation::forPhone($fromE164)->id))->toOthers();
 
             if ($phoneOwner) {
                 // Bug reportado por el usuario (caso real: dos cuentas

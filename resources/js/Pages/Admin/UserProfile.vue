@@ -222,6 +222,24 @@ function formatMessageTime(value) {
                             @{{ profileUser.username }} · Socio #{{ profileUser.member_code }}
                             <span v-if="profileUser.city"> · {{ profileUser.city.name }}</span>
                         </p>
+
+                        <!-- De dónde es (pedido explícito del usuario: "en el
+                             perfil quiero saber de donde son") — país fijo
+                             (única que opera la plataforma), provincia y
+                             ciudad del catálogo, más el barrio aproximado y la
+                             coordenada real dados al registrarse (mismo dato
+                             que ya se ve agregado en Registros por ubicación,
+                             acá puntual para esta cuenta). -->
+                        <p v-if="profileUser.city || profileUser.registration_neighborhood" class="text-xs text-arka-text-muted mt-0.5">
+                            📍 Ecuador
+                            <span v-if="profileUser.city?.province"> · {{ profileUser.city.province }}</span>
+                            <span v-if="profileUser.city"> · {{ profileUser.city.name }}</span>
+                            <span v-if="profileUser.registration_neighborhood"> · {{ profileUser.registration_neighborhood }}</span>
+                            <span v-if="profileUser.registration_lat && profileUser.registration_lng" class="font-mono">
+                                ({{ profileUser.registration_lat }}, {{ profileUser.registration_lng }})
+                            </span>
+                        </p>
+
                         <div class="mt-2 flex items-center gap-2">
                             <span
                                 class="px-2 py-0.5 rounded-full text-xs font-medium"
