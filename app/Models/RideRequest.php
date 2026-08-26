@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -206,5 +207,34 @@ class RideRequest extends Model
     public function driverHasUsedItsCounterOffer(): bool
     {
         return $this->negotiation_round >= 1;
+    }
+
+    /**
+     * Solicitudes pendientes que le llegan a ESTE conductor — dirigidas a él
+     * puntualmente, o sin conductor asignado todavía pero de una flota donde
+     * es miembro activo (misma lógica que ya usaba
+     * DashboardController::incomingRequestsQuery(), movida acá para
+     * reusarla también desde HandleInertiaRequests::share() — el badge de
+     * la pestaña "Carreras" de la nav, pedido explícito del usuario). No
+     * aplica el refinamiento fino de zona de cobertura ni flotas con
+     * solicitudes deshabilitadas que sí hace /carreras — para un contador
+     * de nav alcanza con esto, no hace falta que sea perfecto al dígito.
+     */
+    public static function pendingIncomingFor(int $driverUserId): Builder
+    {
+        return self::query()
+            ->where('status', 'pending')
+            ->where(function ($query) use ($driverUserId) {
+                $query->where('driver_user_id', $driverUserId)
+                    ->orWhere(function ($query) use ($driverUserId) {
+                        $query->whereNull('driver_user_id')
+                            ->whereIn('fleet_id', function ($sub) use ($driverUserId) {
+                                $sub->select('fleet_id')
+                                    ->from('fleet_members')
+                                    ->where('driver_user_id', $driverUserId)
+                                    ->whereNull('left_at');
+                            });
+                    });
+            });
     }
 }

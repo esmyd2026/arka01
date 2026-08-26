@@ -256,7 +256,12 @@ const quickLinks = computed(() =>
             (!item.driverOnly || showDriverNav.value) &&
             (!item.cooperativeOnly || showCooperativeNav.value) &&
             (!showCooperativeNav.value || item.cooperativeOnly) &&
-            (!item.hideIfCommittedClient || canBecomeOrIsDriver.value)
+            (!item.hideIfCommittedClient || canBecomeOrIsDriver.value) &&
+            // Pedido explícito del usuario: "permiteme en el modulo de
+            // sistema de habilitar o no estas opciones del menu" — ver
+            // Admin\SystemController::updateQuickLinks(), compartido en
+            // cualquier pantalla vía HandleInertiaRequests::share().
+            !(usePage().props.disabledQuickLinks ?? []).includes(item.route)
     )
 );
 
@@ -664,6 +669,22 @@ onBeforeUnmount(() => {
                                             </span>
                                         </div>
 
+                                        <!-- Pedido explícito del usuario: "eso es para que el
+                                             sepa que pertenece a una cooperativa, colocalo alli
+                                             como una etiqueta mas con su enlace... debajo de la
+                                             que dice conductor" — antes vivía como un link suelto
+                                             en Inicio (Dashboard.vue), ahora acá se ve en
+                                             cualquier pantalla. -->
+                                        <Link
+                                            v-if="$page.props.auth.cooperative"
+                                            :href="route('cooperatives.show', $page.props.auth.cooperative.id)"
+                                            class="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-arka-primary-bright hover:border-arka-primary/60 hover:bg-arka-primary/15"
+                                        >
+                                            <span aria-hidden="true">◉</span>
+                                            Cooperativa: {{ $page.props.auth.cooperative.name }}
+                                            <span aria-hidden="true">→</span>
+                                        </Link>
+
                                         <!-- Plan vigente de cada rol activo, de un vistazo
                                              (consideración agregada al alcance). -->
                                         <div
@@ -839,16 +860,29 @@ onBeforeUnmount(() => {
                             : 'text-arka-text-muted'
                     "
                 >
-                    <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16"
-                        />
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                        <circle cx="7.5" cy="16" r="1" />
-                        <circle cx="16.5" cy="16" r="1" />
-                    </svg>
+                    <span class="relative">
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16"
+                            />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
+                            <circle cx="7.5" cy="16" r="1" />
+                            <circle cx="16.5" cy="16" r="1" />
+                        </svg>
+                        <!-- Pedido explícito del usuario: "coloca solicitudes en el
+                             navbar cuando sea movil alli donde esta el boton de home"
+                             — antes esta cantidad solo se veía en una tarjeta de
+                             "Acciones rápidas" en Inicio; ahora viaja acá, visible
+                             desde cualquier pantalla (HandleInertiaRequests::share()). -->
+                        <span
+                            v-if="$page.props.auth.pendingRideRequestsCount > 0"
+                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
+                        >
+                            {{ $page.props.auth.pendingRideRequestsCount }}
+                        </span>
+                    </span>
                     <span class="text-xs font-medium">Carreras</span>
                 </Link>
 

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\SiteSetting;
 use App\Models\User;
+use App\Services\QuickLinkRegistry;
 use App\Services\UserFileCleanup;
 use Database\Seeders\DemoDataSeeder;
 use Illuminate\Http\RedirectResponse;
@@ -11,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -35,7 +38,33 @@ class SystemController extends Controller
                 ->where('email', 'like', '%@arka01.test')
                 ->where('is_admin', false)
                 ->count(),
+            // Pedido explícito del usuario: "permiteme en el modulo de
+            // sistema de habilitar o no estas opciones del menu tanto las
+            // del conductor como las del cliente".
+            'quickLinks' => QuickLinkRegistry::withState(SiteSetting::current()->disabled_quick_links ?? []),
         ]);
+    }
+
+    /**
+     * Prende/apaga accesos rápidos del menú (conductor y cliente) — ver
+     * App\Services\QuickLinkRegistry (única fuente de verdad de qué rutas
+     * son apagables) y HandleInertiaRequests::share() (quien de verdad
+     * filtra `quickLinks` con esto, en AuthenticatedLayout.vue).
+     */
+    public function updateQuickLinks(Request $request): RedirectResponse
+    {
+        $validRoutes = array_keys(QuickLinkRegistry::ITEMS);
+
+        $validated = $request->validate([
+            'disabled' => ['array'],
+            'disabled.*' => ['string', Rule::in($validRoutes)],
+        ]);
+
+        SiteSetting::current()->update([
+            'disabled_quick_links' => array_values($validated['disabled'] ?? []),
+        ]);
+
+        return back()->with('status', 'Accesos rápidos del menú actualizados.');
     }
 
     public function resetDemo(Request $request): RedirectResponse

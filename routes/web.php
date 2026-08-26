@@ -633,6 +633,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // de prueba (@arka01.test) y dejar el sistema reiniciado — ver Admin\SystemController.
     Route::get('/sistema', [AdminSystemController::class, 'index'])->name('system.index');
     Route::post('/sistema/borrar-demo', [AdminSystemController::class, 'resetDemo'])->name('system.reset-demo');
+    // Accesos rápidos del menú (pedido explícito del usuario: "permiteme en
+    // el modulo de sistema de habilitar o no estas opciones del menu").
+    Route::patch('/sistema/accesos-rapidos', [AdminSystemController::class, 'updateQuickLinks'])->name('system.quick-links.update');
 
     // Configuración → Integraciones → WhatsApp (roadmap de mejoras, sección
     // 8): evita tener que tocar el .env para cambiar el token.

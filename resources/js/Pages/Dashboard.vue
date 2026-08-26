@@ -394,12 +394,10 @@ function handleRequestGoneWhileWaiting() {
 // "Mis clientes de confianza" escuchaba este evento — si el conductor
 // estaba parado en el Inicio, como acá, no pasaba nada visible). Mismo
 // patrón que handleNewRequest().
-const pendingInvitationsCount = ref(props.driverStats?.pending_invitations ?? 0);
 const newInvitationAlert = ref(null);
 
 function handleNewInvitation(e) {
     playAttentionAlert();
-    pendingInvitationsCount.value++;
     newInvitationAlert.value = { ownerName: e.owner_name };
     setTimeout(() => {
         if (newInvitationAlert.value?.ownerName === e.owner_name) {
@@ -672,19 +670,13 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <div>
                         <!-- Pedido explícito del usuario: "lo de que es
                              conductor colocalo en la barra donde se
-                             despliega desde la foto" y el estado de
-                             disponibilidad ahora vive junto al saludo, arriba
-                             — acá queda solo lo que sigue siendo propio de
-                             esta tarjeta (cooperativa + aviso de ubicación). -->
-                        <Link
-                            v-if="driverStats.cooperative"
-                            :href="route('cooperatives.show', driverStats.cooperative.id)"
-                            class="mt-2 inline-flex items-center gap-2 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright transition hover:border-arka-primary/60 hover:bg-arka-primary/15"
-                        >
-                            <span class="grid h-5 w-5 place-items-center rounded-full bg-arka-primary text-arka-base" aria-hidden="true">◉</span>
-                            Conductor de {{ driverStats.cooperative.name }}
-                            <span aria-hidden="true">→</span>
-                        </Link>
+                             despliega desde la foto", el estado de
+                             disponibilidad ahora vive junto al saludo arriba,
+                             y la etiqueta de cooperativa se mudó al menú de
+                             cuenta (AuthenticatedLayout.vue, "colocalo alli
+                             como una etiqueta mas... debajo de la que dice
+                             conductor") — acá queda solo el aviso de ubicación,
+                             que sí es propio de esta tarjeta. -->
                         <!-- Bug reportado por el usuario: un conductor con el switch
                              prendido podía seguir viéndose "Desconectado" en el
                              roster de sus clientes, sin ningún aviso de por qué —
@@ -793,46 +785,13 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </div>
                     </Link>
 
-                    <!-- Acciones rápidas -->
-                    <div class="space-y-2">
-                        <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Acciones rápidas</h4>
-                        <div class="grid grid-cols-3 gap-2">
-                            <Link :href="route('rides.index')" class="relative p-3 bg-arka-card shadow rounded-arka text-center hover:bg-arka-card/70">
-                                <span
-                                    v-if="pendingRequestsCount > 0"
-                                    class="absolute top-1.5 right-1.5 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
-                                >
-                                    {{ pendingRequestsCount }}
-                                </span>
-                                <svg class="h-6 w-6 mx-auto text-arka-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                    <path d="M3.4 3.3a.75.75 0 0 1 .8-.08l16 8a.75.75 0 0 1 0 1.34l-16 8A.75.75 0 0 1 3.13 19.7L6.98 12 3.13 4.3a.75.75 0 0 1 .27-1Z" />
-                                </svg>
-                                <p class="mt-1 text-xs text-arka-text">Solicitudes</p>
-                            </Link>
-                            <Link :href="route('driver.invitations.index')" class="relative p-3 bg-arka-card shadow rounded-arka text-center hover:bg-arka-card/70">
-                                <span
-                                    v-if="pendingInvitationsCount > 0"
-                                    class="absolute top-1.5 right-1.5 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
-                                >
-                                    {{ pendingInvitationsCount }}
-                                </span>
-                                <svg class="h-6 w-6 mx-auto text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="9" cy="9" r="3" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-                                    <circle cx="17" cy="9" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 13.5c2.4 0 4.5 1.9 5 5" />
-                                </svg>
-                                <p class="mt-1 text-xs text-arka-text">Mis clientes</p>
-                            </Link>
-                            <Link :href="route('driver.profile.edit')" class="p-3 bg-arka-card shadow rounded-arka text-center hover:bg-arka-card/70">
-                                <svg class="h-6 w-6 mx-auto text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-                                </svg>
-                                <p class="mt-1 text-xs text-arka-text">Mi perfil</p>
-                            </Link>
-                        </div>
-                    </div>
+                    <!-- Pedido explícito del usuario: "eliminemos esta parte
+                         [Acciones rápidas] y coloca solicitudes en el
+                         navbar... y la de cliente dejemosla en la opcion de
+                         +" — "Solicitudes" ahora es el badge de la pestaña
+                         "Carreras" de la nav inferior (AuthenticatedLayout.vue);
+                         "Mis clientes" y "Mi perfil" ya vivían en el "+"
+                         (Accesos rápidos, ver quickLinks) sin duplicarlos acá. -->
 
                     <!-- Compartí tu código (consideración agregada al alcance): mismo
                          invite_code que ya existe con QR en Mi perfil de conductor.

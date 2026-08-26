@@ -65,12 +65,7 @@ class DashboardController extends Controller
         $whatsappSession = null;
 
         if ($user->isDriver()) {
-            $cooperative = CooperativeDriverMembership::query()
-                ->where('driver_user_id', $userId)
-                ->where('status', 'accepted')
-                ->whereNull('ended_at')
-                ->with('cooperative:id,name,logo_path')
-                ->first()?->cooperative;
+            $cooperative = CooperativeDriverMembership::activeCooperativeFor($userId);
 
             // Flotas donde deshabilité las solicitudes del cliente dueño
             // (pedido explícito del usuario) — mismo criterio que RideController::index().
@@ -86,7 +81,7 @@ class DashboardController extends Controller
                     'logo_url' => $cooperative->logo_url,
                 ] : null,
                 'active_clients' => FleetMember::query()->where('driver_user_id', $userId)->whereNull('left_at')->count(),
-                'pending_requests' => $this->incomingRequestsQuery($userId)
+                'pending_requests' => RideRequest::pendingIncomingFor($userId)
                     ->get()
                     // Zona de cobertura + cliente deshabilitado (pedido
                     // explícito del usuario): que el número de la tarjeta
@@ -541,23 +536,5 @@ class DashboardController extends Controller
         }
 
         return [(float) $location['lat'], (float) $location['lng']];
-    }
-
-    private function incomingRequestsQuery(int $userId)
-    {
-        return RideRequest::query()
-            ->where('status', 'pending')
-            ->where(function ($query) use ($userId) {
-                $query->where('driver_user_id', $userId)
-                    ->orWhere(function ($query) use ($userId) {
-                        $query->whereNull('driver_user_id')
-                            ->whereIn('fleet_id', function ($sub) use ($userId) {
-                                $sub->select('fleet_id')
-                                    ->from('fleet_members')
-                                    ->where('driver_user_id', $userId)
-                                    ->whereNull('left_at');
-                            });
-                    });
-            });
     }
 }

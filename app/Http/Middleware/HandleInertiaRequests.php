@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\CooperativeDriverMembership;
+use App\Models\RideRequest;
 use App\Models\SiteSetting;
 use App\Services\PlanLimits;
 use Illuminate\Http\Request;
@@ -34,6 +36,7 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $siteSetting = SiteSetting::current();
 
         return [
             ...parent::share($request),
@@ -85,7 +88,32 @@ class HandleInertiaRequests extends Middleware
                         || blank($user->phone)
                         || ! $user->phone_verified_at
                     : false,
+                // Pedido explícito del usuario: "coloca solicitudes en el
+                // navbar... alli donde esta el boton de home" — el badge de
+                // la pestaña "Carreras" de la nav inferior necesita este
+                // número en CUALQUIER pantalla, no solo en Inicio, así que
+                // vive acá y no en DashboardController. Ver
+                // RideRequest::pendingIncomingFor() — mismo criterio (algo
+                // más simple que el de /carreras) usado también ahí.
+                'pendingRideRequestsCount' => $user?->isDriver()
+                    ? RideRequest::pendingIncomingFor($user->id)->count()
+                    : 0,
+                // Pedido explícito del usuario: "eso es para que el sepa
+                // que pertenece a una cooperativa, colocalo alli [menú de
+                // cuenta] como una etiqueta mas con su enlace... debajo de
+                // la que dice conductor" — antes solo vivía en Inicio
+                // (Dashboard.vue), ahora en el menú de cuenta se ve en
+                // cualquier pantalla.
+                'cooperative' => $user?->isDriver()
+                    ? CooperativeDriverMembership::activeCooperativeFor($user->id)?->only(['id', 'name'])
+                    : null,
             ],
+            // Pedido explícito del usuario ("permiteme en el modulo de
+            // sistema de habilitar o no estas opciones del menu"): rutas de
+            // accesos rápidos que un admin apagó — AuthenticatedLayout.vue
+            // filtra su `quickLinks` con esto. Vacío por defecto: nadie
+            // pierde ningún acceso de golpe con esto recién agregado.
+            'disabledQuickLinks' => $siteSetting->disabled_quick_links ?? [],
             // Notificaciones push (sección 9.2 y 9.5): el frontend la necesita
             // para suscribirse vía PushManager, nunca la llave privada.
             'vapidPublicKey' => config('webpush.vapid.public_key'),
@@ -98,7 +126,7 @@ class HandleInertiaRequests extends Middleware
             // en vez de repetirlo en cada controlador de sesión/registro
             // porque AuthBrandingPanel.vue vive dentro de GuestLayout.vue,
             // usado por todos ellos por igual.
-            'authBackgroundUrl' => SiteSetting::current()->auth_background_url,
+            'authBackgroundUrl' => $siteSetting->auth_background_url,
             // Mensajes flash tipo ->with('status', '...'), compartidos acá
             // porque antes cada página tenía que pasarlos a mano (y casi
             // ninguna lo hacía) — ver banner en AuthenticatedLayout.vue.

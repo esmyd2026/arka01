@@ -40,4 +40,22 @@ class CooperativeDriverMembership extends Model
     {
         return $this->belongsTo(User::class, 'invited_by_user_id');
     }
+
+    /**
+     * La cooperativa a la que este conductor está afiliado ahora mismo (o
+     * null si es independiente) — mismo criterio que ya usaba
+     * DashboardController::index(), movido acá para reusarlo también desde
+     * HandleInertiaRequests::share() (pedido explícito del usuario: la
+     * etiqueta de cooperativa en el menú de cuenta tiene que verse en
+     * CUALQUIER pantalla, no solo en Inicio).
+     */
+    public static function activeCooperativeFor(int $driverUserId): ?Cooperative
+    {
+        return self::query()
+            ->where('driver_user_id', $driverUserId)
+            ->where('status', 'accepted')
+            ->whereNull('ended_at')
+            ->with('cooperative:id,name,logo_path')
+            ->first()?->cooperative;
+    }
 }

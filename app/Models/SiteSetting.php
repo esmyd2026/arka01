@@ -24,6 +24,13 @@ class SiteSetting extends Model
         'facebook_url',
         'instagram_url',
         'tiktok_url',
+        // Pedido explícito del usuario: accesos rápidos del menú (conductor
+        // y cliente) que un admin apagó — ver App\Http\Controllers\Admin\SystemController.
+        'disabled_quick_links',
+    ];
+
+    protected $casts = [
+        'disabled_quick_links' => 'array',
     ];
 
     protected $appends = ['hero_background_url', 'auth_background_url'];

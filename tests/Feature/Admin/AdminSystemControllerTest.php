@@ -5,6 +5,7 @@ namespace Tests\Feature\Admin;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
+use App\Models\SiteSetting;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
@@ -178,5 +179,70 @@ class AdminSystemControllerTest extends TestCase
         $this->actingAs($admin)->post(route('admin.system.reset-demo'));
 
         $this->assertSame($plansBefore, SubscriptionPlan::query()->count());
+    }
+
+    /**
+     * Pedido explícito del usuario: "permiteme en el modulo de sistema de
+     * habilitar o no estas opciones del menu tanto las del conductor como
+     * las del cliente."
+     */
+    public function test_the_system_panel_lists_the_toggleable_quick_links(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $response = $this->actingAs($admin)->get(route('admin.system.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('quickLinks', 10)
+            ->where('quickLinks.0.enabled', true)
+        );
+    }
+
+    public function test_a_regular_user_cannot_update_quick_links(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+
+        $this->actingAs($user)->patch(route('admin.system.quick-links.update'), [
+            'disabled' => ['driver.plan.edit'],
+        ])->assertForbidden();
+    }
+
+    public function test_admin_can_disable_a_quick_link(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.quick-links.update'), [
+            'disabled' => ['driver.plan.edit', 'ride-requests.create'],
+        ])->assertRedirect();
+
+        $this->assertSame(
+            ['driver.plan.edit', 'ride-requests.create'],
+            SiteSetting::current()->disabled_quick_links
+        );
+    }
+
+    public function test_re_enabling_everything_clears_the_list(): void
+    {
+        SiteSetting::current()->update(['disabled_quick_links' => ['driver.plan.edit']]);
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.quick-links.update'), [
+            'disabled' => [],
+        ])->assertRedirect();
+
+        $this->assertSame([], SiteSetting::current()->disabled_quick_links);
+    }
+
+    /**
+     * Solo las rutas del registro (App\Services\QuickLinkRegistry) se
+     * pueden apagar — no cualquier string arbitrario mandado por el form.
+     */
+    public function test_an_unknown_route_is_rejected(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.quick-links.update'), [
+            'disabled' => ['admin.system.reset-demo'],
+        ])->assertSessionHasErrors('disabled.0');
     }
 }

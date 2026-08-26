@@ -1,12 +1,41 @@
 <script setup>
+import { computed } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import DangerButton from '@/Components/DangerButton.vue';
-import { Head, router } from '@inertiajs/vue3';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 
-defineProps({
+const props = defineProps({
     demoAccountsCount: { type: Number, required: true },
+    // Pedido explícito del usuario: "permiteme en el modulo de sistema de
+    // habilitar o no estas opciones del menu tanto las del conductor como
+    // las del cliente" — ver App\Services\QuickLinkRegistry.
+    quickLinks: { type: Array, required: true },
 });
+
+const QUICK_LINK_GROUP_LABEL = { conductor: 'Menú del conductor', cliente: 'Menú del cliente' };
+const quickLinkGroups = ['conductor', 'cliente'].map((group) => ({
+    key: group,
+    label: QUICK_LINK_GROUP_LABEL[group],
+    items: props.quickLinks.filter((item) => item.group === group),
+}));
+
+const quickLinksForm = useForm({
+    disabled: props.quickLinks.filter((item) => !item.enabled).map((item) => item.route),
+});
+
+function isChecked(route) {
+    return !quickLinksForm.disabled.includes(route);
+}
+function toggle(route) {
+    quickLinksForm.disabled = isChecked(route)
+        ? [...quickLinksForm.disabled, route]
+        : quickLinksForm.disabled.filter((r) => r !== route);
+}
+function saveQuickLinks() {
+    quickLinksForm.patch(route('admin.system.quick-links.update'), { preserveScroll: true });
+}
 
 // Zona de peligro (pedido explícito del usuario): confirmación fuerte antes
 // de borrar, con el texto explícito de qué se pierde — ver Admin\SystemController.
@@ -64,6 +93,51 @@ async function resetDemo() {
                     </p>
 
                     <DangerButton @click="resetDemo">Reiniciar demo e ir al login</DangerButton>
+                </div>
+
+                <!-- Pedido explícito del usuario: "permiteme en el modulo de
+                     sistema de habilitar o no estas opciones del menu tanto
+                     las del conductor como las del cliente" — si se apaga
+                     un renglón, ese acceso deja de verse en el menú de
+                     cuenta, el botón "+" de móvil y el mapa de escritorio
+                     (ver quickLinks en AuthenticatedLayout.vue). -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-arka-text">Accesos rápidos del menú</h3>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Prenda o apague cada acceso — si lo apaga, deja de verse en el menú de cuenta y en los
+                            accesos rápidos, tanto en escritorio como en móvil.
+                        </p>
+                    </div>
+
+                    <div v-for="group in quickLinkGroups" :key="group.key">
+                        <p class="text-sm font-medium text-arka-text mb-2">{{ group.label }}</p>
+                        <ul class="divide-y divide-arka-text-muted/10">
+                            <li v-for="item in group.items" :key="item.route" class="py-2.5">
+                                <label class="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        :checked="isChecked(item.route)"
+                                        class="rounded border-arka-text-muted/30 text-arka-primary focus:ring-arka-primary"
+                                        @change="toggle(item.route)"
+                                    />
+                                    <span class="text-sm text-arka-text">{{ item.label }}</span>
+                                </label>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <PrimaryButton :disabled="quickLinksForm.processing" @click="saveQuickLinks">Guardar</PrimaryButton>
+                        <Transition
+                            enter-active-class="transition ease-in-out"
+                            enter-from-class="opacity-0"
+                            leave-active-class="transition ease-in-out"
+                            leave-to-class="opacity-0"
+                        >
+                            <p v-if="quickLinksForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
+                        </Transition>
+                    </div>
                 </div>
             </div>
         </div>
