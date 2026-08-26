@@ -16,6 +16,7 @@ export const ADMIN_NAV_GROUPS = [
         label: 'Operación',
         icon: 'route',
         items: [
+            { route: 'admin.live-operations.index', match: 'admin.live-operations.*', label: 'En vivo' },
             { route: 'admin.rides.index', match: 'admin.rides.*', label: 'Carreras' },
             { route: 'admin.user-locations.index', match: 'admin.user-locations.*', label: 'Registros por ubicación' },
             { route: 'admin.operations.index', match: 'admin.operations.*', label: 'Operaciones' },

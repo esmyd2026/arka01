@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Admin\DriverTierController;
 use App\Http\Controllers\Admin\DriverVerificationController;
 use App\Http\Controllers\Admin\FaqController;
+use App\Http\Controllers\Admin\LiveOperationsController;
 use App\Http\Controllers\Admin\LocationController;
 use App\Http\Controllers\Admin\MetricsController;
 use App\Http\Controllers\Admin\OperationsController as AdminOperationsController;
@@ -600,6 +601,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // los conductores cercanos dónde conviene estar.
     Route::get('/operaciones', [AdminOperationsController::class, 'index'])->name('operations.index');
     Route::post('/operaciones/avisar-demanda', [AdminOperationsController::class, 'notifyNearby'])->name('operations.notify-demand');
+
+    // Operaciones en vivo (pedido explícito del usuario: "ver las
+    // transaciones que se estan ejecutando ahorita... cliente esperando
+    // conductor... carrera en curso... con el detalle y el mapa") —
+    // distinto de /operaciones (arriba): acá cada solicitud/carrera activa
+    // es su propia tarjeta con detalle, no un agregado histórico.
+    Route::get('/en-vivo', [LiveOperationsController::class, 'index'])->name('live-operations.index');
 
     // Registros por ubicación (pedido explícito del usuario: "ver de dónde
     // se registran las personas, por su ubicación").

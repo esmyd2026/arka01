@@ -257,4 +257,53 @@ class SurveyTest extends TestCase
             ->where('roles.pasajero.insecurityPerception.percent', 33.3)
         );
     }
+
+    /**
+     * Pedido explícito del usuario: "un analisis dinamico, que diga 10 de
+     * tanto clientes opinan que...... algo bien chevere para yo ir
+     * postiando" — frases armadas con los mismos números ya probados
+     * arriba, no un cálculo aparte.
+     */
+    public function test_insights_are_empty_below_the_minimum_sample(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        // 4 respuestas, una menos que el mínimo de 5 (SurveyMetricsController::MIN_SAMPLE_FOR_INSIGHTS).
+        for ($i = 0; $i < 4; $i++) {
+            SurveyResponse::query()->create(['role' => 'pasajero', 'answers' => $this->passengerAnswers()]);
+        }
+
+        $response = $this->actingAs($admin)->get(route('admin.survey-metrics.index'));
+
+        $response->assertInertia(fn ($page) => $page->where('roles.pasajero.insights', []));
+    }
+
+    public function test_insights_appear_once_the_minimum_sample_is_reached(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        // 5 respuestas: 4 marcan "seguridad" como mayor problema, 3 dicen
+        // que no confían en la verificación de conductores, ninguna elige
+        // la opción aspiracional "me_encantaria" — para probar tanto que
+        // aparece un insight con datos reales, como que uno sin ninguna
+        // respuesta (0 de 5) se omite en vez de mostrar "0%".
+        for ($i = 0; $i < 5; $i++) {
+            $answers = $this->passengerAnswers();
+            $answers[SurveyQuestions::MAIN_PROBLEM_QUESTION_KEY] = ['seguridad'];
+            $answers['confianza_identidad'] = $i < 3 ? 'no_confio' : 'confio';
+            $answers['interes_confianza'] = 'prefiero_cualquiera';
+            SurveyResponse::query()->create(['role' => 'pasajero', 'answers' => $answers]);
+        }
+
+        $response = $this->actingAs($admin)->get(route('admin.survey-metrics.index'));
+
+        $response->assertInertia(function ($page) {
+            $insights = $page->toArray()['props']['roles']['pasajero']['insights'];
+            $texts = collect($insights)->pluck('text');
+
+            $this->assertTrue($texts->contains(fn ($text) => str_contains($text, '5 de 5') && str_contains($text, 'seguridad')));
+            $this->assertTrue($texts->contains(fn ($text) => str_contains($text, '3 de 5') && str_contains($text, 'no confían')));
+            $this->assertFalse($texts->contains(fn ($text) => str_contains($text, 'encantaría')));
+        });
+    }
 }
