@@ -11,6 +11,11 @@ const props = defineProps({
     settings: { type: Object, required: true },
     envFallback: { type: Object, required: true },
     auditLogs: { type: Array, required: true },
+    // Pedido explícito del usuario: "ayudame a configurar los modulos que
+    // yo active de envios de whatsapp... y coloquemos precios estimados por
+    // las cantidades de mensajes enviados quiero ver indicadores alli".
+    notificationTypes: { type: Array, required: true },
+    messageStats: { type: Object, required: true },
 });
 
 // Pedido explícito del usuario: nunca se manda el valor real de un campo
@@ -27,6 +32,11 @@ const form = useForm({
     driver_ride_actions_enabled: props.settings.driver_ride_actions_enabled,
     client_ride_booking_enabled: props.settings.client_ride_booking_enabled,
     privacy_notice_text: props.settings.privacy_notice_text ?? '',
+    // Pedido explícito del usuario: un toggle por tipo de aviso — arranca
+    // con lo que ya viene de cada uno, se manda todo junto con el resto del
+    // formulario para no complicar con un submit aparte por checkbox.
+    ...Object.fromEntries(props.notificationTypes.map((type) => [`notify_${type.key}`, type.enabled])),
+    estimated_cost_per_message: props.settings.estimated_cost_per_message,
 });
 
 const submit = () => {
@@ -41,6 +51,13 @@ function statusFor(hasInDb, envValue) {
     if (envValue) return { label: 'Usando el .env', class: 'text-arka-text-muted' };
     return { label: 'Sin configurar', class: 'text-arka-warning' };
 }
+
+const NOTIFICATION_GROUP_LABEL = { cliente: 'Notificaciones al cliente', conductor: 'Notificaciones al conductor' };
+const notificationGroups = ['cliente', 'conductor'].map((group) => ({
+    key: group,
+    label: NOTIFICATION_GROUP_LABEL[group],
+    items: props.notificationTypes.filter((type) => type.group === group),
+}));
 </script>
 
 <template>
@@ -80,6 +97,73 @@ function statusFor(hasInDb, envValue) {
                                 <InputError class="mt-1" :message="form.errors.privacy_notice_text" />
                             </div>
                         </div>
+                        <!-- Pedido explícito del usuario: "dame las cantidades de
+                             mensajes y ayudame a configurar los modulos que yo
+                             active de envios de whatsapp... y coloquemos precios
+                             estimados... quiero ver indicadores alli" -->
+                        <div class="rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-4 space-y-4">
+                            <div>
+                                <h3 class="font-medium text-arka-text">Notificaciones por WhatsApp</h3>
+                                <p class="mt-1 text-xs text-arka-text-muted">
+                                    Active o desactive cada aviso por separado — si lo apaga, esa notificación puntual
+                                    deja de mandarse (el resto sigue funcionando igual). Meta cobra por mensaje
+                                    enviado; el costo de acá es un estimado editable, no la tarifa oficial.
+                                </p>
+                            </div>
+
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div class="rounded-arka bg-arka-base/50 p-3 text-center">
+                                    <p class="text-xl font-semibold text-arka-text">{{ messageStats.today }}</p>
+                                    <p class="text-[11px] text-arka-text-muted">Hoy</p>
+                                </div>
+                                <div class="rounded-arka bg-arka-base/50 p-3 text-center">
+                                    <p class="text-xl font-semibold text-arka-text">{{ messageStats.last_7_days }}</p>
+                                    <p class="text-[11px] text-arka-text-muted">Últimos 7 días</p>
+                                </div>
+                                <div class="rounded-arka bg-arka-base/50 p-3 text-center">
+                                    <p class="text-xl font-semibold text-arka-text">{{ messageStats.last_30_days }}</p>
+                                    <p class="text-[11px] text-arka-text-muted">${{ messageStats.estimated_cost_last_30_days.toFixed(4) }} · 30 días</p>
+                                </div>
+                                <div class="rounded-arka bg-arka-base/50 p-3 text-center">
+                                    <p class="text-xl font-semibold text-arka-text">{{ messageStats.all_time }}</p>
+                                    <p class="text-[11px] text-arka-text-muted">${{ messageStats.estimated_cost_all_time.toFixed(4) }} · histórico</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <InputLabel for="estimated_cost_per_message" value="Costo estimado por mensaje (USD)" />
+                                <TextInput
+                                    id="estimated_cost_per_message"
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                    class="mt-1 block w-full sm:w-40"
+                                    v-model="form.estimated_cost_per_message"
+                                />
+                                <InputError class="mt-1" :message="form.errors.estimated_cost_per_message" />
+                            </div>
+
+                            <div v-for="group in notificationGroups" :key="group.key">
+                                <p class="text-sm font-medium text-arka-text mb-2">{{ group.label }}</p>
+                                <ul class="divide-y divide-arka-text-muted/10">
+                                    <li v-for="type in group.items" :key="type.key" class="py-2.5 flex items-center justify-between gap-3">
+                                        <label class="flex items-center gap-3 min-w-0 flex-1">
+                                            <input
+                                                v-model="form[`notify_${type.key}`]"
+                                                type="checkbox"
+                                                class="rounded border-arka-text-muted/30 text-arka-primary focus:ring-arka-primary shrink-0"
+                                            />
+                                            <span class="text-sm text-arka-text truncate">{{ type.label }}</span>
+                                        </label>
+                                        <span class="shrink-0 text-right text-xs text-arka-text-muted">
+                                            {{ type.count_last_30_days }} msj · ${{ type.estimated_cost_last_30_days.toFixed(3) }}
+                                            <span class="block text-[10px]">últimos 30 días</span>
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
                         <div>
                             <div class="flex items-center justify-between">
                                 <InputLabel for="token" value="Token de acceso" />

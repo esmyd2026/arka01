@@ -32,6 +32,25 @@ class WhatsAppSetting extends Model
         'driver_ride_actions_enabled',
         'client_ride_booking_enabled',
         'privacy_notice_text',
+        // Pedido explícito del usuario ("que yo las active o desactive y si
+        // las desactivo entonce esas notificaciones no llegaran") — un
+        // apagado puntual por tipo de aviso, distinto de
+        // ride_notifications_enabled de arriba (el apagado general de
+        // TODO). Ver App\Services\WhatsAppRideAccess::notificationTypeEnabled().
+        'notify_ride_accepted',
+        'notify_ride_started',
+        'notify_ride_arrived',
+        'notify_ride_picked_up',
+        'notify_ride_completed',
+        'notify_new_ride_alert',
+        'notify_cooperative_invitation',
+        'notify_scheduled_reminder',
+        'notify_offer_expired',
+        'notify_driver_disconnected',
+        // Pedido explícito del usuario: "coloquemos precios estimados por
+        // las cantidades de mensajes enviados" — editable a mano, el precio
+        // real de Meta varía por categoría y país.
+        'estimated_cost_per_message',
         'updated_by',
     ];
 
@@ -46,6 +65,17 @@ class WhatsAppSetting extends Model
         'ride_notifications_enabled' => 'boolean',
         'driver_ride_actions_enabled' => 'boolean',
         'client_ride_booking_enabled' => 'boolean',
+        'notify_ride_accepted' => 'boolean',
+        'notify_ride_started' => 'boolean',
+        'notify_ride_arrived' => 'boolean',
+        'notify_ride_picked_up' => 'boolean',
+        'notify_ride_completed' => 'boolean',
+        'notify_new_ride_alert' => 'boolean',
+        'notify_cooperative_invitation' => 'boolean',
+        'notify_scheduled_reminder' => 'boolean',
+        'notify_offer_expired' => 'boolean',
+        'notify_driver_disconnected' => 'boolean',
+        'estimated_cost_per_message' => 'decimal:4',
     ];
 
     // Pedido explícito del usuario: "nunca exponer tokens completos en

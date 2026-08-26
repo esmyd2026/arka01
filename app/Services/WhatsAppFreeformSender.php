@@ -56,8 +56,12 @@ class WhatsAppFreeformSender
 
     /**
      * @param  string  $phoneE164  Ej. "+593991234567"
+     * @param  string|null  $type  Key de WhatsAppRideAccess::NOTIFICATION_TYPES
+     *                             (o null para lo que no es un aviso apagable) — solo
+     *                             para trazabilidad/costos en ChatbotMessage.meta, ver
+     *                             Admin\WhatsAppSettingController.
      */
-    public static function sendText(string $phoneE164, string $message): bool
+    public static function sendText(string $phoneE164, string $message, ?string $type = null): bool
     {
         if (! self::enabled()) {
             return false;
@@ -98,13 +102,13 @@ class WhatsAppFreeformSender
             );
         }
 
-        self::logOutbound($phoneE164, $message, $response->successful());
+        self::logOutbound($phoneE164, $message, $response->successful(), array_filter(['type' => $type]));
 
         return $response->successful();
     }
 
     /** @param array<int, array{id:string,title:string}> $buttons */
-    public static function sendButtons(string $phoneE164, string $message, array $buttons): bool
+    public static function sendButtons(string $phoneE164, string $message, array $buttons, ?string $type = null): bool
     {
         if (! self::enabled()) {
             return false;
@@ -126,7 +130,7 @@ class WhatsAppFreeformSender
                 ],
             ]);
 
-        self::logOutbound($phoneE164, $message, $response->successful(), ['buttons' => $buttons]);
+        self::logOutbound($phoneE164, $message, $response->successful(), array_filter(['buttons' => $buttons, 'type' => $type]));
 
         return $response->successful();
     }
@@ -139,7 +143,7 @@ class WhatsAppFreeformSender
      *
      * @param  array<int, array{id:string,title:string}>  $rows  Hasta 10 en total (límite de Meta).
      */
-    public static function sendList(string $phoneE164, string $message, string $buttonLabel, array $rows): bool
+    public static function sendList(string $phoneE164, string $message, string $buttonLabel, array $rows, ?string $type = null): bool
     {
         if (! self::enabled()) {
             return false;
@@ -168,7 +172,7 @@ class WhatsAppFreeformSender
                 ],
             ]);
 
-        self::logOutbound($phoneE164, $message, $response->successful(), ['list_rows' => $rows]);
+        self::logOutbound($phoneE164, $message, $response->successful(), array_filter(['list_rows' => $rows, 'type' => $type]));
 
         return $response->successful();
     }
@@ -240,7 +244,10 @@ class WhatsAppFreeformSender
      */
     public static function sendNewRideAlert(User $driver, RideRequest $rideRequest): void
     {
-        if (! WhatsAppRideAccess::notificationsEnabled() || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+        if (! WhatsAppRideAccess::notificationsEnabled()
+            || ! WhatsAppRideAccess::notificationTypeEnabled('new_ride_alert')
+            || ! $driver->phone
+            || ! $driver->hasActiveWhatsAppSession()) {
             return;
         }
 
@@ -292,9 +299,9 @@ class WhatsAppFreeformSender
             self::sendButtons($driver->phone, $message, [
                 ['id' => 'ride_accept:'.$rideRequest->id, 'title' => 'Aceptar'],
                 ['id' => 'ride_reject:'.$rideRequest->id, 'title' => 'No tomar'],
-            ]);
+            ], 'new_ride_alert');
         } else {
-            self::sendText($driver->phone, $message);
+            self::sendText($driver->phone, $message, 'new_ride_alert');
         }
     }
 
@@ -310,20 +317,20 @@ class WhatsAppFreeformSender
      */
     public static function sendCooperativeInvitationAlert(User $driver, CooperativeDriverMembership $membership): void
     {
-        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+        if (! WhatsAppRideAccess::notificationTypeEnabled('cooperative_invitation') || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
             return;
         }
 
         $message = "🤝 {$membership->cooperative->name} quiere vincularlo como conductor afiliado.\n\n"
             .'Revise la invitación en Arka01: '.route('cooperative-driver-invitations.index');
 
-        self::sendText($driver->phone, $message);
+        self::sendText($driver->phone, $message, 'cooperative_invitation');
     }
 
     public static function sendRideAcceptedToClient(Ride $ride): void
     {
         $client = $ride->client;
-        if (! self::notificationsEnabledFor($client)) {
+        if (! self::notificationsEnabledFor($client, 'ride_accepted')) {
             return;
         }
 
@@ -333,7 +340,7 @@ class WhatsAppFreeformSender
             .'Placa: '.($profile?->maskedPlate() ?? 'ver en la app')."\n\n"
             .'Puede seguir el viaje en Arka01: '.route('rides.show', $ride);
 
-        self::sendText($client->phone, $message);
+        self::sendText($client->phone, $message, 'ride_accepted');
     }
 
     /**
@@ -352,31 +359,31 @@ class WhatsAppFreeformSender
     public static function sendRideStartedToClient(Ride $ride): void
     {
         $client = $ride->client;
-        if (! self::notificationsEnabledFor($client)) {
+        if (! self::notificationsEnabledFor($client, 'ride_started')) {
             return;
         }
 
-        self::sendText($client->phone, "🚗 {$ride->driver->name} ya salió a buscarlo.\n\nSiga el viaje en Arka01: ".route('rides.show', $ride));
+        self::sendText($client->phone, "🚗 {$ride->driver->name} ya salió a buscarlo.\n\nSiga el viaje en Arka01: ".route('rides.show', $ride), 'ride_started');
     }
 
     public static function sendRideArrivedToClient(Ride $ride): void
     {
         $client = $ride->client;
-        if (! self::notificationsEnabledFor($client)) {
+        if (! self::notificationsEnabledFor($client, 'ride_arrived')) {
             return;
         }
 
-        self::sendText($client->phone, "📍 {$ride->driver->name} llegó y lo está esperando.");
+        self::sendText($client->phone, "📍 {$ride->driver->name} llegó y lo está esperando.", 'ride_arrived');
     }
 
     public static function sendRidePickedUpToClient(Ride $ride): void
     {
         $client = $ride->client;
-        if (! self::notificationsEnabledFor($client)) {
+        if (! self::notificationsEnabledFor($client, 'ride_picked_up')) {
             return;
         }
 
-        self::sendText($client->phone, '▶️ Su viaje comenzó hacia '.($ride->destination_address ?? 'su destino').'.');
+        self::sendText($client->phone, '▶️ Su viaje comenzó hacia '.($ride->destination_address ?? 'su destino').'.', 'ride_picked_up');
     }
 
     /**
@@ -390,7 +397,7 @@ class WhatsAppFreeformSender
     public static function sendRideCompletedToClient(Ride $ride): void
     {
         $client = $ride->client;
-        if (! self::notificationsEnabledFor($client)) {
+        if (! self::notificationsEnabledFor($client, 'ride_completed')) {
             return;
         }
 
@@ -402,20 +409,22 @@ class WhatsAppFreeformSender
             $client->phone,
             "✅ Carrera completada — \${$ride->settled_price}.\n\n¿Cómo le fue con {$ride->driver->name}? Califique tocando una opción, o revise el recibo completo en Arka01: ".route('rides.show', $ride),
             'Calificar',
-            $rows
+            $rows,
+            'ride_completed'
         );
     }
 
-    private static function notificationsEnabledFor(User $user): bool
+    private static function notificationsEnabledFor(User $user, string $type): bool
     {
         return WhatsAppRideAccess::notificationsEnabled()
+            && WhatsAppRideAccess::notificationTypeEnabled($type)
             && filled($user->phone)
             && $user->hasActiveWhatsAppSession();
     }
 
     public static function sendScheduledRideReminder(User $driver, Ride $ride): void
     {
-        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+        if (! WhatsAppRideAccess::notificationTypeEnabled('scheduled_reminder') || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
             return;
         }
 
@@ -426,7 +435,7 @@ class WhatsAppFreeformSender
             .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n\n"
             .'Abra Arka01 para revisar e iniciar el viaje: '.route('rides.show', $ride);
 
-        self::sendText($driver->phone, $message);
+        self::sendText($driver->phone, $message, 'scheduled_reminder');
     }
 
     /**
@@ -437,13 +446,13 @@ class WhatsAppFreeformSender
      */
     public static function sendOfferExpiredNotice(User $driver): void
     {
-        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+        if (! WhatsAppRideAccess::notificationTypeEnabled('offer_expired') || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
             return;
         }
 
         $message = '⏱ Se le acabó el tiempo para responder — esa carrera ya pasó a otro conductor.';
 
-        self::sendText($driver->phone, $message);
+        self::sendText($driver->phone, $message, 'offer_expired');
     }
 
     /**
@@ -458,14 +467,14 @@ class WhatsAppFreeformSender
      */
     public static function sendDisconnectedAlert(User $driver): void
     {
-        if (! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+        if (! WhatsAppRideAccess::notificationTypeEnabled('driver_disconnected') || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
             return;
         }
 
         $message = "👋 Se desconectó de Arka01 y dejó de recibir carreras.\n"
             .'Cuando quiera volver a estar disponible, actívese de nuevo desde la app.';
 
-        self::sendText($driver->phone, $message);
+        self::sendText($driver->phone, $message, 'driver_disconnected');
     }
 
     /**

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AdminAuditLog;
+use App\Models\ChatbotMessage;
 use App\Models\WhatsAppSetting;
 use App\Services\AdminAuditLogger;
+use App\Services\WhatsAppRideAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -31,6 +33,11 @@ class WhatsAppSettingController extends Controller
         'business_number', 'webhook_verify_token', 'app_secret',
         'ride_notifications_enabled', 'driver_ride_actions_enabled',
         'client_ride_booking_enabled', 'privacy_notice_text',
+        'notify_ride_accepted', 'notify_ride_started', 'notify_ride_arrived',
+        'notify_ride_picked_up', 'notify_ride_completed', 'notify_new_ride_alert',
+        'notify_cooperative_invitation', 'notify_scheduled_reminder',
+        'notify_offer_expired', 'notify_driver_disconnected',
+        'estimated_cost_per_message',
     ];
 
     public function edit(): Response
@@ -51,7 +58,17 @@ class WhatsAppSettingController extends Controller
                 'driver_ride_actions_enabled' => $settings->driver_ride_actions_enabled,
                 'client_ride_booking_enabled' => $settings->client_ride_booking_enabled,
                 'privacy_notice_text' => $settings->privacy_notice_text,
+                'estimated_cost_per_message' => (float) $settings->estimated_cost_per_message,
             ],
+            // Pedido explícito del usuario: "ayudame a configurar los
+            // modulos que yo active de envios de whatsapp... y si las
+            // desactivo entonce esas notificaciones no llegaran" — un
+            // toggle por tipo de aviso (además del apagado general de
+            // arriba), con cuánto se mandó de cada uno en los últimos 30
+            // días y el costo estimado, para decidir con datos reales qué
+            // conviene apagar.
+            'notificationTypes' => $this->notificationTypesWithStats($settings),
+            'messageStats' => $this->messageStats($settings),
             // Para que la pantalla pueda avisar "tampoco hay nada en .env"
             // cuando ni la base ni el .env tienen un valor cargado — nunca
             // el valor real, solo si existe (mismo criterio que arriba).
@@ -74,6 +91,81 @@ class WhatsAppSettingController extends Controller
         ]);
     }
 
+    /**
+     * Un renglón por tipo de aviso con su estado actual y cuánto costó en
+     * los últimos 30 días — mismo criterio que
+     * App\Http\Controllers\Admin\SurveyMetricsController: se cuenta en PHP
+     * sobre la colección ya traída, sin agregación SQL sobre la columna
+     * `meta` (json). El volumen de mensajes salientes no amerita más.
+     *
+     * @return array<int, array{key: string, label: string, group: string, enabled: bool, count_last_30_days: int, estimated_cost_last_30_days: float}>
+     */
+    private function notificationTypesWithStats(WhatsAppSetting $settings): array
+    {
+        $countsByType = $this->outboundCountsByType();
+        $costPerMessage = (float) $settings->estimated_cost_per_message;
+
+        return collect(WhatsAppRideAccess::NOTIFICATION_TYPES)
+            ->map(function (array $meta, string $key) use ($settings, $countsByType, $costPerMessage) {
+                $count = $countsByType[$key] ?? 0;
+
+                return [
+                    'key' => $key,
+                    'label' => $meta['label'],
+                    'group' => $meta['group'],
+                    'enabled' => (bool) $settings->{"notify_{$key}"},
+                    'count_last_30_days' => $count,
+                    'estimated_cost_last_30_days' => round($count * $costPerMessage, 4),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function outboundCountsByType(): array
+    {
+        return ChatbotMessage::query()
+            ->where('direction', 'out')
+            ->where('created_at', '>=', now()->subDays(30))
+            ->get(['meta'])
+            ->filter(fn (ChatbotMessage $message) => (bool) ($message->meta['successful'] ?? false))
+            ->countBy(fn (ChatbotMessage $message) => $message->meta['type'] ?? null)
+            ->all();
+    }
+
+    /**
+     * Pedido explícito del usuario: "dame las cantidades de mensajes...
+     * coloquemos precios estimados por las cantidades de mensajes
+     * enviados" — totales generales (todo tipo de mensaje saliente, no solo
+     * los apagables de arriba), para tener una foto completa del costo real.
+     *
+     * @return array{today: int, last_7_days: int, last_30_days: int, all_time: int, estimated_cost_last_30_days: float, estimated_cost_all_time: float}
+     */
+    private function messageStats(WhatsAppSetting $settings): array
+    {
+        $outbound = ChatbotMessage::query()
+            ->where('direction', 'out')
+            ->get(['meta', 'created_at'])
+            ->filter(fn (ChatbotMessage $message) => (bool) ($message->meta['successful'] ?? false));
+
+        $costPerMessage = (float) $settings->estimated_cost_per_message;
+        $last30Days = $outbound->filter(fn (ChatbotMessage $message) => $message->created_at->gte(now()->subDays(30)));
+
+        return [
+            'today' => $outbound->filter(fn (ChatbotMessage $message) => $message->created_at->gte(now()->startOfDay()))->count(),
+            'last_7_days' => $outbound->filter(fn (ChatbotMessage $message) => $message->created_at->gte(now()->subDays(7)))->count(),
+            'last_30_days' => $last30Days->count(),
+            'all_time' => $outbound->count(),
+            // 4 decimales (no 2): a $0.0012/mensaje, un volumen bajo
+            // redondearía siempre a $0.00 y el indicador no diría nada.
+            'estimated_cost_last_30_days' => round($last30Days->count() * $costPerMessage, 4),
+            'estimated_cost_all_time' => round($outbound->count() * $costPerMessage, 4),
+        ];
+    }
+
     public function update(Request $request): RedirectResponse
     {
         $validated = $request->validate([
@@ -89,6 +181,18 @@ class WhatsAppSettingController extends Controller
             'driver_ride_actions_enabled' => ['sometimes', 'boolean'],
             'client_ride_booking_enabled' => ['sometimes', 'boolean'],
             'privacy_notice_text' => ['nullable', 'string', 'max:2000'],
+            // Pedido explícito del usuario: "que yo las active o desactive".
+            'notify_ride_accepted' => ['sometimes', 'boolean'],
+            'notify_ride_started' => ['sometimes', 'boolean'],
+            'notify_ride_arrived' => ['sometimes', 'boolean'],
+            'notify_ride_picked_up' => ['sometimes', 'boolean'],
+            'notify_ride_completed' => ['sometimes', 'boolean'],
+            'notify_new_ride_alert' => ['sometimes', 'boolean'],
+            'notify_cooperative_invitation' => ['sometimes', 'boolean'],
+            'notify_scheduled_reminder' => ['sometimes', 'boolean'],
+            'notify_offer_expired' => ['sometimes', 'boolean'],
+            'notify_driver_disconnected' => ['sometimes', 'boolean'],
+            'estimated_cost_per_message' => ['sometimes', 'numeric', 'min:0', 'max:1'],
         ]);
 
         $settings = WhatsAppSetting::current();

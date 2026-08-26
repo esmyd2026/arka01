@@ -489,15 +489,22 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                      superior a acá (donde antes decía "Inicio"), a la izquierda. -->
                 <div class="text-start">
                     <h2 class="font-semibold text-xl text-arka-text leading-tight">¡Hola, {{ firstName }}! 👋</h2>
-                    <!-- Encuesta corta (pedido explícito del usuario: "al lado
-                         izquierdo") — mismo lado que el saludo, debajo. -->
-                    <Link
-                        v-if="!surveyDone"
-                        :href="route('survey.show')"
-                        class="text-xs font-medium text-arka-primary hover:text-arka-primary-bright"
+                    <!-- Pedido explícito del usuario ("conductor activo y el
+                         estado colocalo donde tienes el enlace de la
+                         encuesta"): la encuesta se movió al final de la
+                         pantalla (ver más abajo) — acá queda el estado de
+                         disponibilidad, que es información funcional que se
+                         usa todos los días. "Conductor ✓" (qué ES la cuenta)
+                         se sacó de acá por redundante: ya se ve en el menú
+                         de cuenta (AuthenticatedLayout.vue), que se abre
+                         tocando la foto. -->
+                    <span
+                        v-if="driverStats"
+                        class="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                        :class="isAvailableNow ? 'bg-arka-primary/15 text-arka-primary-bright' : 'bg-arka-text-muted/15 text-arka-text-muted'"
                     >
-                        Cuentanos tu experiencia (2 min) →
-                    </Link>
+                        {{ isAvailableNow ? '● Disponible' : '○ No disponible' }}
+                    </span>
                 </div>
 
                 <div
@@ -663,20 +670,12 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     </div>
 
                     <div>
-                        <!-- Pedido explícito del usuario (roadmap de mejoras, sección 1): el
-                             saludo se mudó al navbar (AuthenticatedLayout.vue) para
-                             recuperar este espacio vertical — acá queda la insignia de
-                             rol/disponibilidad, que sí es información funcional. -->
-                        <p class="text-arka-text-muted flex items-center gap-1.5">
-                            Conductor
-                            <span class="text-arka-primary-bright" title="Cuenta de conductor">✓</span>
-                            <span
-                                class="ms-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                                :class="isAvailableNow ? 'bg-arka-primary/15 text-arka-primary-bright' : 'bg-arka-text-muted/15 text-arka-text-muted'"
-                            >
-                                {{ isAvailableNow ? '● Disponible' : '○ No disponible' }}
-                            </span>
-                        </p>
+                        <!-- Pedido explícito del usuario: "lo de que es
+                             conductor colocalo en la barra donde se
+                             despliega desde la foto" y el estado de
+                             disponibilidad ahora vive junto al saludo, arriba
+                             — acá queda solo lo que sigue siendo propio de
+                             esta tarjeta (cooperativa + aviso de ubicación). -->
                         <Link
                             v-if="driverStats.cooperative"
                             :href="route('cooperatives.show', driverStats.cooperative.id)"
@@ -914,6 +913,19 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </button>
                         </div>
                     </div>
+
+                    <!-- Encuesta corta (pedido explícito del usuario: "lo de
+                         la encuesta mandalo al final") — antes competía con
+                         el saludo arriba de todo; acá abajo sigue siendo
+                         fácil de encontrar sin taparle el paso a lo que se
+                         usa todos los días (disponibilidad, solicitudes, tarifa). -->
+                    <Link
+                        v-if="!surveyDone"
+                        :href="route('survey.show')"
+                        class="block text-center text-sm font-medium text-arka-primary hover:text-arka-primary-bright"
+                    >
+                        Cuéntanos tu experiencia (2 min) →
+                    </Link>
                 </template>
 
             </div>

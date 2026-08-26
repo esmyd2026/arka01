@@ -3,6 +3,7 @@
 namespace Tests\Feature\Admin;
 
 use App\Models\AdminAuditLog;
+use App\Models\ChatbotMessage;
 use App\Models\User;
 use App\Models\WhatsAppSetting;
 use App\Services\WhatsAppConfig;
@@ -95,6 +96,75 @@ class WhatsAppSettingsTest extends TestCase
 
         $this->assertSame('token-original', WhatsAppSetting::current()->token);
         $this->assertSame('593990000000', WhatsAppSetting::current()->business_number);
+    }
+
+    /**
+     * Pedido explícito del usuario: "ayudame a configurar los modulos que
+     * yo active de envios de whatsapp... Notificaciones: cliente: En
+     * camino, aceptada...." — un renglón por tipo, con su estado.
+     */
+    public function test_the_screen_lists_every_notification_type_enabled_by_default(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $response = $this->actingAs($admin)->get(route('admin.integrations.whatsapp.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('notificationTypes', 10)
+            ->where('notificationTypes.0.enabled', true)
+        );
+    }
+
+    public function test_admin_can_disable_a_specific_notification_type(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.integrations.whatsapp.update'), [
+            'notify_ride_started' => false,
+        ])->assertRedirect();
+
+        $this->assertFalse(WhatsAppSetting::current()->notify_ride_started);
+        // El resto no se toca solo por apagar uno.
+        $this->assertTrue(WhatsAppSetting::current()->notify_ride_accepted);
+    }
+
+    /**
+     * Pedido explícito del usuario: "dame las cantidades de mensajes...
+     * coloquemos precios estimados por las cantidades de mensajes enviados
+     * quiero ver indicadores alli."
+     */
+    public function test_the_screen_reports_message_counts_and_estimated_cost(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        WhatsAppSetting::current()->update(['estimated_cost_per_message' => 0.0012]);
+
+        ChatbotMessage::query()->create([
+            'phone' => '+593991234567', 'direction' => 'out', 'body' => 'x',
+            'meta' => ['successful' => true, 'type' => 'ride_accepted'],
+        ]);
+        ChatbotMessage::query()->create([
+            'phone' => '+593991234567', 'direction' => 'out', 'body' => 'x',
+            'meta' => ['successful' => true, 'type' => 'ride_accepted'],
+        ]);
+        // No cuenta: falló el envío.
+        ChatbotMessage::query()->create([
+            'phone' => '+593991234567', 'direction' => 'out', 'body' => 'x',
+            'meta' => ['successful' => false, 'type' => 'ride_accepted'],
+        ]);
+        // No cuenta: es entrante, no saliente.
+        ChatbotMessage::query()->create([
+            'phone' => '+593991234567', 'direction' => 'in', 'body' => 'x', 'meta' => [],
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.integrations.whatsapp.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('messageStats.today', 2)
+            ->where('messageStats.all_time', 2)
+            ->where('messageStats.estimated_cost_all_time', 0.0024)
+            ->where('notificationTypes.0.key', 'ride_accepted')
+            ->where('notificationTypes.0.count_last_30_days', 2)
+        );
     }
 
     public function test_updating_writes_an_audit_log_without_exposing_the_real_secret(): void
