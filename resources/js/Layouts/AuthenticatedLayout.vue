@@ -827,6 +827,45 @@ onBeforeUnmount(() => {
                     <span class="text-xs font-medium">Inicio</span>
                 </Link>
 
+                <!-- Pedido explícito del usuario: "solicitudes lo coloques
+                     alado de donde esta el icono de inicio en el navbar" —
+                     antes vivía del otro lado, junto a "Perfil". -->
+                <Link
+                    v-if="hasRoute('rides.index') && !isAdmin && !showCooperativeNav"
+                    :href="route('rides.index')"
+                    class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
+                    :class="
+                        route().current('rides.*') || route().current('ride-requests.*')
+                            ? 'text-arka-primary'
+                            : 'text-arka-text-muted'
+                    "
+                >
+                    <span class="relative">
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16"
+                            />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
+                            <circle cx="7.5" cy="16" r="1" />
+                            <circle cx="16.5" cy="16" r="1" />
+                        </svg>
+                        <span
+                            v-if="$page.props.auth.pendingRideRequestsCount > 0"
+                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
+                        >
+                            {{ $page.props.auth.pendingRideRequestsCount }}
+                        </span>
+                    </span>
+                    <!-- Pedido explícito del usuario: la etiqueta tiene que
+                         decir "Solicitudes" para el conductor — es lo que
+                         él pidió literalmente; para el cliente sigue
+                         diciendo "Carreras" (su viaje, no una solicitud
+                         entrante que tiene que aceptar/rechazar). -->
+                    <span class="text-xs font-medium">{{ showDriverNav ? 'Solicitudes' : 'Carreras' }}</span>
+                </Link>
+
                 <Link
                     v-if="hasRoute('fleet.index') && showClientNav"
                     :href="route('fleet.index')"
@@ -850,42 +889,6 @@ onBeforeUnmount(() => {
 
             <!-- Tabs a la derecha del botón central. -->
             <div class="flex-1 flex items-stretch">
-                <Link
-                    v-if="hasRoute('rides.index') && !isAdmin && !showCooperativeNav"
-                    :href="route('rides.index')"
-                    class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
-                    :class="
-                        route().current('rides.*') || route().current('ride-requests.*')
-                            ? 'text-arka-primary'
-                            : 'text-arka-text-muted'
-                    "
-                >
-                    <span class="relative">
-                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16"
-                            />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                            <circle cx="7.5" cy="16" r="1" />
-                            <circle cx="16.5" cy="16" r="1" />
-                        </svg>
-                        <!-- Pedido explícito del usuario: "coloca solicitudes en el
-                             navbar cuando sea movil alli donde esta el boton de home"
-                             — antes esta cantidad solo se veía en una tarjeta de
-                             "Acciones rápidas" en Inicio; ahora viaja acá, visible
-                             desde cualquier pantalla (HandleInertiaRequests::share()). -->
-                        <span
-                            v-if="$page.props.auth.pendingRideRequestsCount > 0"
-                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
-                        >
-                            {{ $page.props.auth.pendingRideRequestsCount }}
-                        </span>
-                    </span>
-                    <span class="text-xs font-medium">Carreras</span>
-                </Link>
-
                 <!-- Tab dedicado del admin en móvil: mismo criterio que la pastilla de
                      escritorio, reemplaza a Flotas/Carreras que no le sirven de nada. -->
                 <Link
