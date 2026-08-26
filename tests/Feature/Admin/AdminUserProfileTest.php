@@ -67,6 +67,78 @@ class AdminUserProfileTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario: "cuales son los conductores que tiene
+     * ese cliente" — antes "Flotas propias" solo traía la cantidad de
+     * conductores, no quiénes eran.
+     */
+    public function test_the_clients_profile_lists_the_actual_drivers_in_their_fleet(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create(['name' => 'Mi flota']);
+        $driver = User::factory()->create(['name' => 'Juan Conductor']);
+        DriverProfile::factory()->for($driver)->create(['vehicle_make' => 'Chevrolet', 'vehicle_model' => 'Spark']);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+        Ride::factory()->create(['client_user_id' => $client->id, 'driver_user_id' => $driver->id, 'status' => 'completed']);
+
+        $response = $this->actingAs($admin)->get(route('admin.users.show', $client));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('fleetsOwned.0.name', 'Mi flota')
+            ->has('fleetsOwned.0.drivers', 1)
+            ->where('fleetsOwned.0.drivers.0.name', 'Juan Conductor')
+            ->where('fleetsOwned.0.drivers.0.vehicle', 'Chevrolet Spark')
+            ->where('fleetsOwned.0.drivers.0.rides_together_count', 1)
+        );
+    }
+
+    /**
+     * Pedido explícito del usuario: "cuales son las carreras que a
+     * realizado con su detalle" — tanto desde el lado cliente como conductor.
+     */
+    public function test_the_profile_lists_the_ride_history_with_detail(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create();
+        $driver = User::factory()->create(['name' => 'Juan Conductor']);
+        Ride::factory()->create([
+            'client_user_id' => $client->id, 'driver_user_id' => $driver->id, 'status' => 'completed',
+            'origin_address' => 'Calle Carlos Gómez Rendón', 'destination_address' => 'Av. Kennedy',
+            'price' => 6.90, 'distance_km' => 3.3,
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.users.show', $client));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('rideHistory', 1)
+            ->where('rideHistory.0.counterpart_name', 'Juan Conductor')
+            ->where('rideHistory.0.counterpart_role', 'Conductor')
+            ->where('rideHistory.0.origin_address', 'Calle Carlos Gómez Rendón')
+            ->where('rideHistory.0.destination_address', 'Av. Kennedy')
+            ->where('rideHistory.0.status', 'completed')
+            ->where('rideHistory.0.price', 6.9)
+            ->where('rideHistory.0.distance_km', 3.3)
+        );
+    }
+
+    public function test_the_ride_history_also_shows_up_on_the_drivers_own_profile(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create(['name' => 'Gabriela Parrales']);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        Ride::factory()->create(['client_user_id' => $client->id, 'driver_user_id' => $driver->id, 'status' => 'completed']);
+
+        $response = $this->actingAs($admin)->get(route('admin.users.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('rideHistory', 1)
+            ->where('rideHistory.0.counterpart_name', 'Gabriela Parrales')
+            ->where('rideHistory.0.counterpart_role', 'Cliente')
+        );
+    }
+
+    /**
      * Pedido explícito del usuario ("ayudame a ver la trazabilidad de los
      * whatsapp en el perfil de cada usuario") — la transcripción completa,
      * en la misma ficha que ya reúne todo lo demás del usuario, sea cliente,

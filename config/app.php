@@ -75,7 +75,19 @@ return [
     |
     */
 
-    'timezone' => env('APP_TIMEZONE', 'UTC'),
+    // Pedido explícito del usuario ("no se si tengo un problema de zona
+    // horaria en el server pero esta mal la hora"): Arka01 opera solo en
+    // Ecuador — si el .env del servidor no trae APP_TIMEZONE (o alguien lo
+    // borra sin querer), antes esto caía en UTC por defecto, y toda fecha
+    // formateada con ->format() del lado del servidor (mensajes de
+    // WhatsApp, notificaciones push — ver WhatsAppFreeformSender,
+    // RideRequestedPushNotification, etc.) salía 5 horas adelantada de la
+    // hora real de Ecuador. Los timestamps ISO que ya viajan al frontend
+    // (Profile/Show.vue y el resto) no dependían de esto — llevan su propio
+    // offset y el navegador los convierte solo — pero el texto armado en
+    // PHP sí. Con este default, aunque el servidor no declare la variable,
+    // igual queda correcto.
+    'timezone' => env('APP_TIMEZONE', 'America/Guayaquil'),
 
     /*
     |--------------------------------------------------------------------------

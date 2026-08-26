@@ -262,9 +262,19 @@ class WhatsAppFreeformSender
             : null;
 
         $scheduledLine = $rideRequest->is_scheduled && $rideRequest->scheduled_at
-            ? '📅 Programada para '.$rideRequest->scheduled_at->format('d/m/Y H:i')."\n"
+            ? '📅 Programada para '.$rideRequest->scheduled_at->timezone('America/Guayaquil')->format('d/m/Y H:i')."\n"
             : '';
+        // Pedido explícito del usuario: "en los whatsapp manda la fecha y
+        // hora de la solicitud de la carrera" — antes esto solo salía si
+        // era programada (scheduledLine, arriba); ahora sale siempre.
+        // `->timezone('America/Guayaquil')` explícito, sin importar la zona
+        // horaria configurada en el servidor (ver config/app.php) — esto es
+        // lo que un conductor en Ecuador lee literalmente en el mensaje, no
+        // pasa por el navegador para corregirse solo como sí pasa con las
+        // fechas que se muestran dentro de la app.
+        $requestedLine = '🕐 Solicitada: '.$rideRequest->requested_at->timezone('America/Guayaquil')->format('d/m/Y H:i')."\n";
         $message = " ¡Carrera nueva de {$rideRequest->client->name}!\n"
+            .$requestedLine
             .$scheduledLine
             .'Recogida: '.($rideRequest->origin_address ?? 'ver en la app')."\n"
             .($distanceKm !== null ? "Distancia: {$distanceKm} km\n" : '')

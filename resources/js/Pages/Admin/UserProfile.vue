@@ -20,6 +20,9 @@ const props = defineProps({
     clientPlan: { type: Object, default: null },
     fleetsOwned: { type: Array, required: true },
     driverClients: { type: Array, required: true },
+    // Pedido explícito del usuario: "cuales son las carreras que a
+    // realizado con su detalle" — mismo formato que Admin/Rides.vue.
+    rideHistory: { type: Array, required: true },
     averageRating: { type: Number, required: true },
     reviewCount: { type: Number, required: true },
     recentReviews: { type: Array, required: true },
@@ -32,6 +35,25 @@ const VERIFICATION_LABELS = {
     approved: 'Verificado',
     rejected: 'Rechazada',
 };
+
+// Mismo criterio que Admin/Rides.vue, para que el historial se lea igual en
+// las dos pantallas.
+const RIDE_STATUS_LABEL = {
+    scheduled: 'Programada',
+    in_progress: 'En curso',
+    completed: 'Completada',
+    cancelled: 'Cancelada',
+};
+const RIDE_STATUS_CLASS = {
+    scheduled: 'text-arka-lime',
+    in_progress: 'text-arka-primary-bright',
+    completed: 'text-arka-text-muted',
+    cancelled: 'text-arka-danger',
+};
+function formatRideDate(value) {
+    if (!value) return '—';
+    return new Date(value).toLocaleString('es-EC', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 const STATUS_LABEL = { active: 'Activa', grace: 'En gracia (por vencer)', expired: 'Vencida', cancelled: 'Cancelada' };
 
@@ -403,19 +425,78 @@ function formatMessageTime(value) {
                     </ul>
                 </div>
 
-                <!-- Flotas, si es cliente -->
-                <div v-if="fleetsOwned.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                <!-- Flotas, si es cliente (pedido explícito del usuario:
+                     "cuales son los conductores que tiene ese cliente" —
+                     antes solo se veía la cantidad, no quiénes eran). -->
+                <div v-if="fleetsOwned.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
                     <h3 class="text-lg font-medium text-arka-text">Flotas propias</h3>
-                    <ul class="space-y-1.5">
-                        <li v-for="fleet in fleetsOwned" :key="fleet.id" class="text-sm text-arka-text">
-                            {{ fleet.name }} — {{ fleet.active_members_count }} conductor(es)
-                        </li>
-                    </ul>
+
+                    <div v-for="fleet in fleetsOwned" :key="fleet.id">
+                        <p class="text-sm font-medium text-arka-text">{{ fleet.name }} — {{ fleet.drivers.length }} conductor(es)</p>
+                        <p v-if="!fleet.drivers.length" class="text-sm text-arka-text-muted mt-1">Todavía no tiene conductores.</p>
+                        <ul v-else class="mt-2 divide-y divide-arka-text-muted/10">
+                            <li
+                                v-for="driver in fleet.drivers"
+                                :key="driver.user_id"
+                                class="py-2.5 flex items-center gap-3"
+                            >
+                                <UserAvatar :user="{ name: driver.name, avatar_url: driver.avatar_url }" size-class="h-10 w-10 text-sm shrink-0" />
+                                <div class="min-w-0 flex-1">
+                                    <Link
+                                        :href="route('admin.users.show', driver.user_id)"
+                                        class="text-arka-text font-medium hover:text-arka-primary-bright"
+                                    >
+                                        {{ driver.name }}
+                                    </Link>
+                                    <p class="text-sm text-arka-text-muted">
+                                        {{ driver.phone || 'Sin teléfono' }}
+                                        <span v-if="driver.vehicle"> · {{ driver.vehicle }}</span>
+                                    </p>
+                                    <p class="text-xs text-arka-text-muted">
+                                        {{ driver.rides_together_count }} carrera(s) completada(s) juntos · se unió el
+                                        {{ new Date(driver.joined_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                                    </p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
 
                     <div v-if="clientPlan" class="pt-2 border-t border-arka-text-muted/10">
                         <p class="text-sm text-arka-text">Plan {{ clientPlan.plan_name }}</p>
                         <p class="text-xs text-arka-text-muted">{{ subscriptionLine(clientPlan) }}</p>
                     </div>
+                </div>
+
+                <!-- Historial de carreras (pedido explícito del usuario:
+                     "cuales son las carreras que a realizado con su
+                     detalle") — tanto si esta cuenta viajó como cliente o
+                     manejó como conductor, ver UserProfileController::show(). -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                    <h3 class="text-lg font-medium text-arka-text">Historial de carreras ({{ rideHistory.length }})</h3>
+                    <p v-if="!rideHistory.length" class="text-sm text-arka-text-muted">Todavía no hizo ninguna carrera.</p>
+                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                        <li v-for="ride in rideHistory" :key="ride.id" class="py-3 space-y-1">
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-sm text-arka-text">
+                                    <span class="text-arka-text-muted">{{ ride.counterpart_role }}:</span>
+                                    <strong class="font-medium">{{ ride.counterpart_name || 'Cuenta eliminada' }}</strong>
+                                </p>
+                                <span class="text-xs font-semibold shrink-0" :class="RIDE_STATUS_CLASS[ride.status]">
+                                    {{ RIDE_STATUS_LABEL[ride.status] || ride.status }}
+                                </span>
+                            </div>
+                            <p class="text-sm text-arka-text">
+                                <span class="text-arka-primary">●</span> {{ ride.origin_address || 'Origen sin dirección' }}
+                                <span class="px-1 text-arka-text-muted">→</span>
+                                {{ ride.destination_address || 'Destino sin dirección' }}
+                            </p>
+                            <p class="text-xs text-arka-text-muted">
+                                {{ formatRideDate(ride.started_at || ride.created_at) }}
+                                <span v-if="ride.price != null"> · ${{ ride.price.toFixed(2) }}</span>
+                                <span v-if="ride.distance_km != null"> · {{ ride.distance_km.toFixed(1) }} km</span>
+                            </p>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- Reseñas recientes -->

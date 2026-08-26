@@ -50,12 +50,73 @@ class UserProfileController extends Controller
             ->limit(10)
             ->get();
 
+        // Pedido explícito del usuario: "cuales son los conductores que
+        // tiene ese cliente" — antes "Flotas propias" solo mostraba el
+        // nombre de la flota y la CANTIDAD de conductores ("2
+        // conductor(es)"), sin decir quiénes son. Mismo shape que
+        // $driverClients de abajo (la relación inversa), para que ambas
+        // pantallas se lean igual de completas.
         $fleetsOwned = $user->isClient()
             ? Fleet::query()
                 ->where('owner_user_id', $user->id)
-                ->withCount(['activeMembers as active_members_count'])
+                ->with('activeMembers.driver.driverProfile')
                 ->get()
+                ->map(function (Fleet $fleet) use ($user) {
+                    return [
+                        'id' => $fleet->id,
+                        'name' => $fleet->name,
+                        'drivers' => $fleet->activeMembers->map(function (FleetMember $member) use ($user) {
+                            $driver = $member->driver;
+                            $profile = $driver->driverProfile;
+
+                            return [
+                                'user_id' => $driver->id,
+                                'name' => $driver->name,
+                                'avatar_url' => $driver->avatar_url,
+                                'phone' => $driver->phone,
+                                'vehicle' => trim(($profile?->vehicle_make ?? '').' '.($profile?->vehicle_model ?? '')),
+                                'rides_together_count' => Ride::query()
+                                    ->where('client_user_id', $user->id)
+                                    ->where('driver_user_id', $driver->id)
+                                    ->where('status', 'completed')
+                                    ->count(),
+                                'joined_at' => $member->joined_at,
+                            ];
+                        })->sortByDesc('joined_at')->values(),
+                    ];
+                })
             : collect();
+
+        // Pedido explícito del usuario: "cuales son las carreras que a
+        // realizado con su detalle" — tanto del lado cliente como conductor
+        // (la misma cuenta nunca es las dos cosas a la vez, pero el filtro
+        // cubre ambos casos sin necesidad de un if aparte).
+        $rideHistory = Ride::query()
+            ->where('client_user_id', $user->id)
+            ->orWhere('driver_user_id', $user->id)
+            ->with(['client', 'driver'])
+            ->latest('created_at')
+            ->limit(20)
+            ->get()
+            ->map(function (Ride $ride) use ($user) {
+                $isClient = $ride->client_user_id === $user->id;
+                $counterpart = $isClient ? $ride->driver : $ride->client;
+
+                return [
+                    'id' => $ride->id,
+                    'status' => $ride->status,
+                    'counterpart_name' => $counterpart?->name,
+                    'counterpart_role' => $isClient ? 'Conductor' : 'Cliente',
+                    'origin_address' => $ride->origin_address,
+                    'destination_address' => $ride->destination_address,
+                    'distance_km' => $ride->distance_km !== null ? (float) $ride->distance_km : null,
+                    'price' => $ride->price !== null ? (float) $ride->price : null,
+                    'started_at' => $ride->started_at?->toIso8601String(),
+                    'completed_at' => $ride->completed_at?->toIso8601String(),
+                    'cancelled_at' => $ride->cancelled_at?->toIso8601String(),
+                    'created_at' => $ride->created_at?->toIso8601String(),
+                ];
+            });
 
         // Pedido explícito del usuario: "ver el detalle de los clientes que
         // tiene cada conductor" desde el admin, y poder sacarlo — ver
@@ -113,6 +174,7 @@ class UserProfileController extends Controller
             'clientPlan' => $user->isClient() ? $this->planLimits->forClient($user) : null,
             'fleetsOwned' => $fleetsOwned,
             'driverClients' => $driverClients,
+            'rideHistory' => $rideHistory,
             'averageRating' => $rating,
             'reviewCount' => $reviewCount,
             'recentReviews' => $recentReviews,

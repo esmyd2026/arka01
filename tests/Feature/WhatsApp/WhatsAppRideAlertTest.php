@@ -191,6 +191,33 @@ class WhatsAppRideAlertTest extends TestCase
             && str_contains($request['text']['body'], 'Desconéctese desde la app'));
     }
 
+    /**
+     * Pedido explícito del usuario: "en los whatsapp manda la fecha y hora
+     * de la solicitud de la carrera" — antes solo aparecía si era
+     * programada; ahora siempre, y en hora de Ecuador sin importar la zona
+     * horaria configurada en el servidor (ver config/app.php).
+     */
+    public function test_the_new_ride_alert_includes_the_requested_date_and_time_in_ecuador_time(): void
+    {
+        $this->enableWhatsApp();
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        WhatsAppSession::query()->create(['user_id' => $driver->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        $this->travelTo(now('America/Guayaquil')->setTime(21, 45));
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertRedirect();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com')
+            && str_contains($request['text']['body'], 'Solicitada: '.now('America/Guayaquil')->format('d/m/Y').' 21:45'));
+    }
+
     public function test_an_expired_session_does_not_trigger_a_whatsapp_alert(): void
     {
         $this->enableWhatsApp();
