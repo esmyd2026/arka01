@@ -2,12 +2,14 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\ChatbotMessage;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\User;
+use App\Models\WhatsAppSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -62,6 +64,85 @@ class AdminUserProfileTest extends TestCase
             ->has('fleetsOwned', 1)
             ->where('driverPlan', null)
         );
+    }
+
+    /**
+     * Pedido explícito del usuario ("ayudame a ver la trazabilidad de los
+     * whatsapp en el perfil de cada usuario") — la transcripción completa,
+     * en la misma ficha que ya reúne todo lo demás del usuario, sea cliente,
+     * conductor o admin.
+     */
+    public function test_the_profile_includes_the_whatsapp_transcript(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create(['phone' => '+593991234567']);
+        ChatbotMessage::query()->create(['phone' => '+593991234567', 'user_id' => $client->id, 'direction' => 'in', 'body' => 'Hola']);
+        ChatbotMessage::query()->create(['phone' => '+593991234567', 'user_id' => $client->id, 'direction' => 'out', 'body' => '¡Hola! ¿Qué necesita?']);
+
+        $response = $this->actingAs($admin)->get(route('admin.users.show', $client));
+
+        $response->assertInertia(fn ($page) => $page->has('whatsappMessages', 2));
+    }
+
+    /**
+     * Pedido explícito del usuario ("permiteme actualizar el correo y el
+     * telefono") — mismo criterio de unicidad y re-verificación que ya usa
+     * el propio conductor al corregir su número, disparado acá por un admin.
+     */
+    public function test_an_admin_can_update_a_users_email_and_phone(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create(['email' => 'vieja@example.com', 'phone' => '+593991234567', 'phone_verified_at' => now()]);
+        WhatsAppSession::query()->create(['user_id' => $client->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        $response = $this->actingAs($admin)->patch(route('admin.users.update-contact', $client), [
+            'email' => 'nueva@example.com',
+            'country_code' => '+593',
+            'phone_local' => '981234567',
+        ]);
+
+        $response->assertRedirect();
+        $client->refresh();
+        $this->assertSame('nueva@example.com', $client->email);
+        $this->assertSame('+593981234567', $client->phone);
+        $this->assertNull($client->phone_verified_at);
+        $this->assertFalse($client->hasActiveWhatsAppSession());
+    }
+
+    public function test_updating_contact_rejects_a_phone_already_used_by_another_account(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        User::factory()->create(['phone' => '+593981234567']);
+        $client = User::factory()->create(['phone' => '+593991234567']);
+
+        $response = $this->actingAs($admin)->patch(route('admin.users.update-contact', $client), [
+            'email' => $client->email,
+            'country_code' => '+593',
+            'phone_local' => '981234567',
+        ]);
+
+        $response->assertSessionHasErrors('phone_local');
+        $this->assertSame('+593991234567', $client->fresh()->phone);
+    }
+
+    /**
+     * Pedido explícito del usuario ("ayudame a poder dar de baja a los
+     * numeros") — libera el número por completo, para que otra cuenta
+     * pueda registrarlo.
+     */
+    public function test_an_admin_can_release_a_users_phone_number(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create(['phone' => '+593991234567', 'phone_verified_at' => now()]);
+        WhatsAppSession::query()->create(['user_id' => $client->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        $response = $this->actingAs($admin)->delete(route('admin.users.release-phone', $client));
+
+        $response->assertRedirect();
+        $client->refresh();
+        $this->assertNull($client->phone);
+        $this->assertNull($client->phone_verified_at);
+        $this->assertFalse($client->hasActiveWhatsAppSession());
     }
 
     // Eliminar cuenta (pedido explícito del usuario): borra archivos y, por

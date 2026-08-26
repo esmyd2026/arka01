@@ -58,4 +58,37 @@ class UserLocationsTest extends TestCase
 
         $response->assertInertia(fn ($page) => $page->where('totalUsers', 0));
     }
+
+    /**
+     * Pedido explícito del usuario: "necesito saber de dónde se registran
+     * los usuarios, país, provincia, ciudad y coordenadas... para
+     * determinar los sectores o ciudades" — el registro individual real,
+     * no solo el agregado por ciudad.
+     */
+    public function test_registrations_with_a_precise_location_are_listed_individually(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $quito = City::query()->create(['name' => 'Quito', 'province' => 'Pichincha', 'lat' => -0.1807, 'lng' => -78.4678, 'is_active' => true]);
+
+        User::factory()->create([
+            'city_id' => $quito->id,
+            'registration_lat' => -0.1810,
+            'registration_lng' => -78.4680,
+            'registration_neighborhood' => 'La Carolina',
+        ]);
+        // Sin coordenada precisa — solo eligió ciudad a mano, no aparece acá.
+        User::factory()->create(['city_id' => $quito->id]);
+
+        $response = $this->actingAs($admin)->get(route('admin.user-locations.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('registrations', 1)
+            ->where('registrations.0.country', 'Ecuador')
+            ->where('registrations.0.province', 'Pichincha')
+            ->where('registrations.0.city', 'Quito')
+            ->where('registrations.0.neighborhood', 'La Carolina')
+            ->where('registrations.0.lat', -0.1810)
+            ->where('registrations.0.lng', -78.4680)
+        );
+    }
 }

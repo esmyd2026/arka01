@@ -436,6 +436,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // sin tener que navegar entre suscripciones/verificaciones/flotas.
     Route::get('/usuarios/{user}', [AdminUserProfileController::class, 'show'])->name('users.show');
     Route::post('/usuarios/{user}/reactivar', [AdminUserProfileController::class, 'unlock'])->name('users.unlock');
+    // Corregir correo/teléfono, y dar de baja un número (pedido explícito
+    // del usuario) — ver Admin\UserProfileController::updateContact()/releasePhone().
+    Route::patch('/usuarios/{user}/contacto', [AdminUserProfileController::class, 'updateContact'])->name('users.update-contact');
+    Route::delete('/usuarios/{user}/telefono', [AdminUserProfileController::class, 'releasePhone'])->name('users.release-phone');
     // Ajuste manual de puntos de un conductor (pedido explícito del usuario)
     // — ver Admin\UserProfileController::updatePoints().
     Route::patch('/usuarios/{user}/puntos', [AdminUserProfileController::class, 'updatePoints'])->name('users.update-points');
@@ -576,10 +580,6 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Panel de clientes registrados (pedido explícito del usuario): mismo
     // criterio que el de conductores, del otro lado — ver Admin\ClientController.
     Route::get('/clientes', [AdminClientController::class, 'index'])->name('clients.index');
-    // Ficha de un cliente puntual (pedido explícito del usuario: "ayudame a
-    // ver la trazabilidad... como tenemos en los bot que hemos desarrollado
-    // mejor") — su transcripción completa de WhatsApp, ver ChatbotMessage.
-    Route::get('/clientes/{client}', [AdminClientController::class, 'show'])->name('clients.show');
 
     // Centro de operaciones (pedido explícito del usuario): concentración de
     // solicitudes activas, conectados, demanda por horario/zona, y avisar a

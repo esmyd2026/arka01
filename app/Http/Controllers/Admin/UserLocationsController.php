@@ -64,11 +64,38 @@ class UserLocationsController extends Controller
             ->limit(15)
             ->get();
 
+        // Pedido explícito del usuario ("necesito saber de dónde se
+        // registran los usuarios, país, provincia, ciudad y coordenadas...
+        // para determinar los sectores o ciudades") — el registro
+        // individual con su coordenada real, no solo el agregado por
+        // ciudad de arriba. Ecuador es el único país que opera la
+        // plataforma hoy (sección 1 del alcance), así que "país" es fijo,
+        // no una columna — no tiene sentido guardar un dato que nunca varía.
+        $registrations = User::query()
+            ->where('role', '!=', 'admin')
+            ->whereNotNull('registration_lat')
+            ->whereNotNull('registration_lng')
+            ->with('city:id,name,province')
+            ->orderByDesc('created_at')
+            ->get(['id', 'name', 'city_id', 'registration_lat', 'registration_lng', 'registration_neighborhood', 'created_at'])
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'country' => 'Ecuador',
+                'province' => $user->city?->province,
+                'city' => $user->city?->name,
+                'neighborhood' => $user->registration_neighborhood,
+                'lat' => (float) $user->registration_lat,
+                'lng' => (float) $user->registration_lng,
+                'registered_at' => $user->created_at->toIso8601String(),
+            ]);
+
         return Inertia::render('Admin/UserLocations', [
             'byCity' => $byCity,
             'totalUsers' => (int) $counts->sum(),
             'usersWithPreciseLocation' => User::query()->where('role', '!=', 'admin')->whereNotNull('registration_lat')->count(),
             'topNeighborhoods' => $topNeighborhoods,
+            'registrations' => $registrations,
         ]);
     }
 }

@@ -14,6 +14,12 @@ const props = defineProps({
     // usuario, para saber qué tan confiable es el resto de la pantalla.
     usersWithPreciseLocation: { type: Number, required: true },
     topNeighborhoods: { type: Array, required: true },
+    // Pedido explícito del usuario ("necesito pais, provincia, ciudad y
+    // coordenadas... para determinar los sectores") — el registro
+    // individual real (coordenada ya reducida a ~11m de precisión desde el
+    // guardado, ver la migración que la recorta — no es la puerta de calle
+    // exacta de nadie).
+    registrations: { type: Array, required: true },
 });
 
 // Sin librería de gráficos en el proyecto (mismo criterio que Admin/Operations.vue):
@@ -28,6 +34,21 @@ const maxCityTotal = Math.max(1, ...props.byCity.map((c) => c.total));
 const cityMarkers = props.byCity
     .filter((c) => c.lat != null && c.lng != null)
     .map((c) => ({ id: c.city_id, lat: c.lat, lng: c.lng, label: `${c.city} (${c.total})` }));
+
+// Coordenada real de cada registro (pedido explícito del usuario: "para con
+// eso yo determinar los sectores o ciudades") — a diferencia del mapa de
+// arriba, acá SÍ se ve un punto por persona, para poder mirar cómo se
+// agrupan de verdad y trazar los sectores a mano.
+const registrationMarkers = props.registrations.map((r) => ({
+    id: `reg-${r.id}`,
+    lat: r.lat,
+    lng: r.lng,
+    label: [r.city, r.province, r.neighborhood].filter(Boolean).join(' · ') || 'Sin ciudad',
+}));
+
+function formatDate(value) {
+    return new Date(value).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 </script>
 
 <template>
@@ -57,6 +78,49 @@ const cityMarkers = props.byCity
                         Todavía no hay suficientes registros con ciudad conocida.
                     </p>
                     <FleetMap v-else :markers="cityMarkers" height="360px" />
+                </div>
+
+                <!-- Coordenadas individuales (pedido explícito del usuario:
+                     "necesito saber de dónde se registran los usuarios, país,
+                     provincia, ciudad y coordenadas... para determinar los
+                     sectores o ciudades") — a diferencia del mapa de arriba,
+                     acá sí se ve un punto por persona. -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                    <h3 class="text-lg font-medium text-arka-text">Coordenadas individuales de registro</h3>
+                    <p class="text-xs text-arka-text-muted">
+                        País: Ecuador (único país que opera la plataforma). Coordenada guardada con ~11 m de
+                        precisión — alcanza para ver agrupaciones, no para ubicar la puerta de calle exacta de nadie.
+                    </p>
+                    <p v-if="!registrations.length" class="text-sm text-arka-text-muted">
+                        Todavía no hay registros con coordenada exacta.
+                    </p>
+                    <template v-else>
+                        <FleetMap :markers="registrationMarkers" height="360px" />
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                        <th class="py-2 pr-3">País</th>
+                                        <th class="py-2 pr-3">Provincia</th>
+                                        <th class="py-2 pr-3">Ciudad</th>
+                                        <th class="py-2 pr-3">Barrio (aprox.)</th>
+                                        <th class="py-2 pr-3">Coordenadas</th>
+                                        <th class="py-2">Registro</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-arka-text-muted/10">
+                                    <tr v-for="r in registrations" :key="r.id">
+                                        <td class="py-2 pr-3 text-arka-text-muted">{{ r.country }}</td>
+                                        <td class="py-2 pr-3 text-arka-text-muted">{{ r.province ?? '—' }}</td>
+                                        <td class="py-2 pr-3 text-arka-text">{{ r.city ?? '—' }}</td>
+                                        <td class="py-2 pr-3 text-arka-text-muted">{{ r.neighborhood ?? '—' }}</td>
+                                        <td class="py-2 pr-3 text-arka-text-muted font-mono text-xs">{{ r.lat }}, {{ r.lng }}</td>
+                                        <td class="py-2 text-arka-text-muted">{{ formatDate(r.registered_at) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
                 </div>
 
                 <!-- Tabla ordenada, con barra proporcional (mismo criterio que

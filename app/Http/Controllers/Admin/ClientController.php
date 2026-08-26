@@ -3,11 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\ChatbotMessage;
 use App\Models\City;
 use App\Models\FleetMember;
 use App\Models\Ride;
-use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -83,36 +81,6 @@ class ClientController extends Controller
             'clients' => $paginated,
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['q', 'city_id']),
-        ]);
-    }
-
-    /**
-     * Ficha de un cliente puntual (pedido explícito del usuario: "ayudame a
-     * ver la trazabilidad en el panel administrativo... como tenemos en los
-     * bot que hemos desarrollado mejor") — su transcripción completa de
-     * WhatsApp, más un link directo al ticket de soporte si tiene uno
-     * abierto. Se busca por `user_id` primero; algunos mensajes muy viejos
-     * pueden haber quedado con `user_id` nulo (llegaron antes de crear la
-     * cuenta) — por eso también se suma por `phone`, si ya lo declaró.
-     */
-    public function show(User $client): Response
-    {
-        $messages = ChatbotMessage::query()
-            ->where('user_id', $client->id)
-            ->when($client->phone, fn ($q) => $q->orWhere('phone', $client->phone))
-            ->orderBy('created_at')
-            ->get(['id', 'direction', 'body', 'meta', 'created_at']);
-
-        $openTicket = SupportTicket::query()
-            ->where('user_id', $client->id)
-            ->where('status', '!=', 'cerrado')
-            ->latest()
-            ->first();
-
-        return Inertia::render('Admin/ClientShow', [
-            'client' => $client->only(['id', 'name', 'email', 'phone']),
-            'messages' => $messages,
-            'open_ticket_id' => $openTicket?->id,
         ]);
     }
 }

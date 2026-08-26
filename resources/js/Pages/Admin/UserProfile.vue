@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
@@ -23,6 +23,8 @@ const props = defineProps({
     averageRating: { type: Number, required: true },
     reviewCount: { type: Number, required: true },
     recentReviews: { type: Array, required: true },
+    whatsappMessages: { type: Array, required: true },
+    countryCodes: { type: Array, required: true },
 });
 
 const VERIFICATION_LABELS = {
@@ -101,6 +103,51 @@ async function removeClient(member) {
     if (!(await confirmDialog(`¿Sacar a ${member.client_name} de la flota de ${props.profileUser.name}?`, { danger: true }))) return;
     router.delete(route('admin.users.remove-client', [props.profileUser.id, member.member_id]), { preserveScroll: true });
 }
+
+// Corregir correo/teléfono (pedido explícito del usuario: "permiteme
+// actualizar el correo y el telefono") — mismo criterio de país + número
+// local que usa el resto de la app (ver Admin\UserProfileController::
+// updateContact()). El teléfono ya guardado viene completo (+593...); se
+// separa el prefijo conocido para precargar el formulario, mejor esfuerzo
+// nada más — si no matchea ninguno, el campo local queda vacío y el admin
+// lo escribe de nuevo.
+function splitPhone(phone) {
+    if (!phone) return { country_code: '+593', phone_local: '' };
+    const code = props.countryCodes.find((c) => phone.startsWith(c));
+    return code ? { country_code: code, phone_local: phone.slice(code.length) } : { country_code: '+593', phone_local: '' };
+}
+
+const editingContact = ref(false);
+const contactForm = useForm({
+    email: props.profileUser.email,
+    ...splitPhone(props.profileUser.phone),
+});
+
+function startEditingContact() {
+    contactForm.reset();
+    contactForm.email = props.profileUser.email;
+    Object.assign(contactForm, splitPhone(props.profileUser.phone));
+    editingContact.value = true;
+}
+
+function saveContact() {
+    contactForm.patch(route('admin.users.update-contact', props.profileUser.id), {
+        preserveScroll: true,
+        onSuccess: () => (editingContact.value = false),
+    });
+}
+
+// "Dar de baja" un número (pedido explícito del usuario) — lo libera del
+// todo, acción aparte de la edición de arriba porque es más drástica (ver
+// Admin\UserProfileController::releasePhone()).
+async function releasePhone() {
+    if (!(await confirmDialog(`¿Dar de baja el número ${props.profileUser.phone}? Queda libre para que otra cuenta lo registre.`, { danger: true }))) return;
+    router.delete(route('admin.users.release-phone', props.profileUser.id), { preserveScroll: true });
+}
+
+function formatMessageTime(value) {
+    return new Date(value).toLocaleString('es-EC', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 </script>
 
 <template>
@@ -125,11 +172,53 @@ async function removeClient(member) {
                 <!-- Identidad -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka flex items-start gap-4">
                     <UserAvatar :user="profileUser" size-class="h-16 w-16 text-lg shrink-0" />
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex-1">
                         <p class="text-xl font-medium text-arka-text">{{ profileUser.name }}</p>
-                        <p class="text-sm text-arka-text-muted">{{ profileUser.email }}</p>
-                        <p v-if="profileUser.phone" class="text-sm text-arka-text-muted">{{ profileUser.phone }}</p>
-                        <p class="text-sm text-arka-text-muted">
+
+                        <!-- Correo/teléfono (pedido explícito del usuario:
+                             "permiteme actualizar el correo y el telefono") —
+                             de solo lectura hasta que toque "Editar", para no
+                             ensuciar la ficha con un formulario abierto todo
+                             el tiempo. -->
+                        <template v-if="!editingContact">
+                            <p class="text-sm text-arka-text-muted">{{ profileUser.email }}</p>
+                            <p v-if="profileUser.phone" class="text-sm text-arka-text-muted flex items-center gap-2">
+                                {{ profileUser.phone }}
+                                <button type="button" class="text-xs text-arka-danger hover:underline" @click="releasePhone">
+                                    Dar de baja
+                                </button>
+                            </p>
+                            <p v-else class="text-sm text-arka-text-muted italic">Sin número declarado.</p>
+                            <button type="button" class="mt-1 text-xs text-arka-primary hover:text-arka-primary-bright" @click="startEditingContact">
+                                Editar correo/teléfono
+                            </button>
+                        </template>
+                        <form v-else @submit.prevent="saveContact" class="mt-1 space-y-2 max-w-sm">
+                            <div>
+                                <InputLabel for="contact_email" value="Correo" />
+                                <TextInput id="contact_email" type="email" class="mt-1 w-full" v-model="contactForm.email" />
+                                <InputError class="mt-1" :message="contactForm.errors.email" />
+                            </div>
+                            <div class="flex gap-2">
+                                <div class="w-24">
+                                    <InputLabel for="contact_country_code" value="País" />
+                                    <select id="contact_country_code" v-model="contactForm.country_code" class="mt-1 w-full rounded-arka border-arka-text-muted/30 bg-arka-base text-arka-text text-sm">
+                                        <option v-for="code in countryCodes" :key="code" :value="code">{{ code }}</option>
+                                    </select>
+                                </div>
+                                <div class="flex-1">
+                                    <InputLabel for="contact_phone_local" value="Teléfono (sin el 0 inicial)" />
+                                    <TextInput id="contact_phone_local" class="mt-1 w-full" v-model="contactForm.phone_local" placeholder="991234567" />
+                                </div>
+                            </div>
+                            <InputError :message="contactForm.errors.phone_local" />
+                            <div class="flex items-center gap-2">
+                                <PrimaryButton type="submit" :disabled="contactForm.processing">Guardar</PrimaryButton>
+                                <SecondaryButton type="button" @click="editingContact = false">Cancelar</SecondaryButton>
+                            </div>
+                        </form>
+
+                        <p class="text-sm text-arka-text-muted mt-1">
                             @{{ profileUser.username }} · Socio #{{ profileUser.member_code }}
                             <span v-if="profileUser.city"> · {{ profileUser.city.name }}</span>
                         </p>
@@ -324,6 +413,30 @@ async function removeClient(member) {
                             <p v-if="review.comment" class="text-arka-text-muted italic">"{{ review.comment }}"</p>
                         </li>
                     </ul>
+                </div>
+
+                <!-- Trazabilidad de WhatsApp (pedido explícito del usuario:
+                     "ayudame a ver la trazabilidad de los whatsapp en el
+                     perfil de cada usuario") — TODO lo que entró y salió por
+                     WhatsApp con esta cuenta, no solo el menú del bot: avisos
+                     de carrera, recordatorios, etc. también quedan acá (ver
+                     ChatbotMessage). De solo lectura — para responder de
+                     verdad hace falta un ticket de soporte, ver /admin/soporte. -->
+                <div v-if="whatsappMessages.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
+                    <h3 class="text-lg font-medium text-arka-text">Conversación de WhatsApp</h3>
+                    <div class="max-h-96 overflow-y-auto space-y-2 pe-1">
+                        <div
+                            v-for="message in whatsappMessages"
+                            :key="message.id"
+                            class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
+                            :class="message.direction === 'out'
+                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                : 'bg-arka-base text-arka-text'"
+                        >
+                            <p class="whitespace-pre-wrap">{{ message.body || '[ubicación]' }}</p>
+                            <p class="mt-1 text-[10px] opacity-70">{{ formatMessageTime(message.created_at) }}</p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Zona de peligro: eliminar cuenta (pedido explícito del

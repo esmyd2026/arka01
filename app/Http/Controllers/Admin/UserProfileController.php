@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Controller;
+use App\Models\ChatbotMessage;
 use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\User;
+use App\Models\WhatsAppSession;
+use App\Rules\ValidPhoneNumberLocal;
 use App\Services\AdminAuditLogger;
 use App\Services\PlanLimits;
 use App\Services\UserFileCleanup;
@@ -16,6 +20,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -83,6 +88,18 @@ class UserProfileController extends Controller
                 ->values()
             : collect();
 
+        // Pedido explícito del usuario ("ayudame a ver la trazabilidad de
+        // los whatsapp en el perfil de cada usuario") — la misma
+        // transcripción completa que ya se registra en ChatbotMessage
+        // (entrante en WhatsAppWebhookController::receive(), saliente en
+        // los primitivos de WhatsAppFreeformSender), ahora en la ficha de
+        // CUALQUIER usuario (cliente, conductor o admin), no solo clientes.
+        $whatsappMessages = ChatbotMessage::query()
+            ->where('user_id', $user->id)
+            ->when($user->phone, fn ($q) => $q->orWhere('phone', $user->phone))
+            ->orderBy('created_at')
+            ->get(['id', 'direction', 'body', 'meta', 'created_at']);
+
         return Inertia::render('Admin/UserProfile', [
             // locked_at está en User::$hidden por defecto (auditoría de
             // seguridad: no debe verlo cualquiera) — acá sí hace falta,
@@ -99,7 +116,116 @@ class UserProfileController extends Controller
             'averageRating' => $rating,
             'reviewCount' => $reviewCount,
             'recentReviews' => $recentReviews,
+            'whatsappMessages' => $whatsappMessages,
+            'countryCodes' => RegisteredUserController::COUNTRY_CODES,
         ]);
+    }
+
+    /**
+     * Corrige el correo y/o el teléfono declarados (pedido explícito del
+     * usuario: "permiteme actualizar el correo y el telefono") — mismo
+     * criterio de unicidad y re-verificación que ya usa
+     * DriverProfileController::update() cuando el conductor corrige su
+     * propio número, y ProfileController::update() para el correo. Acá lo
+     * dispara un admin, para casos de soporte (typo al registrarse, cambió
+     * de operadora, etc.) — nunca borra el teléfono, para eso está
+     * releasePhone() de abajo, una acción aparte y explícita.
+     */
+    public function updateContact(Request $request, User $user): RedirectResponse
+    {
+        $request->merge([
+            'phone_local' => filled($request->input('phone_local'))
+                ? ValidPhoneNumberLocal::normalize($request->input('country_code'), $request->input('phone_local'))
+                : null,
+        ]);
+
+        $validated = $request->validate([
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($user->id)],
+            'country_code' => ['required_with:phone_local', 'nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
+        ]);
+
+        $newPhone = filled($validated['phone_local'] ?? null)
+            ? $validated['country_code'].$validated['phone_local']
+            : $user->phone;
+
+        if ($newPhone !== $user->phone && User::query()->where('phone', $newPhone)->where('id', '!=', $user->id)->exists()) {
+            throw ValidationException::withMessages([
+                'phone_local' => 'Ese número ya está registrado por otra cuenta de Arka01.',
+            ]);
+        }
+
+        $oldValue = ['email' => $user->email, 'phone' => $user->phone];
+
+        if ($validated['email'] !== $user->email) {
+            $user->email = $validated['email'];
+            $user->email_verified_at = null;
+        }
+
+        if ($newPhone !== $user->phone) {
+            $user->phone = $newPhone;
+            $user->phone_verified_at = null;
+            $user->phone_verification_code = null;
+            $user->phone_verification_expires_at = null;
+            // Un número que cambia de dueño no puede arrastrar la ventana
+            // de 24h del anterior — si no, un mensaje que le llegue al
+            // número nuevo se procesaría todavía a nombre de esta cuenta.
+            WhatsAppSession::query()->where('user_id', $user->id)->delete();
+        }
+
+        $user->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'user.contact.update',
+            module: 'usuarios',
+            oldValue: ['user_id' => $user->id] + $oldValue,
+            newValue: ['user_id' => $user->id, 'email' => $user->email, 'phone' => $user->phone],
+        );
+
+        Log::info('Correo/teléfono corregidos a mano por un admin.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id,
+        ]);
+
+        return back()->with('status', 'Contacto actualizado.');
+    }
+
+    /**
+     * "Dar de baja" un número (pedido explícito del usuario) — lo libera
+     * por completo: nadie puede recibir avisos ni pedir carreras con él a
+     * nombre de esta cuenta hasta que declare uno nuevo, y queda disponible
+     * para que otra cuenta lo registre (`users.phone` es único, pero
+     * permite null). Acción aparte de updateContact() a propósito: es más
+     * drástica que una simple corrección, así que no debería poder pasar
+     * sin querer al editar el correo.
+     */
+    public function releasePhone(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->phone, 404);
+
+        $oldPhone = $user->phone;
+
+        $user->forceFill([
+            'phone' => null,
+            'phone_verified_at' => null,
+            'phone_verification_code' => null,
+            'phone_verification_expires_at' => null,
+        ])->save();
+
+        WhatsAppSession::query()->where('user_id', $user->id)->delete();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'user.phone.release',
+            module: 'usuarios',
+            oldValue: ['user_id' => $user->id, 'phone' => $oldPhone],
+        );
+
+        Log::info('Número dado de baja a mano por un admin.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id, 'phone' => $oldPhone,
+        ]);
+
+        return back()->with('status', 'Número dado de baja — queda libre para otra cuenta.');
     }
 
     /**

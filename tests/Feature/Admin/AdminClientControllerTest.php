@@ -2,12 +2,10 @@
 
 namespace Tests\Feature\Admin;
 
-use App\Models\ChatbotMessage;
 use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
-use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -111,29 +109,6 @@ class AdminClientControllerTest extends TestCase
             ->has('clients.data', 1)
             ->where('clients.data.0.id', $client->id)
             ->where('clients.data.0.drivers_count', 2)
-        );
-    }
-
-    /**
-     * Pedido explícito del usuario ("ayudame a ver la trazabilidad en el
-     * panel administrativo... como tenemos en los bot que hemos
-     * desarrollado mejor") — la transcripción completa de WhatsApp de un
-     * cliente puntual, más el link directo a su ticket si tiene uno abierto.
-     */
-    public function test_the_client_detail_shows_the_whatsapp_transcript_and_the_open_ticket_link(): void
-    {
-        $admin = User::factory()->create(['is_admin' => true]);
-        $client = User::factory()->create(['phone' => '+593991234567']);
-        ChatbotMessage::query()->create(['phone' => '+593991234567', 'user_id' => $client->id, 'direction' => 'in', 'body' => 'Hola']);
-        ChatbotMessage::query()->create(['phone' => '+593991234567', 'user_id' => $client->id, 'direction' => 'out', 'body' => '¡Hola! ¿Qué necesita?']);
-        $ticket = SupportTicket::factory()->for($client)->create(['status' => 'en_atencion']);
-
-        $response = $this->actingAs($admin)->get(route('admin.clients.show', $client->id));
-
-        $response->assertInertia(fn ($page) => $page
-            ->component('Admin/ClientShow')
-            ->has('messages', 2)
-            ->where('open_ticket_id', $ticket->id)
         );
     }
 }
