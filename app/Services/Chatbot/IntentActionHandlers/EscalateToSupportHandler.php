@@ -2,6 +2,7 @@
 
 namespace App\Services\Chatbot\IntentActionHandlers;
 
+use App\Events\SupportTicketEscalated;
 use App\Models\ChatbotSetting;
 use App\Models\SupportTicket;
 use App\Models\User;
@@ -23,6 +24,16 @@ class EscalateToSupportHandler
         }
 
         $ticket = SupportTicket::openOrCreateFor($user);
+
+        // Pedido explícito del usuario ("ayudame a ver la trazabilidad en
+        // el panel administrativo"): la alerta global es solo al CREAR el
+        // ticket — si ya tenía uno abierto y sigue escribiendo, esos
+        // mensajes siguientes van por SupportMessageSent (por ticket
+        // puntual), no por acá de nuevo. `wasRecentlyCreated` lo pone
+        // Eloquent solo, no hace falta guardarlo a mano.
+        if ($ticket->wasRecentlyCreated) {
+            broadcast(new SupportTicketEscalated($ticket))->toOthers();
+        }
 
         // Pedido explícito del usuario: "enviar al administrador el
         // contexto necesario... para que el usuario no tenga que explicar

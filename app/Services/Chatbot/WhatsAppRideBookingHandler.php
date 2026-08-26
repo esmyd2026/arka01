@@ -50,8 +50,23 @@ class WhatsAppRideBookingHandler
             return true;
         }
 
-        if ($user && ! $user->isClient()) {
-            WhatsAppFreeformSender::sendText($phone, 'Esta opción está disponible para cuentas de cliente. Su cuenta conserva el rol actual en Arka01.');
+        // Pedido explícito del usuario, tras probar el bot con su propio
+        // número de conductor, y luego insistiendo: "la idea era que lo
+        // registraba automaticamente como invitado o tomaba el nombre de su
+        // perfil". Un conductor SÍ puede pedir una carrera por WhatsApp con
+        // su propio número — no se le crea otra cuenta (el teléfono ya es
+        // suyo) ni cambia de rol, la carrera queda a nombre de su cuenta tal
+        // cual, reusando el nombre que ya tiene (por eso más abajo el paso
+        // de "¿cuál es su nombre?" solo se pide `if (! $user)`, nunca acá).
+        // RideRequestController::store() necesita el flag
+        // `whatsapp_guest_booking` para permitir esta única excepción — ver
+        // el comentario allá. Admin y cooperativa siguen bloqueados: pedir
+        // una carrera no tiene sentido para esas cuentas.
+        if ($user && ! $user->isClient() && ! $user->isDriver()) {
+            $reason = $user->is_admin
+                ? 'Este número es de una cuenta de administrador en Arka01, y esas no piden carreras.'
+                : 'Este número está registrado como cooperativa en Arka01, y las cooperativas no piden carreras directamente.';
+            WhatsAppFreeformSender::sendText($phone, $reason);
 
             return true;
         }
@@ -479,6 +494,11 @@ class WhatsAppRideBookingHandler
             'destination_lat' => $context['destination']['lat'], 'destination_lng' => $context['destination']['lng'], 'destination_address' => $context['destination']['address'],
             'is_scheduled' => ! empty($context['is_scheduled']),
             'passenger_count' => $context['passenger_count'] ?? 1, 'needs_trunk' => false, 'payment_method' => 'efectivo',
+            // Ver el comentario en handle(): un conductor pidiendo una
+            // carrera con su propio número por WhatsApp es la única cuenta
+            // no-cliente que llega hasta acá — este flag es lo que
+            // RideRequestController::store() exige para permitirlo.
+            'whatsapp_guest_booking' => ! $user->isClient(),
         ];
         if ($payload['is_scheduled']) {
             $date = Carbon::parse($context['scheduled_at']);

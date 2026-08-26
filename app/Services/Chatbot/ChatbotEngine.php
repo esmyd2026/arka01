@@ -2,11 +2,13 @@
 
 namespace App\Services\Chatbot;
 
+use App\Events\SupportMessageSent;
 use App\Models\ChatbotConversation;
 use App\Models\ChatbotIntent;
 use App\Models\ChatbotSetting;
 use App\Models\ChatbotUnrecognizedMessage;
 use App\Models\Faq;
+use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\Chatbot\IntentActionHandlers\AnswerFaqHandler;
 use App\Services\Chatbot\IntentActionHandlers\EscalateToSupportHandler;
@@ -88,6 +90,16 @@ class ChatbotEngine
         $conversation = ChatbotConversation::forPhone($phoneE164);
         if ($user && ! $conversation->user_id) {
             $conversation->update(['user_id' => $user->id]);
+        }
+
+        // Pedido explícito del usuario ("ayudame a ver la trazabilidad...
+        // y tomar control humana"): si ya hay un admin atendiendo el
+        // ticket de este usuario, el bot se calla del todo — el mensaje se
+        // suma al hilo del ticket (mismo canal en vivo que ya usa
+        // Admin/Support/Show.vue) en vez de contestar con el menú de
+        // siempre por encima de la conversación humana.
+        if ($user && $this->humanIsHandling($user, $rawText)) {
+            return;
         }
 
         if ($user && $this->rideActionHandler->handle($user, $rawText, $conversation)) {
@@ -184,7 +196,7 @@ class ChatbotEngine
             // resto de buildReply() — es un mensaje interactivo aparte.
             if ($match->intent->action === 'show_menu') {
                 $conversation->update(['unresolved_attempts' => 0]);
-                $this->sendMainMenu($conversation, $phoneE164, ChatbotSetting::current()->welcome_message, $role);
+                $this->sendMainMenu($conversation, $phoneE164, ChatbotSetting::current()->welcome_message);
 
                 return;
             }
@@ -284,17 +296,25 @@ class ChatbotEngine
      * usuario: "chatbot mas pro... los primeros 3 con lo mas importante
      * que es pedir una carrera y el otro crear cuenta y el otro más...
      * evitar que confirmen con numeros o escriban"). Máximo 3 botones por
-     * mensaje (límite de la API de Meta) — PEDIR_CARRERA y REGISTRO solo se
-     * incluyen si esa intención existe, está activa y aplica al rol de
-     * quien escribe (mismo filtro que ya usaba el menú de texto); "Más
-     * opciones" siempre va, para llegar al resto sin escribir nada.
+     * mensaje (límite de la API de Meta) — "Soy cliente"/"Soy Conductor" van
+     * siempre que existan y estén activos, sin filtrar por rol (ver el
+     * comentario de más abajo); "Más opciones" siempre va, para llegar al
+     * resto sin escribir nada.
      */
-    private function sendMainMenu(ChatbotConversation $conversation, string $phone, string $introText, ?string $role): void
+    private function sendMainMenu(ChatbotConversation $conversation, string $phone, string $introText): void
     {
+        // Pedido explícito del usuario, insistiendo tras probarlo con un
+        // número ya registrado como conductor: "Soy cliente" y "Soy
+        // Conductor" son navegación, no una acción — tienen que verse los
+        // DOS siempre en el menú de entrada, sin importar el rol real de la
+        // cuenta (por eso `forRole()` NO se aplica acá, a propósito, aunque
+        // sí se sigue usando en "Más opciones" y las FAQ). Si la cuenta no
+        // puede de verdad hacer lo que el botón promete, eso se explica
+        // recién al tocarlo (ver el mensaje de WhatsAppRideBookingHandler
+        // cuando bloquea a alguien que no es cliente).
         $promoted = ChatbotIntent::query()
             ->whereIn('code', self::PROMOTED_MENU_CODES)
             ->where('is_active', true)
-            ->forRole($role)
             ->get()
             ->keyBy('code');
 
@@ -421,6 +441,38 @@ class ChatbotEngine
         // usuario: "chatbot mas pro") — sendMainMenu() ya deja el estado
         // AWAITING_MENU_CHOICE armado, no hace falta duplicarlo acá.
         $conversation->update(['unresolved_attempts' => $attempts]);
-        $this->sendMainMenu($conversation, $phoneE164, $settings->fallback_message, $role);
+        $this->sendMainMenu($conversation, $phoneE164, $settings->fallback_message);
+    }
+
+    /**
+     * true si hay un admin atendiendo de verdad este ticket ahora mismo
+     * (`en_atencion`) o esperando que el usuario responda algo puntual
+     * (`esperando_usuario` — `Admin\SupportTicketController::reply()` ya
+     * transiciona a este estado solo con contestar, sin nada nuevo que
+     * tocar acá). En ese caso el mensaje entrante NO es para el bot: se
+     * suma al hilo del ticket como si el usuario le escribiera directo al
+     * admin, y se transmite por el mismo canal que ya usa
+     * Admin/Support/Show.vue para verlo en vivo.
+     */
+    private function humanIsHandling(User $user, string $rawText): bool
+    {
+        $ticket = SupportTicket::query()
+            ->where('user_id', $user->id)
+            ->whereIn('status', ['en_atencion', 'esperando_usuario'])
+            ->latest()
+            ->first();
+
+        if (! $ticket) {
+            return false;
+        }
+
+        $message = $ticket->messages()->create([
+            'sender_user_id' => $user->id,
+            'body' => $rawText,
+        ]);
+
+        broadcast(new SupportMessageSent($message))->toOthers();
+
+        return true;
     }
 }

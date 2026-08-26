@@ -2,10 +2,13 @@
 
 namespace Tests\Feature\Chatbot;
 
+use App\Events\SupportMessageSent;
+use App\Events\SupportTicketEscalated;
 use App\Jobs\ProcessChatbotMessage;
 use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
 use App\Models\ChatbotConversation;
 use App\Models\ChatbotSetting;
+use App\Models\DriverProfile;
 use App\Models\Faq;
 use App\Models\SupportTicket;
 use App\Models\User;
@@ -13,6 +16,7 @@ use App\Models\WhatsAppSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -50,11 +54,13 @@ class ChatbotWebhookTest extends TestCase
     /**
      * Pedido explícito del usuario, tras probar el bot de verdad: "primero
      * el soy cliente debe ir al inicio... soy conductor, soy cliente y mas
-     * informacion". El saludo es un mensaje interactivo de botones. Un
-     * cliente conocido (role_scope de SOY_CONDUCTOR es 'conductor') solo ve
-     * "Soy cliente" (INFORMACION_CLIENTE) + "Más Info" — "Soy Conductor"
-     * queda afuera, mismo criterio que ya filtraba PEDIR_CARRERA para
-     * conductores antes de que se sacara del menú principal.
+     * informacion" — y de nuevo, insistiendo con un número ya registrado
+     * como conductor: "sigue el caso de que no me deja ver si soy cliente
+     * igual". El saludo es un mensaje interactivo de botones con "Soy
+     * cliente" + "Soy Conductor" + "Más Info" SIEMPRE, sin filtrar por el
+     * rol real de la cuenta — son navegación, no una acción; si la cuenta no
+     * puede de verdad hacer lo que promete, eso se explica recién al tocarlo
+     * (ver WhatsAppRideBookingHandler cuando bloquea a quien no es cliente).
      */
     public function test_a_greeting_from_a_registered_user_gets_a_real_menu_reply_not_the_old_fixed_text(): void
     {
@@ -75,11 +81,31 @@ class ChatbotWebhookTest extends TestCase
                 && str_contains($body, 'asistente virtual')
                 && ! str_contains($body, 'Ya quedó conectado y activo')
                 && $buttonIds->contains('INFORMACION_CLIENTE')
-                && ! $buttonIds->contains('SOY_CONDUCTOR')
+                && $buttonIds->contains('SOY_CONDUCTOR')
                 && $buttonIds->contains('WA_MAS_OPCIONES');
         });
 
         $this->assertDatabaseHas('chatbot_conversations', ['phone' => '+593991234567', 'pending_intent' => 'AWAITING_MENU_CHOICE']);
+    }
+
+    /**
+     * Pedido explícito del usuario ("ayudame a ver la trazabilidad en el
+     * panel administrativo") — el saliente se registra adentro de los
+     * métodos primitivos de WhatsAppFreeformSender, así que un solo enganche
+     * cubre TODO lo que le llega al WhatsApp del usuario, no solo el menú.
+     */
+    public function test_an_outbound_bot_reply_is_logged_to_the_transcript(): void
+    {
+        $this->enableWhatsApp();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $this->sendInbound('593991234567', 'Hola');
+
+        $this->assertDatabaseHas('chatbot_messages', [
+            'phone' => '+593991234567',
+            'user_id' => $user->id,
+            'direction' => 'out',
+        ]);
     }
 
     public function test_an_unregistered_number_is_also_engaged_by_the_chatbot(): void
@@ -119,6 +145,46 @@ class ChatbotWebhookTest extends TestCase
         // la semilla: ambos en null), no debería mandar ninguna tarjeta de
         // contacto — solo el aviso de texto de siempre.
         Http::assertNotSent(fn ($request) => ($request['type'] ?? null) === 'contacts');
+    }
+
+    /**
+     * Pedido explícito del usuario ("ayudame a ver la trazabilidad en el
+     * panel administrativo") — la alerta global es solo al CREAR el ticket,
+     * nunca en mensajes siguientes de uno que ya estaba abierto (para eso
+     * está SupportMessageSent, por ticket puntual).
+     */
+    public function test_hablar_con_soporte_dispatches_the_escalated_event_only_when_the_ticket_is_created(): void
+    {
+        Event::fake([SupportTicketEscalated::class]);
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+
+        $this->sendInbound('593991234567', 'quiero hablar con soporte');
+        Event::assertDispatchedTimes(SupportTicketEscalated::class, 1);
+
+        $this->sendInbound('593991234567', 'quiero hablar con soporte de nuevo');
+        Event::assertDispatchedTimes(SupportTicketEscalated::class, 1);
+    }
+
+    /**
+     * Pedido explícito del usuario, tras mandar la referencia de un panel
+     * con "toma de control humana": mientras un admin atiende el ticket, el
+     * bot no le contesta nada más al cliente — el mensaje se suma al hilo
+     * del ticket como si le escribiera directo al admin.
+     */
+    public function test_a_message_during_an_open_ticket_pauses_the_bot_instead_of_replying(): void
+    {
+        Event::fake([SupportMessageSent::class]);
+        $this->enableWhatsApp();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+        $ticket = SupportTicket::factory()->for($user)->create(['status' => 'en_atencion']);
+
+        $this->sendInbound('593991234567', 'sigo esperando una respuesta');
+
+        $this->assertTrue($ticket->messages()->where('body', 'sigo esperando una respuesta')->exists());
+        Event::assertDispatched(SupportMessageSent::class);
+        // Nada del bot le llegó por WhatsApp — el mensaje quedó solo en el ticket.
+        Http::assertNothingSent();
     }
 
     public function test_hablar_con_soporte_sends_a_whatsapp_contact_card_when_configured(): void
@@ -183,6 +249,42 @@ class ChatbotWebhookTest extends TestCase
             return $buttonIds->contains('wa_when_now');
         });
         $this->assertSame('WA_BOOKING_WHEN', ChatbotConversation::forPhone('+593991234567')->pending_intent);
+    }
+
+    /**
+     * Pedido explícito del usuario, tras probar el bot con su propio número
+     * de conductor e insistir: "la idea era que lo registraba
+     * automaticamente como invitado o tomaba el nombre de su perfil" — un
+     * conductor SÍ puede pedir una carrera con su propio número por
+     * WhatsApp; su cuenta no cambia de rol, y como ya tiene nombre no pasa
+     * por WA_BOOKING_NAME (eso es solo para números totalmente nuevos, ver
+     * el test de arriba con user_id null).
+     */
+    public function test_a_driver_can_book_a_ride_reusing_their_own_profile_name(): void
+    {
+        $this->enableWhatsApp();
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $driver = User::factory()->create(['phone' => '+593991234567', 'whatsapp_privacy_accepted_at' => now()]);
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->sendInbound('593991234567', 'pedir carrera');
+
+        $this->assertSame('WA_BOOKING_WHEN', ChatbotConversation::forPhone('+593991234567')->pending_intent);
+    }
+
+    /**
+     * Admin y cooperativa siguen bloqueados (pedir una carrera no tiene
+     * sentido para esas cuentas) — pero con el motivo real en el mensaje.
+     */
+    public function test_an_admin_trying_to_book_a_ride_gets_told_the_real_reason(): void
+    {
+        $this->enableWhatsApp();
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        User::factory()->create(['phone' => '+593991234567', 'is_admin' => true]);
+
+        $this->sendInbound('593991234567', 'pedir carrera');
+
+        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'cuenta de administrador'));
     }
 
     public function test_gibberish_is_logged_as_unrecognized_and_gets_a_fallback_reply(): void

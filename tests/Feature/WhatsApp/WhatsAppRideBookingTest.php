@@ -201,6 +201,71 @@ class WhatsAppRideBookingTest extends TestCase
         $this->assertGreaterThan(0, RideRequest::where('client_user_id', $client->id)->latest('id')->first()->current_offered_price);
     }
 
+    /**
+     * Pedido explícito del usuario, tras probar el bot con su propio número
+     * de conductor e insistir en que se le permitiera pedir la carrera
+     * igual: la solicitud tiene que quedar creada de verdad (no solo
+     * llegar hasta la pantalla de confirmación) — extremo a extremo,
+     * incluyendo el flag `whatsapp_guest_booking` que
+     * RideRequestController::store() exige para esta única excepción.
+     */
+    public function test_a_driver_without_a_fleet_can_actually_book_a_ride_via_the_nearest_cooperative(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $requester = User::factory()->create([
+            'phone' => '+593991111144',
+            'whatsapp_privacy_accepted_at' => now(),
+        ]);
+        DriverProfile::factory()->for($requester)->create();
+
+        $cooperativeOwner = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeOwner->id,
+            'name' => 'Coop Cercana',
+            'stand_lat' => -2.1690,
+            'stand_lng' => -79.8990,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'driver_type' => 'public_transport',
+            'current_lat' => -2.1700,
+            'current_lng' => -79.9000,
+            'passenger_capacity' => 4,
+            'rate_per_km' => 0.5,
+        ]);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeOwner->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($requester->phone, $requester, 'pedir carrera');
+        $engine->respondTo($requester->phone, $requester, 'wa_when_now');
+        $engine->respondTo($requester->phone, $requester, '[ubicacion]', [
+            'type' => 'location', 'location' => ['lat' => -2.1701, 'lng' => -79.9001, 'address' => 'Origen', 'name' => null],
+        ]);
+        $engine->respondTo($requester->phone, $requester, '[ubicacion]', [
+            'type' => 'location', 'location' => ['lat' => -2.1800, 'lng' => -79.9100, 'address' => 'Destino', 'name' => null],
+        ]);
+        $engine->respondTo($requester->phone, $requester, '1');
+        $engine->respondTo($requester->phone, $requester, 'wa_booking_confirm');
+
+        $this->assertDatabaseHas('ride_requests', [
+            'client_user_id' => $requester->id,
+            'cooperative_id' => $cooperative->id,
+            'origin_address' => 'Origen',
+            'destination_address' => 'Destino',
+        ]);
+        $this->assertGreaterThan(0, RideRequest::where('client_user_id', $requester->id)->latest('id')->first()->current_offered_price);
+        // La cuenta sigue siendo conductor — esto no le cambió el rol.
+        $this->assertTrue($requester->fresh()->isDriver());
+    }
+
     public function test_a_client_without_a_fleet_and_no_nearby_cooperative_candidates_gets_a_clear_message(): void
     {
         WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);

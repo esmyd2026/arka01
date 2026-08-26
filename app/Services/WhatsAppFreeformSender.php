@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ChatbotMessage;
 use App\Models\CooperativeDriverMembership;
 use App\Models\Ride;
 use App\Models\RideRequest;
@@ -23,6 +24,26 @@ class WhatsAppFreeformSender
     public static function enabled(): bool
     {
         return filled(WhatsAppConfig::token()) && filled(WhatsAppConfig::phoneNumberId());
+    }
+
+    /**
+     * Transcripción completa (pedido explícito del usuario: "ver cada
+     * conversación con el bot") — un solo enganche para las 5 primitivas de
+     * acá abajo, en vez de buscar cada uno de los lugares que llaman a
+     * alguna de ellas: los métodos más específicos (sendNewRideAlert(),
+     * sendCooperativeInvitationAlert(), etc.) ya llaman a estas por dentro.
+     * Se registra también cuando falló el envío real (`$successful=false`)
+     * — igual sirve para trazabilidad ("se intentó avisarle, no llegó").
+     */
+    private static function logOutbound(string $phoneE164, string $body, bool $successful, array $meta = []): void
+    {
+        ChatbotMessage::query()->create([
+            'phone' => $phoneE164,
+            'user_id' => User::query()->where('phone', $phoneE164)->value('id'),
+            'direction' => 'out',
+            'body' => $body,
+            'meta' => array_merge($meta, ['successful' => $successful]),
+        ]);
     }
 
     /**
@@ -69,6 +90,8 @@ class WhatsAppFreeformSender
             );
         }
 
+        self::logOutbound($phoneE164, $message, $response->successful());
+
         return $response->successful();
     }
 
@@ -94,6 +117,8 @@ class WhatsAppFreeformSender
                     ])->values()->all()],
                 ],
             ]);
+
+        self::logOutbound($phoneE164, $message, $response->successful(), ['buttons' => $buttons]);
 
         return $response->successful();
     }
@@ -135,6 +160,8 @@ class WhatsAppFreeformSender
                 ],
             ]);
 
+        self::logOutbound($phoneE164, $message, $response->successful(), ['list_rows' => $rows]);
+
         return $response->successful();
     }
 
@@ -144,14 +171,18 @@ class WhatsAppFreeformSender
             return false;
         }
 
-        return Http::withToken(WhatsAppConfig::token())
+        $response = Http::withToken(WhatsAppConfig::token())
             ->timeout(10)
             ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => ltrim($phoneE164, '+'),
                 'type' => 'location',
                 'location' => array_filter(['latitude' => $lat, 'longitude' => $lng, 'name' => $name, 'address' => $address]),
-            ])->successful();
+            ]);
+
+        self::logOutbound($phoneE164, "📍 {$name}", $response->successful(), ['lat' => $lat, 'lng' => $lng, 'address' => $address]);
+
+        return $response->successful();
     }
 
     /**
@@ -172,7 +203,7 @@ class WhatsAppFreeformSender
             return false;
         }
 
-        return Http::withToken(WhatsAppConfig::token())
+        $response = Http::withToken(WhatsAppConfig::token())
             ->timeout(10)
             ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
                 'messaging_product' => 'whatsapp',
@@ -182,7 +213,11 @@ class WhatsAppFreeformSender
                     'name' => ['formatted_name' => $contactName, 'first_name' => $contactName],
                     'phones' => [['phone' => $contactPhoneE164, 'type' => 'WORK']],
                 ]],
-            ])->successful();
+            ]);
+
+        self::logOutbound($phoneE164, "📇 Contacto: {$contactName} ({$contactPhoneE164})", $response->successful());
+
+        return $response->successful();
     }
 
     /**

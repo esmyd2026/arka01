@@ -60,6 +60,7 @@ function formatDate(value) {
                                     <th class="py-2 pr-3">Registro</th>
                                     <th class="py-2 pr-3">Última actividad</th>
                                     <th class="py-2"></th>
+                                    <th class="py-2"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-arka-text-muted/10">
@@ -77,6 +78,11 @@ function formatDate(value) {
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(c.last_active_at) }}</td>
                                     <td class="py-2">
                                         <span v-if="c.is_locked" class="text-arka-danger font-medium">Bloqueada</span>
+                                    </td>
+                                    <td class="py-2">
+                                        <Link :href="route('admin.clients.show', c.id)" class="text-xs text-arka-primary hover:text-arka-primary-bright whitespace-nowrap">
+                                            Ver WhatsApp
+                                        </Link>
                                     </td>
                                 </tr>
                             </tbody>

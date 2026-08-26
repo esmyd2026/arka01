@@ -6,6 +6,7 @@ use App\Jobs\ProcessChatbotMessage;
 use App\Jobs\SendWhatsAppNumberAlreadyRegisteredNotice;
 use App\Jobs\SendWhatsAppPhoneMismatchNotice;
 use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
+use App\Models\ChatbotMessage;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use App\Services\WhatsAppConfig;
@@ -127,6 +128,19 @@ class WhatsAppWebhookController extends Controller
             $refUserId = preg_match('/\(ref:(\d+)\)/', $text, $matches) ? (int) $matches[1] : null;
 
             $phoneOwner = User::query()->where('phone', $fromE164)->first();
+
+            // Transcripción completa (pedido explícito del usuario: "ver
+            // cada conversación con el bot") — se registra ACÁ, antes de
+            // cualquier ramificación de abajo, para que quede el mensaje
+            // tal cual llegó sin importar qué termine pasando con él
+            // (número sin cuenta, referencia inválida, etc.).
+            ChatbotMessage::query()->create([
+                'phone' => $fromE164,
+                'user_id' => $phoneOwner?->id,
+                'direction' => 'in',
+                'body' => $text,
+                'meta' => $metadata,
+            ]);
 
             if ($phoneOwner) {
                 // Bug reportado por el usuario (caso real: dos cuentas

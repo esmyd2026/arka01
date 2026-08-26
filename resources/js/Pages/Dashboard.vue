@@ -864,8 +864,9 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         class="p-3 rounded-arka bg-arka-primary/10 flex items-center justify-between gap-3 text-sm"
                     >
                         <span class="text-arka-text">
-                            📲 1. Mándenos ese WhatsApp ya listo (si no se abrió la pestaña, toque acá) — 2. apenas lo
-                            envíe, queda conectado solo para recibir avisos.
+                            📲 Conéctese por WhatsApp y siga recibiendo solicitudes aunque cierre la app o la deje en
+                            segundo plano. 1. Mándenos ese WhatsApp ya listo (si no se abrió la pestaña, toque acá) —
+                            2. apenas lo envíe, queda conectado.
                         </span>
                         <div class="flex items-center gap-3 shrink-0">
                             <a

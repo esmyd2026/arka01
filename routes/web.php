@@ -576,6 +576,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Panel de clientes registrados (pedido explícito del usuario): mismo
     // criterio que el de conductores, del otro lado — ver Admin\ClientController.
     Route::get('/clientes', [AdminClientController::class, 'index'])->name('clients.index');
+    // Ficha de un cliente puntual (pedido explícito del usuario: "ayudame a
+    // ver la trazabilidad... como tenemos en los bot que hemos desarrollado
+    // mejor") — su transcripción completa de WhatsApp, ver ChatbotMessage.
+    Route::get('/clientes/{client}', [AdminClientController::class, 'show'])->name('clients.show');
 
     // Centro de operaciones (pedido explícito del usuario): concentración de
     // solicitudes activas, conectados, demanda por horario/zona, y avisar a

@@ -300,8 +300,17 @@ class RideRequestController extends Controller
     public function store(Request $request): RedirectResponse
     {
         // Mismo criterio que create() — cada cuenta es cliente o conductor,
-        // nunca las dos (sección 3.1).
-        if (! $request->user()->isClient()) {
+        // nunca las dos (sección 3.1) — CON UNA excepción puntual, pedida
+        // explícitamente por el usuario tras probar el bot con su propio
+        // número de conductor: pedir una carrera por WhatsApp con un número
+        // que ya es de un conductor. `whatsapp_guest_booking` solo lo manda
+        // WhatsAppRideBookingHandler::createRide() (ninguna pantalla web lo
+        // envía nunca) y solo cuando quien escribe es de verdad conductor —
+        // no admin ni cooperativa, esos siguen bloqueados. La cuenta no
+        // cambia de rol ni gana acceso nuevo en la web: solo esta carrera
+        // puntual queda registrada a su nombre.
+        $isWhatsAppDriverGuestBooking = $request->boolean('whatsapp_guest_booking') && $request->user()->isDriver();
+        if (! $request->user()->isClient() && ! $isWhatsAppDriverGuestBooking) {
             throw ValidationException::withMessages(['driver_user_id' => self::SINGLE_ROLE_MESSAGE]);
         }
 

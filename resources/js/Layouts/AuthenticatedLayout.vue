@@ -279,8 +279,23 @@ onMounted(() => {
 // para no sonar/mostrar todo dos veces.
 let incomingRideChannel = null;
 let clientRideChannel = null;
+let adminChannel = null;
 let clientRideAlertTimer = null;
 const clientRideAlert = ref(null);
+
+// Pedido explícito del usuario ("ayudame a ver la trazabilidad en el panel
+// administrativo... una alerta") — canal `admins` (routes/channels.php),
+// para que cualquier admin conectado se entere de un ticket nuevo aunque
+// esté en otra pantalla, no solo el que tenga /admin/soporte abierto.
+let adminSupportAlertTimer = null;
+const adminSupportAlert = ref(null);
+
+function showAdminSupportAlert(message, ticketId) {
+    playUpdateChime();
+    adminSupportAlert.value = { message, ticketId };
+    clearTimeout(adminSupportAlertTimer);
+    adminSupportAlertTimer = setTimeout(() => (adminSupportAlert.value = null), 12000);
+}
 
 function showClientRideAlert(message, rideId, sound = 'update') {
     // En Carreras y en su detalle ya existen avisos específicos con más
@@ -299,6 +314,14 @@ function showClientRideAlert(message, rideId, sound = 'update') {
 
 onMounted(() => {
     const userId = usePage().props.auth.user.id;
+
+    if (isAdmin.value) {
+        adminChannel = window.Echo.private('admins');
+        adminChannel.listen('.support.ticket.escalated', (e) => {
+            if (route().current('admin.support-tickets.show', e.ticket_id)) return;
+            showAdminSupportAlert(`🆘 ${e.user_name} pidió hablar con soporte.`, e.ticket_id);
+        });
+    }
 
     if (showDriverNav.value) {
         incomingRideChannel = window.Echo.private(`App.Models.User.${userId}`);
@@ -340,7 +363,11 @@ onBeforeUnmount(() => {
     if (clientRideChannel) {
         window.Echo.leave(`App.Models.User.${usePage().props.auth.user.id}`);
     }
+    if (adminChannel) {
+        window.Echo.leave('admins');
+    }
     clearTimeout(clientRideAlertTimer);
+    clearTimeout(adminSupportAlertTimer);
 });
 </script>
 
@@ -355,6 +382,16 @@ onBeforeUnmount(() => {
             <span class="block text-sm font-semibold text-arka-text">Cambio en su carrera</span>
             <span class="block mt-1 text-sm text-arka-text-muted">{{ clientRideAlert.message }}</span>
             <span class="block mt-2 text-xs font-medium text-arka-primary">Tocar para abrir carreras</span>
+        </button>
+        <button
+            v-if="adminSupportAlert"
+            type="button"
+            class="fixed top-4 left-1/2 -translate-x-1/2 z-[1700] w-[calc(100%-2rem)] max-w-md p-4 rounded-arka bg-arka-card border border-red-500/50 shadow-2xl text-left"
+            @click="router.visit(route('admin.support-tickets.show', adminSupportAlert.ticketId))"
+        >
+            <span class="block text-sm font-semibold text-arka-text">Soporte</span>
+            <span class="block mt-1 text-sm text-arka-text-muted">{{ adminSupportAlert.message }}</span>
+            <span class="block mt-2 text-xs font-medium text-red-400">Tocar para atender</span>
         </button>
         <!-- `transparentNav`: flota fija (no `absolute`, ver comentario junto
              a la prop) sobre el mapa de Inicio del pasajero, SOLO en móvil —

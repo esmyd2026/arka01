@@ -63,3 +63,12 @@ Broadcast::channel('support-ticket.{ticketId}', function ($user, $ticketId) {
 
     return $ticket && (int) $user->id === (int) $ticket->user_id;
 });
+
+// Pedido explícito del usuario ("ayudame a ver la trazabilidad en el panel
+// administrativo... como tenemos en los bot que hemos desarrollado mejor"):
+// primer canal "para todos los admins" de la app, no atado a un recurso
+// puntual — sirve para avisar en vivo a cualquier admin conectado, esté
+// donde esté, cuando un cliente pide hablar con soporte.
+Broadcast::channel('admins', function ($user) {
+    return (bool) $user->is_admin;
+});

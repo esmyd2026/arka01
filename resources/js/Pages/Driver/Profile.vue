@@ -484,6 +484,16 @@ const VERIFICATION_LABELS = {
                              en toda la app (escribir primero, el bot lo conecta solo). -->
                         <div v-if="driverProfile && whatsappBusinessNumber" class="mt-4 p-3 rounded-arka border border-arka-text-muted/20">
                             <p class="text-sm font-medium text-arka-text">Avisos de carrera nueva por WhatsApp</p>
+                            <!-- Pedido explícito del usuario: "coloca por alli al
+                                 conductor que recibira solicitudes por whatsapp
+                                 siempre y cuando se conecte por alli" — el
+                                 beneficio concreto de conectar WhatsApp (seguir
+                                 disponible aunque la app esté cerrada/en segundo
+                                 plano), no solo el estado de la ventana. -->
+                            <p class="mt-1 text-sm text-arka-text-muted">
+                                Con esto conectado, sigue recibiendo solicitudes aunque cierre la app o la deje en
+                                segundo plano.
+                            </p>
                             <p class="mt-1 text-sm text-arka-text-muted">
                                 <template v-if="whatsappSession && whatsappSession.status !== 'expired'">
                                     Ventana {{ WHATSAPP_STATUS_LABEL[whatsappSession.status] }} — le quedan {{ whatsappTimeRemaining() }}.
@@ -502,6 +512,13 @@ const VERIFICATION_LABELS = {
                             </a>
                             <p class="mt-1 text-xs text-arka-text-muted">
                                 2. Apenas lo mande, queda conectado solo — sin nada más que hacer acá.
+                            </p>
+                            <!-- Pedido explícito del usuario: que sepa que
+                                 también puede conectarse/desconectarse
+                                 directo desde WhatsApp (WhatsAppDriverConnectHandler),
+                                 sin necesidad de abrir la app. -->
+                            <p class="mt-2 text-xs text-arka-text-muted">
+                                Con WhatsApp ya conectado, puede escribirle "conectarme" o "desconectarme" al mismo número — sin abrir la app.
                             </p>
                         </div>
                     </header>

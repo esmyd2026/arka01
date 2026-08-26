@@ -71,6 +71,35 @@ class WhatsAppSessionTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario ("ayudame a ver la trazabilidad en el
+     * panel administrativo... como tenemos en los bot que hemos desarrollado
+     * mejor") — hasta ahora no existía ninguna tabla con la transcripción
+     * completa; se registra ACÁ, antes de cualquier ramificación, sin
+     * importar qué termine pasando con el mensaje.
+     */
+    public function test_an_inbound_message_is_logged_to_the_transcript(): void
+    {
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $payload = [
+            'entry' => [[
+                'changes' => [[
+                    'value' => ['messages' => [['from' => '593991234567', 'text' => ['body' => 'Hola'], 'type' => 'text']]],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
+
+        $this->assertDatabaseHas('chatbot_messages', [
+            'phone' => '+593991234567',
+            'user_id' => $user->id,
+            'direction' => 'in',
+            'body' => 'Hola',
+        ]);
+    }
+
+    /**
      * Pedido explícito del usuario: en vez de la confirmación fija de
      * siempre, el chatbot procesa el mensaje de verdad — sigue abriendo la
      * ventana de 24h exactamente igual (eso no cambió), solo cambia qué

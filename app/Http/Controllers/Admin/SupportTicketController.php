@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Events\SupportMessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\SupportTicket;
+use App\Services\WhatsAppFreeformSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -66,6 +67,19 @@ class SupportTicketController extends Controller
 
         broadcast(new SupportMessageSent($message))->toOthers();
 
+        // Pedido explícito del usuario ("ayudame a ver la trazabilidad... y
+        // ayudame a ver que se cumpla el tema de tomar control humana"):
+        // antes esta respuesta se quedaba solo en la base de datos, nunca
+        // le llegaba de verdad al cliente por WhatsApp — quedaba solo
+        // visible acá si el cliente entraba a Arka01. Sin ventana de 24h
+        // abierta no hay forma de mandarle nada (regla de Meta, no
+        // nuestra); el front usa `whatsapp_sent` para avisarlo.
+        $client = $supportTicket->user;
+        $whatsappSent = false;
+        if ($client->phone && $client->hasActiveWhatsAppSession()) {
+            $whatsappSent = WhatsAppFreeformSender::sendText($client->phone, $validated['body']);
+        }
+
         return response()->json([
             'id' => $message->id,
             'support_ticket_id' => $message->support_ticket_id,
@@ -74,6 +88,7 @@ class SupportTicketController extends Controller
             'sender_is_admin' => true,
             'body' => $message->body,
             'created_at' => $message->created_at->toIso8601String(),
+            'whatsapp_sent' => $whatsappSent,
         ]);
     }
 

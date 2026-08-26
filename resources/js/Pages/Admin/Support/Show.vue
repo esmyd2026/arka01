@@ -58,18 +58,28 @@ onMounted(() => {
 
 onBeforeUnmount(() => window.Echo.leave(`support-ticket.${props.ticket.id}`));
 
+// Pedido explícito del usuario: la respuesta ahora sale por WhatsApp de
+// verdad cuando hay ventana abierta (ver Admin\SupportTicketController::
+// reply()) — si no la hay, el mensaje igual queda en el hilo, pero hay que
+// avisar que no le llegó al cliente por ese canal.
+const whatsappWarning = ref('');
+
 async function send(text) {
     const text_ = (text ?? body.value).trim();
     if (!text_ || sending.value) return;
 
     sending.value = true;
     error.value = '';
+    whatsappWarning.value = '';
 
     try {
         const { data } = await window.axios.post(route('admin.support-tickets.reply', props.ticket.id), { body: text_ });
         messages.value.push(data);
         body.value = '';
         if (status.value === 'nuevo' || status.value === 'en_atencion') status.value = 'esperando_usuario';
+        if (!data.whatsapp_sent) {
+            whatsappWarning.value = 'No se pudo mandar por WhatsApp — la ventana de 24h con este cliente está cerrada. El mensaje quedó guardado acá igual.';
+        }
         scrollToBottom();
     } catch (e) {
         error.value = e.response?.data?.errors?.body?.[0] ?? 'No se pudo mandar el mensaje.';
@@ -78,7 +88,8 @@ async function send(text) {
     }
 }
 
-function changeStatus() {
+function changeStatus(value = status.value) {
+    status.value = value;
     router.patch(route('admin.support-tickets.update-status', props.ticket.id), { status: status.value }, { preserveScroll: true });
 }
 </script>
@@ -89,6 +100,22 @@ function changeStatus() {
     <AdminLayout title="Soporte">
         <div class="py-12">
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <div
+                    v-if="status === 'nuevo'"
+                    class="p-4 rounded-arka bg-red-500/10 border border-red-500/40 flex flex-col sm:flex-row sm:items-center gap-3"
+                >
+                    <p class="flex-1 text-sm text-red-400 font-medium">
+                        Este cliente solicita hablar con un asesor humano — todavía nadie lo atendió.
+                    </p>
+                    <button
+                        type="button"
+                        class="shrink-0 px-3 py-1.5 rounded-arka text-sm font-medium bg-red-500 text-white hover:bg-red-600"
+                        @click="changeStatus('en_atencion')"
+                    >
+                        Marcar atendido
+                    </button>
+                </div>
+
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka flex items-center gap-4">
                     <UserAvatar :user="ticket.user" size-class="h-12 w-12 text-base shrink-0" />
                     <div class="flex-1 min-w-0">
@@ -131,6 +158,7 @@ function changeStatus() {
                         <PrimaryButton :disabled="sending || !body.trim()">Enviar</PrimaryButton>
                     </form>
                     <InputError :message="error" />
+                    <p v-if="whatsappWarning" class="text-xs text-amber-500">{{ whatsappWarning }}</p>
                 </div>
             </div>
         </div>
