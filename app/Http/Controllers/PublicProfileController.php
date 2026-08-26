@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FleetMember;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -38,6 +39,14 @@ class PublicProfileController extends Controller
 
         $profileUrl = route('profiles.show', $user->id);
 
+        // Pedido explícito del usuario ("mejoremos la privacidad de los
+        // conductores"): esta pantalla es visible para CUALQUIERA con el
+        // enlace, incluso sin sesión (arriba) — un conductor puede preferir
+        // que quien no sea él ni un admin no vea vehículo, tarifa ni
+        // comentarios. El dueño del perfil y un admin siguen viendo todo.
+        $isOwnerOrAdmin = $request->user()?->is($user) || $request->user()?->isAdmin();
+        $isPrivateDriverProfile = $user->driverProfile && ! $user->driverProfile->profile_public && ! $isOwnerOrAdmin;
+
         // Para el puñado de rastreadores de vista previa, se sirve una
         // página mínima aparte con las etiquetas correctas (sin pasar por
         // Inertia, que no las mostraría a tiempo) — cualquier persona real
@@ -59,10 +68,11 @@ class PublicProfileController extends Controller
             ]);
         }
 
-        $reviews = $user->reviewsReceived()
-            ->with('reviewer')
-            ->latest()
-            ->paginate(10);
+        // Perfil privado: ni siquiera se consultan las opiniones — nada de
+        // reputación se muestra a quien no sea el dueño ni un admin.
+        $reviews = $isPrivateDriverProfile
+            ? new LengthAwarePaginator([], 0, 10)
+            : $user->reviewsReceived()->with('reviewer')->latest()->paginate(10);
 
         return Inertia::render('Profile/Show', [
             // Auditoría de seguridad (pedido explícito del usuario): esta
@@ -80,7 +90,7 @@ class PublicProfileController extends Controller
                 'username' => $user->username,
                 'member_code' => $user->member_code,
                 'avatar_url' => $user->avatar_url,
-                'driver_profile' => $user->driverProfile ? [
+                'driver_profile' => ($user->driverProfile && ! $isPrivateDriverProfile) ? [
                     // Confidencialidad (pedido explícito del usuario): la foto
                     // del vehículo ya no viaja a ninguna pantalla de cliente —
                     // solo el propio conductor y un admin la ven. La placa va
@@ -104,9 +114,12 @@ class PublicProfileController extends Controller
             // "compartir mi perfil" (Profile/Edit.vue) — absoluto, con
             // dominio, porque va a WhatsApp y a un lector de QR ajeno a la app.
             'profileUrl' => $profileUrl,
-            'averageRating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
-            'reviewCount' => $user->reviewsReceived()->count(),
+            'averageRating' => $isPrivateDriverProfile ? 0 : round((float) $user->reviewsReceived()->avg('rating'), 1),
+            'reviewCount' => $isPrivateDriverProfile ? 0 : $user->reviewsReceived()->count(),
             'reviews' => $reviews,
+            // Frontend (PublicProfileContent.vue): muestra un aviso de
+            // "perfil privado" en vez del bloque de vehículo/tarifa/reseñas.
+            'profilePrivate' => $isPrivateDriverProfile,
             // Bug reportado por el usuario (perfil público mostraba las dos
             // insignias "Cliente" y "Conductor" a la vez): `fleets()->exists()`
             // podía dar true para un conductor con una flota fantasma vieja

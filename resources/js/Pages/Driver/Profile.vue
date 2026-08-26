@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, watch } from 'vue';
+import { computed, nextTick, onMounted, watch } from 'vue';
 import QRCode from 'qrcode';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import InputError from '@/Components/InputError.vue';
@@ -67,6 +67,15 @@ const props = defineProps({
 });
 
 const WHATSAPP_STATUS_LABEL = { active: 'Activa', expiring_soon: 'Próxima a vencer', expired: 'Expirada' };
+
+// Pedido explícito del usuario: el recuadro de tarifa en Inicio
+// (Dashboard.vue) enlaza acá con "#rate_per_km" — sin esto, la pantalla se
+// abría siempre desde arriba y había que buscar el campo a mano.
+onMounted(() => {
+    if (window.location.hash) {
+        document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+});
 
 // Misma lista que RegisteredUserController::COUNTRY_CODES. shortLabel (ver
 // SearchableSelect.vue): bug real reportado por el usuario, el selector con
@@ -160,6 +169,13 @@ const form = useForm({
     accepts_transfer: props.driverProfile?.accepts_transfer ?? false,
     has_insurance: props.driverProfile?.has_insurance ?? false,
     is_public: props.driverProfile?.is_public ?? false,
+    // Pedido explícito del usuario ("mejoremos la privacidad de los
+    // conductores"): distinto de is_public de arriba — ese es el directorio
+    // buscable (gateado por plan), esto es si su perfil individual
+    // (profiles.show) muestra los detalles a quien no sea él ni un admin.
+    // Empieza en true igual que en el backend: nadie pierde visibilidad de
+    // golpe con este cambio, es una opción para ocultarse si lo prefiere.
+    profile_public: props.driverProfile?.profile_public ?? true,
     driver_type: props.driverProfile?.driver_type ?? 'independent',
     profile_photo: null,
     identity_document: null,
@@ -1015,6 +1031,26 @@ const VERIFICATION_LABELS = {
                                 <a :href="route('driver.plan.edit')" class="underline hover:text-arka-primary-bright">
                                     Ver planes
                                 </a>
+                            </p>
+                        </div>
+
+                        <!-- Pedido explícito del usuario ("mejoremos la privacidad de
+                             los conductores"): distinto del directorio de arriba —
+                             ese es "que me encuentren buscando"; esto es "qué ve
+                             alguien que ya tiene mi enlace" (compartido por QR o por
+                             WhatsApp, ver "Compartir mi perfil"). Sin gateo por plan:
+                             es control de privacidad, no una ventaja paga. -->
+                        <div>
+                            <label class="flex items-center">
+                                <Checkbox v-model:checked="form.profile_public" />
+                                <span class="ms-2 text-sm text-arka-text">
+                                    Habilitar mi perfil individual al público
+                                </span>
+                            </label>
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                Si lo apaga, quien abra su enlace de perfil (por QR o WhatsApp) va a ver su nombre
+                                nomás, sin vehículo, tarifa ni comentarios — usted y un admin siguen viendo todo
+                                normal.
                             </p>
                         </div>
 

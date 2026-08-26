@@ -27,10 +27,10 @@ class FleetInvitationFlowTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Pedido explícito del usuario ("manejar la privacidad... limitemos la
-     * búsqueda por código nada más, porque chocarían con millones de
-     * personas"): ya no se puede buscar por nombre — solo por código de
-     * socio o código de invitación, cada uno identifica a una sola persona.
+     * Pedido explícito del usuario esta vuelta ("permite que puedan buscar
+     * por nombres y apellidos y usuario y codigo"): además del código de
+     * socio o de invitación de siempre, ahora también busca por nombre,
+     * apellido y usuario.
      */
     public function test_client_can_search_drivers_by_member_code_or_invite_code(): void
     {
@@ -50,7 +50,7 @@ class FleetInvitationFlowTest extends TestCase
         $byInviteCode->assertJsonPath('drivers.0.user_id', $driver->id);
     }
 
-    public function test_searching_a_driver_by_name_finds_nothing(): void
+    public function test_searching_a_driver_by_name_finds_it(): void
     {
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
@@ -61,7 +61,21 @@ class FleetInvitationFlowTest extends TestCase
             ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => 'Juan']));
 
         $response->assertOk();
-        $response->assertJsonCount(0, 'drivers');
+        $response->assertJsonPath('drivers.0.user_id', $driver->id);
+    }
+
+    public function test_searching_a_driver_by_last_name_finds_it(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create(['name' => 'Juan Conductor', 'last_name' => 'Cedeño']);
+        DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->actingAs($client)
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => 'Cedeño']));
+
+        $response->assertOk();
+        $response->assertJsonPath('drivers.0.user_id', $driver->id);
     }
 
     public function test_search_results_do_not_expose_the_drivers_phone(): void
@@ -138,7 +152,7 @@ class FleetInvitationFlowTest extends TestCase
         $this->assertArrayHasKey('avatar_url', $response->json('drivers.0'));
     }
 
-    public function test_searching_a_driver_by_username_finds_nothing(): void
+    public function test_searching_a_driver_by_username_finds_it(): void
     {
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
@@ -148,7 +162,24 @@ class FleetInvitationFlowTest extends TestCase
         $response = $this->actingAs($client)
             ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => $driver->username]));
 
-        $response->assertJsonCount(0, 'drivers');
+        $response->assertJsonPath('drivers.0.user_id', $driver->id);
+    }
+
+    /**
+     * Mismo criterio que FleetInvitationController::searchFriends(): "@ana"
+     * y "ana" tienen que encontrar lo mismo.
+     */
+    public function test_searching_a_driver_by_username_with_an_at_sign_finds_it(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create(['name' => 'Ana Conductora']);
+        DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->actingAs($client)
+            ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => '@'.$driver->username]));
+
+        $response->assertJsonPath('drivers.0.user_id', $driver->id);
     }
 
     /**

@@ -226,12 +226,15 @@ class FleetController extends Controller
 
     /**
      * Búsqueda de conductores para invitar a esta flota puntual (sección
-     * 3.2), SOLO por código de socio o código de invitación (pedido
-     * explícito del usuario, con una captura real de varias personas de
-     * apellido "Cedeño" saliendo juntas en una búsqueda por nombre: "por
-     * código nada más, porque chocarían con millones de personas" — buscar
-     * por nombre/teléfono no da un resultado preciso con una base grande de
-     * usuarios, y además exponía el teléfono de desconocidos). Devuelve JSON
+     * 3.2). Antes era SOLO por código de socio o de invitación (pedido
+     * explícito del usuario, tras una captura real de varias personas de
+     * apellido "Cedeño" saliendo juntas en una búsqueda por nombre). Pedido
+     * explícito del usuario esta vuelta: "permite que puedan buscar por
+     * nombres y apellidos y usuario y codigo" — se vuelve a sumar nombre,
+     * apellido y usuario, con el mismo límite de 10 resultados de siempre
+     * (varios "Cedeño" ya no chocan entre sí: se ven junto a foto, código y
+     * calificación, no hace falta que el nombre sea único). El teléfono
+     * sigue sin exponerse en los resultados, eso no cambió. Devuelve JSON
      * porque se consume desde un buscador con resultados en vivo.
      */
     public function searchDrivers(Request $request, Fleet $fleet)
@@ -242,7 +245,9 @@ class FleetController extends Controller
             'q' => ['required', 'string', 'min:2', 'max:100'],
         ]);
 
-        $term = $validated['q'];
+        // Acepta "@usuario" o "usuario" por igual (mismo criterio que
+        // FleetInvitationController::searchFriends()).
+        $term = ltrim($validated['q'], '@');
         $memberCode = ctype_digit($term) ? (int) $term : null;
 
         $drivers = DriverProfile::query()
@@ -255,7 +260,12 @@ class FleetController extends Controller
             ->whereNull('deactivated_at')
             ->where(function ($query) use ($term, $memberCode) {
                 $query->when($memberCode, fn ($query) => $query->whereHas('user', fn ($query) => $query->where('member_code', $memberCode)))
-                    ->orWhere('invite_code', strtoupper($term));
+                    ->orWhere('invite_code', strtoupper($term))
+                    ->orWhereHas('user', function ($query) use ($term) {
+                        $query->where('name', 'like', '%'.$term.'%')
+                            ->orWhere('last_name', 'like', '%'.$term.'%')
+                            ->orWhere('username', 'like', '%'.$term.'%');
+                    });
             })
             ->limit(10)
             ->get();
@@ -295,8 +305,8 @@ class FleetController extends Controller
                 'name' => $driver->user->name,
                 'avatar_url' => $driver->user->avatar_url,
                 // Pedido explícito del usuario ("manejar la privacidad"):
-                // sin teléfono acá — ya no hace falta como referencia visual
-                // ahora que la búsqueda es por código exacto, no por nombre.
+                // sin teléfono acá — foto, código y calificación ya alcanzan
+                // para distinguir entre varios resultados con nombre parecido.
                 'username' => $driver->user->username,
                 'member_code' => $driver->user->member_code,
                 'invite_code' => $driver->invite_code,

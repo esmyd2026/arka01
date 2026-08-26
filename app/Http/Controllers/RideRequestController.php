@@ -1293,7 +1293,7 @@ class RideRequestController extends Controller
         // segundos. Si la solicitud era dirigida a este conductor puntual
         // (dispatch_pool null), se mantiene el cancelado de siempre.
         if ($rideRequest->isSequentialDispatch()) {
-            RideDispatchAdvancer::advanceOrExpire($rideRequest->id, $request->user()->id);
+            RideDispatchAdvancer::advanceOrExpire($rideRequest->id, $request->user()->id, 'rejected');
 
             return back();
         }

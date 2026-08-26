@@ -16,6 +16,19 @@ export function buildWhatsAppOptInUrl(businessNumber, userId) {
     return `https://wa.me/${businessNumber}?text=${encodeURIComponent(message)}`;
 }
 
+// Pedido explícito del usuario ("un botón que le invite a escribirle al
+// chatbot de arka01 para que de allí tomemos el número y que ellos puedan
+// estar notificados de sus viajes") — mismo mecanismo que
+// buildWhatsAppOptInUrl() de arriba (el "(ref:ID)" es lo que le permite al
+// webhook vincular el número aunque no coincida con el guardado, ver ese
+// comentario), con un mensaje propio del lado del cliente en vez del de
+// "inicio mi turno" del conductor.
+export function buildClientWhatsAppOptInUrl(businessNumber, userId) {
+    if (!businessNumber) return null;
+    const message = `Hola, quiero recibir por acá los avisos de mis viajes en Arka01 (ref:${userId})`;
+    return `https://wa.me/${businessNumber}?text=${encodeURIComponent(message)}`;
+}
+
 // Pedido explícito del usuario: "cuando manda a whatsapp está mandando
 // siempre a los whatsapp business y debería ser al normal en tal caso
 // primero" — en Android, si además del WhatsApp normal tiene instalado

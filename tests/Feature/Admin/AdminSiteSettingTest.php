@@ -180,4 +180,33 @@ class AdminSiteSettingTest extends TestCase
             ->where('authBackgroundUrl', Storage::disk('public')->url($path))
         );
     }
+
+    /**
+     * Pedido explícito del usuario ("le invite a seguir las redes") — se
+     * mandan al agradecer una calificación de 5 estrellas por WhatsApp (ver
+     * WhatsAppRatingHandler). Formulario independiente de las imágenes de
+     * arriba (mismo criterio: cada campo manda su propio POST), así que
+     * guardarlo NO debe pisar una imagen ya subida.
+     */
+    public function test_an_admin_can_save_social_links_without_affecting_the_background_images(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'hero_background' => UploadedFile::fake()->image('fondo.jpg'),
+        ]);
+        $heroPath = SiteSetting::current()->hero_background_path;
+
+        $this->actingAs($admin)->post(route('admin.site.update'), [
+            'facebook_url' => 'https://facebook.com/arka01',
+            'instagram_url' => 'https://instagram.com/arka01',
+            'tiktok_url' => '',
+        ])->assertRedirect();
+
+        $setting = SiteSetting::current()->fresh();
+        $this->assertSame('https://facebook.com/arka01', $setting->facebook_url);
+        $this->assertSame('https://instagram.com/arka01', $setting->instagram_url);
+        $this->assertNull($setting->tiktok_url);
+        $this->assertSame($heroPath, $setting->hero_background_path);
+    }
 }

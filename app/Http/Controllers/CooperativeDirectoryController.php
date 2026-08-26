@@ -77,10 +77,20 @@ class CooperativeDirectoryController extends Controller
         $cooperative->load('city');
         $summary = $this->reputation->summary($cooperative);
 
+        // Pedido explícito del usuario ("si quieres, pese a que tienen el
+        // perfil publico, mostrar su flota de conductores... y si no que
+        // salga solo las cantidades") — el dueño de la cooperativa y un
+        // admin siempre ven la lista real, aunque el toggle esté apagado
+        // (mismo criterio que $canPreview arriba).
+        $canSeeFleet = $cooperative->show_fleet_publicly
+            || $request->user()?->isAdmin()
+            || $request->user()?->cooperative?->is($cooperative);
+
         return Inertia::render('Cooperative/Show', [
             'cooperative' => $cooperative,
             'reputation' => $summary,
-            'drivers' => $this->reputation->drivers($cooperative),
+            'drivers' => $canSeeFleet ? $this->reputation->drivers($cooperative) : [],
+            'fleetVisible' => $canSeeFleet,
             'reviews' => $this->reputation->recentReviews($cooperative),
             'isAttached' => $request->user()?->isClient()
                 ? ClientCooperative::query()->where('client_user_id', $request->user()->id)->where('cooperative_id', $cooperative->id)->exists()

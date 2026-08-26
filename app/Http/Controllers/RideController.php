@@ -498,6 +498,34 @@ class RideController extends Controller
     }
 
     /**
+     * "Ir por el pasajero" (bug real reportado por el usuario, con
+     * captura: "ya estaba en camino... y cuando entro a la aplicación
+     * decía nuevamente ir por el pasajero") — antes este toque solo vivía
+     * en un ref local de Vue (a propósito, para no disparar el conteo de
+     * cortesía de 5 minutos que sí dispara `arrived_at`), así que recargar
+     * la página o volver a entrar perdía el estado. Se guarda acá, en una
+     * columna aparte que nunca toca `arrived_at` ni ese conteo.
+     */
+    public function headingToPassenger(Request $request, Ride $ride): RedirectResponse
+    {
+        if ($ride->driver_user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($ride->status !== 'in_progress') {
+            throw ValidationException::withMessages([
+                'ride' => 'Esta carrera no está en curso.',
+            ]);
+        }
+
+        if ($ride->heading_to_passenger_at === null) {
+            $ride->update(['heading_to_passenger_at' => now()]);
+        }
+
+        return back();
+    }
+
+    /**
      * El conductor llegó al punto de encuentro (pedido explícito del
      * usuario) — todavía no recogió al cliente, solo avisa que ya está
      * esperando. Solo tiene sentido una vez ('in_progress' y sin marcar

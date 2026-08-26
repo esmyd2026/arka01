@@ -392,10 +392,19 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
                             <div class="flex items-center gap-3 min-w-0">
-                                <UserAvatar :user="member.fleet.owner" size-class="h-12 w-12 text-base shrink-0" />
+                                <!-- Pedido explícito del usuario: "quiero ver
+                                     el detalle de mi cliente" — mismo perfil
+                                     público que ya existe para cualquier
+                                     usuario logueado (Profile/Show.vue, sección
+                                     3.6), sin tener que ser admin para verlo. -->
+                                <Link :href="route('profiles.show', member.fleet.owner.id)" class="shrink-0">
+                                    <UserAvatar :user="member.fleet.owner" size-class="h-12 w-12 text-base" />
+                                </Link>
                                 <div class="min-w-0">
                                     <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
-                                        {{ member.fleet.owner.name }}
+                                        <Link :href="route('profiles.show', member.fleet.owner.id)" class="hover:text-arka-primary-bright">
+                                            {{ member.fleet.owner.name }}
+                                        </Link>
                                         <span v-if="member.client_review_count > 0" class="text-xs text-arka-lime">
                                             ★ {{ member.client_rating.toFixed(1) }}
                                         </span>

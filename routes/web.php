@@ -302,6 +302,9 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:30,1')
         ->name('rides.location.update');
     Route::post('/carreras/{ride}/arrancar', [RideController::class, 'start'])->name('rides.start');
+    // "Ir por el pasajero" (pedido explícito del usuario, bug real con
+    // captura) — ver RideController::headingToPassenger().
+    Route::post('/carreras/{ride}/voy-por-el-pasajero', [RideController::class, 'headingToPassenger'])->name('rides.heading-to-passenger');
     Route::post('/carreras/{ride}/llegue', [RideController::class, 'arrived'])->name('rides.arrived');
     Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');

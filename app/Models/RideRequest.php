@@ -23,6 +23,7 @@ class RideRequest extends Model
         'cooperative_assignment_status',
         'cooperative_candidate_ids',
         'cooperative_offer_expires_at',
+        'cooperative_dispatch_log',
         'express_route_id',
         'client_user_id',
         'driver_user_id',
@@ -77,6 +78,7 @@ class RideRequest extends Model
         'smart_dispatch_snapshot' => 'array',
         'cooperative_candidate_ids' => 'array',
         'cooperative_offer_expires_at' => 'datetime',
+        'cooperative_dispatch_log' => 'array',
         'passenger_count' => 'integer',
         'needs_trunk' => 'boolean',
     ];

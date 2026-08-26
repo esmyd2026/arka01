@@ -60,6 +60,7 @@ class ChatbotEngine
         private readonly WhatsAppRideBookingHandler $rideBookingHandler,
         private readonly WhatsAppDriverConnectHandler $driverConnectHandler,
         private readonly WhatsAppPendingRequestHandler $pendingRequestHandler,
+        private readonly WhatsAppRatingHandler $ratingHandler,
     ) {}
 
     public function respondTo(string $phoneE164, ?User $user, string $rawText, array $metadata = []): void
@@ -115,6 +116,12 @@ class ChatbotEngine
         }
 
         if ($user && $this->rideActionHandler->handle($user, $rawText, $conversation)) {
+            return;
+        }
+
+        // Pedido explícito del usuario ("que califique por allí también") —
+        // calificar una carrera completada, sin salir de WhatsApp.
+        if ($this->ratingHandler->handle($phoneE164, $user, $rawText, $conversation)) {
             return;
         }
 

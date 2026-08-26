@@ -934,6 +934,32 @@ class RideRequestFlowTest extends TestCase
         $this->assertNotNull($ride->started_at);
     }
 
+    /**
+     * Bug real reportado por el usuario, con captura: "ya estaba en camino
+     * por el pasajero y ya a ese boton ya le habia dado, y cuando entro a
+     * la aplicacion decia nuevamente ir por el pasajero" — antes ese toque
+     * solo vivía en un ref local de Vue, se perdía al recargar. Ahora queda
+     * guardado en `heading_to_passenger_at`, aparte de `arrived_at` (no
+     * dispara el conteo de cortesía de 5 minutos).
+     */
+    public function test_driver_can_mark_heading_to_passenger_and_it_survives_a_reload(): void
+    {
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+
+        $ride = Ride::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($driver)->post(route('rides.heading-to-passenger', $ride))->assertRedirect();
+
+        $ride->refresh();
+        $this->assertNotNull($ride->heading_to_passenger_at);
+        $this->assertNull($ride->arrived_at);
+    }
+
     public function test_the_client_cannot_start_a_scheduled_ride(): void
     {
         [$client, $driver, $fleet] = $this->clientWithFleetDriver();

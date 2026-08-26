@@ -145,6 +145,41 @@ class DriverProfilePhoneUpdateTest extends TestCase
      * 999999999 — ver App\Rules\ValidPhoneNumberLocal, mismo criterio que en
      * el registro (RegistrationTest).
      */
+    /**
+     * Pedido explícito del usuario ("mejoremos la privacidad de los
+     * conductores... habilitar su perfil al publico") — distinto de
+     * is_public (directorio): esto no está gateado por plan, cualquier
+     * conductor lo puede apagar.
+     */
+    public function test_a_driver_can_turn_off_their_individual_public_profile(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['profile_public' => true]);
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), $this->baseVehiclePayload() + [
+            'profile_public' => false,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertFalse($driver->driverProfile->fresh()->profile_public);
+    }
+
+    /**
+     * La columna en sí ya tiene default true (ver la migración) — acá se
+     * confirma que dejar `profile_public` fuera del payload de un guardado
+     * (mismo criterio que "sometimes" en el resto del formulario) no la
+     * apaga por accidente.
+     */
+    public function test_a_driver_profile_stays_public_by_default_when_not_sent(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), $this->baseVehiclePayload())
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($driver->driverProfile->fresh()->profile_public);
+    }
+
     public function test_an_obviously_fake_ecuadorian_number_is_rejected_on_the_profile_too(): void
     {
         $driver = User::factory()->create(['phone' => '+593991111111']);

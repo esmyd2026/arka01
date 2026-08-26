@@ -32,6 +32,11 @@ const form = useForm({
     declared_driver_count: props.cooperative.declared_driver_count ?? 0,
     declared_unit_count: props.cooperative.declared_unit_count ?? 0,
     has_insurance: props.cooperative.has_insurance ?? false,
+    // Pedido explícito del usuario ("mejoremos la privacidad de las
+    // cooperativas"): empieza en true igual que en el backend — el perfil
+    // público ya mostraba la flota completa de siempre, esto es para poder
+    // apagarlo, no algo que arranque oculto.
+    show_fleet_publicly: props.cooperative.show_fleet_publicly ?? true,
     geographic_coverage: props.cooperative.geographic_coverage ?? '',
     operating_hours: props.cooperative.operating_hours ?? '',
     response_timeout_seconds: props.cooperative.response_timeout_seconds ?? 30,
@@ -239,6 +244,28 @@ function uploadLogo(event) {
                                 <option :value="60">60 segundos</option>
                             </select>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Pedido explícito del usuario ("mejoremos la privacidad de
+                     las cooperativas... si quieres, pese a que tienen el
+                     perfil publico, mostrar su flota de conductores"): el
+                     perfil en sí ya es público apenas la cooperativa está
+                     aprobada, sin toggle aparte para eso — esto es solo la
+                     lista de conductores dentro de ese perfil. -->
+                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                    <h3 class="text-lg font-semibold text-arka-text">Privacidad</h3>
+                    <p class="mt-1 text-sm text-arka-text-muted">Controla qué ve el público en su perfil (cooperativas.show).</p>
+
+                    <div class="mt-4">
+                        <label class="flex items-start gap-2">
+                            <Checkbox v-model:checked="form.show_fleet_publicly" class="mt-0.5" />
+                            <span class="text-sm text-arka-text">Mostrar la lista de conductores en el perfil público</span>
+                        </label>
+                        <p class="mt-1 text-xs text-arka-text-muted">
+                            Si lo apaga, su perfil sigue público pero la sección de conductores solo muestra la
+                            cantidad, sin nombres ni fotos — usted y un admin siempre ven la flota completa.
+                        </p>
                     </div>
                 </section>
 

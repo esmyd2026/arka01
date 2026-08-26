@@ -45,7 +45,7 @@ function whatsappReferralUrl(member) {
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
-// --- Buscador tipo red social (sección 3.2): nombre, teléfono o código de invitación ---
+// --- Buscador tipo red social (sección 3.2): nombre, apellido, usuario o código ---
 const searchTerm = ref('');
 const searchResults = ref([]);
 const searching = ref(false);
@@ -216,18 +216,17 @@ onBeforeUnmount(() => {
     <div class="space-y-6">
         <!-- Buscador para invitar conductores -->
         <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
-            <!-- Pedido explícito del usuario ("manejar la privacidad...
-                 limitemos la búsqueda por código nada más, porque
-                 chocarían con millones de personas"): buscar por
-                 nombre daba resultados ambiguos entre desconocidos —
-                 el código de socio o de invitación identifica a una
-                 sola persona, sin exponer teléfono a cambio. -->
-            <InputLabel value="Buscar conductor por código de socio o código de invitación" />
+            <!-- Pedido explícito del usuario: buscar por nombre, apellido,
+                 usuario o código — cada resultado ya muestra foto, código y
+                 calificación, así que varios homónimos no se confunden entre
+                 sí (ver FleetController::searchDrivers()). El teléfono sigue
+                 sin mostrarse en los resultados, eso no cambió. -->
+            <InputLabel value="Buscar conductor por nombre, apellido, usuario o código" />
             <TextInput
                 v-model="searchTerm"
                 type="text"
                 class="mt-1 block w-full"
-                placeholder="Ej: 512 o el código de invitación"
+                placeholder="Ej: Ana Cedeño, @ana o el código"
                 @input="runSearch"
                 :disabled="atLimit"
             />

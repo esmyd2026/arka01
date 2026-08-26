@@ -45,6 +45,42 @@ function fallbackSeconds(request) {
     return Math.max(0, Math.ceil((deadline - clock.value) / 1000));
 }
 
+// Pedido explícito del usuario: "le faltaria la fecha visible de la carrera
+// y si es programda o no" — antes solo se veía la hora ("06:35 p. m."), sin
+// fecha ni si era de una vez o programada. Para una programada se muestra la
+// fecha/hora PARA LA QUE está pedida (scheduled_at), no la fecha en la que
+// se creó la solicitud — es lo que le importa al operador para decidir.
+function requestDateTimeLabel(request) {
+    const date = new Date(request.is_scheduled ? request.scheduled_at : request.requested_at);
+    const day = date.toLocaleDateString('es-EC', { day: '2-digit', month: 'short' });
+    const time = date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+    return `${day}, ${time}`;
+}
+
+// Mismo pedido: diferenciar con color las inmediatas de las programadas —
+// arka-warning para programada porque es el mismo color que ya usaba el
+// aviso "Programada: ..." de la tarjeta expandida (más abajo), así queda
+// consistente en toda la pantalla.
+function scheduleBadge(request) {
+    return request.is_scheduled
+        ? { label: '🗓 Programada', classes: 'bg-arka-warning/10 text-arka-warning' }
+        : { label: '● Inmediata', classes: 'bg-arka-primary/10 text-arka-primary' };
+}
+
+// Pedido explícito del usuario ("revisa si la carrera se vence o no"):
+// cuando ya hay un conductor asignado y esperando respuesta, cuánto le
+// queda antes de que el motor la pase al siguiente candidato de la bolsa
+// (App\Services\RideDispatchAdvancer::advanceOrExpire()). Las programadas no
+// vencen así — el backend no les pone current_offer_expires_at a propósito
+// (CooperativeRideAssignmentController::assign()), el conductor las confirma
+// cuando puede, sin la presión del despacho inmediato.
+function offerSecondsLeft(request) {
+    if (!request.driver || !request.current_offer_expires_at) return null;
+    return Math.max(0, Math.ceil((new Date(request.current_offer_expires_at).getTime() - clock.value) / 1000));
+}
+
+const DISPATCH_OUTCOME_LABEL = { timeout: 'no respondió a tiempo', rejected: 'la rechazó' };
+
 const mapMarkers = computed(() => {
     const drivers = props.drivers.filter((driver) => driver.lat != null && driver.lng != null).map((driver) => ({
     id: driver.user_id, type: 'car', lat: Number(driver.lat), lng: Number(driver.lng), label: driver.name,
@@ -212,7 +248,7 @@ onBeforeUnmount(() => {
                         <article v-for="request in requests" :key="request.id" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/45">
                             <div class="p-3.5 sm:p-4">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0"><p class="font-semibold text-arka-text">{{ request.client.name }}</p><p class="mt-1 text-xs text-arka-text-muted">Solicitud #{{ request.id }} · {{ new Date(request.requested_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) }}</p><div class="mt-2 flex flex-wrap gap-1.5 text-[11px]"><span class="rounded-full bg-arka-primary/10 px-2 py-1 font-semibold text-arka-primary">{{ request.client_stats.completed_rides }} carreras completadas</span><span v-if="request.client_stats.review_count" class="rounded-full bg-arka-warning/10 px-2 py-1 text-arka-warning">★ {{ request.client_stats.average_rating }} · {{ request.client_stats.review_count }} opiniones</span><span v-if="request.client_stats.cancelled_rides" class="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{{ request.client_stats.cancelled_rides }} canceladas</span><Link :href="route('profiles.show', request.client.id)" class="rounded-full border border-arka-text-muted/20 px-2 py-1 text-arka-text-muted hover:text-arka-primary">Ver perfil →</Link></div></div>
+                                    <div class="min-w-0"><p class="font-semibold text-arka-text">{{ request.client.name }}</p><p class="mt-1 text-xs text-arka-text-muted">Solicitud #{{ request.id }} · {{ requestDateTimeLabel(request) }}</p><div class="mt-2 flex flex-wrap gap-1.5 text-[11px]"><span class="rounded-full px-2 py-1 font-semibold" :class="scheduleBadge(request).classes">{{ scheduleBadge(request).label }}</span><span class="rounded-full bg-arka-primary/10 px-2 py-1 font-semibold text-arka-primary">{{ request.client_stats.completed_rides }} carreras completadas</span><span v-if="request.client_stats.review_count" class="rounded-full bg-arka-warning/10 px-2 py-1 text-arka-warning">★ {{ request.client_stats.average_rating }} · {{ request.client_stats.review_count }} opiniones</span><span v-if="request.client_stats.cancelled_rides" class="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{{ request.client_stats.cancelled_rides }} canceladas</span><Link :href="route('profiles.show', request.client.id)" class="rounded-full border border-arka-text-muted/20 px-2 py-1 text-arka-text-muted hover:text-arka-primary">Ver perfil →</Link></div></div>
                                     <div class="flex shrink-0 items-center gap-2"><span v-if="fallbackSeconds(request) !== null" class="rounded-full px-2.5 py-1 text-xs font-bold" :class="fallbackSeconds(request) <= 10 ? 'bg-arka-warning/15 text-arka-warning' : 'bg-arka-primary/10 text-arka-primary'">Auto {{ fallbackSeconds(request) }}s</span><button v-if="!request.driver" type="button" class="rounded-full border border-arka-primary/40 px-3 py-1 text-xs font-semibold text-arka-primary" @click="toggleDispatchCard(request.id)">{{ openDispatchCards[request.id] ? 'Cerrar ↑' : 'Asignar →' }}</button></div>
                                 </div>
 
@@ -262,15 +298,35 @@ onBeforeUnmount(() => {
                                     <button type="button" class="w-full shrink-0 rounded-full bg-arka-primary px-5 py-2.5 text-sm font-bold text-arka-base disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" :disabled="!selectedDrivers[request.id] || assigningRequests[request.id]" @click="assign(request)">{{ assigningRequests[request.id] ? 'Asignando…' : 'Confirmar asignación →' }}</button>
                                 </div>
                             </div>
-                            <div v-else-if="request.driver" class="flex items-center justify-between gap-3 border-t border-arka-text-muted/10 bg-arka-primary/5 p-4">
-                                <div class="min-w-0">
-                                    <p class="text-sm text-arka-text">Esperando respuesta de <strong>{{ request.driver.name }}</strong></p>
-                                    <p v-if="request.smart_dispatch_recommendation" class="mt-1 flex items-center gap-1.5 text-xs text-arka-primary">
-                                        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m13.2 2-8 11h6l-.4 9 8-12h-6l.4-8Z" /></svg>
-                                        Selección inteligente · {{ request.smart_dispatch_recommendation.reason }}
-                                    </p>
+                            <div v-else-if="request.driver" class="border-t border-arka-text-muted/10 bg-arka-primary/5 p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="text-sm text-arka-text">Esperando respuesta de <strong>{{ request.driver.name }}</strong></p>
+                                        <p v-if="request.smart_dispatch_recommendation" class="mt-1 flex items-center gap-1.5 text-xs text-arka-primary">
+                                            <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m13.2 2-8 11h6l-.4 9 8-12h-6l.4-8Z" /></svg>
+                                            Selección inteligente · {{ request.smart_dispatch_recommendation.reason }}
+                                        </p>
+                                    </div>
+                                    <div class="flex shrink-0 items-center gap-2">
+                                        <!-- Pedido explícito del usuario: cuánto le queda antes de que el
+                                             motor la pase al siguiente conductor de la cooperativa. Las
+                                             programadas no tienen vencimiento (el conductor confirma cuando
+                                             puede), por eso offerSecondsLeft() da null y no se muestra nada. -->
+                                        <span v-if="offerSecondsLeft(request) !== null" class="rounded-full px-2.5 py-1 text-xs font-bold" :class="offerSecondsLeft(request) <= 10 ? 'bg-arka-warning/15 text-arka-warning' : 'bg-arka-primary/10 text-arka-primary'">
+                                            Vence en {{ offerSecondsLeft(request) }}s
+                                        </span>
+                                        <span class="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-arka-primary"></span>
+                                    </div>
                                 </div>
-                                <span class="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-arka-primary"></span>
+                                <!-- Pedido explícito del usuario ("le dice a la de la cooperativa a
+                                     quien se la asignaron y la cancelo?"): antes esto no quedaba
+                                     visible en ningún lado — antes de esta unidad se le ofreció a
+                                     otra(s) que no respondieron o la rechazaron. -->
+                                <ul v-if="request.cooperative_dispatch_log?.length" class="mt-3 space-y-1 border-t border-arka-text-muted/10 pt-2">
+                                    <li v-for="(attempt, index) in request.cooperative_dispatch_log" :key="index" class="text-xs text-arka-text-muted">
+                                        Antes se le ofreció a <strong class="text-arka-text">{{ attempt.driver_name ?? 'un conductor que ya no está en la cooperativa' }}</strong> y {{ DISPATCH_OUTCOME_LABEL[attempt.outcome] ?? 'no respondió' }}.
+                                    </li>
+                                </ul>
                             </div>
                         </article>
                     </div>

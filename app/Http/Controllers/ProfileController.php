@@ -2,17 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\City;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\PlanLimits;
+use App\Services\WhatsAppConfig;
+use App\Services\WhatsAppVerificationSender;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,9 +32,26 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        // Avisos de sus carreras por WhatsApp (pedido explícito del usuario:
+        // "un botón que le invite a escribirle al chatbot... para que de
+        // allí tomemos el número y puedan estar notificados de sus viajes")
+        // — mismo mecanismo ya probado del lado del conductor
+        // (DriverProfileController::edit()): estado de la ventana de 24h +
+        // link para abrirla escribiéndole al número oficial.
+        $whatsappSession = $user->currentWhatsAppSession();
+
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
+            'whatsappSession' => $whatsappSession ? [
+                'status' => $whatsappSession->status(),
+                'expires_at' => $whatsappSession->expires_at->toIso8601String(),
+            ] : null,
+            'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
+            // Pedido explícito del usuario ("que tambien pueda actualizar su
+            // numero de telefono") — mismo catálogo de países que ya usa el
+            // registro y el formulario de conductor.
+            'countryCodes' => RegisteredUserController::COUNTRY_CODES,
             // Pedido explícito del usuario: una tarjeta de perfil "profesional"
             // arriba de todo, mismo lenguaje visual que la tarjeta de "Te
             // recomendaron viajar con..." (Referral/Show.vue) — necesita su
@@ -189,6 +211,56 @@ class ProfileController extends Controller
             $validated['avatar_path'] = $request->file('avatar')->store('avatars', 'public');
         }
         unset($validated['avatar']);
+
+        // Cambio de número de teléfono (pedido explícito del usuario: "que
+        // tambien pueda actualizar su numero de telefono... y que cuando
+        // ingrese el numero le invite a escribirle al asistente de
+        // whatsapp para confirmar su numero") — mismo mecanismo, casi
+        // literal, que ya usa DriverProfileController::update() para el
+        // conductor: un código de 6 dígitos por WhatsApp (el mismo que ya
+        // usa toda la app para "teléfono verificado", ver
+        // EnsurePhoneIsVerified), no un mecanismo nuevo en paralelo.
+        // 'country_code'/'phone_local' no son columnas de User — se
+        // procesan acá y se sacan de $validated antes del fill() de abajo.
+        if (filled($validated['phone_local'] ?? null)) {
+            $newPhone = $validated['country_code'].$validated['phone_local'];
+
+            if ($newPhone !== $user->phone) {
+                if (User::query()->where('phone', $newPhone)->where('id', '!=', $user->id)->exists()) {
+                    throw ValidationException::withMessages([
+                        'phone_local' => 'Ese número ya está registrado por otra cuenta de Arka01.',
+                    ]);
+                }
+
+                $user->forceFill(['phone' => $newPhone, 'phone_verified_at' => null])->save();
+
+                // Mismo criterio que el registro y que el conductor: si la
+                // verificación por WhatsApp está configurada, hay que
+                // volver a confirmar el número nuevo (EnsurePhoneIsVerified
+                // lo va a exigir en la próxima pantalla); si no está
+                // configurada o el envío falla de verdad, queda
+                // auto-verificado para no bloquear a nadie esperando un
+                // código que nunca va a llegar.
+                if (WhatsAppVerificationSender::enabled()) {
+                    $code = $user->issuePhoneVerificationCode();
+                    $sent = WhatsAppVerificationSender::sendCode($user->phone, $code);
+                    Log::info('Código de verificación enviado tras cambiar el número desde el perfil de cliente.', [
+                        'user_id' => $user->id, 'enviado_por_whatsapp' => $sent,
+                    ]);
+
+                    if (! $sent) {
+                        $user->forceFill([
+                            'phone_verified_at' => now(),
+                            'phone_verification_code' => null,
+                            'phone_verification_expires_at' => null,
+                        ])->save();
+                    }
+                } else {
+                    $user->forceFill(['phone_verified_at' => now()])->save();
+                }
+            }
+        }
+        unset($validated['country_code'], $validated['phone_local']);
 
         $user->fill($validated);
 

@@ -521,6 +521,25 @@ class DashboardTest extends TestCase
         );
     }
 
+    /**
+     * Pedido explícito del usuario: "mostrarle al conductor en la pantalla
+     * principal el costo que el tiene por km y el costo base por carrera
+     * que el tiene declarado" — de solo lectura acá, con un link en
+     * Dashboard.vue al formulario para corregirlos.
+     */
+    public function test_driver_stats_include_their_declared_rates(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['rate_per_km' => 0.45, 'minimum_fare' => 2.5]);
+
+        $response = $this->actingAs($driver)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('driverStats.rate_per_km', 0.45)
+            ->where('driverStats.minimum_fare', 2.5)
+        );
+    }
+
     public function test_client_does_not_receive_invite_code_or_earnings_sparkline(): void
     {
         $client = User::factory()->create();

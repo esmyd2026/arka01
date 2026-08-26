@@ -608,10 +608,19 @@ onBeforeUnmount(() => {
                                 <template #trigger>
                                     <button
                                         type="button"
-                                        class="hover:opacity-90 transition"
+                                        class="relative hover:opacity-90 transition"
                                         :title="$page.props.auth.user.name"
                                     >
                                         <UserAvatar :user="$page.props.auth.user" />
+                                        <!-- Pedido explícito del usuario: "un puntitto
+                                             rojo con un uno para que vaya y actualice
+                                             su numero" — le falta algún dato al perfil
+                                             de cliente (ver HandleInertiaRequests). -->
+                                        <span
+                                            v-if="$page.props.auth.isProfileIncomplete"
+                                            class="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-arka-danger ring-2 ring-arka-card"
+                                            aria-hidden="true"
+                                        ></span>
                                     </button>
                                 </template>
 
@@ -859,13 +868,20 @@ onBeforeUnmount(() => {
 
                 <Link
                     :href="showCooperativeNav ? route('cooperative.profile.edit') : route('profile.edit')"
-                    class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
+                    class="relative flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
                     :class="route().current('profile.*') ? 'text-arka-primary' : 'text-arka-text-muted'"
                 >
-                    <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-                    </svg>
+                    <span class="relative">
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+                        </svg>
+                        <span
+                            v-if="$page.props.auth.isProfileIncomplete"
+                            class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-arka-danger ring-2 ring-arka-card"
+                            aria-hidden="true"
+                        ></span>
+                    </span>
                     <span class="text-xs font-medium">Perfil</span>
                 </Link>
             </div>

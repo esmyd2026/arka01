@@ -178,6 +178,82 @@ class PublicProfileTest extends TestCase
         );
     }
 
+    /**
+     * Pedido explícito del usuario ("mejoremos la privacidad de los
+     * conductores... habilitar su perfil al publico"): con el toggle
+     * apagado, un desconocido ya no ve vehículo, tarifa ni reseñas — solo
+     * nombre y avatar, más el aviso de que el perfil es privado.
+     */
+    public function test_a_stranger_does_not_see_driver_details_when_the_profile_is_private(): void
+    {
+        $viewer = User::factory()->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['profile_public' => false, 'vehicle_make' => 'Chevrolet']);
+
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('profilePrivate', true)
+            ->where('profileUser.driver_profile', null)
+            ->where('averageRating', 0)
+            ->where('reviewCount', 0)
+            ->where('isDriver', true)
+        );
+    }
+
+    public function test_a_guest_without_an_account_also_gets_the_private_version(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['profile_public' => false]);
+
+        $response = $this->get(route('profiles.show', $driver));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page->where('profilePrivate', true));
+    }
+
+    public function test_the_driver_still_sees_their_own_full_private_profile(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['profile_public' => false, 'vehicle_make' => 'Chevrolet']);
+
+        $response = $this->actingAs($driver)->get(route('profiles.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('profilePrivate', false)
+            ->where('profileUser.driver_profile.vehicle_make', 'Chevrolet')
+        );
+    }
+
+    public function test_an_admin_still_sees_the_full_private_profile(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['profile_public' => false, 'vehicle_make' => 'Chevrolet']);
+
+        $response = $this->actingAs($admin)->get(route('profiles.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('profilePrivate', false)
+            ->where('profileUser.driver_profile.vehicle_make', 'Chevrolet')
+        );
+    }
+
+    /** Comportamiento por defecto (columna nueva, default true): nadie pierde visibilidad de golpe. */
+    public function test_a_driver_profile_is_public_by_default(): void
+    {
+        $viewer = User::factory()->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['vehicle_make' => 'Chevrolet']);
+
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('profilePrivate', false)
+            ->where('profileUser.driver_profile.vehicle_make', 'Chevrolet')
+        );
+    }
+
     public function test_a_regular_browser_still_gets_the_real_inertia_page(): void
     {
         $viewer = User::factory()->create();

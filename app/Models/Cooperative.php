@@ -35,6 +35,7 @@ class Cooperative extends Model
         'automatic_assignment_enabled',
         'manual_assignment_timeout_seconds',
         'whatsapp_ride_actions_enabled',
+        'show_fleet_publicly',
     ];
 
     protected $casts = [
@@ -42,6 +43,7 @@ class Cooperative extends Model
         'stand_lng' => 'decimal:7',
         'automatic_assignment_enabled' => 'boolean',
         'has_insurance' => 'boolean',
+        'show_fleet_publicly' => 'boolean',
         'manual_assignment_timeout_seconds' => 'integer',
         'declared_driver_count' => 'integer',
         'declared_unit_count' => 'integer',

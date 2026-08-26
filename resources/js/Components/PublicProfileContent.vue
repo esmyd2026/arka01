@@ -17,6 +17,10 @@ defineProps({
     isClient: { type: Boolean, required: true },
     isDriver: { type: Boolean, required: true },
     canRequestRide: { type: Boolean, required: true },
+    // Pedido explícito del usuario ("mejoremos la privacidad de los
+    // conductores"): true cuando el conductor apagó su perfil individual —
+    // se oculta vehículo/tarifa/reseñas y se avisa en su lugar.
+    profilePrivate: { type: Boolean, default: false },
 });
 </script>
 
@@ -47,9 +51,19 @@ defineProps({
             </span>
         </div>
 
-        <RatingStars :rating="averageRating" :count="reviewCount" readonly />
+        <RatingStars v-if="!profilePrivate" :rating="averageRating" :count="reviewCount" readonly />
 
-        <div v-if="profileUser.driver_profile" class="mt-4 text-sm text-arka-text-muted space-y-1">
+        <!-- Pedido explícito del usuario: quien no sea el propio conductor
+             ni un admin ve esto en vez de vehículo/tarifa/reseñas. -->
+        <div v-if="isDriver && profilePrivate" class="mt-4 flex items-center gap-2 rounded-arka bg-arka-base/40 p-3 text-sm text-arka-text-muted">
+            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="5" y="11" width="14" height="9" rx="2" />
+                <path stroke-linecap="round" d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+            Este conductor mantiene los detalles de su perfil en privado.
+        </div>
+
+        <div v-else-if="profileUser.driver_profile" class="mt-4 text-sm text-arka-text-muted space-y-1">
             <!-- Confidencialidad (pedido explícito del usuario): acá ya no va
                  la foto del vehículo (solo el propio conductor y un admin la
                  ven) ni la placa completa — el tipo de vehículo es el dato
@@ -91,7 +105,7 @@ defineProps({
         </div>
     </div>
 
-    <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka mt-6">
+    <div v-if="!(isDriver && profilePrivate)" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka mt-6">
         <h3 class="text-lg font-medium text-arka-text mb-4">Comentarios</h3>
 
         <p v-if="!reviews.data.length" class="text-sm text-arka-text-muted">

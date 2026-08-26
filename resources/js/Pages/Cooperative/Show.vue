@@ -4,7 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 
-const props = defineProps({ cooperative: Object, reputation: Object, drivers: Array, reviews: Array, isAttached: Boolean });
+const props = defineProps({ cooperative: Object, reputation: Object, drivers: Array, fleetVisible: Boolean, reviews: Array, isAttached: Boolean });
 const isClient = usePage().props.auth?.isClient ?? false;
 const date = (value) => new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium' }).format(new Date(value));
 function toggle() {
@@ -91,7 +91,9 @@ function toggle() {
                         <p class="mt-1 text-xs text-arka-text-muted">Carreras completadas</p>
                     </div>
                     <div class="rounded-2xl bg-arka-base/40 p-4 text-center">
-                        <p class="text-2xl font-bold text-arka-text">{{ drivers.length }}</p>
+                        <!-- reputation.driver_count (no drivers.length): sigue siendo
+                             la cantidad real aunque la lista esté oculta más abajo. -->
+                        <p class="text-2xl font-bold text-arka-text">{{ reputation.driver_count }}</p>
                         <p class="mt-1 text-xs text-arka-text-muted">Conductores activos</p>
                     </div>
                     <div class="rounded-2xl bg-arka-base/40 p-4 text-center">
@@ -121,7 +123,26 @@ function toggle() {
                 <h2 class="mt-1 text-xl font-bold text-arka-text">Conductores de la cooperativa</h2>
                 <p class="mt-1 text-sm text-arka-text-muted">Sus carreras y calificaciones forman la reputación de la organización.</p>
 
-                <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <!-- Pedido explícito del usuario: "que salga solo las
+                     cantidades y los conductores como bloqueados para ver la
+                     flota" — sin nombres, fotos ni links a perfiles
+                     individuales, solo la cantidad (ya mostrada arriba en la
+                     tarjeta de estadísticas). -->
+                <div v-if="!fleetVisible" class="mt-5 flex items-center gap-3 rounded-2xl border border-arka-text-muted/10 bg-arka-base/40 p-5">
+                    <div class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-arka-text-muted/10 text-arka-text-muted">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <rect x="5" y="11" width="14" height="9" rx="2" />
+                            <path stroke-linecap="round" d="M8 11V8a4 4 0 0 1 8 0v3" />
+                        </svg>
+                    </div>
+                    <p class="text-sm text-arka-text-muted">
+                        Esta cooperativa mantiene su flota en privado —
+                        <strong class="text-arka-text">{{ reputation.driver_count }}</strong>
+                        conductor{{ reputation.driver_count === 1 ? '' : 'es' }} activo{{ reputation.driver_count === 1 ? '' : 's' }}.
+                    </p>
+                </div>
+
+                <div v-else class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <Link
                         v-for="driver in drivers"
                         :key="driver.id"

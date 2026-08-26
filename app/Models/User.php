@@ -40,6 +40,8 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'last_name',
+        'birth_date',
         'email',
         'password',
         'password_set_at',
@@ -92,6 +94,7 @@ class User extends Authenticatable
      * @var array<string, string>
      */
     protected $casts = [
+        'birth_date' => 'date',
         'email_verified_at' => 'datetime',
         'phone_verified_at' => 'datetime',
         'phone_verification_expires_at' => 'datetime',
@@ -479,7 +482,12 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return $this->is_admin;
+        // Cast explícito: un modelo recién creado (ej. actingAs() en tests
+        // con un User::factory()->create() que no vuelve a leerse de la
+        // base) trae `is_admin` ausente de $attributes, y el acceso mágico
+        // devuelve null — sin este cast, eso rompía con un TypeError acá en
+        // vez de tratarse simplemente como "no es admin".
+        return (bool) $this->is_admin;
     }
 
     /**

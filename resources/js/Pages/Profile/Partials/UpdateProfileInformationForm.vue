@@ -19,15 +19,35 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    // Teléfono editable (pedido explícito del usuario: "que tambien pueda
+    // actualizar su numero de telefono") — mismo catálogo que usa el
+    // registro y el resto de formularios de teléfono de la app.
+    countryCodes: {
+        type: Array,
+        required: true,
+    },
 });
 
 const user = usePage().props.auth.user;
 
+// El teléfono ya guardado viene completo (+593...); se separa el prefijo
+// conocido para precargar el formulario — mejor esfuerzo nada más, si no
+// matchea ninguno el campo local queda vacío y lo escribe de nuevo (mismo
+// criterio que ya usa Admin/UserProfile.vue para esto mismo).
+function splitPhone(phone) {
+    if (!phone) return { country_code: '+593', phone_local: '' };
+    const code = props.countryCodes.find((c) => phone.startsWith(c));
+    return code ? { country_code: code, phone_local: phone.slice(code.length) } : { country_code: '+593', phone_local: '' };
+}
+
 const form = useForm({
     name: user.name,
+    last_name: user.last_name ?? '',
+    birth_date: user.birth_date ?? '',
     email: user.email,
     city_id: user.city_id,
     avatar: null,
+    ...splitPhone(user.phone),
 });
 
 // Vista previa de la foto elegida, antes de guardar (mismo criterio que la
@@ -74,7 +94,7 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
             <h2 class="text-lg font-medium text-arka-text">Información del perfil</h2>
 
             <p class="mt-1 text-sm text-arka-text-muted">
-                Actualice su nombre y su correo electrónico.
+                Actualice sus datos personales y de contacto.
             </p>
         </header>
 
@@ -115,20 +135,39 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
                 <InputError class="mt-2" :message="avatarSizeError ?? form.errors.avatar" />
             </div>
 
-            <div>
-                <InputLabel for="name" value="Nombre" />
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <InputLabel for="name" value="Nombre" />
 
-                <TextInput
-                    id="name"
-                    type="text"
-                    class="mt-1 block w-full"
-                    v-model="form.name"
-                    required
-                    autofocus
-                    autocomplete="name"
-                />
+                    <TextInput
+                        id="name"
+                        type="text"
+                        class="mt-1 block w-full"
+                        v-model="form.name"
+                        required
+                        autofocus
+                        autocomplete="given-name"
+                    />
 
-                <InputError class="mt-2" :message="form.errors.name" />
+                    <InputError class="mt-2" :message="form.errors.name" />
+                </div>
+
+                <div>
+                    <!-- Pedido explícito del usuario ("nombres, apellidos...")
+                         — opcional: se agrega recién acá, las cuentas viejas
+                         no lo tenían pedido en el registro. -->
+                    <InputLabel for="last_name" value="Apellido" />
+
+                    <TextInput
+                        id="last_name"
+                        type="text"
+                        class="mt-1 block w-full"
+                        v-model="form.last_name"
+                        autocomplete="family-name"
+                    />
+
+                    <InputError class="mt-2" :message="form.errors.last_name" />
+                </div>
             </div>
 
             <div>
@@ -144,6 +183,56 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
                 />
 
                 <InputError class="mt-2" :message="form.errors.email" />
+            </div>
+
+            <div>
+                <!-- Teléfono (pedido explícito del usuario: "que tambien
+                     pueda actualizar su numero de telefono... y que cuando
+                     ingrese el numero le invite a escribirle al asistente
+                     de whatsapp para confirmar su numero") — al guardar un
+                     número distinto, Arka01 manda un código de 6 dígitos
+                     por WhatsApp; la próxima pantalla que visite se lo va a
+                     pedir sola (mismo mecanismo que ya usa el registro y el
+                     conductor). -->
+                <InputLabel for="phone_local" value="Teléfono" />
+                <div class="mt-1 flex gap-2">
+                    <select
+                        v-model="form.country_code"
+                        class="w-24 rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text text-sm"
+                    >
+                        <option v-for="code in countryCodes" :key="code" :value="code">{{ code }}</option>
+                    </select>
+                    <TextInput id="phone_local" type="text" class="flex-1" v-model="form.phone_local" placeholder="991234567" autocomplete="tel-national" />
+                </div>
+                <InputError class="mt-2" :message="form.errors.phone_local" />
+                <p class="mt-1.5 text-xs text-arka-text-muted">
+                    Si lo cambia, le mandamos un código por WhatsApp al número nuevo para confirmarlo — ábralo desde
+                    ahí mismo.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <!-- Fecha de nacimiento (pedido explícito del usuario) —
+                         sin librería de calendario en el proyecto, mismo
+                         patrón que ya usa Ride/Request.vue para programar
+                         una carrera: input nativo type="date". -->
+                    <InputLabel for="birth_date" value="Fecha de nacimiento" />
+                    <TextInput id="birth_date" type="date" class="mt-1 block w-full" v-model="form.birth_date" />
+                    <InputError class="mt-2" :message="form.errors.birth_date" />
+                </div>
+
+                <div>
+                    <!-- País: no es un campo del formulario — la plataforma
+                         opera solo en Ecuador (Arka01_Alcance_Proyectov2.md),
+                         así que no tiene sentido pedirlo. Se muestra fijo
+                         para que el resumen de "datos completos" tenga
+                         sentido de un vistazo. -->
+                    <InputLabel value="País" />
+                    <p class="mt-1 flex h-[42px] items-center rounded-arka border border-arka-text-muted/20 bg-arka-base px-3 text-sm text-arka-text-muted">
+                        🇪🇨 Ecuador
+                    </p>
+                </div>
             </div>
 
             <div>

@@ -673,8 +673,22 @@ function recenterOnDriver(force = false) {
     fleetMapRef.value?.fitTo([origin, currentNavigationTarget.value]);
 }
 
-function recenterMapButton() {
+// Bug real reportado por el usuario ("el zoom no funciona para centrar en
+// el mapa"): recenterOnDriver() se queda callado del todo si driverLat/Lng
+// todavía no tienen ningún valor (recién abrió la carrera y ni el perfil
+// del conductor ni ningún WebSocket mandaron una ubicación todavía) — el
+// botón no hacía nada, sin ningún aviso de por qué. Ahora, si faltan,
+// pide una posición fresca del GPS (mismo mecanismo que ya usa
+// confirmArrived()) antes de encuadrar, en vez de rendirse en silencio.
+async function recenterMapButton() {
     followDriver.value = true;
+    if (driverLat.value == null || driverLng.value == null) {
+        const coords = await currentCoords();
+        if (coords.lat != null && coords.lng != null) {
+            driverLat.value = coords.lat;
+            driverLng.value = coords.lng;
+        }
+    }
     recenterOnDriver(true);
 }
 
@@ -833,12 +847,24 @@ function startRide() {
 // conductor SALÍA para allá, no cuando de verdad llegaba — para un trayecto
 // de más de 5 minutos, el cliente veía "Tiempo cumplido" con el conductor
 // todavía manejando. Ahora son dos toques reales: "Ir por el pasajero" solo
-// abre la navegación, sin tocar el estado — recién "Ya llegué" (un segundo
-// toque, una vez ahí de verdad) marca `arrived_at`.
+// abre la navegación, sin tocar `arrived_at` — recién "Ya llegué" (un
+// segundo toque, una vez ahí de verdad) lo marca.
+//
+// Segundo bug real, también con captura ("ya le había dado a ese botón, y
+// cuando entro a la aplicación decía nuevamente ir por el pasajero"): el
+// toque en sí solo vivía en este ref local — nada quedaba guardado en el
+// servidor, así que recargar la página o volver a entrar perdía el estado
+// y el botón volvía a mostrar "Ir por el pasajero" aunque el conductor ya
+// hubiera salido. `ride.heading_to_passenger_at` (columna nueva, separada
+// de `arrived_at` a propósito) es ahora la fuente de verdad; el ref local
+// solo da el feedback instantáneo mientras el POST todavía está en vuelo.
 const headingToPassenger = ref(false);
 function goToPassenger() {
     window.open(googleNavigateUrl(props.ride.origin_lat, props.ride.origin_lng), '_blank', 'noopener');
     headingToPassenger.value = true;
+    if (!props.ride.heading_to_passenger_at) {
+        router.post(route('rides.heading-to-passenger', props.ride.id), {}, { preserveScroll: true });
+    }
 }
 
 const markingArrived = ref(false);
@@ -1881,7 +1907,7 @@ function submitReview() {
                                  Ninguno bloquea "Completar carrera" si el
                                  conductor se los saltea. -->
                             <SecondaryButton
-                                v-if="!ride.arrived_at && !headingToPassenger"
+                                v-if="!ride.arrived_at && !ride.heading_to_passenger_at && !headingToPassenger"
                                 class="flex-1 justify-center"
                                 @click="goToPassenger"
                             >

@@ -158,6 +158,28 @@ class CooperativeModuleTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario ("mejoremos la privacidad de las
+     * cooperativas") — persistencia simple del toggle nuevo, mismo endpoint
+     * que ya guarda el resto del perfil (borrador o completo).
+     */
+    public function test_a_cooperative_can_turn_off_showing_their_fleet_publicly(): void
+    {
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $user->id, 'show_fleet_publicly' => true]);
+
+        $this->actingAs($user)->post(route('cooperative.profile.update'), [
+            'declared_driver_count' => 3,
+            'declared_unit_count' => 3,
+            'response_timeout_seconds' => 30,
+            'automatic_assignment_enabled' => true,
+            'manual_assignment_timeout_seconds' => 30,
+            'show_fleet_publicly' => false,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertFalse($cooperative->fresh()->show_fleet_publicly);
+    }
+
+    /**
      * Documentos legales de más los datos obligatorios que ya exige
      * submitForReview() — deja la cooperativa lista para enviar a
      * validación salvo por lo que el test decida omitir (ej. el seguro).
@@ -277,6 +299,62 @@ class CooperativeModuleTest extends TestCase
         ])->assertSessionHasErrors('cooperative_id');
 
         $this->assertDatabaseCount('ride_requests', 0);
+    }
+
+    /**
+     * Pedido explícito del usuario ("mejoremos la privacidad de las
+     * cooperativas... si no, que salga solo las cantidades y los
+     * conductores como bloqueados"): con el toggle apagado, un desconocido
+     * ve la cantidad (ya la traía reputation.driver_count) pero no la lista
+     * real de conductores.
+     */
+    public function test_a_stranger_does_not_see_the_driver_roster_when_the_fleet_is_private(): void
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeUser->id, 'name' => 'Coop Privada', 'show_fleet_publicly' => false,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->create(['user_id' => $driver->id, 'driver_type' => 'public_transport']);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id, 'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id, 'status' => 'accepted', 'responded_at' => now(),
+        ]);
+
+        $viewer = User::factory()->create();
+        $response = $this->actingAs($viewer)->get(route('cooperatives.show', $cooperative));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('fleetVisible', false)
+            ->has('drivers', 0)
+            ->where('reputation.driver_count', 1)
+        );
+    }
+
+    public function test_the_cooperative_owner_still_sees_their_own_private_roster(): void
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeUser->id, 'name' => 'Coop Privada', 'show_fleet_publicly' => false,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->create(['user_id' => $driver->id, 'driver_type' => 'public_transport']);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id, 'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id, 'status' => 'accepted', 'responded_at' => now(),
+        ]);
+
+        $response = $this->actingAs($cooperativeUser)->get(route('cooperatives.show', $cooperative));
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('fleetVisible', true)
+            ->has('drivers', 1)
+        );
     }
 
     public function test_public_cooperative_profile_aggregates_its_drivers_rides_and_reviews(): void

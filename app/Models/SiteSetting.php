@@ -21,6 +21,9 @@ class SiteSetting extends Model
         'hero_background_path',
         'auth_background_path',
         'updated_by',
+        'facebook_url',
+        'instagram_url',
+        'tiktok_url',
     ];
 
     protected $appends = ['hero_background_url', 'auth_background_url'];

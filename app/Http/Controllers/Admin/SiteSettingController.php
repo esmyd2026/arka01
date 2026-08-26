@@ -39,6 +39,13 @@ class SiteSettingController extends Controller
             // del usuario) — mismo tamaño máximo, mismo criterio.
             'auth_background' => ['nullable', 'image', 'max:8192'],
             'remove_auth_background' => ['sometimes', 'boolean'],
+            // Pedido explícito del usuario ("le invite a seguir las
+            // redes") — usados al agradecer una calificación por WhatsApp.
+            // Ninguno obligatorio; en blanco simplemente no se ofrece esa
+            // red en el mensaje.
+            'facebook_url' => ['nullable', 'string', 'max:255', 'url'],
+            'instagram_url' => ['nullable', 'string', 'max:255', 'url'],
+            'tiktok_url' => ['nullable', 'string', 'max:255', 'url'],
         ]);
 
         $setting = SiteSetting::current();
@@ -47,6 +54,15 @@ class SiteSettingController extends Controller
             ...$this->handleImageField($request, $setting, 'hero_background'),
             ...$this->handleImageField($request, $setting, 'auth_background'),
         ];
+
+        // Cada campo de este formulario manda su propio POST independiente
+        // (mismo criterio que las imágenes, ver BackgroundImageField.vue) —
+        // si esta request no trae las redes, no hay que pisarlas con null.
+        foreach (['facebook_url', 'instagram_url', 'tiktok_url'] as $field) {
+            if ($request->has($field)) {
+                $update[$field] = $request->input($field) ?: null;
+            }
+        }
 
         $setting->update($update + ['updated_by' => $request->user()->id]);
 

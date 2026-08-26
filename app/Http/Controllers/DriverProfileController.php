@@ -187,6 +187,13 @@ class DriverProfileController extends Controller
             // pero el valor final se fuerza abajo según el plan real del usuario
             // — nunca confiamos en lo que mande el formulario para esto.
             'is_public' => ['boolean'],
+            // Pedido explícito del usuario ("mejoremos la privacidad de los
+            // conductores"): distinto de is_public de arriba — esto no es un
+            // beneficio de plan, es control de privacidad puro, disponible
+            // para cualquiera. Ver PublicProfileController::show(), que lo
+            // usa para mostrar (o bloquear) el detalle a quien no sea el
+            // propio conductor ni un admin.
+            'profile_public' => ['boolean'],
             // Verificación visible antes de subir a un conductor público que no
             // se conoce (sección 8): foto del conductor y de la placa/vehículo.
             // Un admin las revisa después desde /admin/verificaciones.

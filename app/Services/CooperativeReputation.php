@@ -32,6 +32,11 @@ class CooperativeReputation
             // Clientes que eligieron y mantienen vinculada esta cooperativa
             // en su flota. No es un estimado ni la suma de pasajeros únicos.
             'client_count' => $cooperative->clientLinks()->count(),
+            // Pedido explícito del usuario ("que salga solo las cantidades"):
+            // la cantidad tiene que seguir viéndose aunque la flota esté
+            // oculta (Cooperative/Show.vue) — separado de drivers() de abajo,
+            // que sí puede no llamarse cuando show_fleet_publicly es false.
+            'driver_count' => $cooperative->activeDriverMemberships()->count(),
             'average_rating' => round((float) (clone $reviews)->avg('rating'), 1),
             'review_count' => (clone $reviews)->count(),
             'completed_rides' => (clone $rides)->where('status', 'completed')->count(),

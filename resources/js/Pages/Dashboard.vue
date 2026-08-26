@@ -763,6 +763,37 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </div>
                     </div>
 
+                    <!-- Pedido explícito del usuario: mostrar en Inicio, de un
+                         vistazo, la tarifa por km y la tarifa base que tiene
+                         declaradas — de solo lectura acá, con un link directo
+                         al formulario para corregirlas (sin tener que ir a
+                         buscarlo en Mi perfil). -->
+                    <Link
+                        :href="`${route('driver.profile.edit')}#rate_per_km`"
+                        class="block p-4 bg-arka-card shadow rounded-arka border border-transparent transition hover:border-arka-primary/40"
+                    >
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-sm font-medium text-arka-text">Su tarifa declarada</p>
+                            <span class="text-xs font-semibold text-arka-primary">Cambiar →</span>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-3">
+                            <div class="rounded-arka bg-arka-base/50 py-2.5 text-center">
+                                <p class="text-xl font-semibold text-arka-text">
+                                    <template v-if="driverStats.rate_per_km != null">${{ driverStats.rate_per_km.toFixed(2) }}</template>
+                                    <template v-else>—</template>
+                                </p>
+                                <p class="text-xs text-arka-text-muted">Por km</p>
+                            </div>
+                            <div class="rounded-arka bg-arka-base/50 py-2.5 text-center">
+                                <p class="text-xl font-semibold text-arka-text">
+                                    <template v-if="driverStats.minimum_fare != null">${{ driverStats.minimum_fare.toFixed(2) }}</template>
+                                    <template v-else>Sin mínimo</template>
+                                </p>
+                                <p class="text-xs text-arka-text-muted">Tarifa base</p>
+                            </div>
+                        </div>
+                    </Link>
+
                     <!-- Acciones rápidas -->
                     <div class="space-y-2">
                         <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Acciones rápidas</h4>

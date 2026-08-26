@@ -69,6 +69,22 @@ class HandleInertiaRequests extends Middleware
                     ? $user->driverProfile?->verification_status === 'approved'
                         && $this->planLimits->forDriver($user)['verified_badge']
                     : null,
+                // Pedido explícito del usuario ("un puntitto rojo con un
+                // uno para que vaya y actualice"), acotado al perfil del
+                // CLIENTE (lo que se pidió) — un conductor/admin/cooperativa
+                // no ven este aviso, sus pantallas de perfil son otras y no
+                // se tocaron. Compartido acá (no solo en Profile/Edit.vue)
+                // porque el punto de atención tiene que verse en la nav de
+                // CUALQUIER pantalla — mismo criterio que el resto de
+                // auth.* de acá arriba. Sin queries extra: son columnas que
+                // el modelo ya trae cargadas en cada request autenticado.
+                'isProfileIncomplete' => $user && $user->isClient()
+                    ? blank($user->last_name)
+                        || blank($user->birth_date)
+                        || blank($user->city_id)
+                        || blank($user->phone)
+                        || ! $user->phone_verified_at
+                    : false,
             ],
             // Notificaciones push (sección 9.2 y 9.5): el frontend la necesita
             // para suscribirse vía PushManager, nunca la llave privada.

@@ -16,6 +16,11 @@ const props = defineProps({
     // una marca clara de "qué es" antes de decidir invitarla o aceptarla.
     isClient: { type: Boolean, required: true },
     isDriver: { type: Boolean, required: true },
+    // Pedido explícito del usuario ("mejoremos la privacidad de los
+    // conductores"): true cuando el conductor apagó "Habilitar mi perfil
+    // individual al público" y quien mira no es él ni un admin — el
+    // backend ya viene sin vehículo/tarifa/reseñas en ese caso.
+    profilePrivate: { type: Boolean, default: false },
 });
 
 // Vista previa profesional al compartir el enlace (pedido explícito del
@@ -76,6 +81,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
                     :is-client="isClient"
                     :is-driver="isDriver"
                     :can-request-ride="canRequestRide"
+                    :profile-private="profilePrivate"
                 />
             </div>
         </div>
@@ -119,6 +125,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
                 :is-client="isClient"
                 :is-driver="isDriver"
                 :can-request-ride="false"
+                :profile-private="profilePrivate"
             />
 
             <p class="mt-8 text-center text-sm text-arka-text-muted">

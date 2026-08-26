@@ -6,8 +6,10 @@ use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Models\WhatsAppSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -24,6 +26,37 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $response->assertOk();
+    }
+
+    /**
+     * Pedido explícito del usuario: "un botón que le invite a escribirle al
+     * chatbot de arka01 para que de allí tomemos el número y que ellos
+     * puedan estar notificados de sus viajes" — Profile/Edit.vue decide con
+     * estos dos datos si ofrece el botón (solo a clientes, no a
+     * conductores ni admins — ese filtro vive del lado del template).
+     */
+    public function test_the_profile_page_exposes_whatsapp_connection_data(): void
+    {
+        Config::set('services.whatsapp.business_number', '+593991112222');
+        $client = User::factory()->create();
+
+        $response = $this->actingAs($client)->get('/profile');
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('whatsappBusinessNumber', '+593991112222')
+            ->where('whatsappSession', null)
+        );
+    }
+
+    public function test_the_profile_page_reports_the_active_whatsapp_session(): void
+    {
+        Config::set('services.whatsapp.business_number', '+593991112222');
+        $client = User::factory()->create();
+        WhatsAppSession::query()->create(['user_id' => $client->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        $response = $this->actingAs($client)->get('/profile');
+
+        $response->assertInertia(fn ($page) => $page->where('whatsappSession.status', 'active'));
     }
 
     /**
@@ -231,6 +264,74 @@ class ProfileTest extends TestCase
             ->assertRedirect('/profile');
 
         $this->assertNotNull($user->refresh()->email_verified_at);
+    }
+
+    /**
+     * Pedido explícito del usuario ("nombres, apellidos, fecha de
+     * nacimiento...") — mismas columnas nuevas que arman el checklist de
+     * "Complete su perfil".
+     */
+    public function test_last_name_and_birth_date_are_saved(): void
+    {
+        $user = User::factory()->create();
+
+        $this
+            ->actingAs($user)
+            ->patch('/profile', [
+                'name' => $user->name,
+                'email' => $user->email,
+                'last_name' => 'Pérez',
+                'birth_date' => '1990-05-20',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $user->refresh();
+        $this->assertSame('Pérez', $user->last_name);
+        $this->assertSame('1990-05-20', $user->birth_date->format('Y-m-d'));
+    }
+
+    /**
+     * La plataforma exige mayoría de edad (ya está en los manuales, pero
+     * antes no se validaba en ningún lado) — mismo umbral, 18 años.
+     */
+    public function test_a_birth_date_under_18_years_is_rejected(): void
+    {
+        $user = User::factory()->create();
+
+        $this
+            ->actingAs($user)
+            ->patch('/profile', [
+                'name' => $user->name,
+                'email' => $user->email,
+                'birth_date' => now()->subYears(17)->format('Y-m-d'),
+            ])
+            ->assertSessionHasErrors('birth_date');
+    }
+
+    /**
+     * Pedido explícito del usuario ("un puntitto rojo con un uno para que
+     * vaya y actualice") — HandleInertiaRequests::share() calcula esta
+     * bandera con los datos del cliente; acá se prueba el "antes" (le falta
+     * de todo) y el "después" (con todo completo, incluido el teléfono
+     * verificado) de un mismo cliente.
+     */
+    public function test_is_profile_incomplete_is_true_while_data_is_missing_and_false_once_complete(): void
+    {
+        $client = User::factory()->create(['last_name' => null, 'birth_date' => null, 'city_id' => null]);
+        $city = City::query()->where('name', 'Cuenca')->firstOrFail();
+
+        $this->actingAs($client)->get('/profile')
+            ->assertInertia(fn ($page) => $page->where('auth.isProfileIncomplete', true));
+
+        $client->forceFill([
+            'last_name' => 'Pérez',
+            'birth_date' => '1990-05-20',
+            'city_id' => $city->id,
+            'phone_verified_at' => now(),
+        ])->save();
+
+        $this->actingAs($client)->get('/profile')
+            ->assertInertia(fn ($page) => $page->where('auth.isProfileIncomplete', false));
     }
 
     public function test_user_can_delete_their_account(): void

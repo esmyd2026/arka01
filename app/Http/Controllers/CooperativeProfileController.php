@@ -70,6 +70,13 @@ class CooperativeProfileController extends Controller
             // adjunto. Se puede guardar en false en un borrador; recién se
             // exige marcado al enviar a validación (ver submitForReview()).
             'has_insurance' => ['sometimes', 'boolean'],
+            // Pedido explícito del usuario ("mejoremos la privacidad de las
+            // cooperativas"): controla si su perfil público muestra la lista
+            // real de conductores o solo la cantidad, con los conductores
+            // "bloqueados" (ver CooperativeDirectoryController::show() y
+            // Cooperative/Show.vue). No afecta al dueño ni a un admin, que
+            // siguen viendo la flota completa siempre.
+            'show_fleet_publicly' => ['sometimes', 'boolean'],
             'geographic_coverage' => ['nullable', 'string', 'max:2000'],
             'operating_hours' => ['nullable', 'string', 'max:1000'],
             'response_timeout_seconds' => ['required', 'integer', Rule::in([15, 30, 60])],

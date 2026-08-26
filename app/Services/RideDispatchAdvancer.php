@@ -80,9 +80,19 @@ class RideDispatchAdvancer
      *                                             la solicitud ya avanzó desde que se encoló este chequeo
      *                                             (protege contra una carrera entre el Job y una respuesta real).
      */
-    public static function advanceOrExpire(int $rideRequestId, ?int $expectedCurrentDriverId = null): void
+    /**
+     * @param  string  $reason  "timeout" (nadie respondió a los N segundos,
+     *                          ExpireRideOffer) o "rejected" (rechazo
+     *                          explícito, RideRequestController::reject()) —
+     *                          queda guardado en cooperative_dispatch_log
+     *                          para que el operador sepa por qué se reintentó
+     *                          (pedido explícito del usuario: "le dice a la
+     *                          de la cooperativa a quien se la asignaron y la
+     *                          cancelo?" — antes no quedaba ningún rastro).
+     */
+    public static function advanceOrExpire(int $rideRequestId, ?int $expectedCurrentDriverId = null, string $reason = 'timeout'): void
     {
-        $outcome = DB::transaction(function () use ($rideRequestId, $expectedCurrentDriverId) {
+        $outcome = DB::transaction(function () use ($rideRequestId, $expectedCurrentDriverId, $reason) {
             $rideRequest = RideRequest::query()->lockForUpdate()->findOrFail($rideRequestId);
 
             if ($rideRequest->status !== 'pending' || ! $rideRequest->isSequentialDispatch()) {
@@ -95,6 +105,18 @@ class RideDispatchAdvancer
 
             $previousDriverId = $rideRequest->driver_user_id;
             $remaining = $rideRequest->offer_candidate_ids ?? [];
+
+            // Solo la cooperativa tiene un panel donde mostrar este
+            // historial (Cooperative/Dashboard.vue) — para despacho de
+            // flota/público no se guarda, no hay nadie que lo lea.
+            $dispatchLog = $rideRequest->cooperative_id
+                ? [...($rideRequest->cooperative_dispatch_log ?? []), [
+                    'driver_user_id' => $previousDriverId,
+                    'driver_name' => User::find($previousDriverId)?->name,
+                    'outcome' => $reason,
+                    'at' => now()->toIso8601String(),
+                ]]
+                : null;
 
             // Bug reportado por el usuario: un conductor de la bolsa podía
             // desconectarse (o pasar a suspendido, ocupado, fuera de rango)
@@ -135,6 +157,7 @@ class RideDispatchAdvancer
                     'responded_at' => now(),
                     'cooperative_assignment_status' => $rideRequest->cooperative_id ? 'unassigned' : $rideRequest->cooperative_assignment_status,
                     'cooperative_offer_expires_at' => null,
+                    'cooperative_dispatch_log' => $dispatchLog,
                 ]);
 
                 return ['type' => 'expired', 'rideRequest' => $rideRequest, 'previousDriverId' => $previousDriverId];
@@ -151,6 +174,7 @@ class RideDispatchAdvancer
                 'cooperative_assignment_status' => $rideRequest->cooperative_id ? 'awaiting_driver' : $rideRequest->cooperative_assignment_status,
                 'cooperative_candidate_ids' => $rideRequest->cooperative_id ? ($remaining ?: null) : $rideRequest->cooperative_candidate_ids,
                 'cooperative_offer_expires_at' => $rideRequest->cooperative_id ? now()->addSeconds($timeoutSeconds) : $rideRequest->cooperative_offer_expires_at,
+                'cooperative_dispatch_log' => $dispatchLog,
             ]);
 
             return ['type' => 'advanced', 'rideRequest' => $rideRequest->fresh(), 'previousDriverId' => $previousDriverId];

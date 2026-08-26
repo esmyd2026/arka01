@@ -369,6 +369,14 @@ class WhatsAppFreeformSender
         self::sendText($client->phone, '▶️ Su viaje comenzó hacia '.($ride->destination_address ?? 'su destino').'.');
     }
 
+    /**
+     * Pedido explícito del usuario ("que califique por allí también") — no
+     * solo avisa que terminó, deja calificar sin salir de WhatsApp: una
+     * lista real con las 5 estrellas. `WhatsAppPendingRequestHandler`... no,
+     * ver `WhatsAppRatingHandler` — 5 estrellas guarda directo, menos de 5
+     * pide el motivo (obligatorio, ver ReviewController::store()) con una
+     * segunda lista. Quien prefiera hacerlo desde la app también puede.
+     */
     public static function sendRideCompletedToClient(Ride $ride): void
     {
         $client = $ride->client;
@@ -376,7 +384,16 @@ class WhatsAppFreeformSender
             return;
         }
 
-        self::sendText($client->phone, "✅ Carrera completada — \${$ride->settled_price}.\n\nCalifique el viaje en Arka01: ".route('rides.show', $ride));
+        $rows = collect(range(5, 1))
+            ->map(fn (int $stars) => ['id' => "wa_rate:{$ride->id}:{$stars}", 'title' => str_repeat('⭐', $stars)])
+            ->all();
+
+        self::sendList(
+            $client->phone,
+            "✅ Carrera completada — \${$ride->settled_price}.\n\n¿Cómo le fue con {$ride->driver->name}? Califique tocando una opción, o revise el recibo completo en Arka01: ".route('rides.show', $ride),
+            'Calificar',
+            $rows
+        );
     }
 
     private static function notificationsEnabledFor(User $user): bool

@@ -1,11 +1,28 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import BackgroundImageField from './Partials/BackgroundImageField.vue';
-import { Head } from '@inertiajs/vue3';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
+import TextInput from '@/Components/TextInput.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { Head, useForm } from '@inertiajs/vue3';
 
-defineProps({
+const props = defineProps({
     settings: { type: Object, required: true },
 });
+
+// Pedido explícito del usuario ("le invite a seguir las redes") — usados al
+// agradecer una calificación de 5 estrellas por WhatsApp (ver
+// WhatsAppRatingHandler). Ninguno obligatorio.
+const socialForm = useForm({
+    facebook_url: props.settings.facebook_url ?? '',
+    instagram_url: props.settings.instagram_url ?? '',
+    tiktok_url: props.settings.tiktok_url ?? '',
+});
+
+function saveSocialLinks() {
+    socialForm.post(route('admin.site.update'), { preserveScroll: true });
+}
 </script>
 
 <template>
@@ -39,6 +56,38 @@ defineProps({
                     :current-url="settings.auth_background_url"
                     empty-message="Todavía no hay ninguna imagen — el panel se ve con el degradado verde oscuro de siempre."
                 />
+
+                <!-- Pedido explícito del usuario ("le invite a seguir las
+                     redes") — al agradecer una calificación de 5 estrellas
+                     por WhatsApp, se ofrecen las redes que estén completas
+                     acá. Ninguna es obligatoria. -->
+                <form @submit.prevent="saveSocialLinks" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-arka-text">Redes sociales</h3>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Se invita a seguirlas por WhatsApp cuando un cliente califica con 5 estrellas. Dejar en
+                            blanco la que no aplique.
+                        </p>
+                    </div>
+
+                    <div>
+                        <InputLabel for="facebook_url" value="Facebook" />
+                        <TextInput id="facebook_url" v-model="socialForm.facebook_url" type="url" class="mt-1 w-full" placeholder="https://facebook.com/arka01" />
+                        <InputError class="mt-1" :message="socialForm.errors.facebook_url" />
+                    </div>
+                    <div>
+                        <InputLabel for="instagram_url" value="Instagram" />
+                        <TextInput id="instagram_url" v-model="socialForm.instagram_url" type="url" class="mt-1 w-full" placeholder="https://instagram.com/arka01" />
+                        <InputError class="mt-1" :message="socialForm.errors.instagram_url" />
+                    </div>
+                    <div>
+                        <InputLabel for="tiktok_url" value="TikTok" />
+                        <TextInput id="tiktok_url" v-model="socialForm.tiktok_url" type="url" class="mt-1 w-full" placeholder="https://tiktok.com/@arka01" />
+                        <InputError class="mt-1" :message="socialForm.errors.tiktok_url" />
+                    </div>
+
+                    <PrimaryButton :disabled="socialForm.processing">Guardar</PrimaryButton>
+                </form>
             </div>
         </div>
     </AdminLayout>

@@ -138,6 +138,12 @@ class DashboardController extends Controller
                     ->where('driver_user_id', $userId)
                     ->where('status', 'pending')
                     ->count(),
+                // Pedido explícito del usuario: mostrar en Inicio, de un
+                // vistazo, la tarifa que el conductor tiene declarada — con
+                // un link directo al formulario para corregirla, sin tener
+                // que ir a buscarlo en Mi perfil.
+                'rate_per_km' => $user->driverProfile?->rate_per_km !== null ? (float) $user->driverProfile->rate_per_km : null,
+                'minimum_fare' => $user->driverProfile?->minimum_fare !== null ? (float) $user->driverProfile->minimum_fare : null,
             ];
 
             $upcomingTrips = $this->upcomingTripsFor($userId, asDriver: true);
