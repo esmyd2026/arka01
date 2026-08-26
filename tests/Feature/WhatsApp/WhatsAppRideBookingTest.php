@@ -118,6 +118,155 @@ class WhatsAppRideBookingTest extends TestCase
         $this->assertSame('Av. Coronel y Calicuchima, Guayaquil', ChatbotConversation::forPhone($client->phone)->context['origin']['address']);
     }
 
+    /**
+     * Pedido explícito del usuario ("la ubicación que le llega al conductor
+     * dice 'ubicación compartida' porque la mandó el cliente desde el mapa
+     * de WhatsApp pero no le dio el detalle al chofer") — un pin suelto
+     * (a diferencia de buscar un lugar con nombre) no trae `address` ni
+     * `name`; se resuelve con geocoding inverso en vez de dejar el texto
+     * genérico que no le sirve de nada al conductor.
+     */
+    public function test_a_bare_shared_location_gets_reverse_geocoded_into_a_real_address(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $client = User::factory()->create(['phone' => '+593991111177', 'whatsapp_privacy_accepted_at' => now()]);
+        $driver = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -2.138, 'current_lng' => -79.895, 'passenger_capacity' => 4]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        Config::set('services.google_maps.server_api_key', 'fake-key');
+        Http::fake([
+            'maps.googleapis.com/maps/api/geocode/*' => Http::response([
+                'results' => [['formatted_address' => 'Cdla. Kennedy Norte, Guayaquil']],
+            ], 200),
+            'graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200),
+        ]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        // Pin suelto: sin address ni name, solo coordenadas — exactamente
+        // lo que manda WhatsApp cuando alguien comparte su ubicación en
+        // vivo desde el mapa, en vez de buscar un lugar con nombre.
+        $engine->respondTo($client->phone, $client, '[ubicacion]', [
+            'type' => 'location', 'location' => ['lat' => -2.15, 'lng' => -79.90, 'address' => null, 'name' => null],
+        ]);
+        $engine->respondTo($client->phone, $client, '[ubicacion]', [
+            'type' => 'location', 'location' => ['lat' => -2.16, 'lng' => -79.91, 'address' => 'Centro', 'name' => null],
+        ]);
+        $engine->respondTo($client->phone, $client, '2');
+        $engine->respondTo($client->phone, $client, 'wa_pool_fleet');
+        $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
+
+        $this->assertDatabaseHas('ride_requests', [
+            'client_user_id' => $client->id,
+            'origin_address' => 'Cdla. Kennedy Norte, Guayaquil',
+        ]);
+    }
+
+    /**
+     * Pedido explícito del usuario ("deberiamos verificar que si no tiene
+     * cuenta preguntarle si quiere registrarse para luego sus solicitudes
+     * sean mas rapido") — la cuenta se crea sola en la primera reserva,
+     * pero con una contraseña al azar que nunca vio; se le ofrece un link
+     * firmado (una sola vez, no en la segunda carrera) que la deja entrar
+     * sin esa contraseña, directo a completarlo de verdad.
+     */
+    public function test_a_first_time_guest_gets_offered_a_link_to_finish_registering(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+        $cooperativeOwner = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeOwner->id, 'name' => 'Coop', 'stand_lat' => -2.1690, 'stand_lng' => -79.8990]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['driver_type' => 'public_transport', 'current_lat' => -2.1700, 'current_lng' => -79.9000, 'passenger_capacity' => 4, 'rate_per_km' => 0.5]);
+        CooperativeDriverMembership::query()->create(['cooperative_id' => $cooperative->id, 'driver_user_id' => $driver->id, 'invited_by_user_id' => $cooperativeOwner->id, 'status' => 'accepted', 'responded_at' => now()]);
+
+        $phone = '+593991111188';
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($phone, null, 'pedir carrera');
+        $engine->respondTo($phone, null, 'wa_privacy_accept');
+        $engine->respondTo($phone, null, 'Ana Lopez');
+        $engine->respondTo($phone, null, 'wa_name_confirm');
+
+        // La cuenta invitada ya existe desde acá — igual que en la vida
+        // real, donde WhatsAppWebhookController ya resuelve $user antes de
+        // llamar a ChatbotEngine::respondTo() para cada mensaje siguiente.
+        $user = User::query()->where('phone', $phone)->firstOrFail();
+        $engine->respondTo($phone, $user, 'wa_when_now');
+        $engine->respondTo($phone, $user, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.1701, 'lng' => -79.9001, 'address' => 'Origen', 'name' => null]]);
+        $engine->respondTo($phone, $user, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.1800, 'lng' => -79.9100, 'address' => 'Destino', 'name' => null]]);
+        $engine->respondTo($phone, $user, '1');
+        $engine->respondTo($phone, $user, 'wa_booking_confirm');
+
+        $this->assertNull($user->fresh()->password_set_at);
+
+        // El link firmado de verdad funciona: entra sin contraseña.
+        $sentBody = collect(Http::recorded())
+            ->map(fn ($pair) => $pair[0]['text']['body'] ?? null)
+            ->filter(fn ($body) => $body && str_contains($body, 'Termine de registrarse'))
+            ->first();
+        preg_match('#https?://\S+#', $sentBody, $match);
+        $this->get($match[0])->assertRedirect(route('profile.edit'));
+        $this->assertAuthenticatedAs($user);
+    }
+
+    /**
+     * Pedido explícito del usuario ("cuando pida nuevamente mostrarle las
+     * ubicaciones que ha solicitado para volverlas a repetir") — tocar una
+     * dirección anterior de la lista usa sus coordenadas EXACTAS, sin
+     * volver a geocodificar ni pedir confirmación.
+     */
+    public function test_a_returning_client_can_repeat_a_previous_address_from_a_list(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $client = User::factory()->create(['phone' => '+593991111199', 'whatsapp_privacy_accepted_at' => now()]);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -2.138, 'current_lng' => -79.895, 'passenger_capacity' => 4]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        // 'accepted' a propósito, no el 'pending' por defecto de la factory:
+        // esto representa una carrera anterior ya resuelta, no una activa
+        // sin aceptar — con 'pending' interceptaría WhatsAppPendingRequestHandler
+        // antes de llegar a probar la lista de direcciones recientes.
+        RideRequest::factory()->for($fleet)->for($client, 'client')->create([
+            'status' => 'accepted',
+            'origin_address' => 'Casa — Urdesa', 'origin_lat' => -2.16, 'origin_lng' => -79.90,
+            'destination_address' => 'Trabajo — Centro', 'destination_lat' => -2.19, 'destination_lng' => -79.88,
+        ]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+
+        // La lista de direcciones recientes queda guardada en el contexto,
+        // no hace falta volver a escribir ni geocodificar nada.
+        $this->assertSame(
+            'Casa — Urdesa',
+            ChatbotConversation::forPhone($client->phone)->context['recent_origin_options'][0]['address']
+        );
+
+        $engine->respondTo($client->phone, $client, 'wa_recent_origin:0');
+
+        $conversation = ChatbotConversation::forPhone($client->phone);
+        $this->assertSame('Casa — Urdesa', $conversation->context['origin']['address']);
+        $this->assertSame(-2.16, $conversation->context['origin']['lat']);
+        $this->assertSame('WA_BOOKING_DESTINATION', $conversation->pending_intent);
+
+        $engine->respondTo($client->phone, $client, 'wa_recent_destination:0');
+
+        $conversation = ChatbotConversation::forPhone($client->phone);
+        $this->assertSame('Trabajo — Centro', $conversation->context['destination']['address']);
+        $this->assertSame('WA_BOOKING_PAX', $conversation->pending_intent);
+    }
+
     public function test_booking_stops_immediately_when_admin_disables_it(): void
     {
         $client = User::factory()->create(['phone' => '+593992222222', 'whatsapp_privacy_accepted_at' => now()]);

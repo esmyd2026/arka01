@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Auth\GuestAccountController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -78,6 +79,14 @@ Route::middleware('guest')->group(function () {
 Route::get('sesion/bloquear/{user}', [SessionTakeoverController::class, 'lock'])
     ->middleware('signed')
     ->name('session-takeover.lock');
+
+// Completar el registro de una cuenta creada sola al reservar por WhatsApp
+// (pedido explícito del usuario) — mismo criterio de firma que la de
+// arriba: nadie puede armar este link a mano, ver
+// App\Http\Controllers\Auth\GuestAccountController.
+Route::get('cuenta/completar-registro/{user}', [GuestAccountController::class, 'completeRegistration'])
+    ->middleware('signed')
+    ->name('guest-account.complete-registration');
 
 Route::middleware('auth')->group(function () {
     Route::get('verify-email', EmailVerificationPromptController::class)

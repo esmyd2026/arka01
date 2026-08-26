@@ -21,6 +21,7 @@ use App\Services\WhatsAppRideAccess;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -181,7 +182,7 @@ class WhatsAppRideBookingHandler
             }
             $context['is_scheduled'] = false;
 
-            return $this->askLocation($phone, $conversation, 'WA_BOOKING_ORIGIN', $context, '¿Desde dónde le recogemos? Comparta su ubicación o escriba una dirección completa o coordenadas.');
+            return $this->askLocation($phone, $conversation, 'WA_BOOKING_ORIGIN', $context, '¿Desde dónde le recogemos? Comparta su ubicación o escriba una dirección completa o coordenadas.', $user);
         }
 
         if ($state === 'WA_BOOKING_SCHEDULE') {
@@ -198,11 +199,43 @@ class WhatsAppRideBookingHandler
             $context['is_scheduled'] = true;
             $context['scheduled_at'] = $scheduledAt->toIso8601String();
 
-            return $this->askLocation($phone, $conversation, 'WA_BOOKING_ORIGIN', $context, '¿Desde dónde le recogemos? Comparta ubicación, dirección o coordenadas.');
+            return $this->askLocation($phone, $conversation, 'WA_BOOKING_ORIGIN', $context, '¿Desde dónde le recogemos? Comparta ubicación, dirección o coordenadas.', $user);
         }
 
         if (in_array($state, ['WA_BOOKING_ORIGIN', 'WA_BOOKING_DESTINATION'], true)) {
-            $point = $this->resolvePoint($text, $metadata);
+            $field = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
+
+            // Pedido explícito del usuario ("cuando pida nuevamente
+            // mostrarle las ubicaciones que ha solicitado para volverlas a
+            // repetir") — tocar una de la lista que armó askLocation() usa
+            // la dirección y coordenadas EXACTAS de una carrera anterior,
+            // sin volver a geocodificar ni pedir confirmación (ya se
+            // confirmó la primera vez que se usó).
+            if ($text === 'wa_recent_new') {
+                WhatsAppFreeformSender::sendText($phone, 'Escriba la dirección o comparta la ubicación desde WhatsApp.');
+
+                return true;
+            }
+            if (preg_match('/^wa_recent_'.$field.':(\d+)$/', $text, $match) && isset($context['recent_'.$field.'_options'][(int) $match[1]])) {
+                $point = $context['recent_'.$field.'_options'][(int) $match[1]];
+                unset($context['recent_origin_options'], $context['recent_destination_options']);
+
+                return $this->commitPoint($phone, $user, $conversation, $state, $context, $point);
+            }
+
+            // Pedido explícito del usuario ("las direcciones que mete el
+            // cliente por descripciones aun el bot no las detecta") — sin
+            // esto, Places siempre sesgaba la búsqueda hacia Guayaquil (ver
+            // GoogleGeocodingService::findPlace()), aunque el cliente
+            // estuviera pidiendo algo en Quito o cualquier otra ciudad.
+            // Para el ORIGEN se usa la ciudad registrada del cliente (mejor
+            // pista disponible antes de saber nada del viaje); para el
+            // DESTINO, el origen recién confirmado — casi siempre más
+            // cerca de la realidad que la ciudad de registro.
+            $biasPoint = $state === 'WA_BOOKING_DESTINATION'
+                ? ($context['origin'] ?? null)
+                : ($user?->city ? ['lat' => (float) $user->city->lat, 'lng' => (float) $user->city->lng] : null);
+            $point = $this->resolvePoint($text, $metadata, $biasPoint);
             if (! $point) {
                 WhatsAppFreeformSender::sendText($phone, 'No pude ubicar ese punto. Comparta la ubicación desde WhatsApp o escriba calle, sector y ciudad.');
 
@@ -218,7 +251,7 @@ class WhatsAppRideBookingHandler
             // (coordenadas exactas del GPS) no necesita esto — solo cuando
             // se resolvió a partir de texto.
             if (isset($metadata['location']['lat'], $metadata['location']['lng'])) {
-                return $this->commitPoint($phone, $conversation, $state, $context, $point);
+                return $this->commitPoint($phone, $user, $conversation, $state, $context, $point);
             }
 
             $context['pending_point'] = $point;
@@ -241,7 +274,7 @@ class WhatsAppRideBookingHandler
                     ? '¿Desde dónde le recogemos? Comparta su ubicación o escriba una dirección completa o coordenadas.'
                     : '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.';
 
-                return $this->askLocation($phone, $conversation, $originalState, $context, $message);
+                return $this->askLocation($phone, $conversation, $originalState, $context, $message, $user);
             }
 
             if ($text !== 'wa_point_confirm' || ! isset($context['pending_point'])) {
@@ -253,7 +286,7 @@ class WhatsAppRideBookingHandler
             $point = $context['pending_point'];
             unset($context['pending_point'], $context['pending_point_state']);
 
-            return $this->commitPoint($phone, $conversation, $originalState, $context, $point);
+            return $this->commitPoint($phone, $user, $conversation, $originalState, $context, $point);
         }
 
         if ($state === 'WA_BOOKING_PAX') {
@@ -329,8 +362,32 @@ class WhatsAppRideBookingHandler
         return true;
     }
 
-    private function askLocation(string $phone, ChatbotConversation $conversation, string $state, array $context, string $message): bool
+    /**
+     * Pedido explícito del usuario ("cuando pida nuevamente mostrarle las
+     * ubicaciones que ha solicitado para volverlas a repetir") — si el
+     * cliente ya tiene carreras anteriores, ofrece sus últimas direcciones
+     * (distintas entre sí) como lista real de WhatsApp antes de pedirle que
+     * escriba o comparta una nueva. Sin historial (número nuevo, o
+     * ninguna coincidencia), el prompt queda igual que siempre — texto
+     * plano, nada que elegir.
+     */
+    private function askLocation(string $phone, ChatbotConversation $conversation, string $state, array $context, string $message, ?User $user): bool
     {
+        $field = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
+        $recent = $this->recentAddressOptions($user, $field);
+
+        if ($recent) {
+            $context['recent_'.$field.'_options'] = $recent;
+            $this->setState($conversation, $state, $context);
+            $rows = collect($recent)
+                ->map(fn (array $point, int $i) => ['id' => "wa_recent_{$field}:{$i}", 'title' => $point['address']])
+                ->push(['id' => 'wa_recent_new', 'title' => 'Otra ubicación'])
+                ->all();
+            WhatsAppFreeformSender::sendList($phone, $message, 'Elegir', $rows);
+
+            return true;
+        }
+
         $this->setState($conversation, $state, $context);
         WhatsAppFreeformSender::sendText($phone, $message);
 
@@ -338,18 +395,41 @@ class WhatsAppRideBookingHandler
     }
 
     /**
+     * @return array<int, array{lat: float, lng: float, address: string}>
+     */
+    private function recentAddressOptions(?User $user, string $field): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        return RideRequest::query()
+            ->where('client_user_id', $user->id)
+            ->whereNotNull("{$field}_address")
+            ->latest('id')
+            ->limit(20)
+            ->get(["{$field}_address as address", "{$field}_lat as lat", "{$field}_lng as lng"])
+            ->unique('address')
+            ->take(4)
+            ->map(fn ($row) => ['address' => (string) $row->address, 'lat' => (float) $row->lat, 'lng' => (float) $row->lng])
+            ->values()
+            ->all();
+    }
+
+    /**
      * Guarda el punto (origen o destino) ya confirmado y avanza al
      * siguiente paso — extraído para reusarlo tanto cuando no hacía falta
-     * confirmar (ubicación compartida) como después de tocar "Sí, es
-     * correcto" en WA_BOOKING_CONFIRM_POINT.
+     * confirmar (ubicación compartida, o una dirección repetida del
+     * historial) como después de tocar "Sí, es correcto" en
+     * WA_BOOKING_CONFIRM_POINT.
      */
-    private function commitPoint(string $phone, ChatbotConversation $conversation, string $state, array $context, array $point): bool
+    private function commitPoint(string $phone, ?User $user, ChatbotConversation $conversation, string $state, array $context, array $point): bool
     {
         $key = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
         $context[$key] = $point;
 
         if ($key === 'origin') {
-            return $this->askLocation($phone, $conversation, 'WA_BOOKING_DESTINATION', $context, '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.');
+            return $this->askLocation($phone, $conversation, 'WA_BOOKING_DESTINATION', $context, '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.', $user);
         }
 
         // Pedido explícito del usuario: preguntar cuántas personas son
@@ -360,14 +440,29 @@ class WhatsAppRideBookingHandler
         return true;
     }
 
-    private function resolvePoint(string $text, array $metadata): ?array
+    /** @param array{lat: float, lng: float}|null $biasPoint */
+    private function resolvePoint(string $text, array $metadata, ?array $biasPoint): ?array
     {
         $location = $metadata['location'] ?? null;
         if (isset($location['lat'], $location['lng'])) {
-            return ['lat' => (float) $location['lat'], 'lng' => (float) $location['lng'], 'address' => $location['address'] ?: ($location['name'] ?: 'Ubicación compartida')];
+            $lat = (float) $location['lat'];
+            $lng = (float) $location['lng'];
+            $address = $location['address'] ?: $location['name'];
+
+            // Pedido explícito del usuario ("la ubicación que le llega al
+            // conductor dice 'ubicación compartida'... pero no le dio el
+            // detalle") — un pin suelto en el mapa de WhatsApp (a
+            // diferencia de buscar un lugar con nombre) no trae ninguna
+            // dirección, solo coordenadas; se resuelve con geocoding
+            // inverso en vez de dejar el texto genérico.
+            if (! $address) {
+                $address = $this->geocoder->reverseGeocode($lat, $lng) ?? 'Ubicación compartida';
+            }
+
+            return ['lat' => $lat, 'lng' => $lng, 'address' => $address];
         }
 
-        return $this->geocoder->resolve($text);
+        return $this->geocoder->resolve($text, $biasPoint['lat'] ?? null, $biasPoint['lng'] ?? null);
     }
 
     private function askCooperative(string $phone, User $user, ChatbotConversation $conversation, array $context): bool
@@ -540,6 +635,7 @@ class WhatsAppRideBookingHandler
             // columna (Eloquent devuelve null en silencio en vez de un
             // error, por eso pasó desapercibido).
             WhatsAppFreeformSender::sendText($phone, '✅ Solicitud #'.$rideRequest->id.' creada por $'.number_format((float) $rideRequest->current_offered_price, 2).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.');
+            $this->offerFullRegistrationIfFirstGuestRide($phone, $user);
         } catch (ValidationException $e) {
             $this->clear($conversation);
             WhatsAppFreeformSender::sendText($phone, 'No pudimos crear la solicitud: '.collect($e->errors())->flatten()->first());
@@ -549,6 +645,40 @@ class WhatsAppRideBookingHandler
         }
 
         return true;
+    }
+
+    /**
+     * Pedido explícito del usuario ("deberiamos verificar que si no tiene
+     * cuenta preguntarle si quiere registrarse para luego sus solicitudes
+     * sean mas rapido") — la cuenta YA se crea sola en la primera reserva
+     * (ver WA_BOOKING_NAME_CONFIRM más arriba), pero queda con una
+     * contraseña al azar que nunca vio (`password_set_at` sigue en null,
+     * a diferencia del registro real por Auth\RegisteredUserController) —
+     * no puede entrar a Arka01 con ella. Se lo invita UNA sola vez, justo
+     * después de su primera carrera (cuando ya vio que el servicio
+     * funciona, el mejor momento) — nunca de nuevo en las siguientes.
+     */
+    private function offerFullRegistrationIfFirstGuestRide(string $phone, User $user): void
+    {
+        if ($user->password_set_at !== null) {
+            return;
+        }
+
+        if (RideRequest::query()->where('client_user_id', $user->id)->count() > 1) {
+            return;
+        }
+
+        // Link firmado (mismo patrón ya probado que
+        // Auth\SessionTakeoverController::lock()): no tiene contraseña real
+        // para entrar por el login normal ni un correo real para "olvidé mi
+        // contraseña" — este link lo deja entrar sin ninguna de las dos,
+        // directo a completar su correo y contraseña de verdad. Válido 24h
+        // (alcanza de sobra para que lo abra desde el mismo chat).
+        $link = URL::temporarySignedRoute('guest-account.complete-registration', now()->addHours(24), ['user' => $user->id]);
+        WhatsAppFreeformSender::sendText(
+            $phone,
+            "💡 Termine de registrarse en Arka01 con su correo y contraseña — así puede entrar a la app para ver sus carreras y pedir más rápido la próxima vez:\n{$link}"
+        );
     }
 
     private function setState(ChatbotConversation $conversation, string $state, array $context): void

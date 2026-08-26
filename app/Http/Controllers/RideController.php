@@ -26,6 +26,7 @@ use App\Notifications\RideRescheduleResponsePushNotification;
 use App\Notifications\RideStartedPushNotification;
 use App\Services\Haversine;
 use App\Services\RideDispatchAdvancer;
+use App\Services\WhatsAppFreeformSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -446,6 +447,7 @@ class RideController extends Controller
         if ($automaticallyArrived) {
             broadcast(new RideArrived($automaticallyArrived))->toOthers();
             $automaticallyArrived->client->notify(new RideArrivedPushNotification($automaticallyArrived));
+            WhatsAppFreeformSender::sendRideArrivedToClient($automaticallyArrived);
         }
 
         return response()->json([
@@ -490,6 +492,7 @@ class RideController extends Controller
         broadcast(new RideStarted($ride))->toOthers();
 
         $ride->client->notify(new RideStartedPushNotification($ride));
+        WhatsAppFreeformSender::sendRideStartedToClient($ride);
 
         return back();
     }
@@ -531,6 +534,7 @@ class RideController extends Controller
         broadcast(new RideArrived($ride))->toOthers();
 
         $ride->client->notify(new RideArrivedPushNotification($ride));
+        WhatsAppFreeformSender::sendRideArrivedToClient($ride);
 
         return back();
     }
@@ -575,6 +579,7 @@ class RideController extends Controller
         // cambio de estado visible para el cliente necesita también un aviso
         // push, no solo el refresco en vivo por WebSocket.
         $ride->client->notify(new RidePickedUpPushNotification($ride));
+        WhatsAppFreeformSender::sendRidePickedUpToClient($ride);
 
         return back();
     }
@@ -675,6 +680,7 @@ class RideController extends Controller
         // habilitadas en cada acción) — para que se entere y pueda calificar,
         // aunque tenga la app cerrada.
         $ride->client->notify(new RideCompletedPushNotification($ride));
+        WhatsAppFreeformSender::sendRideCompletedToClient($ride);
 
         return back();
     }
@@ -750,6 +756,7 @@ class RideController extends Controller
             broadcast(new RideCompleted($ride))->toOthers();
             RideDispatchAdvancer::activateNextWaitingRequest();
             $ride->client->notify(new RideCompletedPushNotification($ride));
+            WhatsAppFreeformSender::sendRideCompletedToClient($ride);
         }
 
         return back();

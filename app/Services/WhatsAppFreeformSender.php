@@ -326,6 +326,59 @@ class WhatsAppFreeformSender
         self::sendText($client->phone, $message);
     }
 
+    /**
+     * Los siguientes 4 avisos completan la misma serie de eventos que ya
+     * tiene su equivalente en Web Push (Ride*PushNotification, ver
+     * RideController) pero le faltaba a WhatsApp — pedido explícito del
+     * usuario, con caso real: "cuando el conductor iba por el cliente no
+     * le llego el mensaje... y cuando termino la carrera tampoco le dijo
+     * nada". `sendRideAcceptedToClient()` de arriba ya cubre el aviso
+     * inicial; para una carrera INMEDIATA (la mayoría) ese es el único
+     * momento en que el conductor "arranca" — start() solo aplica a
+     * carreras PROGRAMADAS (ver el comentario de RideController::start()),
+     * así que este aviso llega recién ahí. arrived()/pickedUp()/complete()
+     * sí pasan siempre, para cualquier carrera.
+     */
+    public static function sendRideStartedToClient(Ride $ride): void
+    {
+        $client = $ride->client;
+        if (! self::notificationsEnabledFor($client)) {
+            return;
+        }
+
+        self::sendText($client->phone, "🚗 {$ride->driver->name} ya salió a buscarlo.\n\nSiga el viaje en Arka01: ".route('rides.show', $ride));
+    }
+
+    public static function sendRideArrivedToClient(Ride $ride): void
+    {
+        $client = $ride->client;
+        if (! self::notificationsEnabledFor($client)) {
+            return;
+        }
+
+        self::sendText($client->phone, "📍 {$ride->driver->name} llegó y lo está esperando.");
+    }
+
+    public static function sendRidePickedUpToClient(Ride $ride): void
+    {
+        $client = $ride->client;
+        if (! self::notificationsEnabledFor($client)) {
+            return;
+        }
+
+        self::sendText($client->phone, '▶️ Su viaje comenzó hacia '.($ride->destination_address ?? 'su destino').'.');
+    }
+
+    public static function sendRideCompletedToClient(Ride $ride): void
+    {
+        $client = $ride->client;
+        if (! self::notificationsEnabledFor($client)) {
+            return;
+        }
+
+        self::sendText($client->phone, "✅ Carrera completada — \${$ride->settled_price}.\n\nCalifique el viaje en Arka01: ".route('rides.show', $ride));
+    }
+
     private static function notificationsEnabledFor(User $user): bool
     {
         return WhatsAppRideAccess::notificationsEnabled()

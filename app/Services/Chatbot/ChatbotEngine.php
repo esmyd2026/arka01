@@ -59,6 +59,7 @@ class ChatbotEngine
         private readonly WhatsAppRideActionHandler $rideActionHandler,
         private readonly WhatsAppRideBookingHandler $rideBookingHandler,
         private readonly WhatsAppDriverConnectHandler $driverConnectHandler,
+        private readonly WhatsAppPendingRequestHandler $pendingRequestHandler,
     ) {}
 
     public function respondTo(string $phoneE164, ?User $user, string $rawText, array $metadata = []): void
@@ -118,6 +119,17 @@ class ChatbotEngine
         }
 
         if ($this->driverConnectHandler->handle($phoneE164, $user, $rawText, $conversation)) {
+            return;
+        }
+
+        // Pedido explícito del usuario, con captura real: pidió una
+        // carrera, nadie la aceptó, y al escribir de nuevo el bot no
+        // reconoció que tenía una pendiente — le mandó el menú genérico en
+        // vez de contarle el estado real. Antes de cualquier otra cosa
+        // (incluido arrancar una reserva nueva si vuelve a escribir "pedir
+        // carrera"): si ya tiene una sin aceptar, eso es lo que importa
+        // contestar primero.
+        if ($this->pendingRequestHandler->handle($phoneE164, $user, $rawText, $conversation)) {
             return;
         }
 
