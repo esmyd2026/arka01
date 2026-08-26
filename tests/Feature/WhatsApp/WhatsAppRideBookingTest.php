@@ -8,10 +8,13 @@ use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
+use App\Models\RideRequest;
 use App\Models\User;
 use App\Models\WhatsAppSetting;
 use App\Services\Chatbot\ChatbotEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class WhatsAppRideBookingTest extends TestCase
@@ -60,9 +63,59 @@ class WhatsAppRideBookingTest extends TestCase
             'passenger_count' => 2,
         ]);
         $this->assertNull(ChatbotConversation::forPhone($client->phone)->pending_intent);
+        // Bug real reportado por el usuario (con captura: "el valor es
+        // $0.00") — WhatsAppRideBookingHandler::createRide() leía
+        // `offered_price`, un atributo que no existe en el modelo (el campo
+        // real es `current_offered_price`); Eloquent devolvía null en
+        // silencio en vez de un error.
+        $this->assertGreaterThan(0, RideRequest::where('client_user_id', $client->id)->latest('id')->first()->current_offered_price);
         // Con QUEUE_CONNECTION=sync el job diferido de 30 segundos se
         // ejecuta inmediatamente y puede expirar la oferta en el test. Lo
         // importante aquí es que el canal creó la misma solicitud real.
+    }
+
+    /**
+     * Pedido explícito del usuario, con captura real de WhatsApp: escribió
+     * "Coronel y Calicuchima" y el bot no lo entendió sin dar ninguna
+     * pista — y donde sí resolvía algo por texto, lo aceptaba directo sin
+     * mostrarlo. "Que le mande lo que te retorna google map para que
+     * confirme": una dirección escrita a mano se muestra con botones antes
+     * de aceptarla; una ubicación COMPARTIDA (coordenadas GPS reales, ver
+     * el resto de los tests de este archivo) no necesita ese paso.
+     */
+    public function test_a_typed_address_is_shown_back_for_confirmation_before_being_accepted(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $client = User::factory()->create([
+            'phone' => '+593991111166',
+            'whatsapp_privacy_accepted_at' => now(),
+        ]);
+        $driver = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -2.138, 'current_lng' => -79.895, 'passenger_capacity' => 4]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        Http::fake([
+            'maps.googleapis.com/maps/api/geocode/*' => Http::response([
+                'results' => [['formatted_address' => 'Av. Coronel y Calicuchima, Guayaquil', 'geometry' => ['location' => ['lat' => -2.19, 'lng' => -79.89]]]],
+            ], 200),
+        ]);
+        Config::set('services.google_maps.server_api_key', 'fake-key');
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, 'Coronel y Calicuchima');
+
+        // Todavía no quedó aceptado como origen — espera confirmación.
+        $conversation = ChatbotConversation::forPhone($client->phone);
+        $this->assertSame('WA_BOOKING_CONFIRM_POINT', $conversation->pending_intent);
+        $this->assertArrayNotHasKey('origin', $conversation->context);
+        $this->assertSame('Av. Coronel y Calicuchima, Guayaquil', $conversation->context['pending_point']['address']);
+
+        $engine->respondTo($client->phone, $client, 'wa_point_confirm');
+
+        $this->assertSame('Av. Coronel y Calicuchima, Guayaquil', ChatbotConversation::forPhone($client->phone)->context['origin']['address']);
     }
 
     public function test_booking_stops_immediately_when_admin_disables_it(): void
@@ -145,6 +198,7 @@ class WhatsAppRideBookingTest extends TestCase
             'origin_address' => 'Origen',
             'destination_address' => 'Destino',
         ]);
+        $this->assertGreaterThan(0, RideRequest::where('client_user_id', $client->id)->latest('id')->first()->current_offered_price);
     }
 
     public function test_a_client_without_a_fleet_and_no_nearby_cooperative_candidates_gets_a_clear_message(): void

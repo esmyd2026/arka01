@@ -193,17 +193,52 @@ class WhatsAppRideBookingHandler
 
                 return true;
             }
-            $key = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
-            $context[$key] = $point;
-            if ($key === 'origin') {
-                return $this->askLocation($phone, $conversation, 'WA_BOOKING_DESTINATION', $context, '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.');
+
+            // Pedido explícito del usuario, con captura real: escribió
+            // "Coronel y Calicuchima" y el bot no lo entendió — ahora
+            // GoogleGeocodingService también prueba con Places (mejor para
+            // esquinas/lugares sueltos), pero sigue siendo una ADIVINANZA a
+            // partir de texto libre. "Que le mande lo que te retorna google
+            // map para que confirme": una ubicación COMPARTIDA de WhatsApp
+            // (coordenadas exactas del GPS) no necesita esto — solo cuando
+            // se resolvió a partir de texto.
+            if (isset($metadata['location']['lat'], $metadata['location']['lng'])) {
+                return $this->commitPoint($phone, $conversation, $state, $context, $point);
             }
-            // Pedido explícito del usuario: preguntar cuántas personas son
-            // (antes quedaba fijo en 1, ver createRide() más abajo).
-            $this->setState($conversation, 'WA_BOOKING_PAX', $context);
-            WhatsAppFreeformSender::sendText($phone, '¿Cuántas personas son?');
+
+            $context['pending_point'] = $point;
+            $context['pending_point_state'] = $state;
+            $this->setState($conversation, 'WA_BOOKING_CONFIRM_POINT', $context);
+            WhatsAppFreeformSender::sendButtons($phone, "📍 {$point['address']}\n\n¿Es correcto?", [
+                ['id' => 'wa_point_confirm', 'title' => 'Sí, es correcto'],
+                ['id' => 'wa_point_retry', 'title' => 'Escribir de nuevo'],
+            ]);
 
             return true;
+        }
+
+        if ($state === 'WA_BOOKING_CONFIRM_POINT') {
+            $originalState = $context['pending_point_state'] ?? 'WA_BOOKING_ORIGIN';
+
+            if ($text === 'wa_point_retry') {
+                unset($context['pending_point'], $context['pending_point_state']);
+                $message = $originalState === 'WA_BOOKING_ORIGIN'
+                    ? '¿Desde dónde le recogemos? Comparta su ubicación o escriba una dirección completa o coordenadas.'
+                    : '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.';
+
+                return $this->askLocation($phone, $conversation, $originalState, $context, $message);
+            }
+
+            if ($text !== 'wa_point_confirm' || ! isset($context['pending_point'])) {
+                WhatsAppFreeformSender::sendText($phone, 'Toque uno de los botones para continuar.');
+
+                return true;
+            }
+
+            $point = $context['pending_point'];
+            unset($context['pending_point'], $context['pending_point_state']);
+
+            return $this->commitPoint($phone, $conversation, $originalState, $context, $point);
         }
 
         if ($state === 'WA_BOOKING_PAX') {
@@ -283,6 +318,29 @@ class WhatsAppRideBookingHandler
     {
         $this->setState($conversation, $state, $context);
         WhatsAppFreeformSender::sendText($phone, $message);
+
+        return true;
+    }
+
+    /**
+     * Guarda el punto (origen o destino) ya confirmado y avanza al
+     * siguiente paso — extraído para reusarlo tanto cuando no hacía falta
+     * confirmar (ubicación compartida) como después de tocar "Sí, es
+     * correcto" en WA_BOOKING_CONFIRM_POINT.
+     */
+    private function commitPoint(string $phone, ChatbotConversation $conversation, string $state, array $context, array $point): bool
+    {
+        $key = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
+        $context[$key] = $point;
+
+        if ($key === 'origin') {
+            return $this->askLocation($phone, $conversation, 'WA_BOOKING_DESTINATION', $context, '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.');
+        }
+
+        // Pedido explícito del usuario: preguntar cuántas personas son
+        // (antes quedaba fijo en 1, ver createRide() más abajo).
+        $this->setState($conversation, 'WA_BOOKING_PAX', $context);
+        WhatsAppFreeformSender::sendText($phone, '¿Cuántas personas son?');
 
         return true;
     }
@@ -456,7 +514,12 @@ class WhatsAppRideBookingHandler
             app(RideRequestController::class)->store($request);
             $rideRequest = RideRequest::query()->where('client_user_id', $user->id)->latest('id')->firstOrFail();
             $this->clear($conversation);
-            WhatsAppFreeformSender::sendText($phone, '✅ Solicitud #'.$rideRequest->id.' creada por $'.number_format((float) $rideRequest->offered_price, 2).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.');
+            // Bug real reportado por el usuario (con captura: "el valor es
+            // $0.00" después de confirmar) — el campo del modelo es
+            // `current_offered_price`, `offered_price` no existe como
+            // columna (Eloquent devuelve null en silencio en vez de un
+            // error, por eso pasó desapercibido).
+            WhatsAppFreeformSender::sendText($phone, '✅ Solicitud #'.$rideRequest->id.' creada por $'.number_format((float) $rideRequest->current_offered_price, 2).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.');
         } catch (ValidationException $e) {
             $this->clear($conversation);
             WhatsAppFreeformSender::sendText($phone, 'No pudimos crear la solicitud: '.collect($e->errors())->flatten()->first());

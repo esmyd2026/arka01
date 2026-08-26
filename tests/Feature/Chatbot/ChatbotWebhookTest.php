@@ -6,6 +6,7 @@ use App\Jobs\ProcessChatbotMessage;
 use App\Jobs\SendWhatsAppSessionRecoveryPrompt;
 use App\Models\ChatbotConversation;
 use App\Models\ChatbotSetting;
+use App\Models\Faq;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Models\WhatsAppSetting;
@@ -380,5 +381,34 @@ class ChatbotWebhookTest extends TestCase
         $this->sendInbound('593991234567', 'como se calcula el precio');
 
         Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'recargo si es horario nocturno'));
+    }
+
+    /**
+     * Pedido explícito del usuario, tras probar el bot: "en preguntas
+     * frecuente que seleccione por botones no le pidas que ingrese la
+     * opción en número" — antes "Preguntas frecuentes" mandaba texto con
+     * una lista numerada; ahora manda una lista real de WhatsApp, y tocar
+     * una fila resuelve la pregunta por su id exacto, sin escribir nada.
+     */
+    public function test_preguntas_frecuentes_sends_a_real_whatsapp_list_and_touching_a_row_answers_it(): void
+    {
+        $this->enableWhatsApp();
+        User::factory()->create(['phone' => '+593991234567']);
+        ChatbotConversation::create([
+            'phone' => '+593991234567',
+            'pending_intent' => 'AWAITING_MENU_CHOICE',
+            'context' => ['menu_options' => ['PREGUNTA_FRECUENTE']],
+        ]);
+
+        $this->sendInbound('593991234567', 'PREGUNTA_FRECUENTE');
+
+        Http::assertSent(fn ($request) => ($request['interactive']['type'] ?? null) === 'list'
+            && ! empty($request['interactive']['action']['sections'][0]['rows'] ?? []));
+
+        $faqId = ChatbotConversation::forPhone('+593991234567')->context['faq_ids'][0];
+
+        $this->sendInbound('593991234567', "FAQ:{$faqId}");
+
+        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', Faq::find($faqId)->answer));
     }
 }

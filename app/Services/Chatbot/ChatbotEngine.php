@@ -13,6 +13,7 @@ use App\Services\Chatbot\IntentActionHandlers\EscalateToSupportHandler;
 use App\Services\Chatbot\IntentActionHandlers\ResendVerificationCodeHandler;
 use App\Services\SystemEventLogger;
 use App\Services\WhatsAppFreeformSender;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -167,6 +168,17 @@ class ChatbotEngine
                 return;
             }
 
+            // Preguntas frecuentes (pedido explícito del usuario: "que
+            // seleccione por botones... no le pidas que ingrese la opción
+            // en número") — antes era texto con una lista numerada
+            // ("1. ¿...?"), ahora una lista real de WhatsApp. Escribir el
+            // número sigue funcionando como respaldo (ver resolveFaqChoice()).
+            if ($match->intent->action === 'answer_faq') {
+                $this->sendFaqList($conversation, $phoneE164, $role);
+
+                return;
+            }
+
             // El menú principal (pedido explícito del usuario: "chatbot mas
             // pro... con botones") ya no es una respuesta de TEXTO como el
             // resto de buildReply() — es un mensaje interactivo aparte.
@@ -204,39 +216,60 @@ class ChatbotEngine
         return match ($intent->action) {
             // 'show_menu' ya no pasa por acá — ver el chequeo en process(),
             // el menú principal ahora es un mensaje interactivo de botones
-            // (sendMainMenu()), no una respuesta de texto.
+            // (sendMainMenu()), no una respuesta de texto. 'answer_faq'
+            // tampoco — ver sendFaqList().
             'resend_code' => [$this->resendHandler->handle($user), null, null],
             'escalate_support' => [$this->escalateHandler->handle($user, $rawText, $phoneE164), null, null],
-            'answer_faq' => $this->faqMenuReply($role),
             default => [$intent->reply_message ?? 'Listo.', null, null],
         };
     }
 
     /**
-     * @return array{0: string, 1: ?string, 2: ?array}
+     * Preguntas frecuentes como lista real de WhatsApp (pedido explícito
+     * del usuario: "que seleccione por botones... no le pidas que ingrese
+     * la opción en número") — antes era texto con una lista numerada.
      */
-    private function faqMenuReply(?string $role): array
+    private function sendFaqList(ChatbotConversation $conversation, string $phone, ?string $role): void
     {
         $faqs = Faq::query()->where('is_active', true)->orderBy('sort_order')
             ->when($role, fn ($q) => $q->forAudience($role))
-            ->take(6)
+            ->take(10)
             ->get();
 
         if ($faqs->isEmpty()) {
-            return [$this->faqHandler->menuText($role), null, null];
+            $this->resolve($conversation, $this->faqHandler->menuText($role), null, null);
+
+            return;
         }
 
-        $list = $faqs->values()->map(fn (Faq $faq, int $i) => ($i + 1).'. '.$faq->question)->implode("\n");
-        $text = "Estas son algunas preguntas frecuentes:\n\n{$list}\n\nEscríbeme el número, o pregunta directamente con tus palabras.";
+        WhatsAppFreeformSender::sendList(
+            $phone,
+            'Estas son algunas preguntas frecuentes:',
+            'Ver preguntas',
+            $faqs->map(fn (Faq $faq) => ['id' => 'FAQ:'.$faq->id, 'title' => Str::limit($faq->question, 24, '')])->all()
+        );
 
-        return [$text, 'AWAITING_FAQ_CHOICE', ['faq_ids' => $faqs->pluck('id')->all()]];
+        $conversation->update([
+            'unresolved_attempts' => 0,
+            'pending_intent' => 'AWAITING_FAQ_CHOICE',
+            'context' => ['faq_ids' => $faqs->pluck('id')->all()],
+            'last_message_at' => now(),
+        ]);
     }
 
     private function resolveFaqChoice(string $rawText, ChatbotConversation $conversation): ?string
     {
         $faqIds = $conversation->context['faq_ids'] ?? [];
-        $normalized = MessageNormalizer::normalize($rawText);
 
+        // Tocar una fila de la lista manda el id exacto ("FAQ:12").
+        if (preg_match('/^FAQ:(\d+)$/', $rawText, $match) && in_array((int) $match[1], $faqIds, true)) {
+            $faq = Faq::query()->find((int) $match[1]);
+
+            return $faq ? "{$faq->question}\n\n{$faq->answer}" : null;
+        }
+
+        // Respaldo: si igual escribe el número a mano.
+        $normalized = MessageNormalizer::normalize($rawText);
         if (! ctype_digit($normalized) || ! isset($faqIds[((int) $normalized) - 1])) {
             return null;
         }
