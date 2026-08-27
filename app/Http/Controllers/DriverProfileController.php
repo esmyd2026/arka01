@@ -36,6 +36,22 @@ class DriverProfileController extends Controller
      */
     private const ACTIVE_RIDE_MESSAGE = 'Tiene un viaje en curso — termínelo antes de cambiar de rol.';
 
+    /**
+     * Datos que identifican el vehículo y quedan fijados después del primer
+     * guardado. Las comodidades no están aquí porque sí pueden cambiar con el
+     * uso diario sin que el conductor haya cambiado de vehículo.
+     */
+    private const LOCKED_VEHICLE_FIELDS = [
+        'vehicle_make',
+        'vehicle_model',
+        'vehicle_color',
+        'vehicle_type',
+        'vehicle_plate',
+        'vehicle_year',
+        'passenger_capacity',
+        'has_trunk',
+    ];
+
     public function __construct(private readonly PlanLimits $planLimits) {}
 
     /**
@@ -115,6 +131,7 @@ class DriverProfileController extends Controller
     {
         $user = $request->user();
         abort_if($user->isCooperative(), 403);
+        $existingProfile = $user->driverProfile;
 
         // Único bloqueo real que queda para cambiar de rol: un viaje en
         // curso. Cambiar de cliente a conductor a mitad de una carrera
@@ -205,6 +222,27 @@ class DriverProfileController extends Controller
             'minimum_fare.max' => 'La plataforma no permite superar $'.number_format($adminMinimumFare, 2).' como tarifa mínima de una carrera (tope general definido en /admin/tarifas). Puede dejarla en blanco o poner una menor.',
         ]);
 
+        // Una vez guardado, cada dato identificador del vehículo queda
+        // protegido también en el servidor. Así no basta con volver a
+        // habilitar un input desde el navegador para modificarlo. En perfiles
+        // antiguos incompletos solo se bloquean los valores que ya existen;
+        // los pendientes siguen disponibles para terminar el registro.
+        if ($existingProfile) {
+            foreach (self::LOCKED_VEHICLE_FIELDS as $field) {
+                $isLocked = $field === 'has_trunk'
+                    ? $existingProfile->hasCompleteVehicleInfo()
+                    : filled($existingProfile->{$field});
+
+                if ($isLocked) {
+                    // Se conserva siempre el valor persistido. Ignorar un
+                    // valor alterado permite guardar teléfono, tarifas o
+                    // comodidades sin que un payload antiguo bloquee toda la
+                    // operación, pero el vehículo nunca cambia.
+                    $validated[$field] = $existingProfile->{$field};
+                }
+            }
+        }
+
         // Cambio de número de WhatsApp (pedido explícito del usuario, caso
         // real: un conductor necesitaba corregir el número declarado en su
         // perfil). 'country_code' y 'phone_local' no son campos de
@@ -270,7 +308,6 @@ class DriverProfileController extends Controller
         $validated['is_public'] = $this->planLimits->forDriver($request->user())['public_visibility']
             && ($validated['is_public'] ?? false);
 
-        $existingProfile = $request->user()->driverProfile;
         $reviewedDocuments = false;
         $isSubmittingVerification = ! $existingProfile
             || $request->hasFile('identity_document')

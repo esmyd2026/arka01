@@ -143,4 +143,36 @@ class SharedInertiaPropsTest extends TestCase
 
         $response->assertInertia(fn ($page) => $page->where('disabledQuickLinks', []));
     }
+
+    /**
+     * Pedido explícito del usuario: "una lista de sonidos que pueda
+     * seleccionar para las notificaciones y que las pueda activar desde el
+     * panel administrativo. y que tenga todo el volumen" —
+     * Utils/liveAlert.js lee esto en cualquier pantalla (AuthenticatedLayout.vue),
+     * no solo en /admin/sistema.
+     */
+    public function test_notification_sounds_and_volume_are_shared_when_set(): void
+    {
+        SiteSetting::current()->update(['notification_sounds' => ['attention' => 'siren'], 'notification_volume' => 60]);
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('profile.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('notificationSounds', ['attention' => 'siren'])
+            ->where('notificationVolume', 60)
+        );
+    }
+
+    public function test_notification_sounds_and_volume_default_when_unset(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('profile.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('notificationSounds', [])
+            ->where('notificationVolume', 100)
+        );
+    }
 }

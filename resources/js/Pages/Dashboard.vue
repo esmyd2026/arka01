@@ -53,6 +53,10 @@ const props = defineProps({
     // navegador resolviera — sin permiso, o mientras el aviso del navegador
     // seguía sin respuesta, se quedaba ahí sin ningún indicio de qué pasó.
     homeInitialCenter: { type: Object, default: null },
+    // Indicadores del panel admin (pedido explícito del usuario: "personas
+    // registradas, Pasajeros, conductores, cooperativas... esta semana. este
+    // mes. hoy") — null para cualquier cuenta que no sea admin.
+    adminStats: { type: Object, default: null },
 });
 
 const whatsappSessionActive = computed(() => props.whatsappSession && props.whatsappSession.status !== 'expired');
@@ -66,6 +70,23 @@ const hasRoute = (name) => route().has(name);
 // de "armá tu flota"/"convertite en conductor" no le sirve de nada — su
 // puerta de entrada real es el panel admin.
 const isAdmin = usePage().props.auth.user.is_admin;
+
+// Indicadores del panel admin (pedido explícito del usuario: "personas
+// registradas, Pasajeros, conductores, cooperativas... esta semana. este
+// mes. hoy... y cuando le de click alguno me lleve al modulo
+// correspondiente con la lista"). "Personas registradas" no tiene un
+// listado propio (es la suma de los otros roles + admins) — queda como
+// indicador de solo lectura, sin link.
+const adminIndicators = computed(() => {
+    if (!props.adminStats) return [];
+
+    return [
+        { key: 'people', label: 'Personas registradas', route: null, ...props.adminStats.people },
+        { key: 'clients', label: 'Pasajeros', route: 'admin.clients.index', ...props.adminStats.clients },
+        { key: 'drivers', label: 'Conductores', route: 'admin.drivers.index', ...props.adminStats.drivers },
+        { key: 'cooperatives', label: 'Cooperativas', route: 'admin.cooperatives.index', ...props.adminStats.cooperatives },
+    ];
+});
 
 // Saludo de la cabecera (pedido explícito del usuario: bajarlo de la barra
 // superior a acá, a la izquierda, en el lugar donde antes decía "Inicio").
@@ -482,7 +503,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                  título + subtítulo), no solo el switch pelado. En pantallas
                  chicas el título/subtítulo se ocultan (queda ícono + switch)
                  para no romper el layout de la cabecera junto con "Inicio". -->
-            <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center justify-between gap-3">
                 <!-- Pedido explícito del usuario: el saludo baja de la barra
                      superior a acá (donde antes decía "Inicio"), a la izquierda. -->
                 <div class="text-start">
@@ -499,39 +520,10 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <span
                         v-if="driverStats"
                         class="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                        :class="isAvailableNow ? 'bg-arka-primary/15 text-arka-primary-bright' : 'bg-arka-text-muted/15 text-arka-text-muted'"
+                        :class="!driverStats.can_connect ? 'bg-arka-warning/15 text-arka-warning' : isAvailableNow ? 'bg-arka-primary/15 text-arka-primary-bright' : 'bg-arka-text-muted/15 text-arka-text-muted'"
                     >
-                        {{ isAvailableNow ? '● Disponible' : '○ No disponible' }}
+                        {{ !driverStats.can_connect ? '● Perfil pendiente' : isAvailableNow ? '● Disponible' : '○ No disponible' }}
                     </span>
-                </div>
-
-                <div
-                    v-if="driverStats"
-                    class="flex items-center gap-2.5 px-3 py-1.5 rounded-arka"
-                    :class="isAvailableNow ? 'bg-arka-primary/10' : 'bg-arka-text-muted/10'"
-                >
-                    <div
-                        class="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-                        :class="isAvailableNow ? 'bg-arka-primary text-arka-base' : 'bg-arka-text-muted/20 text-arka-text-muted'"
-                    >
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v8" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 5.5a8 8 0 1 0 10 0" />
-                        </svg>
-                    </div>
-                    <div class="hidden sm:block leading-tight">
-                        <p class="text-xs font-medium text-arka-text">{{ isAvailableNow ? 'Desconectarme' : 'Activarme' }}</p>
-                        <p class="text-[11px] text-arka-text-muted">
-                            {{ isAvailableNow ? 'Dejar de recibir solicitudes' : 'Empezar a recibir solicitudes' }}
-                        </p>
-                    </div>
-                    <DriverAvailabilityToggle
-                        ref="availabilityToggleRef"
-                        :initial-available="driverStats.is_available"
-                        :can-connect="driverStats.can_connect"
-                        :blocked-reason="driverStats.connection_block_reason"
-                        @update:available="handleAvailabilityChange"
-                    />
                 </div>
             </div>
         </template>
@@ -570,6 +562,40 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             Ir al panel admin &rarr;
                         </Link>
                     </div>
+                </div>
+
+                <!-- Indicadores (pedido explícito del usuario: "personas
+                     registradas, Pasajeros, conductores, cooperativas...
+                     esta semana. este mes. hoy... y cuando le de click
+                     alguno me lleve al modulo correspondiente con la
+                     lista") — cada tarjeta con link es la puerta directa al
+                     listado filtrado de ese módulo. -->
+                <div v-if="isAdmin && adminIndicators.length" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <component
+                        :is="stat.route && hasRoute(stat.route) ? Link : 'div'"
+                        v-for="stat in adminIndicators"
+                        :key="stat.key"
+                        :href="stat.route && hasRoute(stat.route) ? route(stat.route) : undefined"
+                        class="rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4"
+                        :class="stat.route ? 'transition hover:border-arka-warning/30' : ''"
+                    >
+                        <p class="text-sm font-semibold text-arka-text">{{ stat.label }}</p>
+                        <p class="text-xs text-arka-text-muted">{{ stat.total }} en total</p>
+                        <div class="mt-3 grid grid-cols-3 gap-1 text-center">
+                            <div>
+                                <p class="text-lg font-bold text-arka-text">{{ stat.today }}</p>
+                                <p class="text-[11px] text-arka-text-muted">Hoy</p>
+                            </div>
+                            <div>
+                                <p class="text-lg font-bold text-arka-text">{{ stat.week }}</p>
+                                <p class="text-[11px] text-arka-text-muted">Semana</p>
+                            </div>
+                            <div>
+                                <p class="text-lg font-bold text-arka-text">{{ stat.month }}</p>
+                                <p class="text-[11px] text-arka-text-muted">Mes</p>
+                            </div>
+                        </div>
+                    </component>
                 </div>
 
                 <!-- Secciones agrupadas del panel admin (pedido explícito del
@@ -667,6 +693,139 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </div>
                     </div>
 
+                    <!-- Centro operativo del conductor: el estado para recibir
+                         trabajo y el único paso necesario para cambiarlo deben
+                         entenderse antes de consultar cualquier estadística. -->
+                    <section
+                        class="relative overflow-hidden rounded-2xl border p-4 shadow-sm"
+                        :class="!driverStats.can_connect
+                            ? 'border-arka-warning/35 bg-arka-warning/5'
+                            : isAvailableNow
+                                ? 'border-arka-primary/35 bg-arka-primary/10'
+                                : 'border-arka-text-muted/15 bg-arka-card'"
+                    >
+                        <div class="absolute right-0 top-0 h-24 w-24 -translate-y-1/2 translate-x-1/2 rounded-full"
+                            :class="!driverStats.can_connect ? 'bg-arka-warning/10' : 'bg-arka-primary/10'"
+                            aria-hidden="true"
+                        ></div>
+                        <div class="relative flex items-start gap-3">
+                            <div
+                                class="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                                :class="!driverStats.can_connect
+                                    ? 'bg-arka-warning/15 text-arka-warning'
+                                    : isAvailableNow
+                                        ? 'bg-arka-primary text-arka-base'
+                                        : 'bg-arka-text-muted/15 text-arka-text-muted'"
+                            >
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v8" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 5.5a8 8 0 1 0 10 0" />
+                                </svg>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em]"
+                                    :class="!driverStats.can_connect ? 'text-arka-warning' : 'text-arka-primary'"
+                                >
+                                    Estado para recibir carreras
+                                </p>
+                                <h3 class="mt-1 font-semibold text-arka-text">
+                                    {{ !driverStats.can_connect
+                                        ? 'Complete su perfil para empezar'
+                                        : isAvailableNow
+                                            ? 'Está visible para sus clientes'
+                                            : 'Actívese para recibir solicitudes' }}
+                                </h3>
+                                <p class="mt-1 text-xs leading-relaxed text-arka-text-muted">
+                                    {{ !driverStats.can_connect
+                                        ? driverStats.connection_block_reason
+                                        : isAvailableNow
+                                            ? 'Mantenga la ubicación activa mientras esté trabajando.'
+                                            : 'Cuando esté listo para conducir, cambie su estado a Disponible.' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="relative mt-4">
+                            <Link
+                                v-if="!driverStats.can_connect"
+                                :href="route('driver.profile.edit')"
+                                class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-arka-warning px-4 text-sm font-semibold text-arka-base transition hover:brightness-105"
+                            >
+                                Completar mi perfil
+                                <span aria-hidden="true">→</span>
+                            </Link>
+                            <div v-else class="flex items-center justify-between gap-3 rounded-xl border border-arka-text-muted/10 bg-arka-base/45 px-3 py-2.5">
+                                <div>
+                                    <p class="text-sm font-semibold" :class="isAvailableNow ? 'text-arka-primary-bright' : 'text-arka-text'">
+                                        {{ isAvailableNow ? 'Disponible' : 'No disponible' }}
+                                    </p>
+                                    <p class="text-[11px] text-arka-text-muted">
+                                        {{ isAvailableNow ? 'Toque para dejar de recibir carreras' : 'Toque para conectarse' }}
+                                    </p>
+                                </div>
+                                <DriverAvailabilityToggle
+                                    ref="availabilityToggleRef"
+                                    :initial-available="driverStats.is_available"
+                                    :can-connect="driverStats.can_connect"
+                                    :blocked-reason="driverStats.connection_block_reason"
+                                    :show-label="false"
+                                    @update:available="handleAvailabilityChange"
+                                />
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- La agenda inmediata aparece antes del reporte: el
+                         conductor necesita saber primero cuál es su siguiente
+                         tarea, incluso cuando todavía no tiene ninguna. -->
+                    <section v-if="upcomingTrips" class="rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 shadow-sm">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-primary">Agenda</p>
+                                <h3 class="mt-1 font-semibold text-arka-text">Próximo viaje</h3>
+                            </div>
+                            <Link :href="route('rides.index')" class="text-xs font-semibold text-arka-primary hover:text-arka-primary-bright">
+                                Ver solicitudes →
+                            </Link>
+                        </div>
+
+                        <div v-if="!upcomingTrips.length" class="mt-3 flex items-center gap-3 rounded-xl border border-dashed border-arka-text-muted/20 bg-arka-base/35 p-3">
+                            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-arka-primary/10 text-arka-primary">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 6V3m8 3V3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-arka-text">Sin viajes pendientes</p>
+                                <p class="text-xs text-arka-text-muted">Cuando reciba o programe uno, aparecerá aquí.</p>
+                            </div>
+                        </div>
+
+                        <Link
+                            v-else
+                            :href="upcomingTrips[0].ride_id ? route('rides.show', upcomingTrips[0].ride_id) : route('rides.index')"
+                            class="mt-3 block rounded-xl border border-arka-primary/15 bg-arka-base/45 p-3 transition hover:border-arka-primary/35"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="TRIP_STATUS[upcomingTrips[0].status].class">
+                                        {{ TRIP_STATUS[upcomingTrips[0].status].label }}
+                                    </span>
+                                    <p class="mt-2 truncate text-sm font-semibold text-arka-text">{{ upcomingTrips[0].origin_label }} → {{ upcomingTrips[0].destination_label }}</p>
+                                    <p class="mt-0.5 truncate text-xs text-arka-text-muted">Con {{ upcomingTrips[0].counterpart_name }}</p>
+                                    <p v-if="upcomingTrips[0].status === 'scheduled'" class="mt-1 text-xs font-medium text-arka-warning">
+                                        {{ formatScheduledAt(upcomingTrips[0].scheduled_at) }}
+                                        <span v-if="upcomingTrips[0].round_trip"> · Ida y vuelta</span>
+                                    </p>
+                                </div>
+                                <div class="shrink-0 text-right">
+                                    <p class="text-lg font-bold text-arka-primary-bright">${{ upcomingTrips[0].price.toFixed(2) }}</p>
+                                    <p class="text-[10px] text-arka-text-muted">Ver detalle →</p>
+                                </div>
+                            </div>
+                        </Link>
+                    </section>
+
                     <div>
                         <!-- Pedido explícito del usuario: "lo de que es
                              conductor colocalo en la barra donde se
@@ -701,17 +860,15 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         </p>
                     </div>
 
-                    <AdBannerSlider :banners="adBanners" />
-
-                    <!-- Hoy es un buen día: ganancias del mes + sparkline de los
-                         últimos 14 días + las 4 métricas de siempre, con tarjeta. -->
-                    <div class="p-4 bg-arka-card shadow rounded-arka space-y-4">
+                    <!-- Resumen de trabajo: el ingreso de hoy tiene prioridad;
+                         el resto sirve como contexto y no compite visualmente. -->
+                    <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
                         <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <p class="text-arka-text font-medium">Hoy es un buen día</p>
-                                <p class="text-xs text-arka-text-muted">Más viajes, más libertad.</p>
+                            <div class="p-4">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-primary">Su actividad</p>
+                                <h3 class="mt-1 font-semibold text-arka-text">Resumen de trabajo</h3>
                             </div>
-                            <svg viewBox="0 0 100 32" preserveAspectRatio="none" class="w-24 h-8 shrink-0">
+                            <svg viewBox="0 0 100 32" preserveAspectRatio="none" class="mr-4 h-8 w-24 shrink-0" aria-label="Tendencia de ingresos de los últimos 14 días">
                                 <polyline
                                     :points="sparklinePoints"
                                     fill="none"
@@ -723,36 +880,37 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </svg>
                         </div>
 
-                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                            <Link :href="route('driver.invitations.index')" class="text-center hover:opacity-80">
-                                <p class="text-2xl font-semibold text-arka-text">{{ driverStats.active_clients }}</p>
-                                <p class="text-xs text-arka-text-muted">Clientes en su flota</p>
-                            </Link>
-                            <Link :href="route('rides.index')" class="text-center hover:opacity-80">
-                                <p class="text-2xl font-semibold text-arka-text">{{ driverStats.completed_rides }}</p>
-                                <p class="text-xs text-arka-text-muted">Viajes este mes</p>
-                            </Link>
-                            <div class="text-center">
-                                <p class="text-2xl font-semibold text-arka-lime">
-                                    <span v-if="driverStats.review_count > 0">★ {{ driverStats.rating.toFixed(1) }}</span>
-                                    <span v-else class="text-base text-arka-text-muted">Sin calificar</span>
-                                </p>
-                                <p class="text-xs text-arka-text-muted">Calificación</p>
+                        <div class="grid grid-cols-2 border-y border-arka-text-muted/10">
+                            <div class="bg-arka-primary/10 p-4">
+                                <p class="text-xs font-medium text-arka-text-muted">Ingresos de hoy</p>
+                                <p class="mt-1 text-3xl font-bold tracking-tight text-arka-primary-bright">${{ driverStats.earnings_today.toFixed(2) }}</p>
+                                <p class="mt-1 text-[10px] text-arka-text-muted">Carreras completadas hoy</p>
                             </div>
-                            <!-- Pedido explícito del usuario: "que le muestre
-                                 también la cantidad de $ que ha hecho en el
-                                 día" — con un fondo suave para que resalte
-                                 como el dato "vivo" del día frente al del mes. -->
-                            <div class="text-center rounded-arka bg-arka-primary/10 py-1.5">
-                                <p class="text-2xl font-semibold text-arka-primary-bright">${{ driverStats.earnings_today.toFixed(2) }}</p>
-                                <p class="text-xs text-arka-text-muted">HOY</p>
-                            </div>
-                            <div class="text-center">
-                                <p class="text-2xl font-semibold text-arka-primary-bright">${{ driverStats.earnings_this_month.toFixed(2) }}</p>
-                                <p class="text-xs text-arka-text-muted">MES</p>
+                            <div class="p-4">
+                                <p class="text-xs font-medium text-arka-text-muted">Ingresos del mes</p>
+                                <p class="mt-1 text-2xl font-semibold text-arka-text">${{ driverStats.earnings_this_month.toFixed(2) }}</p>
+                                <p class="mt-1 text-[10px] text-arka-text-muted">Acumulado mensual</p>
                             </div>
                         </div>
-                    </div>
+
+                        <div class="grid grid-cols-3 divide-x divide-arka-text-muted/10 p-3 text-center">
+                            <Link :href="route('rides.index')" class="px-2 py-1 transition hover:opacity-80">
+                                <p class="text-lg font-semibold text-arka-text">{{ driverStats.completed_rides }}</p>
+                                <p class="text-[10px] leading-tight text-arka-text-muted">Viajes completados</p>
+                            </Link>
+                            <Link :href="route('driver.invitations.index')" class="px-2 py-1 transition hover:opacity-80">
+                                <p class="text-lg font-semibold text-arka-text">{{ driverStats.active_clients }}</p>
+                                <p class="text-[10px] leading-tight text-arka-text-muted">Clientes de confianza</p>
+                            </Link>
+                            <div class="px-2 py-1">
+                                <p class="text-lg font-semibold text-arka-lime">
+                                    <span v-if="driverStats.review_count > 0">★ {{ driverStats.rating.toFixed(1) }}</span>
+                                    <span v-else class="text-sm text-arka-text-muted">Sin calificar</span>
+                                </p>
+                                <p class="text-[10px] leading-tight text-arka-text-muted">Calificación</p>
+                            </div>
+                        </div>
+                    </section>
 
                     <!-- Pedido explícito del usuario: mostrar en Inicio, de un
                          vistazo, la tarifa por km y la tarifa base que tiene
@@ -761,29 +919,37 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          buscarlo en Mi perfil). -->
                     <Link
                         :href="`${route('driver.profile.edit')}#rate_per_km`"
-                        class="block p-4 bg-arka-card shadow rounded-arka border border-transparent transition hover:border-arka-primary/40"
+                        class="block rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 shadow-sm transition hover:border-arka-primary/40"
                     >
                         <div class="flex items-center justify-between gap-3">
-                            <p class="text-sm font-medium text-arka-text">Su tarifa declarada</p>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-primary">Configuración</p>
+                                <p class="mt-1 text-sm font-semibold text-arka-text">Tarifa de trabajo</p>
+                            </div>
                             <span class="text-xs font-semibold text-arka-primary">Cambiar →</span>
                         </div>
-                        <div class="mt-3 grid grid-cols-2 gap-3">
-                            <div class="rounded-arka bg-arka-base/50 py-2.5 text-center">
-                                <p class="text-xl font-semibold text-arka-text">
+                        <div class="mt-3 flex items-center gap-6 rounded-xl bg-arka-base/45 px-3 py-2.5">
+                            <div>
+                                <p class="text-lg font-semibold text-arka-text">
                                     <template v-if="driverStats.rate_per_km != null">${{ driverStats.rate_per_km.toFixed(2) }}</template>
                                     <template v-else>—</template>
                                 </p>
-                                <p class="text-xs text-arka-text-muted">Por km</p>
+                                <p class="text-[10px] text-arka-text-muted">Por kilómetro</p>
                             </div>
-                            <div class="rounded-arka bg-arka-base/50 py-2.5 text-center">
-                                <p class="text-xl font-semibold text-arka-text">
+                            <div class="h-8 w-px bg-arka-text-muted/15"></div>
+                            <div>
+                                <p class="text-lg font-semibold text-arka-text">
                                     <template v-if="driverStats.minimum_fare != null">${{ driverStats.minimum_fare.toFixed(2) }}</template>
                                     <template v-else>Sin mínimo</template>
                                 </p>
-                                <p class="text-xs text-arka-text-muted">Tarifa base</p>
+                                <p class="text-[10px] text-arka-text-muted">Tarifa base</p>
                             </div>
                         </div>
                     </Link>
+
+                    <!-- Las promociones quedan después de la información
+                         operativa para no interrumpir las tareas del conductor. -->
+                    <AdBannerSlider :banners="adBanners" />
 
                     <!-- Pedido explícito del usuario: "eliminemos esta parte
                          [Acciones rápidas] y coloca solicitudes en el
@@ -805,40 +971,6 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             {{ codeCopied ? 'Copiado' : 'Copiar' }}
                         </SecondaryButton>
                     </div>-->
-
-                    <!-- Próximos viajes -->
-                    <div v-if="upcomingTrips" class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">Próximos viajes</h4>
-                            <Link :href="route('rides.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
-                                Ver todos
-                            </Link>
-                        </div>
-                        <p v-if="!upcomingTrips.length" class="text-sm text-arka-text-muted">
-                            No tiene viajes pendientes ni en curso ahora mismo.
-                        </p>
-                        <Link
-                            v-for="(trip, i) in upcomingTrips"
-                            :key="i"
-                            :href="trip.ride_id ? route('rides.show', trip.ride_id) : route('rides.index')"
-                            class="flex items-center justify-between gap-3 p-3 bg-arka-card shadow rounded-arka hover:bg-arka-card/70"
-                        >
-                            <div class="min-w-0">
-                                <p class="text-sm text-arka-text truncate">{{ trip.origin_label }} &rarr; {{ trip.destination_label }}</p>
-                                <p class="text-xs text-arka-text-muted truncate">Con {{ trip.counterpart_name }}</p>
-                                <p v-if="trip.status === 'scheduled'" class="text-xs text-arka-warning truncate">
-                                    {{ formatScheduledAt(trip.scheduled_at) }}
-                                    <span v-if="trip.round_trip"> · Ida y vuelta</span>
-                                </p>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <span class="px-2 py-0.5 rounded-full text-[11px] font-medium" :class="TRIP_STATUS[trip.status].class">
-                                    {{ TRIP_STATUS[trip.status].label }}
-                                </span>
-                                <p class="mt-1 text-sm text-arka-primary-bright font-semibold">${{ trip.price.toFixed(2) }}</p>
-                            </div>
-                        </Link>
-                    </div>
 
                     <!-- Pedido explícito del usuario: al activarse, ya se intentó abrir
                          WhatsApp solo (handleAvailabilityChange) — esto queda como

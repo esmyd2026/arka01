@@ -294,4 +294,88 @@ class AdminSystemControllerTest extends TestCase
             'disabled' => ['vehicle_plate'],
         ])->assertSessionHasErrors('disabled.0');
     }
+
+    /**
+     * Pedido explícito del usuario: "una lista de sonidos que pueda
+     * seleccionar para las notificaciones y que las pueda activar desde el
+     * panel administrativo. y que tenga todo el volumen."
+     */
+    public function test_the_system_panel_lists_the_notification_sound_categories_and_options(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $response = $this->actingAs($admin)->get(route('admin.system.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('notificationSounds', 4)
+            ->where('notificationSounds.0.sound', 'attention')
+            ->has('notificationSoundOptions', 9)
+            ->where('notificationVolume', 100)
+        );
+    }
+
+    public function test_a_regular_user_cannot_update_notification_sounds(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+
+        $this->actingAs($user)->patch(route('admin.system.notification-sounds.update'), [
+            'sounds' => ['attention' => 'siren'],
+            'volume' => 80,
+        ])->assertForbidden();
+    }
+
+    public function test_admin_can_change_a_notification_sound_and_the_volume(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.notification-sounds.update'), [
+            'sounds' => ['attention' => 'siren', 'incoming_ride' => 'marimba'],
+            'volume' => 60,
+        ])->assertRedirect();
+
+        $siteSetting = SiteSetting::current();
+        $this->assertSame(['attention' => 'siren', 'incoming_ride' => 'marimba'], $siteSetting->notification_sounds);
+        $this->assertSame(60, $siteSetting->notification_volume);
+    }
+
+    public function test_an_unknown_sound_key_is_rejected(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.notification-sounds.update'), [
+            'sounds' => ['attention' => 'not-a-real-sound'],
+            'volume' => 80,
+        ])->assertSessionHasErrors('sounds.attention');
+    }
+
+    public function test_the_volume_cannot_go_above_100_or_below_0(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.notification-sounds.update'), [
+            'sounds' => [],
+            'volume' => 150,
+        ])->assertSessionHasErrors('volume');
+
+        $this->actingAs($admin)->patch(route('admin.system.notification-sounds.update'), [
+            'sounds' => [],
+            'volume' => -5,
+        ])->assertSessionHasErrors('volume');
+    }
+
+    /**
+     * Solo las categorías reales del registro se guardan — cualquier otra
+     * clave del payload (manipulado a mano) se descarta.
+     */
+    public function test_an_unknown_category_key_is_silently_dropped(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.notification-sounds.update'), [
+            'sounds' => ['attention' => 'siren', 'not_a_real_category' => 'soft'],
+            'volume' => 80,
+        ])->assertRedirect();
+
+        $this->assertSame(['attention' => 'siren'], SiteSetting::current()->notification_sounds);
+    }
 }

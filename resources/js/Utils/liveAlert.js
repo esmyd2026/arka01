@@ -35,54 +35,45 @@ export function unlockAudioContext() {
     }
 }
 
+let armed = false;
+
+/**
+ * Bug reportado por el usuario ("los sonidos... no estan sonando"):
+ * unlockAudioContext() solo se llamaba desde un botón puntual (activar
+ * notificaciones) — quien ya tenía el permiso concedido de antes, o cerró
+ * ese aviso, nunca daba ese clic exacto en la sesión, así que el
+ * AudioContext se quedaba "suspended" toda la sesión y cada playX()
+ * fallaba en silencio (el aviso visual seguía andando, el sonido no).
+ * Los navegadores solo cuentan como "gesto real" un clic/toque/tecla
+ * DENTRO del handler mismo — por eso esto se engancha al primer clic,
+ * toque o tecla de toda la sesión, sin importar en qué botón haya sido,
+ * en vez de depender de que el usuario encuentre ese botón puntual.
+ */
+export function armAudioUnlockOnFirstInteraction() {
+    if (armed) return;
+    armed = true;
+
+    const unlock = () => {
+        unlockAudioContext();
+        document.removeEventListener('pointerdown', unlock);
+        document.removeEventListener('keydown', unlock);
+    };
+
+    document.addEventListener('pointerdown', unlock, { once: true, passive: true });
+    document.addEventListener('keydown', unlock, { once: true });
+}
+
 function tone(ctx, frequency, startAt, durationSeconds, peakGain) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.exponentialRampToValueAtTime(peakGain, startAt + 0.01);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peakGain), startAt + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
     osc.connect(gain).connect(ctx.destination);
     osc.start(startAt);
     osc.stop(startAt + durationSeconds);
-}
-
-/**
- * Aviso "necesita tu atención" (ej. carrera nueva para el conductor): dos
- * tonos ascendentes, más notorio, acompañado de vibración.
- */
-export function playAttentionAlert() {
-    try {
-        const ctx = context();
-        if (!ctx) return;
-        if (ctx.state === 'suspended') ctx.resume();
-
-        const now = ctx.currentTime;
-        tone(ctx, 880, now, 0.16, 0.3);
-        tone(ctx, 1046.5, now + 0.18, 0.18, 0.3);
-    } catch {
-        // Política de autoplay del navegador u otro bloqueo: no rompemos el
-        // flujo, el aviso visual (toast/badge) sigue funcionando igual.
-    }
-
-    vibrateDevice();
-}
-
-/**
- * Aviso "algo cambió" (ej. el conductor aceptó, una carrera se completó):
- * un solo tono suave, sin vibración — informativo, no urgente.
- */
-export function playUpdateChime() {
-    try {
-        const ctx = context();
-        if (!ctx) return;
-        if (ctx.state === 'suspended') ctx.resume();
-
-        tone(ctx, 660, ctx.currentTime, 0.2, 0.22);
-    } catch {
-        // Ídem playAttentionAlert().
-    }
 }
 
 /**
@@ -95,32 +86,195 @@ function bellTone(ctx, frequency, startAt, durationSeconds, peakGain) {
     tone(ctx, frequency * 2, startAt, durationSeconds * 0.35, peakGain * 0.25);
 }
 
+export function vibrateDevice(pattern = [200, 100, 200]) {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
 /**
- * Aviso "el conductor avanzó la carrera" (pedido explícito del usuario: "el
- * tono de los viajes en avión cuando van a hablar por el micrófono a dar
- * indicaciones, que suena tulunnn") — dos notas descendentes tipo campanita
- * de cabina, en vez del tono de atención (ese queda para cosas que sí
- * exigen una respuesta, como una carrera nueva o una cancelación). Usado
- * cuando arranca, cuando el conductor llega, cuando recoge al cliente y
- * cuando se completa — informativo, no urgente.
+ * Catálogo de sonidos elegibles (pedido explícito del usuario: "una lista de
+ * sonidos que pueda seleccionar para las notificaciones... desde el panel
+ * administrativo"). Cada uno es autocontenido: su propia secuencia de tonos
+ * y, si corresponde, su propio patrón de vibración. Las claves tienen que
+ * coincidir tal cual con App\Services\NotificationSoundRegistry::SOUNDS
+ * (PHP) — es la lista que arma el selector del admin — y con
+ * DEFAULT_CATEGORY_SOUND de acá abajo (una clave nueva en un lado sin la
+ * otra no rompe nada, pero tampoco aparece/suena).
+ *
+ * Los `peakGain` de acá ya están pensados para sonar al máximo razonable sin
+ * distorsionar (el `AudioContext` recorta cualquier pico que pase de 1.0) —
+ * el volumen maestro del admin (`applyVolumeScale`) multiplica desde acá
+ * hacia abajo, nunca hacia arriba.
  */
-export function playCabinChime() {
+const SOUND_PRESETS = {
+    attention: {
+        vibrate: [200, 100, 200],
+        play(ctx, now, scale) {
+            tone(ctx, 880, now, 0.16, 0.55 * scale);
+            tone(ctx, 1046.5, now + 0.18, 0.18, 0.55 * scale);
+        },
+    },
+    urgent: {
+        vibrate: [300, 150, 300, 150, 300],
+        play(ctx, now, scale) {
+            tone(ctx, 784, now, 0.16, 0.9 * scale);
+            tone(ctx, 988, now + 0.18, 0.16, 0.9 * scale);
+            tone(ctx, 1174.7, now + 0.36, 0.22, 0.9 * scale);
+        },
+    },
+    cabin: {
+        vibrate: null,
+        play(ctx, now, scale) {
+            bellTone(ctx, 1046.5, now, 0.35, 0.5 * scale);
+            bellTone(ctx, 783.99, now + 0.22, 0.55, 0.5 * scale);
+        },
+    },
+    soft: {
+        vibrate: null,
+        play(ctx, now, scale) {
+            tone(ctx, 660, now, 0.2, 0.4 * scale);
+        },
+    },
+    classic_bell: {
+        vibrate: null,
+        play(ctx, now, scale) {
+            bellTone(ctx, 523.25, now, 0.6, 0.55 * scale);
+        },
+    },
+    double_knock: {
+        vibrate: [120, 80, 120],
+        play(ctx, now, scale) {
+            tone(ctx, 392, now, 0.09, 0.65 * scale);
+            tone(ctx, 392, now + 0.14, 0.09, 0.65 * scale);
+        },
+    },
+    marimba: {
+        vibrate: null,
+        play(ctx, now, scale) {
+            bellTone(ctx, 523.25, now, 0.14, 0.4 * scale);
+            bellTone(ctx, 659.25, now + 0.1, 0.14, 0.4 * scale);
+            bellTone(ctx, 783.99, now + 0.2, 0.2, 0.4 * scale);
+        },
+    },
+    siren: {
+        vibrate: [150, 100, 150, 100, 150],
+        play(ctx, now, scale) {
+            tone(ctx, 600, now, 0.12, 0.7 * scale);
+            tone(ctx, 850, now + 0.13, 0.12, 0.7 * scale);
+            tone(ctx, 600, now + 0.26, 0.12, 0.7 * scale);
+            tone(ctx, 850, now + 0.39, 0.12, 0.7 * scale);
+        },
+    },
+    ding_dong: {
+        vibrate: null,
+        play(ctx, now, scale) {
+            bellTone(ctx, 783.99, now, 0.3, 0.5 * scale);
+            bellTone(ctx, 659.25, now + 0.28, 0.4, 0.5 * scale);
+        },
+    },
+};
+
+// Sonido de fábrica para cada categoría si el admin todavía no eligió nada
+// (mismo comportamiento de siempre, para que nadie note un cambio hasta que
+// entre a /admin/sistema a elegir algo distinto) — tiene que reflejar
+// App\Services\NotificationSoundRegistry::CATEGORIES[*]['default'].
+const DEFAULT_CATEGORY_SOUND = {
+    attention: 'attention',
+    update: 'soft',
+    cabin: 'cabin',
+    incoming_ride: 'urgent',
+};
+
+// Configuración vigente (pedido explícito del usuario: "y que tenga todo el
+// volumen") — se carga una sola vez por sesión desde AuthenticatedLayout.vue
+// con lo que ya venía en `$page.props` (HandleInertiaRequests::share()), sin
+// pedirlo aparte. Mientras nadie la configure, categoryToSound queda vacío y
+// volume en 100 (a todo volumen) — el comportamiento de hoy, intacto.
+let categoryToSound = {};
+let masterVolume = 100;
+
+/**
+ * Pedido explícito del usuario: elegir qué sonido usa cada categoría de
+ * aviso y a qué volumen, desde /admin/sistema — ver
+ * Admin\SystemController::index()/updateNotificationSounds().
+ */
+export function configureNotificationSounds(sounds = {}, volume = 100) {
+    categoryToSound = sounds ?? {};
+    masterVolume = Number.isFinite(volume) ? volume : 100;
+}
+
+function playCategory(category) {
     try {
         const ctx = context();
         if (!ctx) return;
         if (ctx.state === 'suspended') ctx.resume();
 
-        const now = ctx.currentTime;
-        bellTone(ctx, 1046.5, now, 0.35, 0.24); // Do6 ("tu")
-        bellTone(ctx, 783.99, now + 0.22, 0.55, 0.24); // Sol5 ("lunnn")
+        const presetKey = categoryToSound[category] ?? DEFAULT_CATEGORY_SOUND[category] ?? 'soft';
+        const preset = SOUND_PRESETS[presetKey] ?? SOUND_PRESETS.soft;
+        // El tope en 1 evita que el volumen maestro, si algún día se
+        // permitiera pasar de 100, sature y distorsione el sonido.
+        const scale = Math.min(1, Math.max(0, masterVolume / 100));
+
+        preset.play(ctx, ctx.currentTime, scale);
+        if (preset.vibrate) vibrateDevice(preset.vibrate);
     } catch {
         // Política de autoplay del navegador u otro bloqueo: no rompemos el
-        // flujo, el aviso visual (toast/banner) sigue funcionando igual.
+        // flujo, el aviso visual (toast/badge) sigue funcionando igual.
     }
 }
 
-export function vibrateDevice(pattern = [200, 100, 200]) {
-    if (navigator.vibrate) navigator.vibrate(pattern);
+/**
+ * Reproduce un sonido puntual del catálogo, sin pasar por ninguna categoría
+ * ni vibrar por su cuenta — lo usa el botón "Probar" del panel admin para
+ * escuchar un sonido antes de guardarlo.
+ */
+export function previewSound(presetKey, volume = 100) {
+    try {
+        const ctx = context();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const preset = SOUND_PRESETS[presetKey] ?? SOUND_PRESETS.soft;
+        const scale = Math.min(1, Math.max(0, volume / 100));
+        preset.play(ctx, ctx.currentTime, scale);
+    } catch {
+        // Ídem playCategory(): sin Web Audio o sin gesto de usuario, no pasa nada.
+    }
+}
+
+/**
+ * Aviso "necesita tu atención" (ej. carrera nueva para el conductor): dos
+ * tonos ascendentes, más notorio, acompañado de vibración. El sonido real
+ * (y el volumen) los elige el admin — ver configureNotificationSounds().
+ */
+export function playAttentionAlert() {
+    playCategory('attention');
+}
+
+/**
+ * Aviso "algo cambió" (ej. el conductor aceptó, una carrera se completó):
+ * informativo, no urgente por defecto.
+ */
+export function playUpdateChime() {
+    playCategory('update');
+}
+
+/**
+ * Aviso "el conductor avanzó la carrera" (pedido explícito del usuario: "el
+ * tono de los viajes en avión cuando van a hablar por el micrófono a dar
+ * indicaciones, que suena tulunnn") — usado cuando arranca, cuando el
+ * conductor llega, cuando recoge al cliente y cuando se completa.
+ */
+export function playCabinChime() {
+    playCategory('cabin');
+}
+
+/**
+ * Aviso "carrera entrante" (pedido explícito del usuario: "un sonido más
+ * fuerte y vibrar el cel", específicamente para esta notificación en
+ * particular): el más urgente de los cuatro por defecto.
+ */
+export function playIncomingRideAlert() {
+    playCategory('incoming_ride');
 }
 
 /**
@@ -130,7 +284,8 @@ export function vibrateDevice(pattern = [200, 100, 200]) {
  * sierra) sonaba a alarma de error, no a bienvenida — reemplazada por un
  * arpeggio corto de tres notas suaves (mismo `tone()` de acá arriba, onda
  * senoidal, volumen bajo), más parecido al "ding" discreto de abrir una
- * app que a una señal de alerta.
+ * app que a una señal de alerta. No es configurable desde el admin (no es
+ * un aviso de un evento, es la bienvenida fija de la app).
  *
  * Ojo: los navegadores bloquean el autoplay de sonido sin una interacción
  * previa del usuario en la pestaña — puede no sonar en la primera carga en
@@ -150,28 +305,4 @@ export function playStartupChime() {
         // Política de autoplay del navegador: sin sonido, la pantalla de
         // carga se ve igual — nunca bloquea el arranque de la app.
     }
-}
-
-/**
- * Aviso "carrera entrante" (pedido explícito del usuario: "un sonido más
- * fuerte y vibrar el cel", específicamente para esta notificación en
- * particular — más urgente que playAttentionAlert): tres tonos en vez de
- * dos, más volumen, y una vibración más larga tipo "llamada entrante".
- */
-export function playIncomingRideAlert() {
-    try {
-        const ctx = context();
-        if (!ctx) return;
-        if (ctx.state === 'suspended') ctx.resume();
-
-        const now = ctx.currentTime;
-        tone(ctx, 784, now, 0.16, 0.5);
-        tone(ctx, 988, now + 0.18, 0.16, 0.5);
-        tone(ctx, 1174.7, now + 0.36, 0.22, 0.5);
-    } catch {
-        // Ídem playAttentionAlert(): política de autoplay u otro bloqueo, el
-        // aviso visual (el modal en sí) sigue funcionando igual.
-    }
-
-    vibrateDevice([300, 150, 300, 150, 300]);
 }

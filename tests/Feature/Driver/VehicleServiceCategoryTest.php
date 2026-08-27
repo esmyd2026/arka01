@@ -67,18 +67,13 @@ class VehicleServiceCategoryTest extends TestCase
         ]);
     }
 
-    public function test_changing_a_reviewed_field_still_resets_an_approved_verification(): void
+    public function test_a_saved_vehicle_identity_field_cannot_be_changed_by_the_driver(): void
     {
-        // Contraprueba del fix de arriba: sacar `vehicle_amenities` de
-        // `$reviewedFields` no debería aflojar el resto — un dato de
-        // identidad/seguridad del vehículo (la placa, acá) sigue exigiendo
-        // una nueva revisión como siempre.
         $driver = User::factory()->create();
-        $profile = DriverProfile::factory()->for($driver)->create([
-            'vehicle_plate' => 'ABC-1234',
+        $profile = DriverProfile::factory()->for($driver)->create(array_merge($this->profilePayload(), [
             'verification_status' => 'approved',
             'is_available' => true,
-        ]);
+        ]));
 
         $this->actingAs($driver)->post(route('driver.profile.update'), $this->profilePayload([
             'vehicle_plate' => 'XYZ-9999',
@@ -86,8 +81,9 @@ class VehicleServiceCategoryTest extends TestCase
 
         $profile->refresh();
 
-        $this->assertSame('pending', $profile->verification_status);
-        $this->assertFalse((bool) $profile->is_available);
+        $this->assertSame('ABC-1234', $profile->vehicle_plate);
+        $this->assertSame('approved', $profile->verification_status);
+        $this->assertTrue((bool) $profile->is_available);
     }
 
     public function test_unknown_vehicle_amenities_are_rejected(): void

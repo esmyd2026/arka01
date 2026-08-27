@@ -16,6 +16,7 @@ use App\Models\SavedRoute;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -671,5 +672,68 @@ class DashboardTest extends TestCase
             ->where('inviteCode', null)
             ->where('earningsSparkline', null)
         );
+    }
+
+    public function test_a_non_admin_does_not_receive_admin_stats(): void
+    {
+        $client = User::factory()->create();
+        Fleet::factory()->for($client, 'owner')->create();
+
+        $response = $this->actingAs($client)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page->where('adminStats', null));
+    }
+
+    /**
+     * Pedido explícito del usuario: "indicadores en el dashboard...
+     * personas registradas, Pasajeros, conductores, cooperativas, esta
+     * semana. este mes. hoy" — cada balde cuenta ALTAS nuevas desde ese
+     * inicio de período (hoy 00:00, lunes de esta semana, día 1 de este
+     * mes), no un total acumulado.
+     */
+    public function test_an_admin_receives_registration_counts_broken_down_by_period(): void
+    {
+        // Miércoles a mitad de mes: ni el inicio de semana ni el de mes caen
+        // el mismo día que "hoy", así el test distingue los tres baldes.
+        Carbon::setTestNow(Carbon::parse('2026-03-18 12:00:00'));
+
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $clientToday = User::factory()->create();
+        $clientToday->forceFill(['created_at' => now()])->save();
+
+        $driverThisWeekNotToday = User::factory()->create();
+        DriverProfile::factory()->for($driverThisWeekNotToday)->create();
+        $driverThisWeekNotToday->forceFill(['created_at' => now()->subDays(2)])->save();
+
+        $clientThisMonthNotThisWeek = User::factory()->create();
+        $clientThisMonthNotThisWeek->forceFill(['created_at' => now()->subDays(10)])->save();
+
+        $driverLastMonth = User::factory()->create();
+        DriverProfile::factory()->for($driverLastMonth)->create();
+        $driverLastMonth->forceFill(['created_at' => now()->subMonths(2)])->save();
+
+        $cooperativeOwner = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeOwner->id, 'name' => 'Coop de prueba']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $response = $this->actingAs($admin)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('adminStats.clients.today', 1)
+            ->where('adminStats.clients.week', 1)
+            ->where('adminStats.clients.month', 2)
+            ->where('adminStats.drivers.today', 0)
+            ->where('adminStats.drivers.week', 1)
+            ->where('adminStats.drivers.month', 1)
+            ->where('adminStats.cooperatives.today', 1)
+            ->where('adminStats.cooperatives.week', 1)
+            ->where('adminStats.cooperatives.month', 1)
+            // "Personas registradas" (people) suma TODOS los roles, incluido
+            // el propio admin y el dueño de la cooperativa.
+            ->where('adminStats.people.total', 6)
+        );
+
+        Carbon::setTestNow();
     }
 }

@@ -32,6 +32,36 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(RouteServiceProvider::HOME);
     }
 
+    public function test_login_from_a_public_profile_attributes_the_referrer(): void
+    {
+        $referrer = User::factory()->create();
+        $user = User::factory()->create(['referred_by_user_id' => null]);
+
+        $this->get(route('login', ['ref' => $referrer->id]))->assertOk();
+
+        $this->post(route('login'), [
+            'login' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(RouteServiceProvider::HOME);
+
+        $this->assertSame($referrer->id, $user->fresh()->referred_by_user_id);
+    }
+
+    public function test_login_from_another_profile_does_not_replace_an_existing_referrer(): void
+    {
+        $originalReferrer = User::factory()->create();
+        $otherReferrer = User::factory()->create();
+        $user = User::factory()->create(['referred_by_user_id' => $originalReferrer->id]);
+
+        $this->get(route('login', ['ref' => $otherReferrer->id]))->assertOk();
+        $this->post(route('login'), [
+            'login' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(RouteServiceProvider::HOME);
+
+        $this->assertSame($originalReferrer->id, $user->fresh()->referred_by_user_id);
+    }
+
     public function test_users_can_not_authenticate_with_invalid_password(): void
     {
         $user = User::factory()->create();

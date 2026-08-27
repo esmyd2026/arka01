@@ -135,6 +135,23 @@ class PublicProfileTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario ("un mensaje con llamada a la accion...
+     * unete y haz que la movilidad sea ahora mas segura"): la tarjeta de
+     * vista previa que arma WhatsApp para un rastreador debe llevar esa
+     * invitación, no una descripción neutra sin gancho.
+     */
+    public function test_the_link_preview_bot_sees_the_call_to_action_copy(): void
+    {
+        $target = User::factory()->create(['name' => 'Juan Pérez']);
+
+        $response = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23.20 A'])
+            ->get(route('profiles.show', $target));
+
+        $response->assertOk();
+        $response->assertSee('únase y hagamos que la movilidad sea más segura en Ecuador', false);
+    }
+
+    /**
      * Pedido explícito del usuario: quien escanea el QR o abre el enlace
      * compartido puede no tener cuenta todavía en Arka01 — antes esta
      * pantalla vivía atrás del login y lo hubiera mandado a /login en vez

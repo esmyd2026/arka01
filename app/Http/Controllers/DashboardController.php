@@ -172,6 +172,37 @@ class DashboardController extends Controller
         $frequentPlaces = [];
         $savedRoutes = [];
         $homeInitialCenter = null;
+        $adminStats = null;
+
+        // Pedido explícito del usuario ("indicadores en el dashboard...
+        // personas registradas, Pasajeros, conductores, cooperativas, esta
+        // semana. este mes. hoy"): tarjetas rápidas en Inicio con enlace
+        // directo al módulo correspondiente — antes solo existían los
+        // totales sin desglose de App\Http\Controllers\Admin\MetricsController.
+        if ($user->isAdmin()) {
+            $today = now()->startOfDay();
+            $week = now()->startOfWeek();
+            $month = now()->startOfMonth();
+
+            $countsFor = function ($query) use ($today, $week, $month) {
+                return [
+                    'today' => (clone $query)->where('created_at', '>=', $today)->count(),
+                    'week' => (clone $query)->where('created_at', '>=', $week)->count(),
+                    'month' => (clone $query)->where('created_at', '>=', $month)->count(),
+                    'total' => (clone $query)->count(),
+                ];
+            };
+
+            $adminStats = [
+                // Igual que Admin\ClientController/Admin\DriverController: el
+                // filtro directo por la columna 'role' evita cargar cada
+                // driverProfile/cooperative solo para descartarlo.
+                'people' => $countsFor(User::query()),
+                'clients' => $countsFor(User::query()->where('role', 'cliente')),
+                'drivers' => $countsFor(User::query()->where('role', 'conductor')),
+                'cooperatives' => $countsFor(Cooperative::query()),
+            ];
+        }
 
         if ($user->isClient()) {
             // Mismo criterio que FleetController::index()/RideRequestController:
@@ -227,6 +258,7 @@ class DashboardController extends Controller
             'frequentPlaces' => $frequentPlaces,
             'savedRoutes' => $savedRoutes,
             'homeInitialCenter' => $homeInitialCenter,
+            'adminStats' => $adminStats,
         ]);
     }
 

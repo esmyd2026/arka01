@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SiteSetting;
 use App\Models\User;
 use App\Services\DriverVerificationRequirementRegistry;
+use App\Services\NotificationSoundRegistry;
 use App\Services\QuickLinkRegistry;
 use App\Services\UserFileCleanup;
 use Database\Seeders\DemoDataSeeder;
@@ -47,6 +48,12 @@ class SystemController extends Controller
             // activar o no lo obligatorio para que el conductor se le haga
             // mas facil activarse".
             'driverRequirements' => DriverVerificationRequirementRegistry::withState(SiteSetting::current()->disabled_driver_requirements ?? []),
+            // Pedido explícito del usuario: "una lista de sonidos que pueda
+            // seleccionar para las notificaciones... desde el panel
+            // administrativo. y que tenga todo el volumen".
+            'notificationSounds' => NotificationSoundRegistry::withState(SiteSetting::current()->notification_sounds ?? []),
+            'notificationSoundOptions' => NotificationSoundRegistry::soundOptions(),
+            'notificationVolume' => SiteSetting::current()->notification_volume ?? 100,
         ]);
     }
 
@@ -91,6 +98,35 @@ class SystemController extends Controller
         ]);
 
         return back()->with('status', 'Requisitos de conductor actualizados.');
+    }
+
+    /**
+     * Qué sonido usa cada categoría de aviso + volumen maestro (pedido
+     * explícito del usuario) — ver App\Services\NotificationSoundRegistry
+     * (categorías/sonidos válidos) y resources/js/Utils/liveAlert.js (dónde
+     * de verdad se sintetiza y reproduce cada uno).
+     */
+    public function updateNotificationSounds(Request $request): RedirectResponse
+    {
+        $validSounds = array_keys(NotificationSoundRegistry::SOUNDS);
+        $validCategories = array_keys(NotificationSoundRegistry::CATEGORIES);
+
+        $validated = $request->validate([
+            'sounds' => ['array'],
+            'sounds.*' => ['string', Rule::in($validSounds)],
+            'volume' => ['required', 'integer', 'min:0', 'max:100'],
+        ]);
+
+        // Cualquier clave que no sea una categoría real (payload viejo,
+        // manipulado a mano) se descarta acá, no confiamos en el frontend.
+        $sounds = collect($validated['sounds'] ?? [])->only($validCategories)->all();
+
+        SiteSetting::current()->update([
+            'notification_sounds' => $sounds,
+            'notification_volume' => $validated['volume'],
+        ]);
+
+        return back()->with('status', 'Sonidos de notificaciones actualizados.');
     }
 
     public function resetDemo(Request $request): RedirectResponse

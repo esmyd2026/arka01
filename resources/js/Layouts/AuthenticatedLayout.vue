@@ -15,7 +15,7 @@ import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
-import { playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime, unlockAudioContext } from '@/Utils/liveAlert';
+import { armAudioUnlockOnFirstInteraction, configureNotificationSounds, playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime, unlockAudioContext } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -288,6 +288,24 @@ let adminChannel = null;
 let clientRideAlertTimer = null;
 const clientRideAlert = ref(null);
 
+// Bug reportado por el usuario ("los sonidos... para cuando se envian
+// solicitudes de agregar a la flota... no estan sonando"): FleetInvitationCreated
+// ya se transmitía, pero fuera de Dashboard.vue nadie lo escuchaba —
+// Components/FleetRoster.vue y Driver/Invitations.vue solo actualizaban su
+// lista en silencio. Mismo criterio que clientRideAlert de arriba: un solo
+// listener acá, en el layout que envuelve todas las pantallas, para que
+// suene y avise sin importar en qué página esté.
+let fleetInvitationAlertTimer = null;
+const fleetInvitationAlert = ref(null);
+
+function showFleetInvitationAlert(message, targetRoute) {
+    playAttentionAlert();
+
+    fleetInvitationAlert.value = { message, targetRoute };
+    clearTimeout(fleetInvitationAlertTimer);
+    fleetInvitationAlertTimer = setTimeout(() => (fleetInvitationAlert.value = null), 9000);
+}
+
 // Pedido explícito del usuario ("ayudame a ver la trazabilidad en el panel
 // administrativo... una alerta") — canal `admins` (routes/channels.php),
 // para que cualquier admin conectado se entere de un ticket nuevo aunque
@@ -337,6 +355,12 @@ onMounted(() => {
         incomingRideChannel.listen('.ride-request.cancelled', (e) => {
             dismissIncomingRideRequest(e.ride_request_id);
         });
+        // Un cliente lo invitó a su flota (bug reportado por el usuario: no
+        // sonaba fuera de Dashboard.vue) — ver FleetInvitationCreated.
+        incomingRideChannel.listen('.fleet-invitation.created', (e) => {
+            if (e.direction !== 'client' || route().current('driver.invitations.index')) return;
+            showFleetInvitationAlert(`🚖 ${e.owner_name} lo invitó a su flota de confianza.`, route('driver.invitations.index'));
+        });
     }
 
     if (showClientNav.value) {
@@ -357,15 +381,36 @@ onMounted(() => {
             e.ride_id,
             'attention'
         ));
+        // Un conductor pidió unirse a su flota (dirección inversa, pedido
+        // explícito del usuario) — mismo bug: no sonaba fuera de Dashboard.vue.
+        clientRideChannel.listen('.fleet-invitation.created', (e) => {
+            if (e.direction !== 'driver' || route().current('fleet.index')) return;
+            showFleetInvitationAlert(`🚖 ${e.driver_name} pidió unirse a su flota.`, route('fleet.index'));
+        });
     }
+
+    // Bug reportado por el usuario ("los sonidos... no estan sonando"): sin
+    // un gesto real (clic/toque/tecla) el AudioContext queda "suspended" y
+    // ningún playX() de arriba suena, aunque el aviso visual sí aparezca —
+    // ver Utils/liveAlert.js.
+    armAudioUnlockOnFirstInteraction();
+
+    // Pedido explícito del usuario ("una lista de sonidos que pueda
+    // seleccionar para las notificaciones... desde el panel administrativo.
+    // y que tenga todo el volumen"): lo que haya elegido el admin ya viaja
+    // en cada request (HandleInertiaRequests::share()) — se carga una sola
+    // vez acá para que todos los playX() de arriba lo usen sin pedirlo aparte.
+    configureNotificationSounds(usePage().props.notificationSounds, usePage().props.notificationVolume);
 });
 
 onBeforeUnmount(() => {
     if (incomingRideChannel) {
         incomingRideChannel.stopListening('.ride-request.created');
         incomingRideChannel.stopListening('.ride-request.cancelled');
+        incomingRideChannel.stopListening('.fleet-invitation.created');
     }
     if (clientRideChannel) {
+        clientRideChannel.stopListening('.fleet-invitation.created');
         window.Echo.leave(`App.Models.User.${usePage().props.auth.user.id}`);
     }
     if (adminChannel) {
@@ -373,6 +418,7 @@ onBeforeUnmount(() => {
     }
     clearTimeout(clientRideAlertTimer);
     clearTimeout(adminSupportAlertTimer);
+    clearTimeout(fleetInvitationAlertTimer);
 });
 </script>
 
@@ -397,6 +443,19 @@ onBeforeUnmount(() => {
             <span class="block text-sm font-semibold text-arka-text">Soporte</span>
             <span class="block mt-1 text-sm text-arka-text-muted">{{ adminSupportAlert.message }}</span>
             <span class="block mt-2 text-xs font-medium text-red-400">Tocar para atender</span>
+        </button>
+        <!-- Bug reportado por el usuario: invitación de flota (en cualquiera
+             de las dos direcciones) no avisaba con sonido fuera de
+             Dashboard.vue — mismo criterio que clientRideAlert de arriba. -->
+        <button
+            v-if="fleetInvitationAlert"
+            type="button"
+            class="fixed top-4 left-1/2 -translate-x-1/2 z-[1700] w-[calc(100%-2rem)] max-w-md p-4 rounded-arka bg-arka-card border border-arka-primary/50 shadow-2xl text-left"
+            @click="router.visit(fleetInvitationAlert.targetRoute)"
+        >
+            <span class="block text-sm font-semibold text-arka-text">Invitación de flota</span>
+            <span class="block mt-1 text-sm text-arka-text-muted">{{ fleetInvitationAlert.message }}</span>
+            <span class="block mt-2 text-xs font-medium text-arka-primary">Tocar para responder</span>
         </button>
         <!-- `transparentNav`: flota fija (no `absolute`, ver comentario junto
              a la prop) sobre el mapa de Inicio del pasajero, SOLO en móvil —

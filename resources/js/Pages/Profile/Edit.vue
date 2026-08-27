@@ -6,13 +6,12 @@ import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
-import ShareProfileQr from '@/Components/ShareProfileQr.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { canInstallApp, installApp } from '@/pwaInstall';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { buildClientWhatsAppOptInUrl } from '@/Utils/whatsapp';
@@ -22,7 +21,9 @@ import { buildClientWhatsAppOptInUrl } from '@/Utils/whatsapp';
 // lo forzamos acá como respaldo.
 onMounted(() => {
     if (window.location.hash) {
-        document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+        const targetId = window.location.hash.slice(1);
+        if (targetId === 'suscripcion') accountSection.value = 'subscription';
+        nextTick(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth' }));
     }
 });
 
@@ -70,13 +71,25 @@ const props = defineProps({
     whatsappBusinessNumber: { type: String, default: null },
 });
 
-// Compartir mi perfil (pedido explícito del usuario, con captura de
-// referencia): QR con el logo + mensaje prearmado para WhatsApp. El link en
-// sí ya se ve "profesional" al compartirse — WhatsApp arma la tarjeta con
-// foto y nombre solo, leyendo las etiquetas og:* de Profile/Show.vue (ver
-// PublicProfileController::show()).
-const whatsappShareUrl = computed(() => {
-    const text = `¡Hola! Soy ${usePage().props.auth.user.full_name} en Arka01 \n\nMirá mi perfil:\n${props.profileUrl}`;
+// Compartir mi perfil (pedido explícito del usuario: "mejora el boton...
+// para que llegue un card... con llamada a la accion diciendo que hola yo
+// estoy usando arka01 unete y haz que la movilidad sea ahora mas segura").
+// El link en sí ya se ve "profesional" al compartirse — WhatsApp arma la
+// tarjeta con foto y descripción solo, leyendo las etiquetas og:* de
+// Profile/Show.vue (ver PublicProfileController::show() para el caso sin
+// sesión de WhatsApp, que usa la misma copia). La atribución del referido no
+// depende de nada en este texto ni en la URL: quien se registre desde el
+// perfil de este usuario ya queda marcado como su referido (ver
+// Profile/Show.vue, botones "Crear cuenta"/"creá una cuenta").
+const whatsappProfileShareUrl = computed(() => {
+    const name = usePage().props.auth.user.full_name;
+    const text = `¡Hola! Soy ${name}. Este es mi perfil público en Arka01 para que pueda conocerme y verificar mi información:\n${props.profileUrl}`;
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+});
+
+const whatsappReferralUrl = computed(() => {
+    const name = usePage().props.auth.user.full_name;
+    const text = `¡Hola! ${name} le invita a unirse a Arka01 🚖, una comunidad de movilidad basada en personas de confianza.\n\nRegístrese desde este enlace para que la recomendación quede asociada:\n${props.profileUrl}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 });
 
@@ -126,13 +139,6 @@ function whatsappTimeRemaining() {
     return `${hours}h ${minutes}min`;
 }
 
-const linkCopied = ref(false);
-async function copyProfileLink() {
-    await navigator.clipboard.writeText(props.profileUrl);
-    linkCopied.value = true;
-    setTimeout(() => (linkCopied.value = false), 2000);
-}
-
 // Pedido explícito del usuario: "Instalar app" y "Pasarme a..." también acá,
 // no solo en el menú desplegable del header (mismas funciones, mismo
 // criterio — ver AuthenticatedLayout.vue).
@@ -143,6 +149,14 @@ async function installAppNow() {
 
 const isDriver = computed(() => usePage().props.auth.isDriver);
 const isAdmin = computed(() => usePage().props.auth.user.is_admin);
+
+// La cuenta reúne información personal, preferencias, referidos, plan y
+// seguridad. Mantener un solo bloque abierto evita una página interminable
+// sin desmontar formularios ni perder datos escritos.
+const accountSection = ref(usePage().props.auth.isProfileIncomplete ? 'personal' : null);
+const toggleAccountSection = (section) => {
+    accountSection.value = accountSection.value === section ? null : section;
+};
 
 // "Complete su perfil" (pedido explícito del usuario: "estructura... a que
 // si no tiene sus datos completos segmentado los pueda completar") — se
@@ -155,7 +169,6 @@ const profileChecklist = computed(() => {
     return [
         { label: 'Nombre', done: true, fieldId: 'name' },
         { label: 'Apellido', done: Boolean(user.last_name), fieldId: 'last_name' },
-        { label: 'Fecha de nacimiento', done: Boolean(user.birth_date), fieldId: 'birth_date' },
         { label: 'País', done: true, fieldId: null },
         { label: 'Ciudad', done: Boolean(user.city_id), fieldId: 'city_id' },
         {
@@ -212,14 +225,39 @@ async function switchToClient() {
                                 </span>
                                 <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
                             </div>
-                            <p class="mt-3 text-sm text-arka-text-muted max-w-md">
-                                Arme su flota de conductores de confianza y pida sus viajes dentro de ese círculo,
-                                sin comisión de la plataforma.
-                            </p>
                             <p class="mt-2 text-xs text-arka-text-muted">
                                 Miembro desde
                                 {{ new Date($page.props.auth.user.created_at).toLocaleDateString('es-EC', { dateStyle: 'long' }) }}
                             </p>
+
+                            <!-- Misma tarjeta y mismas acciones para cliente y
+                                 conductor: compartir el perfil no es lo mismo
+                                 que invitar a una persona nueva a Arka01. -->
+                            <div class="mt-4 grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                                <a
+                                    :href="whatsappProfileShareUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-semibold text-arka-base transition hover:bg-arka-primary-bright"
+                                >
+                                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
+                                    </svg>
+                                    Compartir mi perfil
+                                </a>
+                                <a
+                                    :href="whatsappReferralUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-arka-primary/40 bg-arka-primary/10 px-4 py-2.5 text-sm font-semibold text-arka-primary-bright transition hover:bg-arka-primary/20"
+                                >
+                                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+                                        <circle cx="12" cy="12" r="9" />
+                                    </svg>
+                                    Referir Arka01
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -258,8 +296,23 @@ async function switchToClient() {
                     </ul>
                 </div>
 
-                <!-- Tarjetas sobre fondo de tarjeta (arka-card), consistente con el resto de la interfaz -->
-                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                <!-- Secciones operativas de la cuenta: una sola abierta para
+                     que en móvil se encuentre cada ajuste sin recorrer toda
+                     la página. -->
+                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                    <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('personal')">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">👤</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block font-semibold text-arka-text">Datos personales</span>
+                            <span class="mt-0.5 block text-xs" :class="$page.props.auth.isProfileIncomplete ? 'text-arka-warning' : 'text-arka-primary'">
+                                {{ $page.props.auth.isProfileIncomplete ? 'Hay información pendiente de completar' : 'Información actualizada' }}
+                            </span>
+                        </span>
+                        <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="accountSection === 'personal' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
+                <div v-show="accountSection === 'personal'" class="border-t border-arka-text-muted/10 p-4 sm:p-6">
                     <UpdateProfileInformationForm
                         :must-verify-email="mustVerifyEmail"
                         :status="status"
@@ -268,12 +321,27 @@ async function switchToClient() {
                         class="max-w-xl"
                     />
                 </div>
+                </section>
 
                 <!-- Cuenta (pedido explícito del usuario): accesos que antes
                      solo estaban en el menú desplegable del header, también
                      acá. Usuario/código de socio ya se muestran arriba, en la
                      tarjeta de perfil — sin repetirlos acá. -->
-                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                    <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('account')">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">⚙️</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block font-semibold text-arka-text">Cuenta y preferencias</span>
+                            <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                {{ isDriver ? 'Cuenta conductora' : isAdmin ? 'Cuenta administrativa' : 'Cuenta cliente' }} · Aplicación y WhatsApp
+                            </span>
+                        </span>
+                        <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="accountSection === 'account' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
+                    <div v-show="accountSection === 'account'" class="space-y-6 border-t border-arka-text-muted/10 p-4 sm:p-6">
+                <div>
                     <h2 class="flex items-center gap-2 text-lg font-medium text-arka-text">
                         <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 1-.1 1.2l2 1.6-2 3.4-2.4-1a7.5 7.5 0 0 1-2 1.2l-.4 2.6H9.5l-.4-2.6a7.5 7.5 0 0 1-2-1.2l-2.4 1-2-3.4 2-1.6a7.4 7.4 0 0 1 0-2.4l-2-1.6 2-3.4 2.4 1a7.5 7.5 0 0 1 2-1.2L9.5 2h5l.4 2.6a7.5 7.5 0 0 1 2 1.2l2.4-1 2 3.4-2 1.6c.07.4.1.8.1 1.2Z" />
@@ -282,8 +350,8 @@ async function switchToClient() {
                     </h2>
                     <!-- Pedido explícito del usuario ("¿este código es el mismo con
                          el que me buscan?"): aclarado a propósito — el código de
-                         socio de arriba es distinto al del link de invitación (más
-                         largo, ver "Compartir mi perfil" abajo). -->
+                         socio de arriba es distinto al enlace público que se
+                         comparte desde la tarjeta superior. -->
                     <p class="mt-1 text-sm text-arka-text-muted">
                         Con su código de socio (arriba) lo encuentran en el buscador de flotas.
                     </p>
@@ -350,42 +418,8 @@ async function switchToClient() {
                     </div>
                 </div>
 
-                <!-- Compartir mi perfil (pedido explícito del usuario): QR con el
-                     logo + WhatsApp, para que otros lo escaneen o lo abran desde un
-                     enlace que se ve profesional al compartirse. -->
-                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
-                    <h2 class="flex items-center gap-2 text-lg font-medium text-arka-text">
-                        <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.68 13.34a3 3 0 1 1 0-2.68m0 2.68 6.63 3.32m-6.63-6 6.63-3.32m0 0a3 3 0 1 0-5.37-2.68 3 3 0 0 0 5.37 2.68Zm0 9.32a3 3 0 1 0-5.37 2.68 3 3 0 0 0 5.37-2.68Z" />
-                        </svg>
-                        Compartir mi perfil
-                    </h2>
-                    <p class="mt-1 text-sm text-arka-text-muted max-w-xl">
-                        Para que alguien lo agregue a su flota o vea sus calificaciones sin buscarlo a mano —
-                        escaneando el código o abriendo el enlace.
-                    </p>
-
-                    <div class="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-                        <ShareProfileQr :url="profileUrl" />
-
-                        <div class="flex flex-col gap-2">
-                            <a
-                                :href="whatsappShareUrl"
-                                target="_blank"
-                                rel="noopener"
-                                class="inline-flex items-center gap-2 px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-sm font-semibold hover:bg-arka-primary-bright transition"
-                            >
-                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
-                                </svg>
-                                Compartir por WhatsApp
-                            </a>
-                            <SecondaryButton @click="copyProfileLink">
-                                {{ linkCopied ? '¡Copiado!' : 'Copiar enlace' }}
-                            </SecondaryButton>
-                        </div>
                     </div>
-                </div>
+                </section>
 
                 <!-- "¿Quién lo recomendó?" (pedido explícito del usuario: "por
                      cupones, por enlaces de referidos o por ingresos
@@ -393,7 +427,21 @@ async function switchToClient() {
                      vía, manual: buscar y guardar una sola vez. Si ya vino
                      por enlace o cupón, esto ya aparece resuelto y de solo
                      lectura. -->
-                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                    <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('referrals')">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">🤝</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block font-semibold text-arka-text">Recomendaciones</span>
+                            <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                {{ referredBy ? `Recomendado por ${referredBy.name}` : 'Registre quién lo invitó' }} · {{ referrals.length }} referido{{ referrals.length === 1 ? '' : 's' }}
+                            </span>
+                        </span>
+                        <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="accountSection === 'referrals' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
+                    <div v-show="accountSection === 'referrals'" class="space-y-6 border-t border-arka-text-muted/10 p-4 sm:p-6">
+                <div>
                     <h2 class="flex items-center gap-2 text-lg font-medium text-arka-text">
                         <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 21c-4.97-3.14-8-6.5-8-10a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 3.5-3.03 6.86-8 10Z" />
@@ -485,18 +533,46 @@ async function switchToClient() {
                         </table>
                     </div>
                 </div>
+                    </div>
+                </section>
 
-                <div v-if="Object.keys(subscriptionSummary).length" class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                <section v-if="Object.keys(subscriptionSummary).length" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                    <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('subscription')">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">💳</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block font-semibold text-arka-text">Mi suscripción</span>
+                            <span class="mt-0.5 block text-xs text-arka-text-muted">Plan vigente, límites y opciones para mejorar</span>
+                        </span>
+                        <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="accountSection === 'subscription' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
+                <div v-show="accountSection === 'subscription'" class="border-t border-arka-text-muted/10 p-4 sm:p-6">
                     <SubscriptionSummary :summary="subscriptionSummary" class="max-w-xl" />
                 </div>
+                </section>
 
-                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                    <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('security')">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">🔒</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block font-semibold text-arka-text">Seguridad</span>
+                            <span class="mt-0.5 block text-xs text-arka-text-muted">Cambiar contraseña o eliminar la cuenta</span>
+                        </span>
+                        <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="accountSection === 'security' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
+                    <div v-show="accountSection === 'security'" class="space-y-8 border-t border-arka-text-muted/10 p-4 sm:p-6">
+                <div>
                     <UpdatePasswordForm class="max-w-xl" />
                 </div>
 
-                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                <div class="border-t border-arka-text-muted/10 pt-6">
                     <DeleteUserForm class="max-w-xl" />
                 </div>
+                    </div>
+                </section>
             </div>
         </div>
     </AuthenticatedLayout>

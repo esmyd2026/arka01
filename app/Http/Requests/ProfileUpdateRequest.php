@@ -35,13 +35,11 @@ class ProfileUpdateRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             // Pedido explícito del usuario ("nombres, apellidos, fecha de
-            // nacimiento... ciudad") — apellido opcional (se pide desde acá,
-            // no desde el registro, así que las cuentas viejas no lo tienen
-            // todavía); fecha de nacimiento exige mayoría de edad, el mismo
-            // requisito que ya declaran los manuales pero que nunca se
-            // había validado de verdad en ningún lado.
+            // nacimiento... ciudad") — apellido y fecha de nacimiento son
+            // opcionales. Si el usuario decide registrar la fecha, sí se
+            // valida la mayoría de edad con un límite exacto y estable.
             'last_name' => ['nullable', 'string', 'max:100'],
-            'birth_date' => ['nullable', 'date', 'before:-18 years'],
+            'birth_date' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(18)->toDateString()],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($this->user()->id)],
             'city_id' => ['nullable', 'integer', 'exists:cities,id'],
             // Foto de perfil (consideración agregada al alcance): mismo límite
@@ -70,7 +68,7 @@ class ProfileUpdateRequest extends FormRequest
         return [
             'avatar.image' => 'El archivo tiene que ser una imagen (JPG, PNG o similar).',
             'avatar.max' => 'La foto pesa demasiado — el máximo es 4 MB. Probá con una de menor resolución o comprimida.',
-            'birth_date.before' => 'Tenés que ser mayor de edad para usar Arka01.',
+            'birth_date.before_or_equal' => 'La fecha ingresada debe corresponder a una persona de 18 años o más.',
         ];
     }
 }

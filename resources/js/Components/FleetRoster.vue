@@ -309,79 +309,26 @@ onBeforeUnmount(() => {
                 </Link>.
             </p>
 
-            <!-- Pedido explícito del usuario (con una captura de referencia):
-                 tarjetas de verdad en vez de filas separadas por una línea —
-                 foto grande, nombre + medalla arriba, calificación destacada
-                 abajo, acciones al pie de cada tarjeta. -->
+            <!-- La tarjeta prioriza la decisión del cliente: primero identifica
+                 al conductor, luego compara sus métricas y finalmente encuentra
+                 las dos acciones de uso frecuente siempre visibles. -->
             <div v-else class="grid gap-3 sm:grid-cols-2">
-                <div
+                <article
                     v-for="member in fleet.active_members"
                     :key="member.id"
-                    class="rounded-2xl border border-arka-text-muted/10 bg-arka-base p-4 transition hover:border-arka-primary/30"
+                    class="group relative overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-arka-primary/35 hover:shadow-lg hover:shadow-black/10"
                 >
-                    <div class="flex items-center gap-3">
-                        <UserAvatar :user="member.driver" size-class="h-14 w-14 text-base shrink-0" />
-                        <div class="min-w-0 flex-1">
-                            <Link
-                                :href="route('profiles.show', member.driver.id)"
-                                class="font-semibold text-arka-text hover:text-arka-primary-bright flex items-center gap-1.5 flex-wrap"
-                            >
-                                {{ member.driver.name }}
-                                <span
-                                    v-if="memberStats[member.driver.id]"
-                                    class="rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-semibold text-arka-primary"
-                                >
-                                    {{ tierLabel(memberStats[member.driver.id].tier) }}
-                                </span>
-                            </Link>
-                            <!-- Pedido explícito del usuario: no mostrar el teléfono acá
-                                 (privacidad) — solo la tarifa. -->
-                            <p v-if="member.driver.driver_profile" class="text-xs text-arka-text-muted">
-                                ${{ member.driver.driver_profile.rate_per_km }}/km
-                            </p>
-                        </div>
-                    </div>
+                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-arka-primary/45 to-transparent opacity-0 transition group-hover:opacity-100"></div>
 
-                    <div v-if="memberStats[member.driver.id]" class="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
-                        <template v-if="memberStats[member.driver.id].review_count > 0">
-                            <span class="text-arka-lime">★</span>
-                            <span class="font-semibold text-arka-text">{{ memberStats[member.driver.id].average_rating.toFixed(2) }}</span>
-                            <span class="text-xs text-arka-text-muted">({{ memberStats[member.driver.id].review_count }})</span>
-                        </template>
-                        <span v-else class="text-xs text-arka-text-muted">Sin calificaciones</span>
-                        <span class="text-xs text-arka-text-muted">· {{ memberStats[member.driver.id].rides_count }} carrera(s) · {{ memberStats[member.driver.id].active_clients_count }} cliente(s)</span>
-                    </div>
-
-                    <!-- Pedido explícito del usuario (con captura: "esos
-                         botones tan grandes"): un solo botón visible
-                         (la acción de siempre, Pedir carrera, con ícono y
-                         tamaño compacto — mismo criterio "sm" que ya usan
-                         PrimaryButton/DangerButton) y el resto (Recomendar,
-                         Sacar) detrás de un menú de 3 puntos — mismo
-                         Dropdown.vue del menú de cuenta del header. -->
-                    <div class="mt-4 flex items-center gap-2">
-                        <!-- Mismas clases que SecondaryButton size="sm", pero es
-                             una navegación (Link → <a>), no puede envolver un
-                             <button> adentro. -->
-                        <Link
-                            :href="route('ride-requests.create', { flota: fleet.id, conductor: member.driver.id })"
-                            class="inline-flex flex-1 items-center justify-center gap-1.5 px-2.5 py-1.5 bg-arka-card border border-arka-text-muted/30 rounded-arka font-semibold text-[11px] tracking-wide text-arka-text shadow-sm hover:bg-arka-base focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150"
-                        >
-                            <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5v-3.2a2 2 0 0 1 .2-.9l1.6-3.3a2 2 0 0 1 1.8-1.1h8.8a2 2 0 0 1 1.8 1.1l1.6 3.3a2 2 0 0 1 .2.9v3.2" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5h16M6 16.5v1.8M18 16.5v1.8" />
-                                <circle cx="7.5" cy="14" r=".1" stroke-linecap="round" />
-                                <circle cx="16.5" cy="14" r=".1" stroke-linecap="round" />
-                            </svg>
-                            Pedir carrera
-                        </Link>
-
+                    <!-- La acción destructiva queda apartada de los CTA para no
+                         comprimirlos ni provocar pulsaciones accidentales. -->
+                    <div class="absolute right-3 top-3 z-10">
                         <Dropdown align="right" width="48">
                             <template #trigger>
                                 <button
                                     type="button"
-                                    class="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-arka-text-muted/30 text-arka-text-muted hover:border-arka-primary/50 hover:text-arka-primary transition"
-                                    aria-label="Más opciones"
+                                    class="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-arka-text-muted/20 bg-arka-base/90 text-arka-text-muted transition hover:border-arka-text-muted/40 hover:bg-arka-card hover:text-arka-text"
+                                    :aria-label="`Más opciones para ${member.driver.name}`"
                                 >
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                                         <circle cx="5" cy="12" r="1.8" />
@@ -391,18 +338,6 @@ onBeforeUnmount(() => {
                                 </button>
                             </template>
                             <template #content>
-                                <a
-                                    v-if="member.driver.driver_profile"
-                                    :href="whatsappReferralUrl(member)"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="flex items-center gap-2 px-4 py-2 text-sm text-arka-text hover:bg-arka-base transition"
-                                >
-                                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
-                                    </svg>
-                                    Recomendar
-                                </a>
                                 <button
                                     type="button"
                                     class="flex w-full items-center gap-2 px-4 py-2 text-start text-sm text-arka-danger hover:bg-arka-base transition"
@@ -416,7 +351,85 @@ onBeforeUnmount(() => {
                             </template>
                         </Dropdown>
                     </div>
-                </div>
+
+                    <div class="flex items-start gap-3 pr-9">
+                        <div class="rounded-full ring-2 ring-arka-card ring-offset-2 ring-offset-arka-base">
+                            <UserAvatar :user="member.driver" size-class="h-14 w-14 text-base shrink-0" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <Link
+                                :href="route('profiles.show', member.driver.id)"
+                                class="flex flex-wrap items-center gap-1.5 font-semibold text-arka-text transition hover:text-arka-primary-bright"
+                            >
+                                {{ member.driver.name }}
+                                <span
+                                    v-if="memberStats[member.driver.id]"
+                                    class="rounded-full border border-arka-primary/15 bg-arka-primary/10 px-2 py-0.5 text-[10px] font-semibold text-arka-primary"
+                                >
+                                    {{ tierLabel(memberStats[member.driver.id].tier) }}
+                                </span>
+                            </Link>
+                            <!-- Pedido explícito del usuario: no mostrar el teléfono acá
+                                 (privacidad) — solo la tarifa. -->
+                            <p v-if="member.driver.driver_profile" class="mt-1 text-xs text-arka-text-muted">
+                                Tarifa · <span class="font-medium text-arka-primary">${{ member.driver.driver_profile.rate_per_km }}/km</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-if="memberStats[member.driver.id]" class="mt-4 grid grid-cols-3 divide-x divide-arka-text-muted/10 rounded-xl border border-arka-text-muted/10 bg-arka-card/60 py-2.5 text-center">
+                        <div class="px-1">
+                            <p class="text-sm font-semibold text-arka-text">
+                                <template v-if="memberStats[member.driver.id].review_count > 0">
+                                    <span class="text-arka-lime">★</span>
+                                    {{ memberStats[member.driver.id].average_rating.toFixed(1) }}
+                                </template>
+                                <template v-else>—</template>
+                            </p>
+                            <p class="mt-0.5 text-[10px] text-arka-text-muted">Calificación</p>
+                        </div>
+                        <div class="px-1">
+                            <p class="text-sm font-semibold text-arka-text">{{ memberStats[member.driver.id].rides_count }}</p>
+                            <p class="mt-0.5 text-[10px] text-arka-text-muted">Carreras</p>
+                        </div>
+                        <div class="px-1">
+                            <p class="text-sm font-semibold text-arka-text">{{ memberStats[member.driver.id].active_clients_count }}</p>
+                            <p class="mt-0.5 text-[10px] text-arka-text-muted">Clientes</p>
+                        </div>
+                    </div>
+
+                    <!-- Pedir carrera y recomendar son acciones frecuentes, por
+                         eso permanecen visibles. El menú conserva únicamente la
+                         acción destructiva para evitar pulsaciones accidentales. -->
+                    <div class="mt-4 grid grid-cols-2 items-center gap-2">
+                        <Link
+                            :href="route('ride-requests.create', { flota: fleet.id, conductor: member.driver.id })"
+                            class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-arka-primary px-2 text-[11px] font-semibold text-arka-base shadow-sm transition hover:bg-arka-primary-bright focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base"
+                        >
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5v-3.2a2 2 0 0 1 .2-.9l1.6-3.3a2 2 0 0 1 1.8-1.1h8.8a2 2 0 0 1 1.8 1.1l1.6 3.3a2 2 0 0 1 .2.9v3.2" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5h16M6 16.5v1.8M18 16.5v1.8" />
+                                <circle cx="7.5" cy="14" r=".1" stroke-linecap="round" />
+                                <circle cx="16.5" cy="14" r=".1" stroke-linecap="round" />
+                            </svg>
+                            Pedir carrera
+                        </Link>
+
+                        <a
+                            v-if="member.driver.driver_profile"
+                            :href="whatsappReferralUrl(member)"
+                            target="_blank"
+                            rel="noopener"
+                            class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/30 bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#57e389] transition hover:border-[#25D366]/50 hover:bg-[#25D366]/15 focus:outline-none focus:ring-2 focus:ring-[#25D366]/60 focus:ring-offset-2 focus:ring-offset-arka-base"
+                            :aria-label="`Recomendar a ${member.driver.name} por WhatsApp`"
+                        >
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
+                            </svg>
+                            Recomendar
+                        </a>
+                    </div>
+                </article>
             </div>
         </div>
 

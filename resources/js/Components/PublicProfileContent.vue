@@ -1,5 +1,4 @@
 <script setup>
-import RatingStars from '@/Components/RatingStars.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Link } from '@inertiajs/vue3';
 
@@ -17,6 +16,9 @@ defineProps({
     isClient: { type: Boolean, required: true },
     isDriver: { type: Boolean, required: true },
     canRequestRide: { type: Boolean, required: true },
+    embedded: { type: Boolean, default: false },
+    showSummaryBadges: { type: Boolean, default: true },
+    showSummaryRating: { type: Boolean, default: true },
     // Pedido explícito del usuario ("mejoremos la privacidad de los
     // conductores"): true cuando el conductor apagó su perfil individual —
     // se oculta vehículo/tarifa/reseñas y se avisa en su lugar.
@@ -25,10 +27,17 @@ defineProps({
 </script>
 
 <template>
-    <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+    <div
+        v-if="showSummaryBadges || isDriver"
+        :class="embedded ? 'pt-5' : 'p-4 sm:p-6 bg-arka-card shadow rounded-arka'"
+    >
         <!-- Marca de rol(es) + calificación compacta (sección 3.1 y 3.6):
              de un vistazo, qué es esta persona y qué tan bien la calificaron. -->
-        <div class="flex flex-wrap items-center gap-2 mb-3">
+        <div
+            v-if="showSummaryBadges"
+            class="flex flex-wrap items-center gap-2 mb-3"
+            :class="embedded ? 'justify-center' : ''"
+        >
             <span v-if="isClient" class="px-3 py-1 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
                 Cliente
             </span>
@@ -44,14 +53,12 @@ defineProps({
                 Conductor de {{ profileUser.driver_profile.cooperative.name }}
             </Link>
             <span
-                v-if="reviewCount > 0"
+                v-if="reviewCount > 0 && showSummaryRating"
                 class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-arka-lime/15 text-arka-lime"
             >
                 <span class="text-sm leading-none">★</span> {{ averageRating.toFixed(1) }}
             </span>
         </div>
-
-        <RatingStars v-if="!profilePrivate" :rating="averageRating" :count="reviewCount" readonly />
 
         <!-- Pedido explícito del usuario: quien no sea el propio conductor
              ni un admin ve esto en vez de vehículo/tarifa/reseñas. -->
@@ -105,21 +112,25 @@ defineProps({
         </div>
     </div>
 
-    <div v-if="!(isDriver && profilePrivate)" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka mt-6">
+    <div
+        v-if="!(isDriver && profilePrivate) && reviews.data.length"
+        :class="embedded
+            ? 'mt-6 border-t border-arka-text-muted/10 pt-5'
+            : 'p-4 sm:p-6 bg-arka-card shadow rounded-arka mt-6'"
+    >
         <h3 class="text-lg font-medium text-arka-text mb-4">Comentarios</h3>
 
-        <p v-if="!reviews.data.length" class="text-sm text-arka-text-muted">
-            Todavía no tiene comentarios.
-        </p>
-
-        <ul v-else class="divide-y divide-arka-text-muted/10">
+        <ul class="divide-y divide-arka-text-muted/10">
             <li v-for="review in reviews.data" :key="review.id" class="py-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <UserAvatar :user="review.reviewer" size-class="h-7 w-7 text-xs shrink-0" />
                         <span class="text-arka-text font-medium">{{ review.reviewer.name }}</span>
                     </div>
-                    <RatingStars :rating="review.rating" readonly />
+                    <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-arka-lime/10 px-2 py-1 text-xs font-semibold text-arka-lime">
+                        <span aria-hidden="true">★</span>
+                        {{ Number(review.rating).toFixed(1) }}
+                    </span>
                 </div>
                 <p v-if="review.comment" class="mt-1 text-sm text-arka-text-muted italic">
                     "{{ review.comment }}"

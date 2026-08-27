@@ -8,6 +8,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Providers\RouteServiceProvider;
 use App\Services\DriverActivityTracker;
+use App\Services\ReferralAttribution;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,13 +19,18 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(private readonly DriverActivityTracker $activityTracker) {}
+    public function __construct(
+        private readonly DriverActivityTracker $activityTracker,
+        private readonly ReferralAttribution $referralAttribution,
+    ) {}
 
     /**
      * Display the login view.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
+        $referrerId = $this->referralAttribution->remember($request);
+
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
@@ -39,6 +45,7 @@ class AuthenticatedSessionController extends Controller
             // en vez de por correo (ver WhatsAppWebhookController::receive()
             // y WhatsAppFreeformSender::sendSessionRecoveryPrompt()).
             'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
+            'referrerId' => $referrerId,
         ]);
     }
 
@@ -50,6 +57,8 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
+
+        $this->referralAttribution->attribute($request, $request->user());
 
         return redirect()->intended(RouteServiceProvider::HOME);
     }

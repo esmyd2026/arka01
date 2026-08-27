@@ -5,6 +5,7 @@ import DangerButton from '@/Components/DangerButton.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { previewSound } from '@/Utils/liveAlert';
 
 const props = defineProps({
     demoAccountsCount: { type: Number, required: true },
@@ -16,6 +17,12 @@ const props = defineProps({
     // o no lo obligatorio para que el conductor se le haga mas facil
     // activarse" — ver App\Services\DriverVerificationRequirementRegistry.
     driverRequirements: { type: Array, required: true },
+    // Pedido explícito del usuario: "una lista de sonidos que pueda
+    // seleccionar para las notificaciones... desde el panel administrativo.
+    // y que tenga todo el volumen" — ver App\Services\NotificationSoundRegistry.
+    notificationSounds: { type: Array, required: true },
+    notificationSoundOptions: { type: Array, required: true },
+    notificationVolume: { type: Number, required: true },
 });
 
 const QUICK_LINK_GROUP_LABEL = { conductor: 'Menú del conductor', cliente: 'Menú del cliente' };
@@ -60,6 +67,28 @@ function toggleRequirement(key) {
 }
 function saveDriverRequirements() {
     driverRequirementsForm.patch(route('admin.system.driver-requirements.update'), { preserveScroll: true });
+}
+
+// Sonidos de notificaciones + volumen (pedido explícito del usuario: "una
+// lista de sonidos que pueda seleccionar para las notificaciones... desde
+// el panel administrativo. y que tenga todo el volumen") — un select por
+// categoría (App\Services\NotificationSoundRegistry::CATEGORIES) más un
+// volumen maestro que aplican TODOS los avisos sintetizados de la app (ver
+// Utils/liveAlert.js), no solo los del admin.
+const soundsForm = useForm({
+    sounds: Object.fromEntries(props.notificationSounds.map((item) => [item.key, item.sound])),
+    volume: props.notificationVolume,
+});
+
+function saveNotificationSounds() {
+    soundsForm.patch(route('admin.system.notification-sounds.update'), { preserveScroll: true });
+}
+
+// "Probar" (pedido implícito al ofrecer una lista para elegir: hay que
+// poder escucharlos antes de guardar) — reproduce con el volumen que se ve
+// en pantalla ahora mismo, aunque todavía no se haya guardado.
+function testSound(soundKey) {
+    previewSound(soundKey, soundsForm.volume);
 }
 
 // Zona de peligro (pedido explícito del usuario): confirmación fuerte antes
@@ -203,6 +232,71 @@ async function resetDemo() {
                             leave-to-class="opacity-0"
                         >
                             <p v-if="driverRequirementsForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
+                        </Transition>
+                    </div>
+                </div>
+
+                <!-- Pedido explícito del usuario: "una lista de sonidos que
+                     pueda seleccionar para las notificaciones y que las
+                     pueda activar desde el panel administrativo. y que
+                     tenga todo el volumen" — cada categoría ya cubre varios
+                     avisos de toda la app (ver Utils/liveAlert.js), no hace
+                     falta un select por cada evento puntual. -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-arka-text">Sonidos de notificaciones</h3>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Elija qué sonido usa cada tipo de aviso y a qué volumen — aplica a toda la app, tanto
+                            para clientes como para conductores. Use "Probar" para escucharlo antes de guardar.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="flex items-center justify-between gap-3 text-sm font-medium text-arka-text">
+                            Volumen
+                            <span class="text-arka-text-muted">{{ soundsForm.volume }}%</span>
+                        </label>
+                        <input
+                            v-model.number="soundsForm.volume"
+                            type="range"
+                            min="0"
+                            max="100"
+                            class="mt-2 w-full accent-arka-primary"
+                        />
+                    </div>
+
+                    <ul class="divide-y divide-arka-text-muted/10">
+                        <li v-for="item in notificationSounds" :key="item.key" class="py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                            <span class="text-sm text-arka-text flex-1">{{ item.label }}</span>
+                            <div class="flex items-center gap-2">
+                                <select
+                                    v-model="soundsForm.sounds[item.key]"
+                                    class="rounded-arka border-arka-text-muted/30 bg-arka-base text-sm text-arka-text focus:ring-arka-primary focus:border-arka-primary"
+                                >
+                                    <option v-for="option in notificationSoundOptions" :key="option.key" :value="option.key">
+                                        {{ option.label }}
+                                    </option>
+                                </select>
+                                <button
+                                    type="button"
+                                    class="px-3 py-1.5 rounded-arka border border-arka-text-muted/30 text-xs font-medium text-arka-text hover:bg-arka-base"
+                                    @click="testSound(soundsForm.sounds[item.key])"
+                                >
+                                    Probar
+                                </button>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <div class="flex items-center gap-4">
+                        <PrimaryButton :disabled="soundsForm.processing" @click="saveNotificationSounds">Guardar</PrimaryButton>
+                        <Transition
+                            enter-active-class="transition ease-in-out"
+                            enter-from-class="opacity-0"
+                            leave-active-class="transition ease-in-out"
+                            leave-to-class="opacity-0"
+                        >
+                            <p v-if="soundsForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
                         </Transition>
                     </div>
                 </div>

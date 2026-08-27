@@ -87,6 +87,19 @@ class GoogleAuthTest extends TestCase
         $this->assertSame('google-456', $existing->fresh()->google_id);
     }
 
+    public function test_google_login_preserves_the_referrer_from_a_public_profile(): void
+    {
+        $referrer = User::factory()->create();
+
+        $this->get(route('login', ['ref' => $referrer->id]))->assertOk();
+        $this->fakeGoogleUser('google-referral', 'referido-google@example.com', 'Referido Google');
+
+        $this->get(route('auth.google.callback'))->assertRedirect(route('account-type.choose'));
+
+        $referredUser = User::query()->where('email', 'referido-google@example.com')->firstOrFail();
+        $this->assertSame($referrer->id, $referredUser->referred_by_user_id);
+    }
+
     public function test_callback_reuses_the_same_account_on_a_second_login(): void
     {
         $this->fakeGoogleUser('google-789', 'repetido@example.com', 'Repetido');

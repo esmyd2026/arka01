@@ -312,8 +312,9 @@ class ProfileTest extends TestCase
      * Pedido explícito del usuario ("un puntitto rojo con un uno para que
      * vaya y actualice") — HandleInertiaRequests::share() calcula esta
      * bandera con los datos del cliente; acá se prueba el "antes" (le falta
-     * de todo) y el "después" (con todo completo, incluido el teléfono
-     * verificado) de un mismo cliente.
+     * de todo) y el "después" (con los datos obligatorios completos, incluido
+     * el teléfono verificado) de un mismo cliente. La fecha de nacimiento es
+     * opcional y no participa en esta bandera.
      */
     public function test_is_profile_incomplete_is_true_while_data_is_missing_and_false_once_complete(): void
     {
@@ -325,7 +326,6 @@ class ProfileTest extends TestCase
 
         $client->forceFill([
             'last_name' => 'Pérez',
-            'birth_date' => '1990-05-20',
             'city_id' => $city->id,
             'phone_verified_at' => now(),
         ])->save();

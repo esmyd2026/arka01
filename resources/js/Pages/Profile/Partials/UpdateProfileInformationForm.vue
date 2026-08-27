@@ -30,6 +30,20 @@ const props = defineProps({
 
 const user = usePage().props.auth.user;
 
+// El input nativo necesita YYYY-MM-DD. Además, su fecha máxima muestra de
+// inmediato un año válido para una persona adulta, sin obligar a guardar el
+// dato ni colocar una fecha ficticia en el perfil.
+function dateInputValue(value) {
+    return value ? String(value).slice(0, 10) : '';
+}
+
+const adultBirthDateLimit = (() => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 18);
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+})();
+
 // El teléfono ya guardado viene completo (+593...); se separa el prefijo
 // conocido para precargar el formulario — mejor esfuerzo nada más, si no
 // matchea ninguno el campo local queda vacío y lo escribe de nuevo (mismo
@@ -43,7 +57,7 @@ function splitPhone(phone) {
 const form = useForm({
     name: user.name,
     last_name: user.last_name ?? '',
-    birth_date: user.birth_date ?? '',
+    birth_date: dateInputValue(user.birth_date),
     email: user.email,
     city_id: user.city_id,
     avatar: null,
@@ -217,8 +231,17 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
                          sin librería de calendario en el proyecto, mismo
                          patrón que ya usa Ride/Request.vue para programar
                          una carrera: input nativo type="date". -->
-                    <InputLabel for="birth_date" value="Fecha de nacimiento" />
-                    <TextInput id="birth_date" type="date" class="mt-1 block w-full" v-model="form.birth_date" />
+                    <InputLabel for="birth_date" value="Fecha de nacimiento (opcional)" />
+                    <TextInput
+                        id="birth_date"
+                        v-model="form.birth_date"
+                        type="date"
+                        class="mt-1 block w-full"
+                        :max="adultBirthDateLimit"
+                    />
+                    <p class="mt-1 text-xs text-arka-text-muted">
+                        Si la registra, debe corresponder a una persona de 18 años o más.
+                    </p>
                     <InputError class="mt-2" :message="form.errors.birth_date" />
                 </div>
 

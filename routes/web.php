@@ -672,6 +672,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // usuario: "permiteme desde el admin poder activar o no lo obligatorio
     // para que el conductor se le haga mas facil activarse").
     Route::patch('/sistema/requisitos-conductor', [AdminSystemController::class, 'updateDriverRequirements'])->name('system.driver-requirements.update');
+    // Sonidos de notificaciones + volumen (pedido explícito del usuario:
+    // "una lista de sonidos que puedo seleccionar para las notificaciones y
+    // que las pueda activar desde el panel administrativo. y que tenga todo
+    // el volumen").
+    Route::patch('/sistema/sonidos', [AdminSystemController::class, 'updateNotificationSounds'])->name('system.notification-sounds.update');
 
     // Configuración → Integraciones → WhatsApp (roadmap de mejoras, sección
     // 8): evita tener que tocar el .env para cambiar el token.

@@ -31,11 +31,18 @@ class SiteSetting extends Model
         // activar o no lo obligatorio para que el conductor se le haga mas
         // facil activarse" — ver App\Services\DriverVerificationRequirementRegistry.
         'disabled_driver_requirements',
+        // Pedido explícito del usuario: "una lista de sonidos que pueda
+        // seleccionar para las notificaciones... desde el panel
+        // administrativo. y que tenga todo el volumen" — ver
+        // App\Services\NotificationSoundRegistry.
+        'notification_sounds',
+        'notification_volume',
     ];
 
     protected $casts = [
         'disabled_quick_links' => 'array',
         'disabled_driver_requirements' => 'array',
+        'notification_sounds' => 'array',
     ];
 
     protected $appends = ['hero_background_url', 'auth_background_url'];

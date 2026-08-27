@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Exceptions\ActiveSessionExistsException;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\ReferralAttribution;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -20,12 +22,14 @@ use Laravel\Socialite\Two\InvalidStateException;
  */
 class GoogleAuthController extends Controller
 {
+    public function __construct(private readonly ReferralAttribution $referralAttribution) {}
+
     public function redirect(): RedirectResponse
     {
         return Socialite::driver('google')->redirect();
     }
 
-    public function callback(): RedirectResponse
+    public function callback(Request $request): RedirectResponse
     {
         try {
             $googleUser = Socialite::driver('google')->user();
@@ -97,6 +101,8 @@ class GoogleAuthController extends Controller
                 ->with('status', $e->getMessage())
                 ->with('login_hint', $user->email);
         }
+
+        $this->referralAttribution->attribute($request, $user);
 
         if ($isNewUser) {
             return redirect()->route('account-type.choose');

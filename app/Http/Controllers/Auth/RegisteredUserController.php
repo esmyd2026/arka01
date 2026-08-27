@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\Haversine;
+use App\Services\ReferralAttribution;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -31,8 +32,10 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(): Response
+    public function create(Request $request, ReferralAttribution $referralAttribution): Response
     {
+        $referralAttribution->remember($request);
+
         return Inertia::render('Auth/Register');
     }
 
@@ -51,7 +54,7 @@ class RegisteredUserController extends Controller
      */
     public const COUNTRY_CODES = ['+593', '+51', '+57', '+58', '+56', '+54'];
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, ReferralAttribution $referralAttribution): RedirectResponse
     {
         // Pedido explícito del usuario: si escribe el 0 inicial (ej.
         // "0988492339"), se lo quitamos solo en vez de rechazarlo.
@@ -151,6 +154,11 @@ class RegisteredUserController extends Controller
             // cliente en silencio.
             'intends_to_drive' => $validated['account_type'] === 'conductor',
         ]);
+
+        // El registro normal ya recibe `ref` como campo oculto. Esta llamada
+        // limpia el referente recordado para OAuth y, si hiciera falta, lo
+        // aplica sin sobrescribir la atribución que acaba de guardarse.
+        $referralAttribution->attribute($request, $user);
 
         // A diferencia de una cuenta creada por Google (contraseña al azar
         // que nadie conoce, ver GoogleAuthController), acá el usuario SÍ

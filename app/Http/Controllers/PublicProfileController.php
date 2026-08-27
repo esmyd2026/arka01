@@ -58,9 +58,15 @@ class PublicProfileController extends Controller
 
             return view('profile-preview', [
                 'title' => "{$user->full_name} — Arka01",
+                // Copia de llamada a la acción (pedido explícito del usuario:
+                // "un mensaje con llamada a la accion... unete y haz que la
+                // movilidad sea ahora mas segura") — misma copia que usa
+                // Profile/Show.vue para la sesión con Inertia; esta vista
+                // aparte solo existe para el rastreador de WhatsApp, que
+                // nunca manda cookies de sesión.
                 'description' => ($isDriver ? 'Conductor' : 'Cliente').' en Arka01'
                     .($reviewCount > 0 ? " · ★ {$averageRating}" : '')
-                    .' — movilidad de confianza en Ecuador.',
+                    .' — únase y hagamos que la movilidad sea más segura en Ecuador.',
                 'image' => $user->avatar_url && ! str_starts_with($user->avatar_url, 'http')
                     ? url($user->avatar_url)
                     : ($user->avatar_url ?? asset('icons/icon.svg')),

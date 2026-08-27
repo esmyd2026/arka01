@@ -31,6 +31,10 @@ const props = defineProps({
         type: String,
         default: null,
     },
+    referrerId: {
+        type: Number,
+        default: null,
+    },
 });
 
 const sessionRecoveryWhatsAppUrl = computed(() => buildSessionRecoveryWhatsAppUrl(props.whatsappBusinessNumber));
@@ -42,6 +46,7 @@ const surveyDone = ref(typeof window !== 'undefined' && window.localStorage.getI
 const form = useForm({
     login: props.loginHint ?? '',
     password: '',
+    ref: props.referrerId,
 });
 
 const submit = () => {
@@ -155,7 +160,7 @@ async function confirmTakeover() {
                      hay forma de saber qué quiere ser, así que Auth/Register.vue
                      arranca en el primer paso y se lo pregunta. -->
                 <p v-if="showsAccountNotFoundError" class="mt-2 text-sm">
-                    <Link :href="route('register')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                    <Link :href="route('register', { ref: referrerId })" class="text-arka-primary hover:text-arka-primary-bright font-medium">
                         Crear una cuenta →
                     </Link>
                 </p>

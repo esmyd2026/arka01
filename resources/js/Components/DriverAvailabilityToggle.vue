@@ -17,6 +17,13 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    // En tarjetas que ya explican el estado con título y descripción, evita
+    // repetir "Disponible" junto al interruptor. El resto de usos conserva
+    // la etiqueta por defecto.
+    showLabel: {
+        type: Boolean,
+        default: true,
+    },
 });
 
 // Le avisa al padre cuando cambia (consideración agregada al alcance): así una
@@ -263,7 +270,7 @@ onBeforeUnmount(() => {
             />
         </button>
 
-        <span class="text-sm font-medium" :class="available ? 'text-arka-primary-bright' : 'text-arka-text-muted'">
+        <span v-if="showLabel" class="text-sm font-medium" :class="available ? 'text-arka-primary-bright' : 'text-arka-text-muted'">
             {{ available ? 'Disponible' : 'No disponible' }}
         </span>
 

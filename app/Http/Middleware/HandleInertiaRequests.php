@@ -84,7 +84,6 @@ class HandleInertiaRequests extends Middleware
                 // el modelo ya trae cargadas en cada request autenticado.
                 'isProfileIncomplete' => $user && $user->isClient()
                     ? blank($user->last_name)
-                        || blank($user->birth_date)
                         || blank($user->city_id)
                         || blank($user->phone)
                         || ! $user->phone_verified_at
@@ -123,6 +122,14 @@ class HandleInertiaRequests extends Middleware
             // filtra su `quickLinks` con esto. Vacío por defecto: nadie
             // pierde ningún acceso de golpe con esto recién agregado.
             'disabledQuickLinks' => $siteSetting->disabled_quick_links ?? [],
+            // Pedido explícito del usuario ("una lista de sonidos que pueda
+            // seleccionar para las notificaciones... y que tenga todo el
+            // volumen"): qué sonido eligió el admin para cada categoría de
+            // aviso, más el volumen maestro — Utils/liveAlert.js los lee acá
+            // para sintetizar cada aviso. Vacío/100 por defecto: nadie
+            // pierde sonido ni volumen de golpe con esto recién agregado.
+            'notificationSounds' => $siteSetting->notification_sounds ?? [],
+            'notificationVolume' => $siteSetting->notification_volume ?? 100,
             // Notificaciones push (sección 9.2 y 9.5): el frontend la necesita
             // para suscribirse vía PushManager, nunca la llave privada.
             'vapidPublicKey' => config('webpush.vapid.public_key'),
