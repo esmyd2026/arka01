@@ -831,7 +831,10 @@ onBeforeUnmount(() => {
                      alado de donde esta el icono de inicio", SOLO para el
                      conductor — el tab "Carreras" de siempre (más abajo, a
                      la derecha) sigue igual para todos, sin tocarlo. Este es
-                     uno NUEVO, no un reemplazo. -->
+                     uno NUEVO, no un reemplazo. Ícono distinto a propósito
+                     (flecha, no auto) — mismo ícono que ya usaba "Solicitudes"
+                     en la vieja tarjeta de Acciones rápidas: reportado que se
+                     veían como dos veces la misma opción con el auto repetido. -->
                 <Link
                     v-if="hasRoute('rides.index') && showDriverNav"
                     :href="route('rides.index')"
@@ -843,15 +846,8 @@ onBeforeUnmount(() => {
                     "
                 >
                     <span class="relative">
-                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16"
-                            />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                            <circle cx="7.5" cy="16" r="1" />
-                            <circle cx="16.5" cy="16" r="1" />
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M3.4 3.3a.75.75 0 0 1 .8-.08l16 8a.75.75 0 0 1 0 1.34l-16 8A.75.75 0 0 1 3.13 19.7L6.98 12 3.13 4.3a.75.75 0 0 1 .27-1Z" />
                         </svg>
                         <span
                             v-if="$page.props.auth.pendingRideRequestsCount > 0"
