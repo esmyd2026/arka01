@@ -110,7 +110,7 @@ class WhatsAppSettingsTest extends TestCase
         $response = $this->actingAs($admin)->get(route('admin.integrations.whatsapp.edit'));
 
         $response->assertInertia(fn ($page) => $page
-            ->has('notificationTypes', 10)
+            ->has('notificationTypes', 11)
             ->where('notificationTypes.0.enabled', true)
         );
     }

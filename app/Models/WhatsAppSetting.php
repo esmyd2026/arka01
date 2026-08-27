@@ -45,6 +45,7 @@ class WhatsAppSetting extends Model
         'notify_new_ride_alert',
         'notify_cooperative_invitation',
         'notify_scheduled_reminder',
+        'notify_scheduled_overdue',
         'notify_offer_expired',
         'notify_driver_disconnected',
         // Pedido explícito del usuario: "coloquemos precios estimados por
@@ -73,6 +74,7 @@ class WhatsAppSetting extends Model
         'notify_new_ride_alert' => 'boolean',
         'notify_cooperative_invitation' => 'boolean',
         'notify_scheduled_reminder' => 'boolean',
+        'notify_scheduled_overdue' => 'boolean',
         'notify_offer_expired' => 'boolean',
         'notify_driver_disconnected' => 'boolean',
         'estimated_cost_per_message' => 'decimal:4',

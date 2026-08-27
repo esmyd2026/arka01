@@ -35,7 +35,7 @@ class WhatsAppSettingController extends Controller
         'client_ride_booking_enabled', 'privacy_notice_text',
         'notify_ride_accepted', 'notify_ride_started', 'notify_ride_arrived',
         'notify_ride_picked_up', 'notify_ride_completed', 'notify_new_ride_alert',
-        'notify_cooperative_invitation', 'notify_scheduled_reminder',
+        'notify_cooperative_invitation', 'notify_scheduled_reminder', 'notify_scheduled_overdue',
         'notify_offer_expired', 'notify_driver_disconnected',
         'estimated_cost_per_message',
     ];
@@ -190,6 +190,7 @@ class WhatsAppSettingController extends Controller
             'notify_new_ride_alert' => ['sometimes', 'boolean'],
             'notify_cooperative_invitation' => ['sometimes', 'boolean'],
             'notify_scheduled_reminder' => ['sometimes', 'boolean'],
+            'notify_scheduled_overdue' => ['sometimes', 'boolean'],
             'notify_offer_expired' => ['sometimes', 'boolean'],
             'notify_driver_disconnected' => ['sometimes', 'boolean'],
             'estimated_cost_per_message' => ['sometimes', 'numeric', 'min:0', 'max:1'],

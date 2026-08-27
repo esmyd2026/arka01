@@ -24,6 +24,13 @@ class Kernel extends ConsoleKernel
         // Pedido explícito del usuario: recordatorio al conductor 15-20 min
         // antes de una carrera programada — ver el comando para el detalle.
         $schedule->command('rides:send-upcoming-reminders')->everyFiveMinutes();
+
+        // Bug reportado por el usuario: una carrera/solicitud programada
+        // cuya hora ya pasó se quedaba pendiente para siempre, sin ningún
+        // aviso — ver los dos comandos para el detalle. Misma cadencia de
+        // 5 min que el recordatorio de arriba, por consistencia.
+        $schedule->command('rides:send-overdue-scheduled-alerts')->everyFiveMinutes();
+        $schedule->command('rides:expire-overdue-scheduled-requests')->everyFiveMinutes();
     }
 
     /**

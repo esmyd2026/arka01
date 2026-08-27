@@ -27,6 +27,14 @@ function formatScheduledAt(iso) {
     return new Date(iso).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Bug reportado por el usuario: una programada cuya hora ya pasó se quedaba
+// mostrando "Iniciar viaje" para siempre, sin ningún aviso de que está
+// vencida — esto es el lado visual, inmediato (no espera al comando que
+// corre cada 5 min, ver App\Console\Commands\SendOverdueScheduledRideAlerts).
+function isScheduledOverdue(iso) {
+    return iso ? new Date(iso).getTime() < Date.now() : false;
+}
+
 function startRide(id) {
     router.post(route('rides.start', id), {}, { preserveScroll: true });
 }
@@ -510,9 +518,15 @@ function confirmRaiseOffer(id) {
                                 <p class="text-arka-text font-medium">
                                     {{ ride.client.id === userId ? ride.driver.name : ride.client.name }}
                                 </p>
-                                <p class="text-sm text-arka-primary-bright">
+                                <p class="text-sm" :class="isScheduledOverdue(ride.ride_request?.scheduled_at) ? 'text-arka-danger' : 'text-arka-primary-bright'">
                                     {{ formatScheduledAt(ride.ride_request?.scheduled_at) }}
                                     <span v-if="ride.round_trip" class="ms-1 text-xs text-arka-text-muted">· Ida y vuelta</span>
+                                </p>
+                                <!-- Bug reportado por el usuario: antes esto se
+                                     quedaba mostrando "Iniciar viaje" para
+                                     siempre, sin avisar que ya pasó la hora. -->
+                                <p v-if="isScheduledOverdue(ride.ride_request?.scheduled_at) && !ride.pending_reschedule_at" class="text-xs text-arka-danger">
+                                    ⚠️ Ya pasó la hora — inícela ahora o avísele al {{ ride.client.id === userId ? 'conductor' : 'cliente' }}
                                 </p>
                                 <!-- Pedido explícito del usuario: si el cliente
                                      editó el horario, tiene que verse acá mismo,

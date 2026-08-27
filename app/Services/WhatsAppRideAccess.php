@@ -26,6 +26,7 @@ class WhatsAppRideAccess
         'new_ride_alert' => ['label' => 'Carrera nueva', 'group' => 'conductor'],
         'cooperative_invitation' => ['label' => 'Invitación de cooperativa', 'group' => 'conductor'],
         'scheduled_reminder' => ['label' => 'Recordatorio de carrera programada', 'group' => 'conductor'],
+        'scheduled_overdue' => ['label' => 'Carrera programada vencida', 'group' => 'conductor'],
         'offer_expired' => ['label' => 'Se acabó el tiempo para responder', 'group' => 'conductor'],
         'driver_disconnected' => ['label' => 'Aviso de desconexión', 'group' => 'conductor'],
     ];

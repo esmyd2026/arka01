@@ -46,6 +46,61 @@ class AdminRideTest extends TestCase
         );
     }
 
+    public function test_a_regular_user_cannot_view_a_ride_detail(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        $ride = Ride::factory()->create();
+
+        $this->actingAs($user)->get(route('admin.rides.show', $ride))->assertForbidden();
+    }
+
+    /**
+     * Pedido explícito del usuario: "permiteme también ver el detalle de las
+     * carreras cuando le de click alguna de ellas" — toda la info relevante
+     * (solicitud original, paradas, reseñas) en una sola pantalla.
+     */
+    public function test_an_admin_can_view_a_ride_detail(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create(['name' => 'Cliente Detalle']);
+        $driver = User::factory()->create(['name' => 'Conductor Detalle']);
+
+        $rideRequest = RideRequest::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'is_scheduled' => true,
+            'scheduled_at' => now()->addDay(),
+        ]);
+        $ride = Ride::factory()->create([
+            'ride_request_id' => $rideRequest->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'completed',
+            'price' => 12.5,
+        ]);
+        Review::factory()->create([
+            'ride_id' => $ride->id,
+            'reviewer_user_id' => $client->id,
+            'reviewee_user_id' => $driver->id,
+            'rating' => 5,
+            'comment' => 'Excelente viaje',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.rides.show', $ride));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Admin/RideDetail')
+            ->where('ride.id', $ride->id)
+            ->where('ride.client.name', 'Cliente Detalle')
+            ->where('ride.driver.name', 'Conductor Detalle')
+            ->where('ride.is_scheduled', true)
+            ->where('ride.price', 12.5)
+            ->has('reviews', 1)
+            ->where('reviews.0.comment', 'Excelente viaje')
+        );
+    }
+
     public function test_a_regular_user_cannot_delete_a_ride(): void
     {
         $user = User::factory()->create(['is_admin' => false]);

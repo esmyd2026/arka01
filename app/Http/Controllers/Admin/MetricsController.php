@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Cooperative;
 use App\Models\Fleet;
 use App\Models\Ride;
 use App\Models\SubscriptionPlan;
@@ -22,12 +23,17 @@ class MetricsController extends Controller
     {
         $driverPlans = $this->planBreakdown('driver');
         $clientPlans = $this->planBreakdown('client');
+        // Pedido explícito del usuario: "no tengo indicadores de las
+        // cooperativas" — mismo desglose por plan que ya existía para
+        // conductor y cliente, del lado de la cooperativa.
+        $cooperativePlans = $this->planBreakdown('cooperative');
 
-        $mrr = $driverPlans->sum('monthly_total') + $clientPlans->sum('monthly_total');
+        $mrr = $driverPlans->sum('monthly_total') + $clientPlans->sum('monthly_total') + $cooperativePlans->sum('monthly_total');
 
         return Inertia::render('Admin/Metrics', [
             'driverPlans' => $driverPlans,
             'clientPlans' => $clientPlans,
+            'cooperativePlans' => $cooperativePlans,
             'estimatedMrr' => round($mrr, 2),
             'totals' => [
                 'users' => User::query()->count(),
@@ -35,6 +41,8 @@ class MetricsController extends Controller
                 'clients' => User::query()->whereHas('fleets')->count(),
                 'fleets' => Fleet::query()->count(),
                 'completedRides' => Ride::query()->where('status', 'completed')->count(),
+                'cooperatives' => Cooperative::query()->count(),
+                'approvedCooperatives' => Cooperative::query()->where('status', 'approved')->count(),
             ],
         ]);
     }
@@ -76,12 +84,14 @@ class MetricsController extends Controller
             ->get()
             ->countBy(fn (User $user) => $user->subscriptions->first()?->subscription_plan_id);
 
-        // El universo base de este lado: conductores (con perfil) o clientes
-        // (con al menos una flota) — así el plan Gratis también muestra cuántos
-        // hay, no solo los que pagan.
-        $baseCount = $ownerType === 'driver'
-            ? User::query()->whereHas('driverProfile')->count()
-            : User::query()->whereHas('fleets')->count();
+        // El universo base de este lado: conductores (con perfil), clientes
+        // (con al menos una flota), o cooperativas (con cuenta propia) —
+        // así el plan Gratis también muestra cuántos hay, no solo los que pagan.
+        $baseCount = match ($ownerType) {
+            'driver' => User::query()->whereHas('driverProfile')->count(),
+            'cooperative' => User::query()->whereHas('cooperative')->count(),
+            default => User::query()->whereHas('fleets')->count(),
+        };
 
         $paidSubscriberTotal = $subscriberCounts->sum();
 

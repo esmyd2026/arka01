@@ -439,6 +439,29 @@ class WhatsAppFreeformSender
     }
 
     /**
+     * Bug reportado por el usuario: una carrera programada cuya hora ya
+     * pasó se quedaba mostrando "Iniciar viaje" sin ningún aviso — este es
+     * el mensaje de WhatsApp, simétrico a sendScheduledRideReminder() pero
+     * DESPUÉS de la hora en vez de antes. No cancela nada solo por
+     * mandarse (puede estar en camino, con tráfico) — solo avisa.
+     */
+    public static function sendScheduledRideOverdueAlert(User $driver, Ride $ride): void
+    {
+        if (! WhatsAppRideAccess::notificationTypeEnabled('scheduled_overdue') || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+            return;
+        }
+
+        $time = $ride->rideRequest->scheduled_at->format('H:i');
+        $message = "⚠️ Su carrera programada ya debería haber empezado.\n"
+            ."Cliente: {$ride->client->name}\n"
+            ."Hora: {$time}\n"
+            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n\n"
+            .'Abra Arka01 para iniciarla, o avísele al cliente si va a demorar: '.route('rides.show', $ride);
+
+        self::sendText($driver->phone, $message, 'scheduled_overdue');
+    }
+
+    /**
      * Pedido explícito del usuario: avisarle al conductor que se le acabó el
      * tiempo para responder una oferta del despacho secuencial — antes se
      * enteraba solo por la app (si la tenía abierta); ahora también por

@@ -47,6 +47,7 @@ class Ride extends Model
         'cancellation_note',
         'pending_reschedule_at',
         'driver_reminder_sent_at',
+        'overdue_alert_sent_at',
     ];
 
     protected $casts = [
@@ -69,6 +70,7 @@ class Ride extends Model
         'cancelled_at' => 'datetime',
         'pending_reschedule_at' => 'datetime',
         'driver_reminder_sent_at' => 'datetime',
+        'overdue_alert_sent_at' => 'datetime',
     ];
 
     /**

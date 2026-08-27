@@ -100,7 +100,12 @@ async function destroyRide(ride) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-arka-text-muted/10">
-                                <tr v-for="ride in rides.data" :key="ride.id">
+                                <tr
+                                    v-for="ride in rides.data"
+                                    :key="ride.id"
+                                    class="cursor-pointer hover:bg-arka-primary/5"
+                                    @click="router.visit(route('admin.rides.show', ride.id))"
+                                >
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ ride.id }}</td>
                                     <td class="py-2 pr-3 text-arka-text">{{ ride.client_name }}</td>
                                     <td class="py-2 pr-3 text-arka-text">{{ ride.driver_name }}</td>
@@ -111,7 +116,7 @@ async function destroyRide(ride) {
                                     <td class="py-2 pr-3 text-arka-text">${{ ride.price.toFixed(2) }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(ride.created_at) }}</td>
                                     <td class="py-2">
-                                        <DangerButton size="sm" @click="destroyRide(ride)">Eliminar</DangerButton>
+                                        <DangerButton size="sm" @click.stop="destroyRide(ride)">Eliminar</DangerButton>
                                     </td>
                                 </tr>
                             </tbody>

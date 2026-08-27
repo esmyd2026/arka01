@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\CooperativeDriverMembership;
+use App\Models\FleetInvitation;
 use App\Models\RideRequest;
 use App\Models\SiteSetting;
 use App\Services\PlanLimits;
@@ -97,6 +98,14 @@ class HandleInertiaRequests extends Middleware
                 // más simple que el de /carreras) usado también ahí.
                 'pendingRideRequestsCount' => $user?->isDriver()
                     ? RideRequest::pendingIncomingFor($user->id)->count()
+                    : 0,
+                // Pedido explícito del usuario: "quitemos carreras y
+                // coloquemos clientes" — el tab "Clientes" de la nav
+                // inferior (antes "Carreras", redundante con "Solicitudes")
+                // necesita este número en cualquier pantalla, mismo
+                // criterio que pendingRideRequestsCount de arriba.
+                'pendingFleetInvitationsCount' => $user?->isDriver()
+                    ? FleetInvitation::query()->where('driver_user_id', $user->id)->where('status', 'pending')->count()
                     : 0,
                 // Pedido explícito del usuario: "eso es para que el sepa
                 // que pertenece a una cooperativa, colocalo alli [menú de

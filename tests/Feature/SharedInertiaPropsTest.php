@@ -6,6 +6,7 @@ use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
 use App\Models\SiteSetting;
@@ -39,6 +40,39 @@ class SharedInertiaPropsTest extends TestCase
         $response = $this->actingAs($driver)->get(route('driver.profile.edit'));
 
         $response->assertInertia(fn ($page) => $page->where('auth.pendingRideRequestsCount', 2));
+    }
+
+    /**
+     * Pedido explícito del usuario: "carreras y solicitudes es la misma
+     * pagina... quitemos carreras y coloquemos clientes" — el tab
+     * "Clientes" de la nav inferior (antes "Carreras") necesita este
+     * número en cualquier pantalla.
+     */
+    public function test_pending_fleet_invitations_count_is_shared_for_a_driver_on_any_page(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $fleet = Fleet::factory()->create();
+        FleetInvitation::query()->create([
+            'fleet_id' => $fleet->id,
+            'driver_user_id' => $driver->id,
+            'invited_by' => $fleet->owner_user_id,
+            'initiated_by' => 'client',
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('driver.profile.edit'));
+
+        $response->assertInertia(fn ($page) => $page->where('auth.pendingFleetInvitationsCount', 1));
+    }
+
+    public function test_pending_fleet_invitations_count_is_zero_for_a_client(): void
+    {
+        $client = User::factory()->create();
+
+        $response = $this->actingAs($client)->get(route('profile.edit'));
+
+        $response->assertInertia(fn ($page) => $page->where('auth.pendingFleetInvitationsCount', 0));
     }
 
     public function test_pending_ride_requests_count_is_zero_for_a_client(): void

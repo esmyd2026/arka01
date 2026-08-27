@@ -882,14 +882,12 @@ onBeforeUnmount(() => {
 
             <!-- Tabs a la derecha del botón central. -->
             <div class="flex-1 flex items-stretch">
-                <!-- Pedido explícito del usuario: esto es el tab de
-                     siempre, tal cual estaba antes — no se toca para el
-                     cliente ("solo te pedi que agregaras en el conductor").
-                     El conductor ahora lo ve doble (acá y como "Solicitudes"
-                     a la izquierda) a propósito, para que ambos lados del
-                     "+" queden simétricos con 2 íconos cada uno. -->
+                <!-- Pedido explícito del usuario ("carreras y solicitudes es
+                     la misma pagina... quitemos carreras y coloquemos
+                     clientes"): para el cliente, este tab sigue siendo
+                     "Carreras" tal cual siempre fue — no se toca. -->
                 <Link
-                    v-if="hasRoute('rides.index') && !isAdmin && !showCooperativeNav"
+                    v-if="hasRoute('rides.index') && showClientNav"
                     :href="route('rides.index')"
                     class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
                     :class="
@@ -909,6 +907,33 @@ onBeforeUnmount(() => {
                         <circle cx="16.5" cy="16" r="1" />
                     </svg>
                     <span class="text-xs font-medium">Carreras</span>
+                </Link>
+
+                <!-- Pedido explícito del usuario: para el conductor, este
+                     lado del "+" ya no repite Carreras/Solicitudes (la misma
+                     página dos veces) — ahora es "Clientes", mismo destino
+                     que ya vivía en el botón "+" (driver.invitations.index). -->
+                <Link
+                    v-if="hasRoute('driver.invitations.index') && showDriverNav"
+                    :href="route('driver.invitations.index')"
+                    class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
+                    :class="route().current('driver.invitations.*') ? 'text-arka-primary' : 'text-arka-text-muted'"
+                >
+                    <span class="relative">
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="9" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+                            <circle cx="17" cy="9" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 13.5c2.4 0 4.5 1.9 5 5" />
+                        </svg>
+                        <span
+                            v-if="$page.props.auth.pendingFleetInvitationsCount > 0"
+                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
+                        >
+                            {{ $page.props.auth.pendingFleetInvitationsCount }}
+                        </span>
+                    </span>
+                    <span class="text-xs font-medium">Clientes</span>
                 </Link>
 
                 <!-- Tab dedicado del admin en móvil: mismo criterio que la pastilla de

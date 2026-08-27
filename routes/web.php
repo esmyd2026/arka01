@@ -464,6 +464,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // programadas o de Expreso — todas son filas de `rides`. Ver
     // Admin\RideController::destroy() para qué se lleva de encajada.
     Route::get('/carreras', [AdminRideController::class, 'index'])->name('rides.index');
+    // Detalle de una carrera puntual (pedido explícito del usuario: "ver el
+    // detalle de las carreras cuando le de click alguna de ellas").
+    Route::get('/carreras/{ride}', [AdminRideController::class, 'show'])->name('rides.show');
     Route::delete('/carreras/{ride}', [AdminRideController::class, 'destroy'])->name('rides.destroy');
 
     Route::get('/suscripciones', [AdminSubscriptionController::class, 'index'])->name('subscriptions.index');
