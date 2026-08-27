@@ -31,6 +31,13 @@ class Kernel extends ConsoleKernel
         // 5 min que el recordatorio de arriba, por consistencia.
         $schedule->command('rides:send-overdue-scheduled-alerts')->everyFiveMinutes();
         $schedule->command('rides:expire-overdue-scheduled-requests')->everyFiveMinutes();
+
+        // Bug encontrado en una auditoría del flujo completo: una solicitud
+        // INMEDIATA dirigida a un conductor puntual nunca vencía si no
+        // respondía — ver el comando para el porqué de no usar el mismo
+        // Job con delay() que ya usa la bolsa. Cada 2 min, mismo criterio
+        // de cadencia que el barrido de disponibilidad de arriba.
+        $schedule->command('rides:expire-overdue-directed-requests')->everyTwoMinutes();
     }
 
     /**

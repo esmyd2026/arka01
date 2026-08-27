@@ -8,7 +8,10 @@ import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
 import ShareProfileQr from '@/Components/ShareProfileQr.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputError from '@/Components/InputError.vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 import { canInstallApp, installApp } from '@/pwaInstall';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -52,6 +55,9 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    // "¿Quién lo recomendó?" (pedido explícito del usuario) — null hasta que
+    // quede fijado por enlace, cupón, o la búsqueda manual de más abajo.
+    referredBy: { type: Object, default: null },
     // Tarjeta de perfil "profesional" (pedido explícito del usuario, mismo
     // lenguaje visual que Referral/Show.vue) — su propia reputación, igual
     // que ese conductor la mostraba.
@@ -70,9 +76,41 @@ const props = defineProps({
 // foto y nombre solo, leyendo las etiquetas og:* de Profile/Show.vue (ver
 // PublicProfileController::show()).
 const whatsappShareUrl = computed(() => {
-    const text = `¡Hola! Soy ${usePage().props.auth.user.name} en Arka01 \n\nMirá mi perfil:\n${props.profileUrl}`;
+    const text = `¡Hola! Soy ${usePage().props.auth.user.full_name} en Arka01 \n\nMirá mi perfil:\n${props.profileUrl}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 });
+
+// "¿Quién lo recomendó?" (pedido explícito del usuario): buscar por nombre,
+// usuario o código, y guardar una sola vez — se queda "quemado" (el backend
+// rechaza pisar un referido ya asignado, por esta vía o por enlace/cupón).
+const referrerSearchTerm = ref('');
+const referrerResults = ref([]);
+let referrerSearchTimeout = null;
+const referrerForm = useForm({ referrer_user_id: null });
+const selectedReferrer = ref(null);
+
+function searchReferrer() {
+    clearTimeout(referrerSearchTimeout);
+    if (referrerSearchTerm.value.trim().length < 2) {
+        referrerResults.value = [];
+        return;
+    }
+    referrerSearchTimeout = setTimeout(async () => {
+        const { data } = await window.axios.get(route('profile.search-referrer'), { params: { q: referrerSearchTerm.value } });
+        referrerResults.value = data.users;
+    }, 300);
+}
+
+function chooseReferrer(user) {
+    selectedReferrer.value = user;
+    referrerForm.referrer_user_id = user.id;
+    referrerResults.value = [];
+    referrerSearchTerm.value = '';
+}
+
+function saveReferrer() {
+    referrerForm.post(route('profile.set-referrer'), { preserveScroll: true });
+}
 
 // Avisos de sus carreras por WhatsApp (pedido explícito del usuario) — mismo
 // mecanismo ya probado del lado del conductor (Driver/Profile.vue): estado
@@ -164,7 +202,7 @@ async function switchToClient() {
                     <div class="p-6 sm:p-8 flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
                         <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl shrink-0" />
                         <div class="min-w-0 flex-1">
-                            <p class="text-xl font-semibold text-arka-text">{{ $page.props.auth.user.name }}</p>
+                            <p class="text-xl font-semibold text-arka-text">{{ $page.props.auth.user.full_name }}</p>
                             <p class="text-sm text-arka-text-muted">
                                 @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
                             </p>
@@ -346,6 +384,68 @@ async function switchToClient() {
                                 {{ linkCopied ? '¡Copiado!' : 'Copiar enlace' }}
                             </SecondaryButton>
                         </div>
+                    </div>
+                </div>
+
+                <!-- "¿Quién lo recomendó?" (pedido explícito del usuario: "por
+                     cupones, por enlaces de referidos o por ingresos
+                     manuales pueden obtener referidos") — esta es la tercera
+                     vía, manual: buscar y guardar una sola vez. Si ya vino
+                     por enlace o cupón, esto ya aparece resuelto y de solo
+                     lectura. -->
+                <div class="p-4 sm:p-8 bg-arka-card shadow sm:rounded-arka">
+                    <h2 class="flex items-center gap-2 text-lg font-medium text-arka-text">
+                        <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21c-4.97-3.14-8-6.5-8-10a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 3.5-3.03 6.86-8 10Z" />
+                        </svg>
+                        ¿Quién lo recomendó?
+                    </h2>
+
+                    <div v-if="referredBy" class="mt-3 max-w-xl">
+                        <p class="text-sm text-arka-text">
+                            Fue recomendado por <span class="font-medium">{{ referredBy.name }}</span>
+                            <span v-if="referredBy.username" class="text-arka-text-muted"> · @{{ referredBy.username }}</span>
+                        </p>
+                    </div>
+
+                    <div v-else class="mt-3 max-w-xl space-y-3">
+                        <p class="text-sm text-arka-text-muted">
+                            Si alguien de Arka01 lo invitó pero no quedó registrado solo, búsquelo acá y guárdelo — una vez
+                            guardado, no se puede cambiar.
+                        </p>
+
+                        <div v-if="!selectedReferrer">
+                            <TextInput
+                                v-model="referrerSearchTerm"
+                                class="w-full"
+                                placeholder="Nombre, usuario o código de socio"
+                                @input="searchReferrer"
+                            />
+                            <ul v-if="referrerResults.length" class="mt-2 divide-y divide-arka-text-muted/10 rounded-arka border border-arka-text-muted/10">
+                                <li
+                                    v-for="candidate in referrerResults"
+                                    :key="candidate.id"
+                                    class="cursor-pointer p-2 text-sm text-arka-text hover:bg-arka-base"
+                                    @click="chooseReferrer(candidate)"
+                                >
+                                    {{ candidate.name }}
+                                    <span class="text-arka-text-muted">
+                                        <span v-if="candidate.username">· @{{ candidate.username }}</span>
+                                        <span v-if="candidate.member_code"> · #{{ candidate.member_code }}</span>
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div v-else class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm text-arka-text">
+                                {{ selectedReferrer.name }}
+                                <span v-if="selectedReferrer.username" class="text-arka-text-muted">· @{{ selectedReferrer.username }}</span>
+                            </span>
+                            <SecondaryButton @click="selectedReferrer = null; referrerForm.referrer_user_id = null;">Cambiar</SecondaryButton>
+                            <PrimaryButton :disabled="referrerForm.processing" @click="saveReferrer">Guardar</PrimaryButton>
+                        </div>
+                        <InputError :message="referrerForm.errors.referrer_user_id" />
                     </div>
                 </div>
 

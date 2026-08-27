@@ -83,6 +83,29 @@ class ExpireOverdueScheduledRideRequestsTest extends TestCase
         Notification::assertNotSentTo($rideRequest->client, ScheduledRideRequestExpiredPushNotification::class);
     }
 
+    /**
+     * Bug encontrado en una auditoría del flujo completo (pedido explícito
+     * del usuario): un conductor puede contraofertar una solicitud
+     * programada (RideRequestController::counter(), no distingue programada
+     * de inmediata) — antes, si el cliente nunca respondía esa contraoferta
+     * antes de la hora pedida, se quedaba en 'negotiating' para siempre,
+     * invisible para este comando (solo miraba 'pending').
+     */
+    public function test_it_also_expires_a_negotiating_scheduled_request_nobody_resolved(): void
+    {
+        Event::fake([RideRequestExpired::class]);
+        Notification::fake();
+
+        $rideRequest = $this->pendingRequest(['status' => 'negotiating']);
+
+        $this->artisan('rides:expire-overdue-scheduled-requests')->assertSuccessful();
+
+        $fresh = $rideRequest->fresh();
+        $this->assertSame('expired', $fresh->status);
+        Event::assertDispatched(RideRequestExpired::class, fn ($event) => $event->rideRequest->id === $rideRequest->id);
+        Notification::assertSentTo($rideRequest->client, ScheduledRideRequestExpiredPushNotification::class);
+    }
+
     public function test_it_ignores_immediate_non_scheduled_requests(): void
     {
         Notification::fake();

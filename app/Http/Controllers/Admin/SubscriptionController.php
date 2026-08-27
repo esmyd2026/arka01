@@ -112,17 +112,18 @@ class SubscriptionController extends Controller
         // alcance) — lo primero que un admin necesita ver al entrar acá.
         $pendingRequests = SubscriptionRequest::query()
             ->where('status', 'pending_review')
-            // planPromotion (pedido explícito del usuario): si el pedido
-            // viene de una promoción, el admin necesita saber qué monto
-            // correspondía revisar en el comprobante, no el precio de lista.
-            ->with(['user', 'plan', 'planPromotion'])
+            // planPromotion/planCoupon (pedido explícito del usuario): si el
+            // pedido viene de una promoción o de un cupón, el admin necesita
+            // saber qué monto correspondía revisar en el comprobante, no el
+            // precio de lista.
+            ->with(['user', 'plan', 'planPromotion', 'planCoupon'])
             ->latest()
             ->get()
             // Descuento por cooperativa (pedido explícito del usuario): sin
             // esto, el admin esperaría el precio de lista completo y
             // podría rechazar un comprobante legítimo por un monto menor.
             ->each(function (SubscriptionRequest $subscriptionRequest) {
-                $subscriptionRequest->cooperative_discount = (! $subscriptionRequest->planPromotion && $subscriptionRequest->plan->owner_type === 'driver')
+                $subscriptionRequest->cooperative_discount = (! $subscriptionRequest->planCoupon && ! $subscriptionRequest->planPromotion && $subscriptionRequest->plan->owner_type === 'driver')
                     ? $this->planLimits->driverDiscountFor($subscriptionRequest->plan, $subscriptionRequest->user)
                     : null;
             });
@@ -216,9 +217,11 @@ class SubscriptionController extends Controller
             throw ValidationException::withMessages(['subscription_request' => $reason]);
         }
 
-        $note = $subscriptionRequest->planPromotion
-            ? "Aprobado desde comprobante de pago (promoción: {$subscriptionRequest->planPromotion->label})."
-            : 'Aprobado desde comprobante de pago subido por el usuario.';
+        $note = match (true) {
+            $subscriptionRequest->planCoupon !== null => "Aprobado desde comprobante de pago (cupón: {$subscriptionRequest->planCoupon->code}).",
+            $subscriptionRequest->planPromotion !== null => "Aprobado desde comprobante de pago (promoción: {$subscriptionRequest->planPromotion->label}).",
+            default => 'Aprobado desde comprobante de pago subido por el usuario.',
+        };
 
         $this->activator->activate(
             $subscriptionRequest->user,

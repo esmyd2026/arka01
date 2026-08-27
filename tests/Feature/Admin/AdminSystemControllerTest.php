@@ -245,4 +245,53 @@ class AdminSystemControllerTest extends TestCase
             'disabled' => ['admin.system.reset-demo'],
         ])->assertSessionHasErrors('disabled.0');
     }
+
+    /**
+     * Pedido explícito del usuario: "permiteme desde el admin poder activar
+     * o no lo obligatorio para que el conductor se le haga mas facil
+     * activarse."
+     */
+    public function test_the_system_panel_lists_the_toggleable_driver_requirements(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $response = $this->actingAs($admin)->get(route('admin.system.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('driverRequirements', 5)
+            ->where('driverRequirements.0.enabled', true)
+        );
+    }
+
+    public function test_a_regular_user_cannot_update_driver_requirements(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+
+        $this->actingAs($user)->patch(route('admin.system.driver-requirements.update'), [
+            'disabled' => ['police_record'],
+        ])->assertForbidden();
+    }
+
+    public function test_admin_can_disable_a_driver_requirement(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.driver-requirements.update'), [
+            'disabled' => ['police_record', 'has_insurance'],
+        ])->assertRedirect();
+
+        $this->assertSame(
+            ['police_record', 'has_insurance'],
+            SiteSetting::current()->disabled_driver_requirements
+        );
+    }
+
+    public function test_an_unknown_driver_requirement_key_is_rejected(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.driver-requirements.update'), [
+            'disabled' => ['vehicle_plate'],
+        ])->assertSessionHasErrors('disabled.0');
+    }
 }

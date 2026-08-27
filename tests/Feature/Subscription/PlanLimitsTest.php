@@ -78,6 +78,46 @@ class PlanLimitsTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario: "cuando una cooperativa tenga que
+     * buscar a un conductor... tiene que tener el plan mayor al gratis, y
+     * tiene que estar vigente" — ver hasActivePaidPlan(), consumido por
+     * RideDispatchCandidates::forCooperative() y CooperativeDriverController.
+     */
+    public function test_has_active_paid_plan_is_false_for_a_driver_on_the_free_plan(): void
+    {
+        $driver = User::factory()->create();
+
+        $this->assertFalse($this->planLimits->hasActivePaidPlan($driver));
+    }
+
+    public function test_has_active_paid_plan_is_true_for_a_driver_with_an_active_paid_subscription(): void
+    {
+        $driver = User::factory()->create();
+        $plusPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plusPlan->id, 'status' => 'active']);
+
+        $this->assertTrue($this->planLimits->hasActivePaidPlan($driver));
+    }
+
+    public function test_has_active_paid_plan_is_true_for_a_subscription_in_grace(): void
+    {
+        $driver = User::factory()->create();
+        $plusPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plusPlan->id, 'status' => 'grace']);
+
+        $this->assertTrue($this->planLimits->hasActivePaidPlan($driver));
+    }
+
+    public function test_has_active_paid_plan_is_false_once_the_subscription_expired(): void
+    {
+        $driver = User::factory()->create();
+        $plusPlan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plusPlan->id, 'status' => 'expired']);
+
+        $this->assertFalse($this->planLimits->hasActivePaidPlan($driver));
+    }
+
+    /**
      * Pedido explícito del usuario: poder sacarle Expresos a un plan puntual
      * desde /admin/planes.
      */

@@ -302,7 +302,7 @@ class FleetController extends Controller
 
             return [
                 'user_id' => $driver->user_id,
-                'name' => $driver->user->name,
+                'name' => $driver->user->full_name,
                 'avatar_url' => $driver->user->avatar_url,
                 // Pedido explícito del usuario ("manejar la privacidad"):
                 // sin teléfono acá — foto, código y calificación ya alcanzan

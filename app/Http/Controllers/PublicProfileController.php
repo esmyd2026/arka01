@@ -57,7 +57,7 @@ class PublicProfileController extends Controller
             $averageRating = round((float) $user->reviewsReceived()->avg('rating'), 1);
 
             return view('profile-preview', [
-                'title' => "{$user->name} — Arka01",
+                'title' => "{$user->full_name} — Arka01",
                 'description' => ($isDriver ? 'Conductor' : 'Cliente').' en Arka01'
                     .($reviewCount > 0 ? " · ★ {$averageRating}" : '')
                     .' — movilidad de confianza en Ecuador.',
@@ -86,7 +86,7 @@ class PublicProfileController extends Controller
             // PublicRideTrackingController::publicPayload().
             'profileUser' => [
                 'id' => $user->id,
-                'name' => $user->name,
+                'name' => $user->full_name,
                 'username' => $user->username,
                 'member_code' => $user->member_code,
                 'avatar_url' => $user->avatar_url,

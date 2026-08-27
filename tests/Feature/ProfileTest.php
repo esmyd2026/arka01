@@ -369,4 +369,79 @@ class ProfileTest extends TestCase
 
         $this->assertNotNull($user->fresh());
     }
+
+    /**
+     * Pedido explícito del usuario: "agreguemos un campo para que busquen
+     * en la plataforma quien los recomendo que busquen por nombres o
+     * usuario o codigo".
+     */
+    public function test_can_search_for_a_referrer_by_partial_name(): void
+    {
+        $user = User::factory()->create();
+        $target = User::factory()->create(['name' => 'Gabriela Parrales']);
+
+        $response = $this->actingAs($user)->getJson(route('profile.search-referrer', ['q' => 'Gabriela']));
+
+        $response->assertOk();
+        $response->assertJsonFragment(['id' => $target->id]);
+    }
+
+    public function test_the_search_never_includes_the_user_themselves(): void
+    {
+        $user = User::factory()->create(['name' => 'Gabriela Parrales']);
+
+        $response = $this->actingAs($user)->getJson(route('profile.search-referrer', ['q' => 'Gabriela']));
+
+        $response->assertJsonMissing(['id' => $user->id]);
+    }
+
+    /**
+     * Pedido explícito del usuario: "le den a un boton guardar y ya alli se
+     * quede quemado" — se guarda una sola vez.
+     */
+    public function test_can_save_who_referred_them(): void
+    {
+        $user = User::factory()->create();
+        $referrer = User::factory()->create();
+
+        $this->actingAs($user)->post(route('profile.set-referrer'), [
+            'referrer_user_id' => $referrer->id,
+        ])->assertRedirect();
+
+        $this->assertSame($referrer->id, $user->fresh()->referred_by_user_id);
+    }
+
+    public function test_cannot_overwrite_an_already_saved_referrer(): void
+    {
+        $originalReferrer = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $user = User::factory()->create(['referred_by_user_id' => $originalReferrer->id]);
+
+        $this->actingAs($user)->post(route('profile.set-referrer'), [
+            'referrer_user_id' => $otherUser->id,
+        ])->assertSessionHasErrors('referrer_user_id');
+
+        $this->assertSame($originalReferrer->id, $user->fresh()->referred_by_user_id);
+    }
+
+    public function test_cannot_mark_themselves_as_their_own_referrer(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('profile.set-referrer'), [
+            'referrer_user_id' => $user->id,
+        ])->assertSessionHasErrors('referrer_user_id');
+
+        $this->assertNull($user->fresh()->referred_by_user_id);
+    }
+
+    public function test_the_profile_page_exposes_who_referred_them(): void
+    {
+        $referrer = User::factory()->create(['name' => 'Gabriela Parrales']);
+        $user = User::factory()->create(['referred_by_user_id' => $referrer->id]);
+
+        $response = $this->actingAs($user)->get('/profile');
+
+        $response->assertInertia(fn ($page) => $page->where('referredBy.name', 'Gabriela Parrales'));
+    }
 }

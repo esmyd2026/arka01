@@ -7,6 +7,8 @@ use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\RideRequest;
+use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use Database\Seeders\DemoDataSeeder;
@@ -260,6 +262,11 @@ class CooperativeModuleTest extends TestCase
             'status' => 'accepted',
             'responded_at' => now(),
         ]);
+        // Pedido explícito del usuario: un conductor de cooperativa necesita
+        // un plan pago vigente para que el despacho automático lo considere
+        // (ver PlanLimits::hasActivePaidPlan()).
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
 
         $response = $this->actingAs($client)->post(route('ride-requests.store'), [
             'cooperative_id' => $cooperative->id,

@@ -4,6 +4,7 @@ namespace App\Http;
 
 use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\EncryptCookies;
+use App\Http\Middleware\EnsureDriverOnboardingIsComplete;
 use App\Http\Middleware\EnsurePhoneIsVerified;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsCooperative;
@@ -102,6 +103,7 @@ class Kernel extends HttpKernel
         'cache.headers' => SetCacheHeaders::class,
         'can' => Authorize::class,
         'guest' => RedirectIfAuthenticated::class,
+        'driver_onboarding' => EnsureDriverOnboardingIsComplete::class,
         'password.confirm' => RequirePassword::class,
         'phone_verified' => EnsurePhoneIsVerified::class,
         'precognitive' => HandlePrecognitiveRequests::class,

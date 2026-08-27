@@ -3,6 +3,7 @@
 namespace Tests\Feature\Security;
 
 use App\Models\DriverProfile;
+use App\Models\SiteSetting;
 use App\Models\User;
 use App\Notifications\DriverVerificationResultPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -117,6 +118,39 @@ class DriverVerificationTest extends TestCase
         ])->assertSessionHasErrors('has_insurance');
 
         $this->assertNull($driver->driverProfile()->first());
+    }
+
+    /**
+     * Pedido explícito del usuario: "ayudame a quitar o no validaciones de
+     * los conductores... por ejemplo si es obligatorio o no el tema de
+     * seguro" → "permiteme desde el admin poder activar o no lo
+     * obligatorio para que el conductor se le haga mas facil activarse" —
+     * ver App\Services\DriverVerificationRequirementRegistry.
+     */
+    public function test_a_disabled_requirement_no_longer_blocks_the_first_save(): void
+    {
+        Storage::fake('local');
+        Storage::fake('public');
+        SiteSetting::current()->update(['disabled_driver_requirements' => ['has_insurance', 'police_record']]);
+        $driver = User::factory()->create();
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), [
+            'vehicle_make' => 'Chevrolet',
+            'vehicle_model' => 'Spark',
+            'vehicle_color' => 'Blanco',
+            'vehicle_type' => 'sedan',
+            'vehicle_plate' => 'ABC-1234',
+            'vehicle_year' => 2020,
+            'passenger_capacity' => 4,
+            'has_trunk' => true,
+            'rate_per_km' => 0.5,
+            'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
+            'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
+            'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
+            // has_insurance y police_record deliberadamente ausentes.
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNotNull($driver->driverProfile()->first());
     }
 
     public function test_an_admin_can_approve_a_pending_verification(): void

@@ -168,6 +168,10 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex flex-wrap gap-3">
                     <Link :href="route('cooperative.drivers.index')" class="rounded-full bg-arka-primary px-4 py-2 text-sm font-semibold text-arka-base">Administrar conductores</Link>
+                    <!-- Pedido explícito del usuario: "quiero ver mis clientes
+                         vinculados... la lista, cantidad de carreras,
+                         puntuaccion y desvincular". -->
+                    <Link :href="route('cooperative.clients.index')" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Clientes vinculados</Link>
                     <Link :href="route('cooperative.profile.edit')" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Perfil y documentos</Link>
                     <Link :href="route('cooperatives.show', cooperative.id)" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Perfil público</Link>
                 </div>

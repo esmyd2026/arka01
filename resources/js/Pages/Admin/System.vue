@@ -12,6 +12,10 @@ const props = defineProps({
     // habilitar o no estas opciones del menu tanto las del conductor como
     // las del cliente" — ver App\Services\QuickLinkRegistry.
     quickLinks: { type: Array, required: true },
+    // Pedido explícito del usuario: "permiteme desde el admin poder activar
+    // o no lo obligatorio para que el conductor se le haga mas facil
+    // activarse" — ver App\Services\DriverVerificationRequirementRegistry.
+    driverRequirements: { type: Array, required: true },
 });
 
 const QUICK_LINK_GROUP_LABEL = { conductor: 'Menú del conductor', cliente: 'Menú del cliente' };
@@ -35,6 +39,27 @@ function toggle(route) {
 }
 function saveQuickLinks() {
     quickLinksForm.patch(route('admin.system.quick-links.update'), { preserveScroll: true });
+}
+
+// Pedido explícito del usuario: "permiteme desde el admin poder activar o
+// no lo obligatorio para que el conductor se le haga mas facil activarse"
+// — mismo patrón de toggles que los accesos rápidos de arriba, pero para
+// qué le exige el registro/verificación (ver DriverProfileController::update()
+// y DriverProfile::hasCompleteRegistrationInformation()).
+const driverRequirementsForm = useForm({
+    disabled: props.driverRequirements.filter((item) => !item.enabled).map((item) => item.key),
+});
+
+function isRequirementChecked(key) {
+    return !driverRequirementsForm.disabled.includes(key);
+}
+function toggleRequirement(key) {
+    driverRequirementsForm.disabled = isRequirementChecked(key)
+        ? [...driverRequirementsForm.disabled, key]
+        : driverRequirementsForm.disabled.filter((k) => k !== key);
+}
+function saveDriverRequirements() {
+    driverRequirementsForm.patch(route('admin.system.driver-requirements.update'), { preserveScroll: true });
 }
 
 // Zona de peligro (pedido explícito del usuario): confirmación fuerte antes
@@ -136,6 +161,48 @@ async function resetDemo() {
                             leave-to-class="opacity-0"
                         >
                             <p v-if="quickLinksForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
+                        </Transition>
+                    </div>
+                </div>
+
+                <!-- Pedido explícito del usuario: "ayudame a quitar o no
+                     validaciones de los conductores... para no limitar el
+                     registro de un conductor" y "permiteme desde el admin
+                     poder activar o no lo obligatorio para que el conductor
+                     se le haga mas facil activarse". -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-arka-text">Requisitos para activarse como conductor</h3>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Si apaga uno, deja de exigirse tanto para guardar el perfil por primera vez como para
+                            poder conectarse y recibir carreras — el conductor lo puede completar después de todas
+                            formas, solo que ya no lo bloquea.
+                        </p>
+                    </div>
+
+                    <ul class="divide-y divide-arka-text-muted/10">
+                        <li v-for="item in driverRequirements" :key="item.key" class="py-2.5">
+                            <label class="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    :checked="isRequirementChecked(item.key)"
+                                    class="rounded border-arka-text-muted/30 text-arka-primary focus:ring-arka-primary"
+                                    @change="toggleRequirement(item.key)"
+                                />
+                                <span class="text-sm text-arka-text">{{ item.label }}</span>
+                            </label>
+                        </li>
+                    </ul>
+
+                    <div class="flex items-center gap-4">
+                        <PrimaryButton :disabled="driverRequirementsForm.processing" @click="saveDriverRequirements">Guardar</PrimaryButton>
+                        <Transition
+                            enter-active-class="transition ease-in-out"
+                            enter-from-class="opacity-0"
+                            leave-active-class="transition ease-in-out"
+                            leave-to-class="opacity-0"
+                        >
+                            <p v-if="driverRequirementsForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
                         </Transition>
                     </div>
                 </div>

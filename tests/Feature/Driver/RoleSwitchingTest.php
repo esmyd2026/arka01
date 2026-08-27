@@ -149,7 +149,7 @@ class RoleSwitchingTest extends TestCase
 
         $this->actingAs($client)
             ->post(route('driver.profile.update'), $this->validVehiclePayload())
-            ->assertSessionHasErrors('license_number');
+            ->assertSessionHasErrors('vehicle_make');
 
         $this->assertDatabaseMissing('driver_profiles', ['user_id' => $client->id]);
     }

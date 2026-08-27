@@ -218,6 +218,39 @@ class WhatsAppRideAlertTest extends TestCase
             && str_contains($request['text']['body'], 'Solicitada: '.now('America/Guayaquil')->format('d/m/Y').' 21:45'));
     }
 
+    /**
+     * Pedido explícito del usuario: "que diga origen, destino, y los km
+     * desde hasta y km de donde tengo que ir a buscar al pasajero" — antes
+     * solo salía el origen y una distancia ambigua (la del conductor hasta
+     * el pasajero, sin destino ni distancia del viaje en sí).
+     */
+    public function test_the_new_ride_alert_includes_destination_and_both_distances(): void
+    {
+        $this->enableWhatsApp();
+        $client = User::factory()->create();
+        $driver = User::factory()->create(['phone' => '+593991234567']);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -0.1820, 'current_lng' => -78.4690]);
+
+        WhatsAppSession::query()->create(['user_id' => $driver->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'origin_address' => 'Sauces 8',
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'destination_address' => 'Samanes 3',
+        ])->assertRedirect();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com')
+            && str_contains($request['text']['body'], 'Destino: Samanes 3')
+            && str_contains($request['text']['body'], 'Distancia del viaje:')
+            && str_contains($request['text']['body'], 'Km hasta el pasajero:'));
+    }
+
     public function test_an_expired_session_does_not_trigger_a_whatsapp_alert(): void
     {
         $this->enableWhatsApp();

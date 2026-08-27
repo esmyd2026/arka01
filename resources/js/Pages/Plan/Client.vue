@@ -1,9 +1,13 @@
 <script setup>
+import { ref } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
 import SubscriptionRequestPanel from '@/Components/SubscriptionRequestPanel.vue';
 import SubscriptionRequestHistory from '@/Components/SubscriptionRequestHistory.vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 
 const props = defineProps({
     plans: { type: Array, required: true },
@@ -15,11 +19,22 @@ const props = defineProps({
     requestHistory: { type: Array, required: true },
 });
 
+// Pedido explícito del usuario: "cupones de descuentos... los ingresan
+// cuando esten registrandose en un plan" — un solo campo para toda la
+// pantalla (no uno por tarjeta): se escribe una vez y viaja junto con
+// cualquier plan que se elija después. useForm() (en vez de router.post
+// suelto) para poder mostrar el error de "cupón inválido" bajo el campo,
+// en vez de que se pierda en silencio.
+const couponForm = useForm({
+    subscription_plan_id: null,
+    plan_promotion_id: null,
+    coupon_code: '',
+});
+
 function selectPlan(plan) {
-    router.post(route('subscription-requests.store'), {
-        subscription_plan_id: plan.id,
-        plan_promotion_id: plan.active_promotion?.id ?? null,
-    });
+    couponForm.subscription_plan_id = plan.id;
+    couponForm.plan_promotion_id = plan.active_promotion?.id ?? null;
+    couponForm.post(route('subscription-requests.store'));
 }
 
 function formatDate(value) {
@@ -57,6 +72,20 @@ function fitsCurrentUsage(plan) {
                     <p class="mt-2 text-sm text-arka-text-muted">
                         Hasta {{ currentPlan.max_drivers_per_fleet ?? 'a medida (convenio)' }} conductores por flota.
                     </p>
+                </div>
+
+                <!-- Cupón de descuento (pedido explícito del usuario): opcional, se
+                     valida recién al elegir un plan. Cubre desde un % chico hasta
+                     el 100% (en ese caso activa el plan directo, sin comprobante). -->
+                <div v-if="!pendingRequest" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <InputLabel value="¿Tiene un cupón de descuento? (opcional)" />
+                    <TextInput
+                        v-model="couponForm.coupon_code"
+                        class="mt-1 block w-full max-w-xs uppercase"
+                        placeholder="Ej: BIENVENIDA50"
+                    />
+                    <InputError class="mt-1" :message="couponForm.errors.coupon_code" />
+                    <p class="mt-1 text-xs text-arka-text-muted">Se aplica automáticamente al elegir un plan abajo.</p>
                 </div>
 
                 <!-- Pedido en curso (consideración agregada al alcance): "botón de

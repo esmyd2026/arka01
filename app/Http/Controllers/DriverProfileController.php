@@ -9,6 +9,7 @@ use App\Models\PricingSetting;
 use App\Models\Ride;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
+use App\Services\DriverVerificationRequirementRegistry;
 use App\Services\PlanLimits;
 use App\Services\SystemEventLogger;
 use App\Services\WhatsAppConfig;
@@ -119,7 +120,7 @@ class DriverProfileController extends Controller
         // curso. Cambiar de cliente a conductor a mitad de una carrera
         // propia sí sería un problema (ver ACTIVE_RIDE_MESSAGE).
         if (! $user->isDriver() && Ride::where('client_user_id', $user->id)->where('status', 'in_progress')->exists()) {
-            throw ValidationException::withMessages(['license_number' => self::ACTIVE_RIDE_MESSAGE]);
+            throw ValidationException::withMessages(['vehicle_make' => self::ACTIVE_RIDE_MESSAGE]);
         }
 
         // Tope de la tarifa mínima propia del conductor (pedido explícito
@@ -145,7 +146,6 @@ class DriverProfileController extends Controller
             'country_code' => ['nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
             'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
             'driver_type' => ['sometimes', 'required', 'string', Rule::in(['independent', 'public_transport'])],
-            'license_number' => ['required', 'string', 'max:50'],
             // Datos del vehículo, TODOS obligatorios (pedido explícito del
             // usuario): hacen falta para que un cliente pueda filtrar por
             // cantidad de pasajeros y cajuela al pedir una carrera — un dato
@@ -278,12 +278,17 @@ class DriverProfileController extends Controller
             || $request->hasFile('police_record');
 
         if ($isSubmittingVerification) {
+            // Pedido explícito del usuario: "permiteme desde el admin poder
+            // activar o no lo obligatorio para que el conductor se le haga
+            // mas facil activarse" — cada uno de estos se puede apagar
+            // desde /admin/sistema (ver DriverVerificationRequirementRegistry).
             foreach ([
                 'identity_document' => 'identity_document_path',
                 'license_photo' => 'license_photo_path',
                 'police_record' => 'police_record_path',
             ] as $input => $pathField) {
-                if (! $request->hasFile($input) && blank($existingProfile?->{$pathField})) {
+                if (DriverVerificationRequirementRegistry::isRequired($input)
+                    && ! $request->hasFile($input) && blank($existingProfile?->{$pathField})) {
                     throw ValidationException::withMessages([
                         $input => 'Este documento es obligatorio para solicitar la verificación.',
                     ]);
@@ -292,8 +297,10 @@ class DriverProfileController extends Controller
 
             // Pedido explícito del usuario: seguro que lo proteja a él, a
             // los pasajeros y al vehículo — autodeclarado, sin documento,
-            // pero igual obligatorio para solicitar verificación.
-            if (! ($validated['has_insurance'] ?? $existingProfile?->has_insurance ?? false)) {
+            // pero igual obligatorio para solicitar verificación (salvo que
+            // un admin lo haya apagado).
+            if (DriverVerificationRequirementRegistry::isRequired('has_insurance')
+                && ! ($validated['has_insurance'] ?? $existingProfile?->has_insurance ?? false)) {
                 throw ValidationException::withMessages([
                     'has_insurance' => 'Debe declarar que cuenta con un seguro vigente para solicitar la verificación.',
                 ]);
@@ -311,7 +318,8 @@ class DriverProfileController extends Controller
             ]);
         }
 
-        if ($isSubmittingVerification && ! $user->avatar_path && ! $request->hasFile('profile_photo')) {
+        if ($isSubmittingVerification && DriverVerificationRequirementRegistry::isRequired('profile_photo')
+            && ! $user->avatar_path && ! $request->hasFile('profile_photo')) {
             throw ValidationException::withMessages([
                 'profile_photo' => 'La fotografía de perfil es obligatoria para verificar a un conductor.',
             ]);
@@ -373,7 +381,7 @@ class DriverProfileController extends Controller
         // debería tirar abajo una verificación ya aprobada. Sigue avisando a
         // administración (ver el aviso más abajo), solo que ya no bloquea.
         $reviewedFields = [
-            'driver_type', 'license_number', 'vehicle_make', 'vehicle_model',
+            'driver_type', 'vehicle_make', 'vehicle_model',
             'vehicle_color', 'vehicle_type', 'vehicle_plate', 'vehicle_year',
             'passenger_capacity', 'has_trunk',
         ];

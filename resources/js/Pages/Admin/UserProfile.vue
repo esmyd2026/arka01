@@ -100,6 +100,17 @@ async function revokeForceActivate() {
     router.delete(route('admin.users.revoke-force-activate-driver', props.profileUser.id), { preserveScroll: true });
 }
 
+// Pedido explícito del usuario: "como hago para pasar yo a un cliente como
+// conductor" — crea el perfil de conductor ya activado, sin que la persona
+// tenga que completarlo ella misma (ver Admin\UserProfileController::convertToDriver()).
+const convertToDriverForm = useForm({ note: '' });
+function convertToDriver() {
+    convertToDriverForm.post(route('admin.users.convert-to-driver', props.profileUser.id), {
+        preserveScroll: true,
+        onSuccess: () => convertToDriverForm.reset(),
+    });
+}
+
 // Eliminar cuenta (pedido explícito del usuario): borra archivos y, por el
 // cascade que ya tienen las FKs, historial de carreras, flotas/membresías,
 // reseñas, suscripciones, tickets de soporte, etc. — ver
@@ -325,8 +336,6 @@ function formatMessageTime(value) {
                     </form>
 
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <dt class="text-arka-text-muted">Licencia</dt>
-                        <dd class="text-arka-text">{{ profileUser.driver_profile.license_number }}</dd>
                         <dt class="text-arka-text-muted">Vehículo</dt>
                         <dd class="text-arka-text">
                             {{ profileUser.driver_profile.vehicle_make }} {{ profileUser.driver_profile.vehicle_model }}
@@ -386,6 +395,31 @@ function formatMessageTime(value) {
                         <p class="text-sm text-arka-text">Plan {{ driverPlan.plan_name }}</p>
                         <p class="text-xs text-arka-text-muted">{{ subscriptionLine(driverPlan) }}</p>
                     </div>
+                </div>
+
+                <!-- Pedido explícito del usuario: "como hago para pasar yo a un
+                     cliente como conductor" — crea el perfil de conductor
+                     directo desde acá, sin que la persona tenga que pasar por
+                     el registro/completar vehículo y documentos ella misma.
+                     Nota obligatoria, mismo criterio que la activación manual
+                     de arriba: salta un requisito de seguridad. -->
+                <div v-else class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-2">
+                    <h3 class="text-lg font-medium text-arka-text">Convertir en conductor</h3>
+                    <p class="text-sm text-arka-text-muted">
+                        Crea su perfil de conductor ya activado y aprobado, sin exigirle vehículo, documentos ni seguro
+                        completos — puede completarlos después desde su propio perfil.
+                    </p>
+                    <form @submit.prevent="convertToDriver" class="space-y-2">
+                        <InputLabel for="convert_note" value="Motivo" />
+                        <TextInput
+                            id="convert_note"
+                            class="w-full"
+                            v-model="convertToDriverForm.note"
+                            placeholder="Ej: se registró como conductor pero no completó el perfil"
+                        />
+                        <InputError :message="convertToDriverForm.errors.note" />
+                        <PrimaryButton type="submit" :disabled="convertToDriverForm.processing">Convertir en conductor</PrimaryButton>
+                    </form>
                 </div>
 
                 <!-- Clientes de este conductor (pedido explícito del usuario:

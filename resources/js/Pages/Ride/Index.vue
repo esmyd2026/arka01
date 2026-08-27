@@ -16,9 +16,32 @@ const props = defineProps({
     pendingCooperativeInvitations: { type: Array, required: true },
     activeRides: { type: Array, required: true },
     scheduledRides: { type: Array, required: true },
-    rideHistory: { type: Array, required: true },
+    // Rediseño (pedido explícito del usuario): ahora viene paginado desde
+    // RideController::index() — { data: [...], prev_page_url, next_page_url,
+    // ... }, ya no un array plano con tope fijo de 20.
+    rideHistory: { type: Object, required: true },
+    // Alarma de "sin calificar", calculada aparte para que sea correcta sin
+    // importar en qué página del historial esté el usuario.
+    unratedRideIds: { type: Array, required: true },
     driverFleetIds: { type: Array, required: true },
 });
+
+// Mismo criterio de etiquetas/colores que Admin/Rides.vue — acá solo
+// aplican 'completed'/'cancelled' (el historial excluye en curso y
+// programadas), pero se deja igual de completo por si algún día cambia.
+const HISTORY_STATUS_LABEL = {
+    completed: 'Completada',
+    cancelled: 'Cancelada',
+};
+const HISTORY_STATUS_BADGE_CLASS = {
+    completed: 'bg-arka-lime/15 text-arka-lime',
+    cancelled: 'bg-arka-danger/15 text-arka-danger',
+};
+
+function formatHistoryDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('es-EC', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 // Fecha/hora programada, legible (ej. "3 ago, 18:00") — mismo formato en
 // todas las tarjetas que muestran `scheduled_at` (consideración agregada al
@@ -67,12 +90,6 @@ const userId = usePage().props.auth.user.id;
 // compartida entre los dos roles, muestra tanto lo que pedí como cliente
 // como lo que me llega como conductor).
 const isClient = usePage().props.auth.isClient;
-
-// Pedido explícito del usuario ("si no han calificado que le arroje una
-// alarma"): cliente y conductor califican de forma independiente, así que
-// esto se calcula igual para los dos lados — cada carrera completada trae
-// `needs_my_review` ya resuelto desde RideController::index().
-const unratedRides = computed(() => props.rideHistory.filter((ride) => ride.needs_my_review));
 
 // Copias locales para poder sumar/sacar en vivo sin esperar una recarga de
 // página completa (sección 3.5: notificación instantánea de solicitudes).
@@ -480,11 +497,11 @@ function confirmRaiseOffer(id) {
                      carreras completadas sin calificar de mi parte — cliente y
                      conductor califican de forma independiente, no se espera al
                      otro para nada, pero sí se recuerda hasta que cada uno lo haga. -->
-                <div v-if="unratedRides.length" class="p-4 rounded-arka bg-arka-warning/15 border border-arka-warning/40 flex items-center justify-between gap-3 flex-wrap">
+                <div v-if="unratedRideIds.length" class="p-4 rounded-arka bg-arka-warning/15 border border-arka-warning/40 flex items-center justify-between gap-3 flex-wrap">
                     <p class="text-sm text-arka-warning font-medium">
-                        ⚠️ Tiene {{ unratedRides.length }} carrera{{ unratedRides.length > 1 ? 's' : '' }} completada{{ unratedRides.length > 1 ? 's' : '' }} sin calificar todavía.
+                        ⚠️ Tiene {{ unratedRideIds.length }} carrera{{ unratedRideIds.length > 1 ? 's' : '' }} completada{{ unratedRideIds.length > 1 ? 's' : '' }} sin calificar todavía.
                     </p>
-                    <Link :href="route('rides.show', unratedRides[0].id)" class="text-sm text-arka-warning underline hover:text-arka-warning/80">
+                    <Link :href="route('rides.show', unratedRideIds[0])" class="text-sm text-arka-warning underline hover:text-arka-warning/80">
                         Calificar ahora &rarr;
                     </Link>
                 </div>
@@ -793,27 +810,70 @@ function confirmRaiseOffer(id) {
 
                 <!-- Historial -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <h3 class="text-lg font-medium text-arka-text mb-3">Historial</h3>
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <h3 class="text-lg font-medium text-arka-text">Historial</h3>
+                        <span v-if="rideHistory.total" class="text-xs text-arka-text-muted">{{ rideHistory.total }} carrera{{ rideHistory.total > 1 ? 's' : '' }}</span>
+                    </div>
 
-                    <p v-if="!rideHistory.length" class="text-sm text-arka-text-muted">
+                    <p v-if="!rideHistory.data.length" class="text-sm text-arka-text-muted">
                         Todavía no tiene carreras completadas.
                     </p>
 
                     <ul v-else class="divide-y divide-arka-text-muted/10">
-                        <li v-for="ride in rideHistory" :key="ride.id" class="py-3">
-                            <Link :href="route('rides.show', ride.id)" class="flex items-center justify-between gap-2">
-                                <span class="text-arka-text">
-                                    {{ ride.client.id === userId ? ride.driver.name : ride.client.name }}
-                                </span>
-                                <span class="text-sm text-arka-text-muted flex items-center gap-2 shrink-0">
-                                    <span v-if="ride.needs_my_review" class="px-1.5 py-0.5 rounded text-[11px] font-medium bg-arka-warning/15 text-arka-warning">
-                                        Sin calificar
+                        <li v-for="ride in rideHistory.data" :key="ride.id">
+                            <Link
+                                :href="route('rides.show', ride.id)"
+                                class="flex items-center gap-3 py-3 -mx-2 px-2 rounded-lg transition-colors hover:bg-arka-base/40"
+                            >
+                                <UserAvatar
+                                    :user="ride.client.id === userId ? ride.driver : ride.client"
+                                    size-class="h-10 w-10 text-sm shrink-0"
+                                />
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-arka-text font-medium truncate">
+                                            {{ ride.client.id === userId ? ride.driver.name : ride.client.name }}
+                                        </span>
+                                        <span
+                                            class="px-1.5 py-0.5 rounded text-[11px] font-semibold shrink-0"
+                                            :class="HISTORY_STATUS_BADGE_CLASS[ride.status] ?? 'bg-arka-text-muted/15 text-arka-text-muted'"
+                                        >
+                                            {{ HISTORY_STATUS_LABEL[ride.status] ?? ride.status }}
+                                        </span>
+                                        <span v-if="ride.needs_my_review" class="px-1.5 py-0.5 rounded text-[11px] font-medium bg-arka-warning/15 text-arka-warning shrink-0">
+                                            Sin calificar
+                                        </span>
                                     </span>
-                                    ${{ ride.price }} · {{ ride.status }}
+                                    <span class="block text-xs text-arka-text-muted mt-0.5">{{ formatHistoryDate(ride.occurred_at) }}</span>
                                 </span>
+                                <span class="text-arka-text font-semibold shrink-0">${{ ride.price.toFixed(2) }}</span>
                             </Link>
                         </li>
                     </ul>
+
+                    <!-- Paginado (pedido explícito del usuario: "asegura que tenga
+                         paginado") — mismo criterio simple de Anterior/Siguiente
+                         que ya usa Admin/Rides.vue. -->
+                    <div v-if="rideHistory.prev_page_url || rideHistory.next_page_url" class="flex justify-between pt-3 mt-1 border-t border-arka-text-muted/10">
+                        <Link
+                            v-if="rideHistory.prev_page_url"
+                            :href="rideHistory.prev_page_url"
+                            preserve-scroll
+                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        >
+                            &larr; Anterior
+                        </Link>
+                        <span v-else></span>
+
+                        <Link
+                            v-if="rideHistory.next_page_url"
+                            :href="rideHistory.next_page_url"
+                            preserve-scroll
+                            class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        >
+                            Siguiente &rarr;
+                        </Link>
+                    </div>
                 </div>
                 </template>
             </div>

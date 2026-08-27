@@ -262,9 +262,11 @@ class WhatsAppFreeformSender
 
         // Pedido explícito del usuario: indicar cuánto tiempo tiene para
         // responder — solo aplica al despacho secuencial (una solicitud
-        // DIRIGIDA no tiene vencimiento, queda pendiente hasta que el
-        // cliente la cancele a mano).
-        $secondsLeft = $rideRequest->current_offer_expires_at
+        // DIRIGIDA también tiene vencimiento desde el bug encontrado en la
+        // auditoría del flujo completo, pero SIN cascada — "pase al
+        // siguiente conductor" sería falso ahí, así que esta línea sigue
+        // siendo solo para la bolsa; ver isSequentialDispatch()).
+        $secondsLeft = ($rideRequest->current_offer_expires_at && $rideRequest->isSequentialDispatch())
             ? max(0, $rideRequest->current_offer_expires_at->getTimestamp() - now()->getTimestamp())
             : null;
 
@@ -280,11 +282,20 @@ class WhatsAppFreeformSender
         // pasa por el navegador para corregirse solo como sí pasa con las
         // fechas que se muestran dentro de la app.
         $requestedLine = '🕐 Solicitada: '.$rideRequest->requested_at->timezone('America/Guayaquil')->format('d/m/Y H:i')."\n";
+        // Pedido explícito del usuario: "que diga origen, destino, y los km
+        // desde hasta y km de donde tengo que ir a buscar al pasajero" — antes
+        // solo salía el origen y una sola distancia ambigua (la del conductor
+        // hasta el pasajero, pero etiquetada solo "Distancia"). Ahora van las
+        // dos por separado: el tramo del viaje en sí, y lo que falta manejar
+        // para llegar a recogerlo.
+        $tripDistanceKm = $rideRequest->distance_km !== null ? round((float) $rideRequest->distance_km, 1) : null;
         $message = " ¡Carrera nueva de {$rideRequest->client->name}!\n"
             .$requestedLine
             .$scheduledLine
             .'Recogida: '.($rideRequest->origin_address ?? 'ver en la app')."\n"
-            .($distanceKm !== null ? "Distancia: {$distanceKm} km\n" : '')
+            .'Destino: '.($rideRequest->destination_address ?? 'ver en la app')."\n"
+            .($tripDistanceKm !== null ? "Distancia del viaje: {$tripDistanceKm} km\n" : '')
+            .($distanceKm !== null ? "Km hasta el pasajero: {$distanceKm} km\n" : '')
             ."Valor aproximado: \${$rideRequest->current_offered_price}\n"
             .($secondsLeft !== null ? "⏱ Tiene {$secondsLeft} segundos para aceptar antes de que pase al siguiente conductor.\n" : '')
             ."\nAbra Arka01 para aceptarla:\n".route('rides.index')
@@ -335,12 +346,39 @@ class WhatsAppFreeformSender
         }
 
         $profile = $ride->driver->driverProfile;
+        // Pedido explícito del usuario: origen, destino y las dos distancias
+        // (viaje y cuánto le falta al conductor para llegar) — mismo criterio
+        // que sendNewRideAlert(), acá del lado del cliente.
+        $tripDistanceKm = $ride->distance_km !== null ? round((float) $ride->distance_km, 1) : null;
+        $driverDistanceKm = $profile?->current_lat !== null
+            ? round(Haversine::distanceKm(
+                (float) $profile->current_lat,
+                (float) $profile->current_lng,
+                (float) $ride->origin_lat,
+                (float) $ride->origin_lng,
+            ), 1)
+            : null;
+
         $message = "✅ {$ride->driver->name} aceptó su carrera y ya va en camino.\n"
             .'Vehículo: '.trim(($profile?->vehicle_make ?? '').' '.($profile?->vehicle_model ?? '')).' · '.($profile?->vehicle_color ?? 'sin color')."\n"
-            .'Placa: '.($profile?->maskedPlate() ?? 'ver en la app')."\n\n"
-            .'Puede seguir el viaje en Arka01: '.route('rides.show', $ride);
+            .'Placa: '.($profile?->maskedPlate() ?? 'ver en la app')."\n"
+            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n"
+            .'Destino: '.($ride->destination_address ?? 'ver en la app')."\n"
+            .($tripDistanceKm !== null ? "Distancia del viaje: {$tripDistanceKm} km\n" : '')
+            .($driverDistanceKm !== null ? "El conductor está a {$driverDistanceKm} km de usted\n" : '')
+            ."\nPuede seguir el viaje en Arka01: ".route('rides.show', $ride);
 
-        self::sendText($client->phone, $message, 'ride_accepted');
+        // Pedido explícito del usuario: botón simple para cancelar sin salir
+        // de WhatsApp — ver WhatsAppRideActionHandler::cancelRide(), reusa el
+        // mismo RideController::cancel() de la app con un motivo fijo
+        // ("Otro motivo"), sin pedirle nada más al cliente.
+        if (WhatsAppRideAccess::clientCanBook()) {
+            self::sendButtons($client->phone, $message, [
+                ['id' => 'ride_cancel:'.$ride->id, 'title' => 'Cancelar carrera'],
+            ], 'ride_accepted');
+        } else {
+            self::sendText($client->phone, $message, 'ride_accepted');
+        }
     }
 
     /**
@@ -429,13 +467,36 @@ class WhatsAppFreeformSender
         }
 
         $time = $ride->rideRequest->scheduled_at->format('H:i');
+        // Pedido explícito del usuario: destino y las dos distancias, mismo
+        // criterio que sendNewRideAlert()/sendRideAcceptedToClient().
+        $tripDistanceKm = $ride->distance_km !== null ? round((float) $ride->distance_km, 1) : null;
+        $driverDistanceKm = $driver->driverProfile?->current_lat !== null
+            ? round(Haversine::distanceKm(
+                (float) $driver->driverProfile->current_lat,
+                (float) $driver->driverProfile->current_lng,
+                (float) $ride->origin_lat,
+                (float) $ride->origin_lng,
+            ), 1)
+            : null;
+
         $message = "⏰ Su carrera programada está próxima.\n"
             ."Cliente: {$ride->client->name}\n"
             ."Hora: {$time}\n"
-            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n\n"
-            .'Abra Arka01 para revisar e iniciar el viaje: '.route('rides.show', $ride);
+            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n"
+            .'Destino: '.($ride->destination_address ?? 'ver en la app')."\n"
+            .($tripDistanceKm !== null ? "Distancia del viaje: {$tripDistanceKm} km\n" : '')
+            .($driverDistanceKm !== null ? "Km hasta el pasajero: {$driverDistanceKm} km\n" : '')
+            ."\nAbra Arka01 para revisar e iniciar el viaje: ".route('rides.show', $ride);
 
-        self::sendText($driver->phone, $message, 'scheduled_reminder');
+        // Pedido explícito del usuario: botón simple para cancelar sin salir
+        // de WhatsApp — ver WhatsAppRideActionHandler::cancelRide().
+        if (WhatsAppRideAccess::driverCanOperate($driver)) {
+            self::sendButtons($driver->phone, $message, [
+                ['id' => 'ride_cancel:'.$ride->id, 'title' => 'Cancelar carrera'],
+            ], 'scheduled_reminder');
+        } else {
+            self::sendText($driver->phone, $message, 'scheduled_reminder');
+        }
     }
 
     /**
@@ -452,13 +513,36 @@ class WhatsAppFreeformSender
         }
 
         $time = $ride->rideRequest->scheduled_at->format('H:i');
+        // Pedido explícito del usuario: destino y las dos distancias, mismo
+        // criterio que sendNewRideAlert()/sendScheduledRideReminder().
+        $tripDistanceKm = $ride->distance_km !== null ? round((float) $ride->distance_km, 1) : null;
+        $driverDistanceKm = $driver->driverProfile?->current_lat !== null
+            ? round(Haversine::distanceKm(
+                (float) $driver->driverProfile->current_lat,
+                (float) $driver->driverProfile->current_lng,
+                (float) $ride->origin_lat,
+                (float) $ride->origin_lng,
+            ), 1)
+            : null;
+
         $message = "⚠️ Su carrera programada ya debería haber empezado.\n"
             ."Cliente: {$ride->client->name}\n"
             ."Hora: {$time}\n"
-            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n\n"
-            .'Abra Arka01 para iniciarla, o avísele al cliente si va a demorar: '.route('rides.show', $ride);
+            .'Recogida: '.($ride->origin_address ?? 'ver en la app')."\n"
+            .'Destino: '.($ride->destination_address ?? 'ver en la app')."\n"
+            .($tripDistanceKm !== null ? "Distancia del viaje: {$tripDistanceKm} km\n" : '')
+            .($driverDistanceKm !== null ? "Km hasta el pasajero: {$driverDistanceKm} km\n" : '')
+            ."\nAbra Arka01 para iniciarla, o avísele al cliente si va a demorar: ".route('rides.show', $ride);
 
-        self::sendText($driver->phone, $message, 'scheduled_overdue');
+        // Pedido explícito del usuario: botón simple para cancelar sin salir
+        // de WhatsApp — ver WhatsAppRideActionHandler::cancelRide().
+        if (WhatsAppRideAccess::driverCanOperate($driver)) {
+            self::sendButtons($driver->phone, $message, [
+                ['id' => 'ride_cancel:'.$ride->id, 'title' => 'Cancelar carrera'],
+            ], 'scheduled_overdue');
+        } else {
+            self::sendText($driver->phone, $message, 'scheduled_overdue');
+        }
     }
 
     /**

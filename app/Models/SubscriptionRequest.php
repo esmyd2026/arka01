@@ -19,6 +19,7 @@ class SubscriptionRequest extends Model
         'user_id',
         'subscription_plan_id',
         'plan_promotion_id',
+        'plan_coupon_id',
         'payment_proof_path',
         'status',
         'admin_note',
@@ -45,6 +46,11 @@ class SubscriptionRequest extends Model
     public function planPromotion(): BelongsTo
     {
         return $this->belongsTo(PlanPromotion::class);
+    }
+
+    public function planCoupon(): BelongsTo
+    {
+        return $this->belongsTo(PlanCoupon::class);
     }
 
     public function reviewedBy(): BelongsTo

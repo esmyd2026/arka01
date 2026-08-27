@@ -27,13 +27,27 @@ class CooperativeDriverController extends Controller
     {
         $cooperative = $request->user()->cooperative()->firstOrFail();
 
+        $memberships = $cooperative->driverMemberships()
+            ->whereIn('status', ['pending', 'accepted', 'suspended'])
+            ->with('driver.driverProfile')
+            ->latest()
+            ->get();
+
+        // Pedido explícito del usuario: "cuando una cooperativa tenga que
+        // buscar a un conductor... tiene que tener el plan mayor al
+        // gratis, y tiene que estar vigente. por lo contrario aparecera
+        // bloqueado" — se calcula siempre en vivo (nunca se guarda, mismo
+        // criterio que cooperativeDriverDiscountPercent()), y solo aplica a
+        // vínculos 'accepted' (uno 'pending'/'suspended' ya está sin recibir
+        // carreras por otro motivo, no hace falta marcarlo también).
+        $memberships->each(function ($membership) {
+            $membership->is_plan_blocked = $membership->status === 'accepted'
+                && ! $this->planLimits->hasActivePaidPlan($membership->driver);
+        });
+
         return Inertia::render('Cooperative/Drivers', [
             'cooperative' => $cooperative,
-            'memberships' => $cooperative->driverMemberships()
-                ->whereIn('status', ['pending', 'accepted', 'suspended'])
-                ->with('driver.driverProfile')
-                ->latest()
-                ->get(),
+            'memberships' => $memberships,
             'planLimits' => $this->planLimits->forCooperative($request->user()),
         ]);
     }

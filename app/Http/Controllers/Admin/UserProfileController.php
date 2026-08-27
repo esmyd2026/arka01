@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Controller;
 use App\Models\ChatbotMessage;
+use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\FleetMember;
@@ -418,7 +419,53 @@ class UserProfileController extends Controller
             'admin_id' => $request->user()->id, 'user_id' => $user->id,
         ]);
 
-        return back()->with('status', 'Activación manual revocada — vuelve a exigirse la información completa.');
+        return back()->with('status', 'Activación manual revocada — vuelve a exigírsele información completa.');
+    }
+
+    /**
+     * Pedido explícito del usuario: "como hago para pasar yo a un cliente
+     * como conductor" — crea el perfil de conductor directo desde el
+     * panel, sin que la persona tenga que registrarse de nuevo ni
+     * completar vehículo/documentos ella misma (los puede cargar después
+     * desde su propio perfil). Ya queda activado y aprobado, mismo
+     * criterio y misma nota obligatoria que forceActivate() de arriba —
+     * salta el mismo requisito de seguridad, solo que de entrada.
+     */
+    public function convertToDriver(Request $request, User $user): RedirectResponse
+    {
+        abort_if($user->driverProfile, 409);
+        abort_if($user->isCooperative(), 403);
+
+        $validated = $request->validate(['note' => ['required', 'string', 'max:500']]);
+
+        // admin_activated_at/by/note no son mass-assignable a propósito
+        // (mismo criterio que forceActivate() de arriba) — se completan
+        // con forceFill() después de crear la fila con lo mínimo.
+        $profile = DriverProfile::query()->create([
+            'user_id' => $user->id,
+            'driver_type' => 'independent',
+            'verification_status' => 'approved',
+            'verified_at' => now(),
+            'verified_by' => $request->user()->id,
+        ]);
+        $profile->forceFill([
+            'admin_activated_at' => now(),
+            'admin_activated_by' => $request->user()->id,
+            'admin_activation_note' => $validated['note'],
+        ])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.convert_from_client',
+            module: 'usuarios',
+            newValue: ['user_id' => $user->id, 'driver_profile_id' => $profile->id, 'note' => $validated['note']],
+        );
+
+        Log::warning('Cliente convertido en conductor a mano por un admin.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id, 'note' => $validated['note'],
+        ]);
+
+        return back()->with('status', 'Convertido en conductor — ya puede operar y ponerse disponible.');
     }
 
     /**

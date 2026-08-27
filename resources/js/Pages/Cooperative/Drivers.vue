@@ -69,7 +69,21 @@ function invite(driver) {
                         <div v-for="membership in memberships" :key="membership.id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
                             <UserAvatar :user="membership.driver" size-class="h-11 w-11 text-sm shrink-0" />
                             <div class="flex-1">
-                                <p class="font-medium text-arka-text">{{ membership.driver.name }}</p>
+                                <p class="font-medium text-arka-text flex items-center gap-2 flex-wrap">
+                                    {{ membership.driver.name }}
+                                    <!-- Pedido explícito del usuario: "tiene que tener el
+                                         plan mayor al gratis, y tiene que estar vigente. por
+                                         lo contrario aparecera bloqueado" — sigue vinculado
+                                         (no se le retira solo), pero la cooperativa ya no lo
+                                         despacha automáticamente hasta que renueve. -->
+                                    <span
+                                        v-if="membership.is_plan_blocked"
+                                        class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-arka-danger/15 text-arka-danger"
+                                        title="Su plan de conductor está en Gratis o vencido — no recibe carreras de la cooperativa hasta que renueve."
+                                    >
+                                        Bloqueado
+                                    </span>
+                                </p>
                                 <p class="mt-1 text-xs text-arka-text-muted">
                                     {{ membership.status }}
                                     <span v-if="membership.driver.driver_profile?.is_available"> · disponible ahora</span>

@@ -16,6 +16,13 @@ use Illuminate\Console\Command;
  * conductor de la bolsa podía tomar y nadie tomó a tiempo. Sin gracia: si
  * ya pasó la hora pedida y nadie la aceptó, no tiene sentido seguir
  * ofreciendo ese horario — se expira apenas se cruza `scheduled_at`.
+ *
+ * Bug adicional encontrado en una auditoría del flujo completo (mismo
+ * pedido del usuario): 'negotiating' también queda atrapada — un conductor
+ * puede contraofertar una solicitud programada (RideRequestController::counter(),
+ * que no distingue programada de inmediata) y si el cliente nunca responde
+ * esa contraoferta antes de la hora pedida, se quedaba pendiente para
+ * siempre igual que 'pending', solo que nadie lo cubría.
  */
 class ExpireOverdueScheduledRideRequests extends Command
 {
@@ -26,7 +33,7 @@ class ExpireOverdueScheduledRideRequests extends Command
     public function handle(): int
     {
         $overdue = RideRequest::query()
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'negotiating'])
             ->where('is_scheduled', true)
             ->where('scheduled_at', '<', now())
             ->with('client')

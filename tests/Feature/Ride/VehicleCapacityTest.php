@@ -5,6 +5,7 @@ namespace Tests\Feature\Ride;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
+use App\Models\SiteSetting;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\RideDispatchCandidates;
@@ -91,6 +92,27 @@ class VehicleCapacityTest extends TestCase
         ])->assertForbidden();
 
         $this->assertFalse($driver->driverProfile->fresh()->is_available);
+    }
+
+    /**
+     * Pedido explícito del usuario: "permiteme desde el admin poder activar
+     * o no lo obligatorio para que el conductor se le haga mas facil
+     * activarse" — un perfil que le falta un requisito apagado por un admin
+     * ya no lo bloquea para conectarse.
+     */
+    public function test_a_driver_missing_a_disabled_requirement_can_still_become_available(): void
+    {
+        SiteSetting::current()->update(['disabled_driver_requirements' => ['police_record']]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['police_record_path' => null, 'is_available' => false]);
+
+        $this->actingAs($driver)->post(route('driver.location.update'), [
+            'lat' => -0.18,
+            'lng' => -78.46,
+            'is_available' => true,
+        ])->assertOk();
+
+        $this->assertTrue($driver->driverProfile->fresh()->is_available);
     }
 
     public function test_a_driver_with_a_complete_profile_can_become_available(): void

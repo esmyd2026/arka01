@@ -62,10 +62,12 @@ class RegisteredUserController extends Controller
         $validated = $request->validate([
             // Qué tipo de cuenta quiere crear (consideración agregada al alcance:
             // se pide primero, antes que ningún otro dato, porque cambia a dónde
-            // va apenas termina de registrarse — ver el redirect más abajo). No
-            // se persiste en `users`: la fuente de verdad del rol sigue siendo
-            // `isDriver()`/`isClient()` (sección 3.1), esto es solo para decidir
-            // el siguiente paso de la guía.
+            // va apenas termina de registrarse — ver el redirect más abajo). El
+            // valor en sí no se guarda tal cual: la fuente de verdad del rol
+            // sigue siendo `isDriver()`/`isClient()` (sección 3.1, según exista
+            // o no un DriverProfile de verdad) — 'conductor' solo se traduce en
+            // `intends_to_drive` (bug reportado por el usuario, ver más abajo),
+            // que es una señal de "le falta terminar", no el rol en sí.
             'account_type' => ['required', 'string', Rule::in(['cliente', 'conductor', 'cooperativa'])],
             // El formulario nuevo solicita nombre y apellido por separado,
             // pero `name` se conserva temporalmente como entrada compatible
@@ -140,6 +142,14 @@ class RegisteredUserController extends Controller
             'city_id' => $city?->id,
             'registration_lat' => $hasCoordinates ? $validated['lat'] : null,
             'registration_lng' => $hasCoordinates ? $validated['lng'] : null,
+            // Bug reportado por el usuario: "se estan registrando como
+            // conductor y el sistema termina creandole como cliente" — si
+            // abandonaba el segundo paso (completar el vehículo), no
+            // quedaba ninguna señal de que le faltaba algo. Ver
+            // EnsureDriverOnboardingIsComplete, que usa esto para
+            // devolverlo a terminar en vez de dejarlo operar como
+            // cliente en silencio.
+            'intends_to_drive' => $validated['account_type'] === 'conductor',
         ]);
 
         // A diferencia de una cuenta creada por Google (contraseña al azar

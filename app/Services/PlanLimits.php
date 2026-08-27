@@ -151,6 +151,21 @@ class PlanLimits
         ] : null;
     }
 
+    /**
+     * Pedido explícito del usuario: "cuando una cooperativa tenga que
+     * buscar a un conductor, y pueda permanecer en su cooperativa activo,
+     * tiene que tener el plan mayor al gratis, y tiene que estar vigente" —
+     * true solo cuando el conductor tiene una suscripción pagada realmente
+     * activa o en gracia. No hace falta mirar `subscription_status` aparte:
+     * si la suscripción venció/se canceló, User::activeSubscription() ya
+     * deja de devolverla y forDriver() cae solo al plan Gratis (código
+     * 'gratis') — con eso alcanza para saber "está vigente y no es gratis".
+     */
+    public function hasActivePaidPlan(User $driver): bool
+    {
+        return $this->forDriver($driver)['plan_code'] !== 'gratis';
+    }
+
     private function freePlan(string $ownerType): SubscriptionPlan
     {
         return SubscriptionPlan::query()

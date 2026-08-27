@@ -6,6 +6,7 @@ use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\Fleet;
 use App\Models\FleetMember;
+use App\Models\PlanCoupon;
 use App\Models\PlanPromotion;
 use App\Models\PricingSetting;
 use App\Models\Subscription;
@@ -593,6 +594,275 @@ class SubscriptionRequestFlowTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->where('pendingRequest.cooperative_discount.percent', 10)
             ->where('pendingRequest.cooperative_discount.discounted_price', fn ($value) => (float) $value === round((float) $plan->monthly_price * 0.9, 2))
+        );
+    }
+
+    // Cupones de descuento (pedido explícito del usuario: "generar cupones
+    // de descuentos... para clientes y para conductores como para
+    // cooperativa... si el cupon cubre el 100 o 50") — mismo estilo que las
+    // pruebas de promoción de arriba.
+
+    public function test_selecting_a_free_coupon_activates_immediately_and_records_it_as_used(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $coupon = PlanCoupon::query()->create([
+            'code' => 'GRATIS100', 'owner_type' => 'driver', 'discount_percent' => 100, 'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'gratis100',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscriptions', [
+            'user_id' => $user->id,
+            'subscription_plan_id' => $plan->id,
+            'status' => 'active',
+        ]);
+
+        // Sin este registro, el cupón se le seguiría dejando usar para siempre.
+        $this->assertDatabaseHas('subscription_requests', [
+            'user_id' => $user->id,
+            'plan_coupon_id' => $coupon->id,
+            'status' => 'approved',
+        ]);
+    }
+
+    public function test_selecting_a_half_off_coupon_creates_an_awaiting_proof_request_linked_to_it(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $coupon = PlanCoupon::query()->create([
+            'code' => 'MITAD50', 'owner_type' => 'driver', 'discount_percent' => 50, 'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'MITAD50',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscription_requests', [
+            'user_id' => $user->id,
+            'plan_coupon_id' => $coupon->id,
+            'status' => 'awaiting_proof',
+        ]);
+        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+    }
+
+    /**
+     * Pedido explícito del usuario: "colocarle un usuario para que cuando
+     * se registren tenga a ese usuario que le dio el cupon como referido".
+     */
+    public function test_redeeming_a_coupon_with_a_referrer_attributes_the_referral(): void
+    {
+        $referrer = User::factory()->create();
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'CONREFERIDO', 'owner_type' => 'driver', 'discount_percent' => 50, 'is_active' => true,
+            'referrer_user_id' => $referrer->id,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'CONREFERIDO',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame($referrer->id, $user->fresh()->referred_by_user_id);
+    }
+
+    /** Primer referidor gana — un cupón no le pisa el referido a quien ya tenía uno. */
+    public function test_a_coupon_referrer_does_not_override_an_existing_referral(): void
+    {
+        $originalReferrer = User::factory()->create();
+        $couponReferrer = User::factory()->create();
+        $user = User::factory()->create(['referred_by_user_id' => $originalReferrer->id]);
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'OTROCUPON', 'owner_type' => 'driver', 'discount_percent' => 50, 'is_active' => true,
+            'referrer_user_id' => $couponReferrer->id,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'OTROCUPON',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame($originalReferrer->id, $user->fresh()->referred_by_user_id);
+    }
+
+    public function test_the_same_coupon_cannot_be_used_twice_by_the_same_user(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'UNAVEZ', 'owner_type' => 'driver', 'discount_percent' => 100, 'is_active' => true,
+        ]);
+
+        $this->actingAs($user)->post(route('subscription-requests.store'), [
+            'subscription_plan_id' => $plan->id,
+            'coupon_code' => 'UNAVEZ',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'UNAVEZ',
+            ])
+            ->assertSessionHasErrors('coupon_code');
+    }
+
+    public function test_a_nonexistent_coupon_code_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'NOEXISTE',
+            ])
+            ->assertSessionHasErrors('coupon_code');
+
+        $this->assertDatabaseMissing('subscription_requests', ['user_id' => $user->id]);
+    }
+
+    public function test_an_inactive_coupon_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'APAGADO', 'owner_type' => 'driver', 'discount_percent' => 50, 'is_active' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'APAGADO',
+            ])
+            ->assertSessionHasErrors('coupon_code');
+    }
+
+    public function test_an_expired_coupon_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'VENCIDO', 'owner_type' => 'driver', 'discount_percent' => 50,
+            'is_active' => true, 'expires_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'VENCIDO',
+            ])
+            ->assertSessionHasErrors('coupon_code');
+    }
+
+    public function test_a_coupon_for_a_different_owner_type_is_rejected(): void
+    {
+        $client = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'client')->where('code', 'multiflota')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'SOLOCONDUCTOR', 'owner_type' => 'driver', 'discount_percent' => 50, 'is_active' => true,
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'SOLOCONDUCTOR',
+            ])
+            ->assertSessionHasErrors('coupon_code');
+    }
+
+    public function test_a_coupon_that_reached_its_max_redemptions_is_rejected(): void
+    {
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $coupon = PlanCoupon::query()->create([
+            'code' => 'LIMITADO', 'owner_type' => 'driver', 'discount_percent' => 100,
+            'is_active' => true, 'max_redemptions' => 1,
+        ]);
+
+        $firstUser = User::factory()->create();
+        $this->actingAs($firstUser)->post(route('subscription-requests.store'), [
+            'subscription_plan_id' => $plan->id,
+            'coupon_code' => 'LIMITADO',
+        ]);
+        $this->assertSame(1, $coupon->redemptionsCount());
+
+        $secondUser = User::factory()->create();
+        $this->actingAs($secondUser)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'LIMITADO',
+            ])
+            ->assertSessionHasErrors('coupon_code');
+    }
+
+    /**
+     * Nunca conviven cupón y descuento por cooperativa a la vez — el cupón
+     * gana, mismo criterio que ya vale entre promoción y descuento de
+     * cooperativa (test_an_active_promotion_takes_precedence_over_the_cooperative_discount).
+     */
+    public function test_a_coupon_takes_precedence_over_the_cooperative_discount(): void
+    {
+        $driver = User::factory()->create();
+        $this->affiliateDriverToApprovedCooperative($driver, 'profesional');
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        PlanCoupon::query()->create([
+            'code' => 'GANACUPON', 'owner_type' => 'driver', 'discount_percent' => 100, 'is_active' => true,
+        ]);
+
+        // El descuento de cooperativa (20%) dejaría un precio > $0 — si el
+        // cupón (100%) no ganara, esto crearía un pedido awaiting_proof en
+        // vez de activarse directo.
+        $this->actingAs($driver)
+            ->post(route('subscription-requests.store'), [
+                'subscription_plan_id' => $plan->id,
+                'coupon_code' => 'GANACUPON',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscriptions', [
+            'user_id' => $driver->id,
+            'subscription_plan_id' => $plan->id,
+            'status' => 'active',
+        ]);
+    }
+
+    /**
+     * Mismo bug (y arreglo) que ya vale para la promoción — ver
+     * test_the_pending_request_exposes_the_promotion_it_was_created_with.
+     */
+    public function test_the_pending_request_exposes_the_coupon_it_was_created_with(): void
+    {
+        $user = User::factory()->create();
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        $coupon = PlanCoupon::query()->create([
+            'code' => 'MITAD50', 'owner_type' => 'driver', 'discount_percent' => 50, 'is_active' => true,
+        ]);
+
+        $this->actingAs($user)->post(route('subscription-requests.store'), [
+            'subscription_plan_id' => $plan->id,
+            'coupon_code' => 'MITAD50',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('driver.plan.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('pendingRequest.plan_coupon.id', $coupon->id)
+            ->where('pendingRequest.plan_coupon.code', 'MITAD50')
+            ->where('pendingRequest.plan_coupon.discount_percent', 50)
         );
     }
 

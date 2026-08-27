@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Services\DriverVerificationRequirementRegistry;
 use App\Services\QuickLinkRegistry;
 use App\Services\UserFileCleanup;
 use Database\Seeders\DemoDataSeeder;
@@ -42,6 +43,10 @@ class SystemController extends Controller
             // sistema de habilitar o no estas opciones del menu tanto las
             // del conductor como las del cliente".
             'quickLinks' => QuickLinkRegistry::withState(SiteSetting::current()->disabled_quick_links ?? []),
+            // Pedido explícito del usuario: "permiteme desde el admin poder
+            // activar o no lo obligatorio para que el conductor se le haga
+            // mas facil activarse".
+            'driverRequirements' => DriverVerificationRequirementRegistry::withState(SiteSetting::current()->disabled_driver_requirements ?? []),
         ]);
     }
 
@@ -65,6 +70,27 @@ class SystemController extends Controller
         ]);
 
         return back()->with('status', 'Accesos rápidos del menú actualizados.');
+    }
+
+    /**
+     * Prende/apaga qué le exige el registro/verificación a un conductor
+     * (pedido explícito del usuario) — ver
+     * App\Services\DriverVerificationRequirementRegistry.
+     */
+    public function updateDriverRequirements(Request $request): RedirectResponse
+    {
+        $validKeys = array_keys(DriverVerificationRequirementRegistry::ITEMS);
+
+        $validated = $request->validate([
+            'disabled' => ['array'],
+            'disabled.*' => ['string', Rule::in($validKeys)],
+        ]);
+
+        SiteSetting::current()->update([
+            'disabled_driver_requirements' => array_values($validated['disabled'] ?? []),
+        ]);
+
+        return back()->with('status', 'Requisitos de conductor actualizados.');
     }
 
     public function resetDemo(Request $request): RedirectResponse

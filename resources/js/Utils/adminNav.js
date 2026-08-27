@@ -46,7 +46,8 @@ export const ADMIN_NAV_GROUPS = [
             { route: 'admin.plans.index', match: 'admin.plans.*', label: 'Planes' },
             { route: 'admin.plan-promotions.index', match: 'admin.plan-promotions.*', label: 'Promociones' },
             { route: 'admin.pricing.edit', match: 'admin.pricing.*', label: 'Tarifas' },
-            { route: 'admin.coupons.index', match: 'admin.coupons.*', label: 'Cupones' },
+            { route: 'admin.coupons.index', match: 'admin.coupons.*', label: 'Cupones (beneficios)' },
+            { route: 'admin.plan-coupons.index', match: 'admin.plan-coupons.*', label: 'Cupones de descuento' },
         ],
     },
     {

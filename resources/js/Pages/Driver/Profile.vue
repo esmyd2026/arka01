@@ -133,7 +133,7 @@ watch(() => props.driverProfile?.invite_code, drawInviteQr, { immediate: true })
 const whatsappInviteUrl = computed(() => {
     if (!props.driverProfile) return null;
 
-    const name = usePage().props.auth.user.name;
+    const name = usePage().props.auth.user.full_name;
     const link = route('referrals.show', props.driverProfile.invite_code);
     const text =
         `¡Hola! Soy ${name} y ya estoy en Arka01  — la app donde cada quien arma su propia ` +
@@ -150,7 +150,6 @@ const form = useForm({
     // por defecto — el backend no toca el teléfono actual si no se completa.
     country_code: '+593',
     phone_local: '',
-    license_number: props.driverProfile?.license_number ?? '',
     vehicle_make: props.driverProfile?.vehicle_make ?? '',
     vehicle_model: props.driverProfile?.vehicle_model ?? '',
     vehicle_color: props.driverProfile?.vehicle_color ?? '',
@@ -369,7 +368,7 @@ const VERIFICATION_LABELS = {
                                      no una lista de muchos), así que se deja bajar
                                      de línea normal. -->
                                 <div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                                    <h3 class="break-words text-xl font-bold text-arka-text sm:text-2xl">{{ $page.props.auth.user.name }}</h3>
+                                    <h3 class="break-words text-xl font-bold text-arka-text sm:text-2xl">{{ $page.props.auth.user.full_name }}</h3>
                                     <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                                         {{ assignedServiceCategory?.label ?? 'Categoría por asignar' }}
                                     </span>
@@ -594,18 +593,6 @@ const VERIFICATION_LABELS = {
                                 <h3 class="font-semibold text-arka-text">Identificación del conductor</h3>
                                 <p class="text-xs text-arka-text-muted">Datos personales que revisará administración.</p>
                             </div>
-                        </div>
-
-                        <div>
-                            <InputLabel for="license_number" value="Número de licencia" />
-                            <TextInput
-                                id="license_number"
-                                type="text"
-                                class="mt-1 block w-full"
-                                v-model="form.license_number"
-                                required
-                            />
-                            <InputError class="mt-2" :message="form.errors.license_number" />
                         </div>
 
                         <div class="flex items-center gap-3 border-b border-arka-text-muted/10 pb-3">

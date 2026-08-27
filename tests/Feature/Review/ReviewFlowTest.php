@@ -175,7 +175,7 @@ class ReviewFlowTest extends TestCase
         $response = $this->actingAs($client)->get(route('rides.index'));
 
         $response->assertInertia(fn ($page) => $page->where(
-            'rideHistory',
+            'rideHistory.data',
             fn ($history) => collect($history)->firstWhere('id', $ride->id)['needs_my_review'] === true
         ));
     }
@@ -199,7 +199,7 @@ class ReviewFlowTest extends TestCase
         $response = $this->actingAs($client)->get(route('rides.index'));
 
         $response->assertInertia(fn ($page) => $page->where(
-            'rideHistory',
+            'rideHistory.data',
             fn ($history) => collect($history)->firstWhere('id', $ride->id)['needs_my_review'] === false
         ));
     }

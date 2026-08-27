@@ -23,7 +23,7 @@ class User extends Authenticatable
 
     // Se agrega a la serialización para que el frontend tenga la URL lista
     // (login con Google guarda ahí la foto de perfil de la cuenta de Google).
-    protected $appends = ['avatar_url'];
+    protected $appends = ['avatar_url', 'full_name'];
 
     // Mismo default que la columna en la migración — sin esto, un modelo
     // recién creado en memoria (sin releerlo de la BD con fresh()) muestra
@@ -54,6 +54,12 @@ class User extends Authenticatable
         'registration_lng',
         'registration_neighborhood',
         'role',
+        // Bug reportado por el usuario: "se estan registrando como
+        // conductor y el sistema termina creandole como [cliente]" —
+        // señal de "eligió ser conductor al registrarse pero todavía no
+        // completó su perfil" (ver EnsureDriverOnboardingIsComplete). No
+        // es la fuente de verdad del rol, esa sigue siendo isDriver().
+        'intends_to_drive',
         'whatsapp_privacy_accepted_at',
         // Trazabilidad de referidos (pedido explícito del usuario): siempre
         // se pasa por RegisteredUserController::store() ya validado
@@ -105,6 +111,7 @@ class User extends Authenticatable
         'password' => 'hashed',
         'password_set_at' => 'datetime',
         'is_admin' => 'boolean',
+        'intends_to_drive' => 'boolean',
         // Auditoría de seguridad: bajado de 7 a 4 decimales (~11 metros en
         // vez de ~1 metro) — ver la migración
         // reduce_registration_location_precision_on_users_table. Alcanza de
@@ -505,5 +512,20 @@ class User extends Authenticatable
         return str_starts_with($this->avatar_path, 'http')
             ? $this->avatar_path
             : Storage::disk('public')->url($this->avatar_path);
+    }
+
+    /**
+     * Nombre completo (pedido explícito del usuario: "una en el nombre,
+     * nombre y apellido"). `name` sigue guardando solo el nombre de pila
+     * (así se registró históricamente, y de ahí depende el login por
+     * usuario/`Str::squish()` de RegisteredUserController) — `last_name`
+     * es un campo nuevo, opcional, que se completa después desde el perfil
+     * (Profile\Edit.vue, tarjeta "Complete su perfil"). Se combinan acá en
+     * vez de fusionarlos en `name` para no tocar esa columna; `trim()`
+     * evita un espacio colgando cuando todavía no hay apellido cargado.
+     */
+    public function getFullNameAttribute(): string
+    {
+        return trim("{$this->name} {$this->last_name}");
     }
 }

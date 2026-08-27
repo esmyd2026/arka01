@@ -410,6 +410,67 @@ class AdminUserProfileTest extends TestCase
             ->assertForbidden();
     }
 
+    /**
+     * Pedido explícito del usuario: "como hago para pasar yo a un cliente
+     * como conductor" — crea el perfil de conductor directo desde el
+     * panel, ya activado y aprobado, sin que la persona pase por su propio
+     * registro/completar vehículo y documentos.
+     */
+    public function test_an_admin_can_convert_a_client_into_a_driver(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create();
+        $this->assertFalse($client->isDriver());
+
+        $response = $this->actingAs($admin)->post(route('admin.users.convert-to-driver', $client), [
+            'note' => 'Se registró como conductor pero no completó el perfil.',
+        ]);
+
+        $response->assertRedirect();
+        $client = $client->fresh();
+        $this->assertTrue($client->isDriver());
+        $this->assertSame('conductor', $client->role);
+        $profile = $client->driverProfile;
+        $this->assertNotNull($profile->admin_activated_at);
+        $this->assertSame($admin->id, $profile->admin_activated_by);
+        $this->assertSame('approved', $profile->verification_status);
+        $this->assertTrue($profile->canBecomeAvailable());
+        $this->assertDatabaseHas('admin_audit_logs', ['action' => 'driver.convert_from_client']);
+    }
+
+    public function test_converting_a_client_requires_a_note(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $client = User::factory()->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.users.convert-to-driver', $client), ['note' => ''])
+            ->assertSessionHasErrors('note');
+
+        $this->assertFalse($client->fresh()->isDriver());
+    }
+
+    public function test_a_regular_user_cannot_convert_a_client_into_a_driver(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        $client = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('admin.users.convert-to-driver', $client), ['note' => 'motivo'])
+            ->assertForbidden();
+    }
+
+    public function test_cannot_convert_a_user_that_already_has_a_driver_profile(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $this->actingAs($admin)
+            ->post(route('admin.users.convert-to-driver', $driver), ['note' => 'motivo'])
+            ->assertStatus(409);
+    }
+
     public function test_revoking_the_manual_activation_restores_the_normal_requirement(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

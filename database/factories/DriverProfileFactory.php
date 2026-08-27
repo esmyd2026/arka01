@@ -20,7 +20,6 @@ class DriverProfileFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'license_number' => fake()->unique()->bothify('LIC-#####'),
             'driver_type' => 'independent',
             'vehicle_make' => fake()->randomElement(['Chevrolet', 'Kia', 'Toyota', 'Hyundai']),
             'vehicle_model' => fake()->word(),

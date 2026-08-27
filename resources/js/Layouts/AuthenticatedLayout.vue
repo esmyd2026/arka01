@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
                                     <button
                                         type="button"
                                         class="relative hover:opacity-90 transition"
-                                        :title="$page.props.auth.user.name"
+                                        :title="$page.props.auth.user.full_name"
                                     >
                                         <UserAvatar :user="$page.props.auth.user" />
                                         <!-- Pedido explícito del usuario: "un puntitto
@@ -631,7 +631,7 @@ onBeforeUnmount(() => {
 
                                 <template #content>
                                     <div class="px-4 py-3 border-b border-arka-text-muted/10">
-                                        <p class="text-sm text-arka-text font-medium truncate">{{ $page.props.auth.user.name }}</p>
+                                        <p class="text-sm text-arka-text font-medium truncate">{{ $page.props.auth.user.full_name }}</p>
                                         <p class="text-xs text-arka-text-muted truncate mb-2">{{ $page.props.auth.user.email }}</p>
 
                                         <!-- Marca de qué es esta cuenta + puntuación, de un vistazo

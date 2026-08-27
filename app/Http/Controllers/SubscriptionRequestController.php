@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PlanCoupon;
 use App\Models\PlanPromotion;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
@@ -42,6 +43,7 @@ class SubscriptionRequestController extends Controller
         $validated = $request->validate([
             'subscription_plan_id' => ['required', 'integer', 'exists:subscription_plans,id'],
             'plan_promotion_id' => ['nullable', 'integer', 'exists:plan_promotions,id'],
+            'coupon_code' => ['nullable', 'string', 'max:40'],
         ]);
 
         $plan = SubscriptionPlan::query()->findOrFail($validated['subscription_plan_id']);
@@ -80,43 +82,86 @@ class SubscriptionRequestController extends Controller
             }
         }
 
+        // Cupón de descuento (pedido explícito del usuario: "generar
+        // cupones de descuentos... para clientes y para conductores como
+        // para cooperativa... si el cupon cubre el 100 o 50") — mismo
+        // criterio que la promoción: nunca se confía en lo que mandó el
+        // navegador, se busca y se revalida acá por completo. Si hay
+        // cupón, gana por sobre la promoción y el descuento de cooperativa
+        // (es la acción más específica y puntual del usuario en este
+        // pedido) — no se combinan entre sí.
+        $coupon = null;
+        $couponCode = trim((string) ($validated['coupon_code'] ?? ''));
+        if ($couponCode !== '') {
+            $coupon = PlanCoupon::query()->whereRaw('UPPER(code) = ?', [mb_strtoupper($couponCode)])->first();
+
+            if (! $coupon) {
+                throw ValidationException::withMessages(['coupon_code' => 'Ese código de cupón no existe.']);
+            }
+
+            if ($reason = $coupon->reasonNotUsableFor($user, $plan)) {
+                throw ValidationException::withMessages(['coupon_code' => $reason]);
+            }
+
+            // Pedido explícito del usuario: "colocarle un usuario para que
+            // cuando se registren tenga a ese usuario que le dio el cupon
+            // como referido" — se atribuye apenas usa el cupón (no espera a
+            // que el pedido se apruebe: ya demostró venir de ese cupón).
+            // Gana el PRIMER referidor de la cuenta (mismo criterio "se
+            // queda quemado" que la búsqueda manual en el perfil) — si ya
+            // tenía uno (por enlace o ya asignado antes), este cupón no lo
+            // pisa.
+            if ($coupon->referrer_user_id && ! $user->referred_by_user_id) {
+                $user->forceFill(['referred_by_user_id' => $coupon->referrer_user_id])->save();
+            }
+        }
+
         // Descuento por cooperativa (pedido explícito del usuario) — nunca
         // se confía en lo que mandó el navegador, se recalcula acá igual
         // que la promoción. Solo aplica del lado conductor, y solo si no
-        // hay promoción de por medio (la promoción de precio fijo gana).
-        $cooperativeDiscountPercent = (! $promotion && $plan->owner_type === 'driver')
+        // hay cupón ni promoción de por medio (esos dos ganan).
+        $cooperativeDiscountPercent = (! $coupon && ! $promotion && $plan->owner_type === 'driver')
             ? $this->planLimits->cooperativeDriverDiscountPercent($user)
             : 0;
 
-        $effectivePrice = $promotion
-            ? (float) $promotion->promo_price
-            : (float) $plan->monthly_price * (1 - $cooperativeDiscountPercent / 100);
+        $effectivePrice = match (true) {
+            $coupon !== null => round((float) $plan->monthly_price * (1 - $coupon->discount_percent / 100), 2),
+            $promotion !== null => (float) $promotion->promo_price,
+            default => (float) $plan->monthly_price * (1 - $cooperativeDiscountPercent / 100),
+        };
 
         // Un precio en $0 no tiene nada que transferir — pedirle un
         // comprobante no tiene sentido, así que se activa directo sin pasar
         // por revisión (mismo criterio de siempre para un plan gratis de
-        // catálogo, generalizado acá al precio EFECTIVO, de promo o de lista).
+        // catálogo, generalizado acá al precio EFECTIVO, de cupón, de promo
+        // o de lista).
         if ($effectivePrice <= 0) {
-            $note = $promotion
-                ? "Auto-activado por promoción: {$promotion->label}."
-                : 'Auto-activado: plan sin costo, no necesita comprobante.';
+            $note = match (true) {
+                $coupon !== null => "Auto-activado por cupón: {$coupon->code} ({$coupon->discount_percent}% off).",
+                $promotion !== null => "Auto-activado por promoción: {$promotion->label}.",
+                default => 'Auto-activado: plan sin costo, no necesita comprobante.',
+            };
 
             $this->activator->activate($user, $plan, $user->id, null, $note);
 
-            // Solo si hubo promoción de por medio: sin este registro,
-            // PlanPromotion::isEligibleFor() no tendría cómo enterarse de que
-            // este usuario ya la usó, y se la seguiría ofreciendo para
-            // siempre — un plan gratis de catálogo de toda la vida no
-            // necesita este rastro, no cambia nada de su comportamiento.
-            if ($promotion) {
+            // Solo si hubo cupón o promoción de por medio: sin este
+            // registro, reasonNotUsableFor()/isEligibleFor() no tendrían
+            // cómo enterarse de que este usuario ya lo usó, y se lo
+            // seguirían ofreciendo para siempre — un plan gratis de
+            // catálogo de toda la vida no necesita este rastro, no cambia
+            // nada de su comportamiento.
+            if ($coupon || $promotion) {
                 SubscriptionRequest::query()->create([
                     'user_id' => $user->id,
                     'subscription_plan_id' => $plan->id,
-                    'plan_promotion_id' => $promotion->id,
+                    'plan_promotion_id' => $promotion?->id,
+                    'plan_coupon_id' => $coupon?->id,
                     'status' => 'approved',
                     'reviewed_by' => $user->id,
                     'reviewed_at' => now(),
-                    'admin_note' => "Auto-aprobado por promoción: {$promotion->label}.",
+                    'admin_note' => $coupon
+                        ? "Auto-aprobado por cupón: {$coupon->code}."
+                        : "Auto-aprobado por promoción: {$promotion->label}.",
                 ]);
             }
 
@@ -124,6 +169,7 @@ class SubscriptionRequestController extends Controller
                 'user_id' => $user->id,
                 'plan_id' => $plan->id,
                 'plan_promotion_id' => $promotion?->id,
+                'plan_coupon_id' => $coupon?->id,
             ]);
 
             return back()->with('status', 'Plan activado. Como no tiene costo, no hace falta comprobante de pago.');
@@ -133,6 +179,7 @@ class SubscriptionRequestController extends Controller
             'user_id' => $user->id,
             'subscription_plan_id' => $plan->id,
             'plan_promotion_id' => $promotion?->id,
+            'plan_coupon_id' => $coupon?->id,
             'status' => 'awaiting_proof',
         ]);
 
@@ -141,6 +188,7 @@ class SubscriptionRequestController extends Controller
             'user_id' => $user->id,
             'plan_id' => $plan->id,
             'plan_promotion_id' => $promotion?->id,
+            'plan_coupon_id' => $coupon?->id,
         ]);
 
         return back()->with('status', 'Plan elegido. Ahora suba el comprobante de su transferencia para que lo revisemos.');

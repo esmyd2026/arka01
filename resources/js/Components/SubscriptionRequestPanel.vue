@@ -18,9 +18,11 @@ const uploadForm = useForm({ payment_proof: null });
 // de LISTA del plan, aunque el pedido se haya hecho con una promoción
 // vigente — el monto a transferir tiene que ser el que realmente se
 // prometió al elegir el plan (Plan/Driver.vue y Plan/Client.vue). Mismo
-// criterio para el descuento por cooperativa (pedido explícito del
-// usuario) — el backend ya prioriza la promoción si hay una vigente.
+// criterio para el cupón de descuento (pedido explícito del usuario) y
+// para el descuento por cooperativa — el backend ya prioriza cupón >
+// promoción > descuento de cooperativa si hay más de uno vigente.
 function effectivePrice(request) {
+    if (request.plan_coupon) return Number(request.plan.monthly_price) * (1 - request.plan_coupon.discount_percent / 100);
     if (request.plan_promotion) return request.plan_promotion.promo_price;
     if (request.cooperative_discount) return request.cooperative_discount.discounted_price;
     return request.plan.monthly_price;
@@ -68,7 +70,14 @@ async function cancelRequest() {
         <!-- Coherencia con la promo mostrada en el catálogo (Plan/Driver.vue,
              Plan/Client.vue): si este pedido usó una promoción, se ve acá
              también, con el mismo lenguaje visual. -->
-        <div v-if="pendingRequest.plan_promotion" class="p-2 rounded-arka bg-arka-lime/10 border border-arka-lime/30">
+        <div v-if="pendingRequest.plan_coupon" class="p-2 rounded-arka bg-arka-lime/10 border border-arka-lime/30">
+            <p class="text-xs text-arka-lime font-medium">
+                🎟️ Cupón aplicado: {{ pendingRequest.plan_coupon.code }} ({{ pendingRequest.plan_coupon.discount_percent }}% off) — pague
+                ${{ effectivePrice(pendingRequest).toFixed(2) }}/mes en vez de
+                ${{ Number(pendingRequest.plan.monthly_price).toFixed(2) }}/mes.
+            </p>
+        </div>
+        <div v-else-if="pendingRequest.plan_promotion" class="p-2 rounded-arka bg-arka-lime/10 border border-arka-lime/30">
             <p class="text-xs text-arka-lime font-medium">
                 🎁 Promoción aplicada: {{ pendingRequest.plan_promotion.label }} — pague
                 ${{ Number(pendingRequest.plan_promotion.promo_price).toFixed(2) }}/mes en vez de

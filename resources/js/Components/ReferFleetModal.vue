@@ -132,6 +132,12 @@ watch(
             <!-- Paso 1: buscar amigo -->
             <div v-if="!selectedFriend" class="mt-5">
                 <InputLabel value="Usuario o código de socio del amigo" />
+                <!-- Bug reportado por el usuario ("el botón no funciona"): no
+                     estaba roto, buscaba por coincidencia EXACTA (por
+                     privacidad, mismo criterio que el resto de buscadores por
+                     código) pero no lo aclaraba en ningún lado — quien
+                     escribía un nombre o un usuario a medias solo veía "no
+                     encontramos a nadie", sin entender por qué. -->
                 <TextInput
                     v-model="searchTerm"
                     type="text"
@@ -139,6 +145,9 @@ watch(
                     placeholder="Ej: @maria o 512"
                     @input="runSearch"
                 />
+                <p class="mt-1 text-xs text-arka-text-muted">
+                    Debe ser el usuario exacto (con o sin @) o el código de socio completo — no busca por nombre.
+                </p>
 
                 <ul v-if="searchResults.length" class="mt-4 divide-y divide-arka-text-muted/10">
                     <li v-for="friend in searchResults" :key="friend.user_id" class="py-3 flex items-center justify-between gap-4">
@@ -158,7 +167,7 @@ watch(
                 </ul>
 
                 <p v-if="showNoFriendFound" class="mt-4 text-sm text-arka-text-muted">
-                    No encontramos a nadie con ese usuario o código.
+                    No encontramos a nadie con ese usuario o código exacto. Revise que esté bien escrito — no busca por nombre.
                 </p>
             </div>
 

@@ -97,6 +97,52 @@ class RegistrationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('driver.profile.edit'));
+
+        // Bug reportado por el usuario: "se estan registrando como
+        // conductor y el sistema termina creandole como cliente" — si no
+        // completa el segundo paso, esto es lo único que distingue a esta
+        // cuenta de un cliente normal (ver EnsureDriverOnboardingIsComplete).
+        $user = User::where('email', 'conductor.nuevo@example.com')->firstOrFail();
+        $this->assertTrue($user->intends_to_drive);
+        $this->assertFalse($user->isDriver());
+    }
+
+    /**
+     * Mismo bug: si abandona el segundo paso y vuelve más tarde (o navega a
+     * /dashboard directo), tiene que volver a mandarlo a terminar en vez de
+     * dejarlo operar como cliente sin darse cuenta de que le falta algo.
+     */
+    public function test_an_incomplete_driver_registration_is_sent_back_to_finish_from_the_dashboard(): void
+    {
+        $this->post('/register', [
+            'account_type' => 'conductor',
+            'name' => 'Conductor Abandonado',
+            'email' => 'conductor.abandonado@example.com',
+            'country_code' => '+593',
+            'phone_local' => '998888887',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response = $this->get(route('dashboard'));
+
+        $response->assertRedirect(route('driver.profile.edit'));
+    }
+
+    /**
+     * Apenas de verdad completa el perfil de conductor, la señal se apaga
+     * y /dashboard vuelve a andar normal (ver DriverProfile::booted()).
+     */
+    public function test_completing_the_driver_profile_clears_the_pending_flag(): void
+    {
+        $user = User::factory()->create(['intends_to_drive' => true]);
+        DriverProfile::factory()->for($user)->create();
+
+        $this->assertFalse($user->fresh()->intends_to_drive);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
     }
 
     /**

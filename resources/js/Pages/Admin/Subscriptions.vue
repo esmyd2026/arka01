@@ -218,7 +218,14 @@ function clientPlanOf(user) {
                                  de una promo, el monto a revisar en el comprobante es el
                                  promocional, no el de lista — sin esto no había forma de
                                  saberlo desde acá. -->
-                            <p v-if="req.plan_promotion" class="text-sm text-arka-lime mt-0.5">
+                            <!-- Cupón de descuento (pedido explícito del usuario): mismo
+                                 criterio que la promoción de abajo — sin esto el admin
+                                 esperaría el precio de lista completo. -->
+                            <p v-if="req.plan_coupon" class="text-sm text-arka-lime mt-0.5">
+                                🎟️ Cupón "{{ req.plan_coupon.code }}" ({{ req.plan_coupon.discount_percent }}%) — correspondía
+                                ${{ (Number(req.plan.monthly_price) * (1 - req.plan_coupon.discount_percent / 100)).toFixed(2) }}/mes
+                            </p>
+                            <p v-else-if="req.plan_promotion" class="text-sm text-arka-lime mt-0.5">
                                 🎁 Promoción "{{ req.plan_promotion.label }}" — correspondía ${{ req.plan_promotion.promo_price }}/mes
                             </p>
                             <!-- Descuento por cooperativa (pedido explícito del usuario):
@@ -292,11 +299,13 @@ function clientPlanOf(user) {
                             <dt class="text-arka-text-muted">Monto a transferir</dt>
                             <dd class="text-arka-text font-semibold">
                                 ${{
-                                    viewingRequest.plan_promotion
-                                        ? viewingRequest.plan_promotion.promo_price
-                                        : viewingRequest.cooperative_discount
-                                          ? viewingRequest.cooperative_discount.discounted_price
-                                          : viewingRequest.plan.monthly_price
+                                    viewingRequest.plan_coupon
+                                        ? (Number(viewingRequest.plan.monthly_price) * (1 - viewingRequest.plan_coupon.discount_percent / 100)).toFixed(2)
+                                        : viewingRequest.plan_promotion
+                                          ? viewingRequest.plan_promotion.promo_price
+                                          : viewingRequest.cooperative_discount
+                                            ? viewingRequest.cooperative_discount.discounted_price
+                                            : viewingRequest.plan.monthly_price
                                 }}/mes
                             </dd>
                             <dt class="text-arka-text-muted">Comprobante subido</dt>

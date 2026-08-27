@@ -389,6 +389,41 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
+     * Bug encontrado en una auditoría del flujo completo (pedido explícito
+     * del usuario: "revisa todo el flujo de una carrera... las que son
+     * solicitadas a un conductor en especifico"): antes una solicitud
+     * INMEDIATA dirigida a un conductor puntual nunca tenía vencimiento —
+     * se quedaba 'pending' para siempre si ese conductor no respondía. Ahora
+     * arma su cronómetro (más generoso que los 30 seg. de la bolsa, ver
+     * RideRequestController::DIRECTED_REQUEST_TIMEOUT_SECONDS), pero SIN
+     * pasar por el Job con delay() que usa la bolsa (App\Jobs\ExpireRideOffer)
+     * — bajo QUEUE_CONNECTION=sync ese delay se ignora y correría al toque,
+     * expirando la solicitud en el mismo request que la crea. El vencimiento
+     * real de una dirigida lo procesa el comando periódico aparte, ver
+     * tests/Feature/Ride/ExpireOverdueDirectedRideRequestsTest.php.
+     */
+    public function test_a_directed_immediate_request_gets_an_expiry_timer_without_using_the_pool_job(): void
+    {
+        Queue::fake();
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::query()->where('client_user_id', $client->id)->firstOrFail();
+        $this->assertNotNull($rideRequest->current_offer_expires_at);
+        $this->assertTrue($rideRequest->current_offer_expires_at->greaterThan(now()->addMinutes(4)));
+        $this->assertNull($rideRequest->dispatch_pool);
+
+        Queue::assertNotPushed(ExpireRideOffer::class);
+    }
+
+    /**
      * Bug real confirmado por el usuario ("probá el mapa... en temas de
      * km"): la línea recta (Haversine) podía dar bastante menos que la
      * distancia real de manejo — ahora se usa la distancia real que manda

@@ -8,6 +8,8 @@ use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
+use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\RideDispatchAdvancer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,6 +45,15 @@ class CooperativeDispatchCascadeTest extends TestCase
             'status' => 'accepted',
             'responded_at' => now(),
         ]);
+
+        // Pedido explícito del usuario: un conductor de cooperativa necesita
+        // un plan pago vigente para que el despacho automático lo considere
+        // (ver PlanLimits::hasActivePaidPlan()) — este test cubre la
+        // mecánica de la cascada en sí, no el filtro de plan (eso lo cubre
+        // CooperativeDriverPlanGatingTest), así que el fixture arranca con
+        // uno activo para no chocar con esa regla nueva.
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
 
         return $driver;
     }

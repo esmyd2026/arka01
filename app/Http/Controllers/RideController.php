@@ -253,26 +253,51 @@ class RideController extends Controller
             ->orderBy('created_at')
             ->get();
 
+        // Rediseño (pedido explícito del usuario): historial paginado en vez
+        // de un tope fijo de 20 sin forma de ver más atrás — nombre de página
+        // 'historial' propio, para no chocar si esta pantalla suma otro
+        // paginado más adelante.
         $rideHistory = Ride::query()
             ->where(fn ($query) => $query->where('client_user_id', $userId)->orWhere('driver_user_id', $userId))
             ->whereNotIn('status', ['in_progress', 'scheduled'])
-            ->with(['client', 'driver'])
+            ->with(['client:id,name,avatar_path', 'driver:id,name,avatar_path'])
             ->latest()
-            ->limit(20)
-            ->get();
+            ->paginate(10, ['*'], 'historial')
+            ->withQueryString();
 
         // Pedido explícito del usuario: recordatorio si hay carreras
         // completadas todavía sin calificar de mi parte — cliente y
         // conductor califican de forma independiente (ninguno espera al
-        // otro), así que esto se calcula igual para los dos lados.
+        // otro), así que esto se calcula igual para los dos lados. Solo
+        // hace falta para las carreras de ESTA página del historial.
         $myReviewedRideIds = Review::query()
             ->where('reviewer_user_id', $userId)
-            ->whereIn('ride_id', $rideHistory->where('status', 'completed')->pluck('id'))
+            ->whereIn('ride_id', $rideHistory->getCollection()->where('status', 'completed')->pluck('id'))
             ->pluck('ride_id');
 
-        $rideHistory->each(function (Ride $ride) use ($myReviewedRideIds) {
-            $ride->needs_my_review = $ride->status === 'completed' && ! $myReviewedRideIds->contains($ride->id);
-        });
+        $rideHistory->through(fn (Ride $ride) => [
+            'id' => $ride->id,
+            'client' => ['id' => $ride->client_user_id, 'name' => $ride->client?->name ?? 'Cuenta eliminada', 'avatar_url' => $ride->client?->avatar_url],
+            'driver' => ['id' => $ride->driver_user_id, 'name' => $ride->driver?->name ?? 'Cuenta eliminada', 'avatar_url' => $ride->driver?->avatar_url],
+            'status' => $ride->status,
+            'price' => (float) $ride->price,
+            // Fecha/hora real del hecho, no solo de cuándo se creó la fila
+            // (pedido explícito del usuario: "coloquele al menos la fecha y
+            // hora de la carrera").
+            'occurred_at' => ($ride->completed_at ?? $ride->cancelled_at ?? $ride->created_at)->toIso8601String(),
+            'needs_my_review' => $ride->status === 'completed' && ! $myReviewedRideIds->contains($ride->id),
+        ]);
+
+        // Alarma de "sin calificar" (pedido explícito del usuario): a
+        // propósito una consulta aparte de $rideHistory, así la alarma
+        // sigue siendo correcta sin importar en qué página del historial
+        // esté parado el usuario.
+        $unratedRideIds = Ride::query()
+            ->where(fn ($query) => $query->where('client_user_id', $userId)->orWhere('driver_user_id', $userId))
+            ->where('status', 'completed')
+            ->whereNotIn('id', Review::query()->where('reviewer_user_id', $userId)->pluck('ride_id'))
+            ->orderByDesc('completed_at')
+            ->pluck('id');
 
         // Flotas donde este usuario es conductor activo: el frontend se suscribe
         // a cada una por WebSocket para recibir en vivo las solicitudes "a toda
@@ -302,6 +327,7 @@ class RideController extends Controller
             'activeRides' => $activeRides,
             'scheduledRides' => $scheduledRides,
             'rideHistory' => $rideHistory,
+            'unratedRideIds' => $unratedRideIds,
             'driverFleetIds' => $driverFleetIds,
         ]);
     }

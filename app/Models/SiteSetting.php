@@ -27,10 +27,15 @@ class SiteSetting extends Model
         // Pedido explícito del usuario: accesos rápidos del menú (conductor
         // y cliente) que un admin apagó — ver App\Http\Controllers\Admin\SystemController.
         'disabled_quick_links',
+        // Pedido explícito del usuario: "permiteme desde el admin poder
+        // activar o no lo obligatorio para que el conductor se le haga mas
+        // facil activarse" — ver App\Services\DriverVerificationRequirementRegistry.
+        'disabled_driver_requirements',
     ];
 
     protected $casts = [
         'disabled_quick_links' => 'array',
+        'disabled_driver_requirements' => 'array',
     ];
 
     protected $appends = ['hero_background_url', 'auth_background_url'];

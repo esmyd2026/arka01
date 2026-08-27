@@ -11,6 +11,7 @@ use App\Services\PlanLimits;
 use App\Services\WhatsAppConfig;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -81,7 +82,71 @@ class ProfileController extends Controller
                     'role' => $referral->isDriver() ? 'Conductor' : ($referral->isClient() ? 'Cliente' : 'Admin'),
                     'registered_at' => $referral->created_at->toIso8601String(),
                 ]),
+            // "¿Quién lo recomendó?" (pedido explícito del usuario): quién
+            // quedó marcado como su referidor — por enlace al registrarse,
+            // por un cupón con dueño, o guardado a mano acá mismo. Null
+            // hasta que alguna de esas tres vías lo fije.
+            'referredBy' => $user->referredBy()->first(['id', 'name', 'username', 'member_code']),
         ]);
+    }
+
+    /**
+     * Buscar a quién marcar como "quién lo recomendó" (pedido explícito del
+     * usuario: "que busquen en la plataforma quien los recomendo... por
+     * nombres o usuario o codigo") — a diferencia de los buscadores del
+     * resto de la app (solo código, por privacidad), acá el propio usuario
+     * pidió poder buscar por nombre: es su elección sobre su propia cuenta,
+     * no un listado público para invitar a nadie.
+     */
+    public function searchReferrer(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['q' => ['required', 'string', 'min:2', 'max:100']]);
+        $term = ltrim($validated['q'], '@');
+        $userId = $request->user()->id;
+
+        $users = User::query()
+            ->where('id', '!=', $userId)
+            ->where(function ($query) use ($term) {
+                $query->where('name', 'like', "%{$term}%")
+                    ->orWhere('username', 'like', "%{$term}%");
+
+                if (ctype_digit($term)) {
+                    $query->orWhere('member_code', (int) $term);
+                }
+            })
+            ->limit(10)
+            ->get(['id', 'name', 'username', 'member_code']);
+
+        return response()->json(['users' => $users]);
+    }
+
+    /**
+     * Se fija una sola vez (pedido explícito del usuario: "que le den a un
+     * boton guardar y ya alli se quede quemado") — no se puede pisar un
+     * referido ya asignado, sea por la vía que haya sido (enlace, cupón, o
+     * esta misma búsqueda antes).
+     */
+    public function setReferrer(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->referred_by_user_id) {
+            throw ValidationException::withMessages([
+                'referrer_user_id' => 'Ya tiene un referido asignado — no se puede cambiar.',
+            ]);
+        }
+
+        $validated = $request->validate(['referrer_user_id' => ['required', 'integer', 'exists:users,id']]);
+
+        if ((int) $validated['referrer_user_id'] === $user->id) {
+            throw ValidationException::withMessages([
+                'referrer_user_id' => 'No puede marcarse a sí mismo como referido.',
+            ]);
+        }
+
+        $user->forceFill(['referred_by_user_id' => $validated['referrer_user_id']])->save();
+
+        return back()->with('status', 'Guardado — ya quedó marcado quién lo recomendó.');
     }
 
     /**

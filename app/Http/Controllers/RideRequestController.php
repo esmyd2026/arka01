@@ -64,6 +64,20 @@ class RideRequestController extends Controller
      */
     private const SCHEDULED_CONFLICT_BUFFER_MINUTES = 60;
 
+    /**
+     * Bug reportado por el usuario (encontrado en una auditoría del flujo
+     * completo de despacho): una solicitud INMEDIATA dirigida a un
+     * conductor puntual (no de una bolsa) nunca tenía vencimiento — si ese
+     * conductor no abría la app ni respondía, la solicitud quedaba
+     * 'pending' para siempre, sin cascada (no hay a quién más ofrecérsela)
+     * y sin ningún aviso al cliente. Más generosa que los 30 seg. de la
+     * bolsa (ahí sí hay cascada de respaldo si alguien no contesta rápido;
+     * acá el cliente eligió a esta persona a propósito, merece más tiempo
+     * real antes de darla por perdida) — ver el nuevo branch en store() y
+     * el guard relajado en RideDispatchAdvancer::advanceOrExpire().
+     */
+    private const DIRECTED_REQUEST_TIMEOUT_SECONDS = 300;
+
     public function __construct(private readonly PlanLimits $planLimits) {}
 
     /**
@@ -237,7 +251,7 @@ class RideRequestController extends Controller
 
         return [
             'user_id' => $driver->id,
-            'name' => $driver->name,
+            'name' => $driver->full_name,
             // Foto de perfil (pedido explícito del usuario, con mockup de
             // referencia): esta función arma el array a mano en vez de
             // serializar el modelo completo, así que `avatar_url` (que User
@@ -669,6 +683,11 @@ class RideRequestController extends Controller
                 $offerCandidateIds = $candidateIds;
                 $currentOfferExpiresAt = now()->addSeconds(30);
             }
+        } elseif ($driverUserId && ! $isScheduled) {
+            // Bug reportado por el usuario: ver DIRECTED_REQUEST_TIMEOUT_SECONDS
+            // arriba — sin esto, una solicitud dirigida a un conductor
+            // puntual que nunca respondiera quedaba pendiente para siempre.
+            $currentOfferExpiresAt = now()->addSeconds(self::DIRECTED_REQUEST_TIMEOUT_SECONDS);
         }
 
         // Bug real confirmado (pedido explícito del usuario: "probá el mapa...
@@ -899,8 +918,17 @@ class RideRequestController extends Controller
 
         // Despacho secuencial estilo Uber (pedido explícito del usuario): si
         // este candidato no responde en 30 segundos, ExpireRideOffer pasa al
-        // siguiente de la bolsa (o expira si ya no queda ninguno).
-        if ($rideRequest->current_offer_expires_at) {
+        // siguiente de la bolsa (o expira si ya no queda ninguno). Solo
+        // aplica a la bolsa/cooperativa (`dispatch_pool` siempre queda
+        // null en una dirigida) — una solicitud dirigida a un conductor
+        // puntual usa en cambio el comando periódico
+        // rides:expire-overdue-directed-requests (bug encontrado en una
+        // auditoría del flujo: dispatch()->delay() bajo QUEUE_CONNECTION=sync
+        // corre AL TOQUE, no en 5 minutos — eso está bien para la bolsa
+        // (30 seg. reales en producción con una cola de verdad) pero
+        // reventaba cualquier solicitud dirigida creada en un test o en un
+        // entorno sin worker, expirándola en el mismo request que la crea).
+        if ($rideRequest->current_offer_expires_at && $rideRequest->dispatch_pool) {
             ExpireRideOffer::dispatch($rideRequest->id, $rideRequest->driver_user_id)
                 ->delay($rideRequest->current_offer_expires_at);
         }

@@ -9,6 +9,8 @@ use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
+use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Models\WhatsAppSetting;
 use App\Services\Chatbot\ChatbotEngine;
@@ -20,6 +22,19 @@ use Tests\TestCase;
 class WhatsAppRideBookingTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Pedido explícito del usuario: un conductor de cooperativa necesita un
+     * plan pago vigente para que el despacho automático lo considere (ver
+     * PlanLimits::hasActivePaidPlan()) — sin esto, RideDispatchCandidates::forCooperative()
+     * lo excluye y estos tests de reserva automática por cooperativa se
+     * quedan sin candidato.
+     */
+    private function giveActivePaidPlan(User $driver): void
+    {
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
+        Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
+    }
 
     public function test_a_client_can_create_an_immediate_fleet_request_from_whatsapp(): void
     {
@@ -187,6 +202,7 @@ class WhatsAppRideBookingTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['driver_type' => 'public_transport', 'current_lat' => -2.1700, 'current_lng' => -79.9000, 'passenger_capacity' => 4, 'rate_per_km' => 0.5]);
         CooperativeDriverMembership::query()->create(['cooperative_id' => $cooperative->id, 'driver_user_id' => $driver->id, 'invited_by_user_id' => $cooperativeOwner->id, 'status' => 'accepted', 'responded_at' => now()]);
+        $this->giveActivePaidPlan($driver);
 
         $phone = '+593991111188';
         $engine = app(ChatbotEngine::class);
@@ -321,6 +337,7 @@ class WhatsAppRideBookingTest extends TestCase
             'status' => 'accepted',
             'responded_at' => now(),
         ]);
+        $this->giveActivePaidPlan($driver);
 
         $engine = app(ChatbotEngine::class);
         $engine->respondTo($client->phone, $client, 'pedir carrera');
@@ -391,6 +408,7 @@ class WhatsAppRideBookingTest extends TestCase
             'status' => 'accepted',
             'responded_at' => now(),
         ]);
+        $this->giveActivePaidPlan($driver);
 
         $engine = app(ChatbotEngine::class);
         $engine->respondTo($requester->phone, $requester, 'pedir carrera');

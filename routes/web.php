@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\LocationController;
 use App\Http\Controllers\Admin\MetricsController;
 use App\Http\Controllers\Admin\OperationsController as AdminOperationsController;
 use App\Http\Controllers\Admin\PlanController;
+use App\Http\Controllers\Admin\PlanCouponController;
 use App\Http\Controllers\Admin\PlanPromotionController;
 use App\Http\Controllers\Admin\PlatformFeedbackController as AdminPlatformFeedbackController;
 use App\Http\Controllers\Admin\PricingSettingController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\Admin\UserLocationsController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
 use App\Http\Controllers\Admin\WhatsAppInboxController;
 use App\Http\Controllers\Admin\WhatsAppSettingController;
+use App\Http\Controllers\CooperativeClientController;
 use App\Http\Controllers\CooperativeDashboardController;
 use App\Http\Controllers\CooperativeDirectoryController;
 use App\Http\Controllers\CooperativeDriverController;
@@ -151,7 +153,7 @@ Route::get('/privacidad', function () {
 })->name('legal.privacy');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'phone_verified'])
+    ->middleware(['auth', 'verified', 'phone_verified', 'driver_onboarding'])
     ->name('dashboard');
 
 Route::post('/dashboard/ubicacion', [DashboardController::class, 'updateLocation'])
@@ -165,6 +167,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    // "¿Quién lo recomendó?" (pedido explícito del usuario): buscar en la
+    // plataforma por nombre, usuario o código, y guardarlo una sola vez
+    // como referido — mismo mecanismo para cualquier rol (cliente o
+    // conductor), por eso vive en ProfileController y no en uno separado.
+    Route::get('/perfil/buscar-referido', [ProfileController::class, 'searchReferrer'])->name('profile.search-referrer');
+    Route::post('/perfil/referido', [ProfileController::class, 'setReferrer'])->name('profile.set-referrer');
 
     // Perfil y documentos privados de la cuenta Cooperativa. El registro
     // crea la cuenta base; este formulario completa la postulación legal.
@@ -183,6 +191,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/cooperativa/conductores/{membership}/reactivar', [CooperativeDriverController::class, 'reactivate'])->name('cooperative.drivers.reactivate');
         Route::delete('/cooperativa/conductores/{membership}', [CooperativeDriverController::class, 'remove'])->name('cooperative.drivers.remove');
         Route::post('/cooperativa/solicitudes/{rideRequest}/asignar', [CooperativeRideAssignmentController::class, 'assign'])->name('cooperative.rides.assign');
+        // Pedido explícito del usuario: "quiero ver mis clientes vinculados
+        // la lista, cantidad de carreras, puntuacion y desvincular" — ver
+        // CooperativeClientController.
+        Route::get('/cooperativa/clientes', [CooperativeClientController::class, 'index'])->name('cooperative.clients.index');
+        Route::delete('/cooperativa/clientes/{clientCooperative}', [CooperativeClientController::class, 'destroy'])->name('cooperative.clients.destroy');
     });
     Route::get('/cooperativas/documentos/{document}', [CooperativeProfileController::class, 'document'])->name('cooperative.documents.show');
 
@@ -452,6 +465,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // usuario) — ver Admin\UserProfileController::forceActivate().
     Route::post('/usuarios/{user}/activar-conductor', [AdminUserProfileController::class, 'forceActivate'])->name('users.force-activate-driver');
     Route::delete('/usuarios/{user}/activar-conductor', [AdminUserProfileController::class, 'revokeForceActivate'])->name('users.revoke-force-activate-driver');
+    // Pedido explícito del usuario: "como hago para pasar yo a un cliente
+    // como conductor" — ver Admin\UserProfileController::convertToDriver().
+    Route::post('/usuarios/{user}/convertir-en-conductor', [AdminUserProfileController::class, 'convertToDriver'])->name('users.convert-to-driver');
     // Pedido explícito del usuario: ver el detalle de los clientes de un
     // conductor desde el admin, y poder sacarlo de esa flota — ver
     // AdminUserProfileController::removeDriverClient().
@@ -500,6 +516,19 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/promociones', [PlanPromotionController::class, 'store'])->name('plan-promotions.store');
     Route::patch('/promociones/{planPromotion}', [PlanPromotionController::class, 'update'])->name('plan-promotions.update');
     Route::delete('/promociones/{planPromotion}', [PlanPromotionController::class, 'destroy'])->name('plan-promotions.destroy');
+
+    // Cupones de descuento para suscripciones (pedido explícito del
+    // usuario): "generar cupones de descuentos... para clientes y para
+    // conductores como para cooperativa" — ver Admin\PlanCouponController.
+    Route::get('/cupones-de-planes', [PlanCouponController::class, 'index'])->name('plan-coupons.index');
+    // Buscar a quién atribuirle el cupón como referidor (pedido explícito
+    // del usuario) — literal antes de cualquier ruta con {planCoupon} para
+    // que no se confunda "buscar-referido" con un id.
+    Route::get('/cupones-de-planes/buscar-referido', [PlanCouponController::class, 'searchReferrer'])->name('plan-coupons.search-referrer');
+    Route::post('/cupones-de-planes', [PlanCouponController::class, 'store'])->name('plan-coupons.store');
+    Route::patch('/cupones-de-planes/{planCoupon}', [PlanCouponController::class, 'update'])->name('plan-coupons.update');
+    Route::post('/cupones-de-planes/{planCoupon}/alternar', [PlanCouponController::class, 'toggle'])->name('plan-coupons.toggle');
+    Route::delete('/cupones-de-planes/{planCoupon}', [PlanCouponController::class, 'destroy'])->name('plan-coupons.destroy');
 
     // Mantenimiento de las medallas del conductor (pedido explícito del
     // usuario): a partir de cuántos puntos aplica cada una, y si aparece en
@@ -639,6 +668,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Accesos rápidos del menú (pedido explícito del usuario: "permiteme en
     // el modulo de sistema de habilitar o no estas opciones del menu").
     Route::patch('/sistema/accesos-rapidos', [AdminSystemController::class, 'updateQuickLinks'])->name('system.quick-links.update');
+    // Requisitos de verificación del conductor (pedido explícito del
+    // usuario: "permiteme desde el admin poder activar o no lo obligatorio
+    // para que el conductor se le haga mas facil activarse").
+    Route::patch('/sistema/requisitos-conductor', [AdminSystemController::class, 'updateDriverRequirements'])->name('system.driver-requirements.update');
 
     // Configuración → Integraciones → WhatsApp (roadmap de mejoras, sección
     // 8): evita tener que tocar el .env para cambiar el token.

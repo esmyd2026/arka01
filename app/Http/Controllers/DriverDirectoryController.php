@@ -116,7 +116,7 @@ class DriverDirectoryController extends Controller
 
                 return [
                     'user_id' => $profile->user_id,
-                    'name' => $profile->user->name,
+                    'name' => $profile->user->full_name,
                     'avatar_url' => $profile->user->avatar_url,
                     'rate_per_km' => $profile->rate_per_km,
                     'accepts_cash' => $profile->accepts_cash,

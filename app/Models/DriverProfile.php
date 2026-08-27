@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\DriverVerificationRequirementRegistry;
 use App\Services\Haversine;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -28,7 +29,6 @@ class DriverProfile extends Model
     protected $fillable = [
         'user_id',
         'driver_type',
-        'license_number',
         'license_photo_path',
         'identity_document_path',
         'police_record_path',
@@ -102,7 +102,13 @@ class DriverProfile extends Model
         // por User::saving() porque acá el cambio arranca del lado de
         // DriverProfile, no de User.
         static::created(function (DriverProfile $profile) {
-            User::whereKey($profile->user_id)->update(['role' => 'conductor']);
+            // Bug reportado por el usuario ("se estan registrando como
+            // conductor y el sistema termina creandole como cliente"):
+            // acá es donde de verdad se termina de convertir en conductor
+            // — se apaga la señal de "le falta terminar" que se prendió
+            // en el registro (ver RegisteredUserController::store() y
+            // EnsureDriverOnboardingIsComplete).
+            User::whereKey($profile->user_id)->update(['role' => 'conductor', 'intends_to_drive' => false]);
         });
 
         // Simétrico al de arriba: si el perfil de conductor se borra (hoy no
@@ -421,19 +427,28 @@ class DriverProfile extends Model
             return true;
         }
 
+        // Pedido explícito del usuario: "eso de numero de licencia para
+        // conductores eso no existe en el ecuador" — ya no se exige
+        // `license_number` acá (la cédula, que sí existe, queda cubierta
+        // por `identity_document_path` más abajo).
+        //
+        // Cada `filled($this->x) || ! isRequired('x')` de acá abajo es
+        // "hace falta el dato, A MENOS que un admin lo haya apagado desde
+        // /admin/sistema" (pedido explícito del usuario: "permiteme desde
+        // el admin poder activar o no lo obligatorio para que el conductor
+        // se le haga mas facil activarse" — ver DriverVerificationRequirementRegistry).
         return filled($this->driver_type)
-            && filled($this->license_number)
             && $this->hasCompleteVehicleInfo()
             && is_numeric($this->rate_per_km)
             && (float) $this->rate_per_km >= 0
             && ($this->accepts_cash || $this->accepts_transfer)
-            && filled($this->identity_document_path)
-            && filled($this->license_photo_path)
-            && filled($this->police_record_path)
+            && (filled($this->identity_document_path) || ! DriverVerificationRequirementRegistry::isRequired('identity_document'))
+            && (filled($this->license_photo_path) || ! DriverVerificationRequirementRegistry::isRequired('license_photo'))
+            && (filled($this->police_record_path) || ! DriverVerificationRequirementRegistry::isRequired('police_record'))
             // Pedido explícito del usuario: seguro que lo proteja a él, a
             // los pasajeros y al vehículo — autodeclarado con un checkbox,
             // sin documento adjunto (a diferencia de los 3 de arriba).
-            && $this->has_insurance;
+            && ($this->has_insurance || ! DriverVerificationRequirementRegistry::isRequired('has_insurance'));
     }
 
     /**

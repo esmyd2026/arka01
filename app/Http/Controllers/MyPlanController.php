@@ -36,15 +36,16 @@ class MyPlanController extends Controller
             // el panel de "Pedido de plan" no tenía cómo saber que este
             // pedido usaba una promoción, y siempre mostraba el precio de
             // LISTA del plan en vez del precio promocional que el usuario
-            // efectivamente eligió.
-            ->with(['plan', 'planPromotion', 'user'])
+            // efectivamente eligió. `planCoupon` (pedido explícito del
+            // usuario: cupones de descuento) sigue el mismo criterio.
+            ->with(['plan', 'planPromotion', 'planCoupon', 'user'])
             ->latest()
             ->first();
 
         // Mismo criterio que la promoción de arriba, pero para el descuento
         // por cooperativa (pedido explícito del usuario) — solo aplica del
-        // lado conductor, y solo si no hay promoción (la promoción gana).
-        if ($request && $ownerType === 'driver' && ! $request->planPromotion) {
+        // lado conductor, y solo si no hay cupón ni promoción (esos ganan).
+        if ($request && $ownerType === 'driver' && ! $request->planCoupon && ! $request->planPromotion) {
             $request->cooperative_discount = $this->planLimits->driverDiscountFor($request->plan, $request->user);
         }
 

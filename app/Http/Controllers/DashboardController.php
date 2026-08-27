@@ -282,7 +282,7 @@ class DashboardController extends Controller
 
                 return [
                     'user_id' => $member->driver_user_id,
-                    'name' => $member->driver->name,
+                    'name' => $member->driver->full_name,
                     'avatar_url' => $member->driver->avatar_url,
                     'status' => match (true) {
                         $busyDriverIds->contains($member->driver_user_id) => 'busy',
