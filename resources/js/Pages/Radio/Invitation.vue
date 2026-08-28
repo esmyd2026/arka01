@@ -39,8 +39,15 @@ function join() {
 
             <p class="mt-4 text-sm text-arka-text-muted">{{ channel.member_count }} integrante(s) autorizado(s)</p>
 
-            <p v-if="isOwner" class="mt-5 text-sm font-medium text-arka-primary">Este es su canal principal.</p>
-            <p v-else-if="alreadyMember" class="mt-5 text-sm font-medium text-arka-primary">Ya forma parte de este canal.</p>
+            <template v-if="isOwner || alreadyMember">
+                <p class="mt-5 text-sm font-medium text-arka-primary">
+                    {{ isOwner ? 'Este es su canal principal.' : 'Ya forma parte de este canal.' }}
+                </p>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Link href="/?abrir_radio=1" class="rounded-arka bg-arka-primary px-4 py-3 text-sm font-semibold text-arka-card">Ir al canal de radio</Link>
+                    <Link href="/" class="rounded-arka border border-arka-primary px-4 py-3 text-sm font-semibold text-arka-primary">Ir al inicio</Link>
+                </div>
+            </template>
             <PrimaryButton v-else-if="canJoin" class="mt-5 w-full justify-center" @click="join">Unirme al canal</PrimaryButton>
 
             <div v-else-if="!loggedIn" class="mt-5 grid gap-3 sm:grid-cols-2">

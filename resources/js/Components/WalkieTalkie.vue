@@ -634,6 +634,15 @@ onMounted(() => {
     window.addEventListener('blur', releaseTransmission);
     window.addEventListener('focus', syncRadioAvailability);
     document.addEventListener('visibilitychange', refreshAvailabilityWhenVisible);
+
+    // Viene de "Ir al canal de radio" en Radio/Invitation.vue: el enlace de
+    // invitación no sabe abrir el bottom sheet directamente (vive en otra
+    // página), así que llega por querystring. Se abre y se limpia la URL
+    // para que un refresh no reabra el panel solo.
+    if (new URLSearchParams(window.location.search).has('abrir_radio')) {
+        isOpen.value = true;
+        window.history.replaceState(null, '', window.location.pathname);
+    }
 });
 
 onBeforeUnmount(() => {
@@ -846,6 +855,9 @@ onBeforeUnmount(() => {
                             <span class="max-w-52 text-right text-[10px] leading-4 text-arka-text-muted">Se oculta cuando termina la carrera del propietario.</span>
                         </div>
                     </div>
+                    <p v-else class="py-6 text-center text-sm text-arka-text-muted">
+                        Este canal se activa solo cuando su propietario solicita o realiza una carrera.
+                    </p>
                 </div>
             </section>
         </div>

@@ -7,13 +7,12 @@ use App\Models\Cooperative;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
-use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
+use App\Services\Fleet\FleetRosterBuilder;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,7 +22,10 @@ class FleetController extends Controller
     /** Cada cuenta es cliente o conductor, nunca las dos (sección 3.1). */
     private const SINGLE_ROLE_MESSAGE = 'Los conductores no pueden tener una flota propia — cada cuenta es cliente o conductor, no ambas.';
 
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly FleetRosterBuilder $rosterBuilder,
+    ) {}
 
     /**
      * Lista de flotas del cliente (sección 3.2, 9.5-A y multi-flota de la
@@ -70,7 +72,7 @@ class FleetController extends Controller
             // puñado en Multi-flota) — cargar el roster completo de cada una
             // acá mismo no es un problema de escala real, y es justo lo que
             // hace falta para que esta pantalla ya no dependa de show().
-            'fleets' => $fleets->map(fn (Fleet $fleet) => $this->fleetDetails($fleet)),
+            'fleets' => $fleets->map(fn (Fleet $fleet) => $this->rosterBuilder->build($fleet)),
             // null = sin límite de flotas.
             'maxFleets' => $limits['max_fleets'],
             'maxDriversPerFleet' => $limits['max_drivers_per_fleet'],
@@ -145,7 +147,7 @@ class FleetController extends Controller
         $this->authorize('view', $fleet);
 
         $limits = $this->planLimits->forClient($request->user());
-        $details = $this->fleetDetails($fleet);
+        $details = $this->rosterBuilder->build($fleet);
 
         return Inertia::render('Fleet/Show', [
             'fleet' => $details['fleet'],
@@ -153,76 +155,6 @@ class FleetController extends Controller
             'maxDriversPerFleet' => $limits['max_drivers_per_fleet'],
             'memberStats' => $details['memberStats'],
         ]);
-    }
-
-    /**
-     * Roster completo de una flota (conductores activos, invitaciones
-     * pendientes, y las mismas estadísticas por conductor que ya calculaba
-     * searchDrivers() — calificación, carreras completadas, categoría,
-     * clientes activos). Compartido entre index() (una vez por cada flota
-     * del cliente) y show() (respaldo de una sola), para no calcular esto
-     * dos veces.
-     *
-     * @return array{fleet: Fleet, memberStats: Collection}
-     */
-    private function fleetDetails(Fleet $fleet): array
-    {
-        $fleet->load([
-            'activeMembers.driver.driverProfile',
-            // 'inviter' además de 'driver' (pedido explícito del usuario,
-            // "Recomendar mi flota"): en una recomendación quien invitó no es
-            // el dueño de la flota, así que la pantalla necesita mostrar
-            // quién la mandó de verdad (ver FleetRoster.vue).
-            'invitations' => fn ($query) => $query->where('status', 'pending')->with(['driver', 'inviter']),
-        ]);
-
-        $driverIds = $fleet->activeMembers->pluck('driver_user_id');
-
-        $ratings = Review::query()
-            ->whereIn('reviewee_user_id', $driverIds)
-            ->selectRaw('reviewee_user_id, avg(rating) as avg_rating, count(*) as review_count')
-            ->groupBy('reviewee_user_id')
-            ->get()
-            ->keyBy('reviewee_user_id');
-
-        $rideCounts = Ride::query()
-            ->whereIn('driver_user_id', $driverIds)
-            ->where('status', 'completed')
-            ->selectRaw('driver_user_id, count(*) as rides_count')
-            ->groupBy('driver_user_id')
-            ->pluck('rides_count', 'driver_user_id');
-
-        // Pedido explícito del usuario: "cuando busque O TENGA un
-        // conductor" — también en el roster de mi flota, no solo al
-        // buscarlo. En un solo query agrupado, no uno por conductor
-        // (FleetMember::activeClientCount() sirve para un conductor puntual,
-        // acá conviene el conteo por lote).
-        $clientCounts = FleetMember::query()
-            ->whereIn('driver_user_id', $driverIds)
-            ->whereNull('left_at')
-            ->selectRaw('driver_user_id, count(*) as clients_count')
-            ->groupBy('driver_user_id')
-            ->pluck('clients_count', 'driver_user_id');
-
-        // Medalla por puntos (pedido explícito del usuario): reemplaza la
-        // insignia por calificación de antes — ver App\Models\DriverTier.
-        $points = DriverProfile::query()->whereIn('user_id', $driverIds)->pluck('total_points', 'user_id');
-
-        $memberStats = $driverIds->mapWithKeys(function ($driverId) use ($ratings, $rideCounts, $clientCounts, $points) {
-            $rating = $ratings->get($driverId);
-            $averageRating = $rating ? round((float) $rating->avg_rating, 1) : null;
-            $reviewCount = $rating->review_count ?? 0;
-
-            return [$driverId => [
-                'average_rating' => $averageRating,
-                'review_count' => $reviewCount,
-                'rides_count' => $rideCounts->get($driverId, 0),
-                'tier' => DriverTier::forPoints($points->get($driverId, 0))->toBadge(),
-                'active_clients_count' => $clientCounts->get($driverId, 0),
-            ]];
-        });
-
-        return ['fleet' => $fleet, 'memberStats' => $memberStats];
     }
 
     /**

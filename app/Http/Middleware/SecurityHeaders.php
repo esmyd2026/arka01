@@ -49,9 +49,17 @@ class SecurityHeaders
         // navegando es quien está programando en su propia máquina, así que
         // no hay una amenaza real que mitigar acá.
         if (! app()->environment('local')) {
+            // WalkieTalkie.vue carga `${VITE_RADIO_URL}/socket.io/socket.io.js`
+            // con un <script src> de verdad (no un import empaquetado), porque
+            // así siempre coincide con la versión del cliente que sirve
+            // radio-server. Ese origen es distinto del propio (arka01.com:3000
+            // en producción) y necesita estar en script-src o Chrome bloquea la
+            // carga (bug real: "No se pudo cargar el servicio de radio.").
+            $radioOrigin = rtrim((string) config('radio.url'), '/');
+
             $csp = implode('; ', [
                 "default-src 'self'",
-                "script-src 'self' 'unsafe-inline' https://maps.googleapis.com",
+                "script-src 'self' 'unsafe-inline' https://maps.googleapis.com".($radioOrigin !== '' ? " {$radioOrigin}" : ''),
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                 "font-src 'self' data: https://fonts.gstatic.com",
                 // FleetMap usa CARTO Positron/Dark Matter. Sus teselas llegan
