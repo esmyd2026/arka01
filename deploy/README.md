@@ -91,6 +91,14 @@ php artisan storage:link
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
+
+cd radio-server
+cp .env.example .env
+nano .env   # HOST=127.0.0.1, PORT=3000, SOCKET_PATH=/socket.io,
+            # RADIO_SHARED_SECRET = EL MISMO valor que pusiste en el .env de
+            # Laravel (paso anterior), APP_ORIGINS=https://arka01.com,https://www.arka01.com
+npm ci
+cd ..
 ```
 
 ### 6. Nginx
@@ -102,22 +110,24 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### 7. Queue worker y Reverb (Supervisor)
+### 7. Queue worker, Reverb y radio-server (Supervisor)
 
 Los `.conf` ya están armados en esta carpeta:
 
 ```
 sudo cp deploy/supervisor-queue-worker.conf /etc/supervisor/conf.d/arka01-queue-worker.conf
 sudo cp deploy/supervisor-reverb.conf /etc/supervisor/conf.d/arka01-reverb.conf
+sudo cp deploy/supervisor-radio-server.conf /etc/supervisor/conf.d/arka01-radio-server.conf
 sudo supervisorctl reread
 sudo supervisorctl update
-sudo supervisorctl start arka01-queue-worker:* arka01-reverb:*
+sudo supervisorctl start arka01-queue-worker:* arka01-reverb:* arka01-radio-server:*
 ```
 
 | Proceso | Qué pasa si se cae | Cómo mantenerlo vivo |
 |---|---|---|
 | `php artisan queue:work` | Los Jobs (avisos de WhatsApp, notificaciones push, etc.) se acumulan sin procesarse. | `supervisor-queue-worker.conf` |
 | `php artisan reverb:start` | "En vivo" deja de actualizarse — el resto sigue por HTTP normal. | `supervisor-reverb.conf` |
+| `npm start` en `radio-server/` | El botón de radio queda con "No se pudo conectar con la radio." | `supervisor-radio-server.conf` |
 | El scheduler (`drivers:sweep-stale-availability`, `express:generate-rides`) | Los conductores "fantasma" no se desconectan solos, y los Expresos no generan su carrera del día. | Una línea de cron (siguiente paso) |
 
 ### 8. El scheduler (cron)
@@ -155,9 +165,10 @@ el paso 1) — más rápido de restaurar cuando solo hace falta la base.
 sudo supervisorctl status
 ```
 
-Debería mostrar `arka01-queue-worker:00`, `arka01-queue-worker:01` y
-`arka01-reverb` en estado `RUNNING`. Logs en `storage/logs/queue-worker.log`
-y `storage/logs/reverb.log`.
+Debería mostrar `arka01-queue-worker:00`, `arka01-queue-worker:01`,
+`arka01-reverb` y `arka01-radio-server` en estado `RUNNING`. Logs en
+`storage/logs/queue-worker.log`, `storage/logs/reverb.log` y
+`storage/logs/radio-server.log`.
 
 ```
 curl -I https://arka01.com
@@ -175,6 +186,16 @@ real y que `npm run build` se haya corrido DESPUÉS de completarlos (Vite
 los hornea en el JS compilado, un `.env` editado después no alcanza sin
 recompilar).
 
+Lo mismo aplica a la radio (botón flotante, `resources/js/Components/WalkieTalkie.vue`):
+si la consola muestra un error de "Content-Security-Policy" o "Mixed
+Content" al cargar `socket.io.js`, `VITE_RADIO_URL` quedó apuntando directo
+al puerto 3000 en vez de `https://arka01.com` (revisar `.env` +
+`npm run build` + que el bloque `/radio/socket.io/` de
+`deploy/nginx-arka01.conf` esté activo). Si en cambio conecta pero el
+navegador tira "No se pudo conectar con la radio.", el problema suele ser
+`RADIO_SHARED_SECRET` desincronizado entre Laravel y `radio-server/.env`, o
+`APP_ORIGINS` sin el dominio real en `radio-server/.env`.
+
 ## Actualizaciones futuras
 
 Una vez que la app ya está en producción, para llevar cambios nuevos:
@@ -190,8 +211,9 @@ Ver los comentarios `[COMPLETAR]` dentro de `deploy/.env.production.example`
 
 **Recomendable antes de un piloto con gente real:**
 `APP_KEY` fresco (se genera en el paso 5), `DB_PASSWORD` fuerte,
-`REVERB_APP_ID/KEY/SECRET` propios, `MAIL_*` reales (en local apunta a
-mailpit, que no existe en producción), `WHATSAPP_APP_SECRET` (sin esto el
+`REVERB_APP_ID/KEY/SECRET` propios, `RADIO_SHARED_SECRET` propio (y copiado
+tal cual a `radio-server/.env` — sección 7), `MAIL_*` reales (en local apunta
+a mailpit, que no existe en producción), `WHATSAPP_APP_SECRET` (sin esto el
 webhook de WhatsApp acepta mensajes sin validar firma), `GOOGLE_REDIRECT_URI`
 actualizado al dominio real (y en Google Cloud Console).
 

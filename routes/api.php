@@ -41,6 +41,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
         Route::delete('/account', [AccountController::class, 'destroy'])->name('account.destroy');
         Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
+        Route::get('/fleet/{fleet}/search-drivers', [FleetController::class, 'searchDrivers'])
+            ->middleware('throttle:30,1')
+            ->name('fleet.search-drivers');
+        Route::post('/fleet/{fleet}/invitations', [FleetController::class, 'invite'])->name('fleet.invite');
+        Route::delete('/fleet/members/{member}', [FleetController::class, 'removeMember'])->name('fleet.members.destroy');
     });
 });
 

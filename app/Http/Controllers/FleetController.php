@@ -4,11 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
-use App\Models\DriverProfile;
-use App\Models\DriverTier;
 use App\Models\Fleet;
-use App\Models\Review;
-use App\Models\Ride;
+use App\Services\Fleet\FleetDriverSearch;
 use App\Services\Fleet\FleetRosterBuilder;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
@@ -25,6 +22,7 @@ class FleetController extends Controller
     public function __construct(
         private readonly PlanLimits $planLimits,
         private readonly FleetRosterBuilder $rosterBuilder,
+        private readonly FleetDriverSearch $driverSearch,
     ) {}
 
     /**
@@ -178,88 +176,8 @@ class FleetController extends Controller
             'q' => ['required', 'string', 'min:2', 'max:100'],
         ]);
 
-        // Acepta "@usuario" o "usuario" por igual (mismo criterio que
-        // FleetInvitationController::searchFriends()).
-        $term = ltrim($validated['q'], '@');
-        $memberCode = ctype_digit($term) ? (int) $term : null;
+        $results = $this->driverSearch->search($fleet, $validated['q'], $request->user()->id);
 
-        $drivers = DriverProfile::query()
-            ->with('user')
-            // Un cliente no se busca ni se invita a sí mismo, aunque también sea conductor.
-            ->where('user_id', '!=', $request->user()->id)
-            // Pedido explícito del usuario ("pasarme a cliente"): con el
-            // perfil pausado no se lo puede buscar/invitar como conductor —
-            // la cuenta está operando como cliente ahora mismo.
-            ->whereNull('deactivated_at')
-            ->where(function ($query) use ($term, $memberCode) {
-                $query->when($memberCode, fn ($query) => $query->whereHas('user', fn ($query) => $query->where('member_code', $memberCode)))
-                    ->orWhere('invite_code', strtoupper($term))
-                    ->orWhereHas('user', function ($query) use ($term) {
-                        $query->where('name', 'like', '%'.$term.'%')
-                            ->orWhere('last_name', 'like', '%'.$term.'%')
-                            ->orWhere('username', 'like', '%'.$term.'%');
-                    });
-            })
-            ->limit(10)
-            ->get();
-
-        // Le sumamos a cada resultado en qué estado está respecto a esta flota
-        // (todavía no invitado, invitación pendiente, o ya es miembro activo),
-        // para que la pantalla sepa qué botón mostrar sin otra consulta.
-        $activeDriverIds = $fleet->activeMembers()->pluck('driver_user_id');
-        $pendingDriverIds = $fleet->invitations()->where('status', 'pending')->pluck('driver_user_id');
-
-        // Foto, puntaje, cantidad de carreras y categoría (pedido explícito
-        // del usuario) — antes el buscador solo mostraba nombre/teléfono/tarifa,
-        // sin nada que ayude a decidir a quién invitar entre varios resultados.
-        $driverIds = $drivers->pluck('user_id');
-
-        $ratings = Review::query()
-            ->whereIn('reviewee_user_id', $driverIds)
-            ->selectRaw('reviewee_user_id, avg(rating) as avg_rating, count(*) as review_count')
-            ->groupBy('reviewee_user_id')
-            ->get()
-            ->keyBy('reviewee_user_id');
-
-        $rideCounts = Ride::query()
-            ->whereIn('driver_user_id', $driverIds)
-            ->where('status', 'completed')
-            ->selectRaw('driver_user_id, count(*) as rides_count')
-            ->groupBy('driver_user_id')
-            ->pluck('rides_count', 'driver_user_id');
-
-        $results = $drivers->map(function (DriverProfile $driver) use ($activeDriverIds, $pendingDriverIds, $ratings, $rideCounts) {
-            $rating = $ratings->get($driver->user_id);
-            $averageRating = $rating ? round((float) $rating->avg_rating, 1) : null;
-            $reviewCount = $rating->review_count ?? 0;
-
-            return [
-                'user_id' => $driver->user_id,
-                'name' => $driver->user->full_name,
-                'avatar_url' => $driver->user->avatar_url,
-                // Pedido explícito del usuario ("manejar la privacidad"):
-                // sin teléfono acá — foto, código y calificación ya alcanzan
-                // para distinguir entre varios resultados con nombre parecido.
-                'username' => $driver->user->username,
-                'member_code' => $driver->user->member_code,
-                'invite_code' => $driver->invite_code,
-                'rate_per_km' => $driver->rate_per_km,
-                'average_rating' => $averageRating,
-                'review_count' => $reviewCount,
-                'tier' => DriverTier::forPoints($driver->total_points)->toBadge(),
-                'rides_count' => $rideCounts->get($driver->user_id, 0),
-                // Pedido explícito del usuario: "saber cuántos clientes
-                // tiene ese conductor" al buscarlo — para decidir si sumarse
-                // a alguien que ya está muy repartido entre varias flotas.
-                'active_clients_count' => $driver->activeClientCount(),
-                'status' => match (true) {
-                    $activeDriverIds->contains($driver->user_id) => 'member',
-                    $pendingDriverIds->contains($driver->user_id) => 'pending',
-                    default => 'not_invited',
-                },
-            ];
-        });
-
-        return response()->json(['drivers' => $results->values()]);
+        return response()->json(['drivers' => $results]);
     }
 }

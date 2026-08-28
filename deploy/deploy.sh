@@ -19,6 +19,7 @@ echo "== Dependencias =="
 composer install --no-dev --optimize-autoloader
 npm ci
 npm run build
+(cd radio-server && npm ci)
 
 echo "== Base de datos =="
 php artisan migrate --force
@@ -32,7 +33,7 @@ echo "== Reiniciando procesos =="
 # Recarga PHP-FPM (invalida opcache.validate_timestamps=0, si no seguiría
 # sirviendo el código viejo desde memoria) y los procesos de fondo.
 sudo systemctl reload php8.4-fpm
-sudo supervisorctl restart arka01-queue-worker:* arka01-reverb:*
+sudo supervisorctl restart arka01-queue-worker:* arka01-reverb:* arka01-radio-server:*
 
 echo "== Saliendo de mantenimiento =="
 php artisan up
