@@ -32,7 +32,7 @@ class RadioSessionTest extends TestCase
 
         $this->getJson(route('radio.status'))->assertUnauthorized();
         $this->postJson(route('radio.session'))->assertUnauthorized();
-        $this->get(route('radio.invitation.show', $channel->share_code), ['X-Inertia' => 'true'])
+        $this->get(route('radio.invitation.show', $channel->share_code))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Radio/Invitation')

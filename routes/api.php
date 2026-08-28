@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ConfigController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\FleetController;
+use App\Http\Controllers\Api\V1\RideController;
 use App\Http\Controllers\Api\V1\RideRequestController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Http\Request;
@@ -49,17 +50,36 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/fleet/{fleet}/invitations', [FleetController::class, 'invite'])->name('fleet.invite');
         Route::delete('/fleet/members/{member}', [FleetController::class, 'removeMember'])->name('fleet.members.destroy');
 
+        // /ride-requests/incoming va ANTES de /ride-requests/{rideRequest}
+        // (mismo cuidado que la web con /carreras/indicadores vs.
+        // /carreras/{ride}): si no, "incoming" se interpreta como el id.
+        Route::get('/ride-requests/incoming', [RideRequestController::class, 'incoming'])->name('ride-requests.incoming');
         Route::get('/ride-requests', [RideRequestController::class, 'index'])->name('ride-requests.index');
         Route::post('/ride-requests', [RideRequestController::class, 'store'])
             ->middleware('throttle:10,1,api.ride-requests.store')
             ->name('ride-requests.store');
         Route::get('/ride-requests/{rideRequest}', [RideRequestController::class, 'show'])->name('ride-requests.show');
+        Route::post('/ride-requests/{rideRequest}/accept', [RideRequestController::class, 'accept'])->name('ride-requests.accept');
+        Route::post('/ride-requests/{rideRequest}/reject', [RideRequestController::class, 'reject'])->name('ride-requests.reject');
         Route::post('/ride-requests/{rideRequest}/cancel', [RideRequestController::class, 'cancel'])->name('ride-requests.cancel');
 
         Route::get('/driver/status', [DriverController::class, 'status'])->name('driver.status');
         Route::post('/driver/location', [DriverController::class, 'updateLocation'])
             ->middleware('throttle:20,1,api.driver.location')
             ->name('driver.location');
+
+        // /rides/active va ANTES de /rides/{ride}, mismo cuidado de orden.
+        Route::get('/rides/active', [RideController::class, 'active'])->name('rides.active');
+        Route::get('/rides/{ride}', [RideController::class, 'show'])->name('rides.show');
+        Route::post('/rides/{ride}/start', [RideController::class, 'start'])->name('rides.start');
+        Route::post('/rides/{ride}/heading-to-passenger', [RideController::class, 'headingToPassenger'])->name('rides.heading-to-passenger');
+        Route::post('/rides/{ride}/arrived', [RideController::class, 'arrived'])->name('rides.arrived');
+        Route::post('/rides/{ride}/picked-up', [RideController::class, 'pickedUp'])->name('rides.picked-up');
+        Route::post('/rides/{ride}/complete', [RideController::class, 'complete'])->name('rides.complete');
+        Route::post('/rides/{ride}/cancel', [RideController::class, 'cancel'])->name('rides.cancel');
+        Route::post('/rides/{ride}/location', [RideController::class, 'updateLocation'])
+            ->middleware('throttle:30,1,api.rides.location')
+            ->name('rides.location');
     });
 });
 

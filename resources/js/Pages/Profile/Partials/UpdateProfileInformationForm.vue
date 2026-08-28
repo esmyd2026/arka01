@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
@@ -100,19 +101,94 @@ function onAvatarChange(event) {
 // mismo componente (el navegador pinta el panel desplegable de un <select>
 // con su propio tema del sistema operativo, no con las clases de Tailwind).
 const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id, label: city.name })));
+
+// Pedido explícito del usuario: una vez guardados los datos personales, no
+// mostrarlos más como inputs vacíos esperando que los llenen — se ven como
+// texto ya confirmado, con un botón "Editar" que recién ahí abre el
+// formulario de siempre. Arranca en modo vista solo si YA hay algo cargado
+// (nombre y correo siempre existen desde el registro); una cuenta a medio
+// completar (ej. recién creada por Google) sigue arrancando directo en el
+// formulario, como antes.
+const editing = ref(!(user.name && user.email));
+
+const cityName = computed(() => props.cities.find((city) => city.id === user.city_id)?.name ?? null);
+
+function formattedBirthDate(value) {
+    if (!value) return null;
+    // Se arma a mano en vez de `new Date(value)` para no arrastrar un
+    // corrimiento de zona horaria (un date-only "YYYY-MM-DD" se interpreta
+    // como UTC medianoche, que en Ecuador cae al día anterior).
+    const [year, month, day] = value.split('-');
+
+    return `${day}/${month}/${year}`;
+}
+
+function startEditing() {
+    editing.value = true;
+}
+
+function cancelEditing() {
+    form.reset();
+    form.clearErrors();
+    avatarPreview.value = null;
+    avatarFileName.value = '';
+    avatarSizeError.value = null;
+    editing.value = false;
+}
+
+function submit() {
+    form.patch(route('profile.update'), {
+        onSuccess: () => { editing.value = false; },
+    });
+}
 </script>
 
 <template>
     <section>
-        <header>
-            <h2 class="text-lg font-medium text-arka-text">Información del perfil</h2>
-
-            <p class="mt-1 text-sm text-arka-text-muted">
-                Actualice sus datos personales y de contacto.
-            </p>
+        <header class="flex items-start justify-between gap-3">
+            <div>
+                <h2 class="text-lg font-medium text-arka-text">Información del perfil</h2>
+                <p class="mt-1 text-sm text-arka-text-muted">
+                    {{ editing ? 'Actualice sus datos personales y de contacto.' : 'Sus datos personales y de contacto.' }}
+                </p>
+            </div>
+            <SecondaryButton v-if="!editing" type="button" @click="startEditing">Editar</SecondaryButton>
         </header>
 
-        <form @submit.prevent="form.patch(route('profile.update'))" class="mt-6 space-y-6">
+        <!-- Pedido explícito del usuario: una vez guardados los datos, se
+             ven como texto (no como inputs vacíos esperando que los
+             llenen) hasta que se toque "Editar". -->
+        <dl v-if="!editing" class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="sm:col-span-2 flex items-center gap-3">
+                <UserAvatar :user="user" size-class="h-16 w-16 shrink-0 text-lg" />
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-arka-text-muted">Nombre</dt>
+                <dd class="mt-1 text-sm text-arka-text">{{ user.name }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-arka-text-muted">Apellido</dt>
+                <dd class="mt-1 text-sm" :class="user.last_name ? 'text-arka-text' : 'text-arka-text-muted italic'">{{ user.last_name || 'Sin especificar' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-arka-text-muted">Correo electrónico</dt>
+                <dd class="mt-1 truncate text-sm text-arka-text">{{ user.email }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-arka-text-muted">Teléfono</dt>
+                <dd class="mt-1 text-sm text-arka-text">{{ user.phone }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-arka-text-muted">Fecha de nacimiento</dt>
+                <dd class="mt-1 text-sm" :class="user.birth_date ? 'text-arka-text' : 'text-arka-text-muted italic'">{{ formattedBirthDate(user.birth_date) || 'Sin especificar' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-arka-text-muted">Ciudad donde vive</dt>
+                <dd class="mt-1 text-sm" :class="cityName ? 'text-arka-text' : 'text-arka-text-muted italic'">{{ cityName || 'Sin especificar' }}</dd>
+            </div>
+        </dl>
+
+        <form v-else @submit.prevent="submit" class="mt-6 space-y-6">
             <div>
                 <InputLabel for="avatar" value="Foto de perfil" />
                 <div class="mt-2 flex min-w-0 items-center gap-3">
@@ -274,29 +350,9 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
                 <InputError class="mt-2" :message="form.errors.city_id" />
             </div>
 
-            <div v-if="mustVerifyEmail && user.email_verified_at === null">
-                <p class="text-sm mt-2 text-arka-text">
-                    Su correo todavía no está verificado.
-                    <Link
-                        :href="route('verification.send')"
-                        method="post"
-                        as="button"
-                        class="underline text-sm text-arka-text-muted hover:text-arka-text rounded-arka focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-arka-card focus:ring-arka-primary"
-                    >
-                        Haga clic acá para reenviar el correo de verificación.
-                    </Link>
-                </p>
-
-                <div
-                    v-show="status === 'verification-link-sent'"
-                    class="mt-2 font-medium text-sm text-arka-primary-bright"
-                >
-                    Le enviamos un nuevo enlace de verificación a su correo.
-                </div>
-            </div>
-
             <div class="flex items-center gap-4">
                 <PrimaryButton :disabled="form.processing">Guardar</PrimaryButton>
+                <SecondaryButton type="button" @click="cancelEditing">Cancelar</SecondaryButton>
 
                 <Transition
                     enter-active-class="transition ease-in-out"
@@ -308,5 +364,26 @@ const cityOptions = computed(() => props.cities.map((city) => ({ value: city.id,
                 </Transition>
             </div>
         </form>
+
+        <div v-if="mustVerifyEmail && user.email_verified_at === null" class="mt-6">
+            <p class="text-sm text-arka-text">
+                Su correo todavía no está verificado.
+                <Link
+                    :href="route('verification.send')"
+                    method="post"
+                    as="button"
+                    class="underline text-sm text-arka-text-muted hover:text-arka-text rounded-arka focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-arka-card focus:ring-arka-primary"
+                >
+                    Haga clic acá para reenviar el correo de verificación.
+                </Link>
+            </p>
+
+            <div
+                v-show="status === 'verification-link-sent'"
+                class="mt-2 font-medium text-sm text-arka-primary-bright"
+            >
+                Le enviamos un nuevo enlace de verificación a su correo.
+            </div>
+        </div>
     </section>
 </template>

@@ -31,6 +31,8 @@ const statusEndpoint = String(import.meta.env.VITE_RADIO_STATUS_ENDPOINT || '/ra
 const audioPlaybackUnsupported = !window.MediaSource?.isTypeSupported?.('audio/webm;codecs=opus');
 
 const isOpen = ref(false);
+const showListeners = ref(false);
+const showShareOptions = ref(false);
 const config = ref(null);
 const activeChannels = ref([]);
 const onlineParticipants = ref([]);
@@ -45,6 +47,8 @@ const microphoneActive = ref(false);
 const microphonePermissionBlocked = ref(false);
 const requestingMicrophonePermission = ref(false);
 const playbackBlocked = ref(false);
+const reactivatingAudio = ref(false);
+const playbackError = ref('');
 const errorMessage = ref('');
 
 let socket = null;
@@ -57,6 +61,7 @@ let receiverMediaSource = null;
 let receiverSourceBuffer = null;
 let receiverQueue = [];
 let receiverCleanupTimer = null;
+let playbackAudioContext = null;
 let participantNoticeTimer = null;
 let availabilityTimer = null;
 let stopInertiaListener = null;
@@ -139,10 +144,12 @@ async function connectRadio({ userGesture = false } = {}) {
     // elemento pueda seguir sonando más tarde cuando sí lleguen los chunks.
     // Bug real reportado por el usuario: "todo funciona pero no llega la voz".
     if (userGesture) {
-        prepareReceiver();
-        receiverAudio?.play().then(() => {
+        unlockAudioPlayback().then(() => {
             playbackBlocked.value = false;
+            playbackError.value = '';
         }).catch(() => {
+            // Si el desbloqueo preventivo falla, el aviso ofrece un segundo
+            // gesto explícito y una explicación visible.
             playbackBlocked.value = true;
         });
     }
@@ -515,13 +522,46 @@ function reloadToApplyMicrophonePermission() {
 // si el navegador volvió a suspender el audio más tarde (p. ej. tras un
 // rato en segundo plano). Mismo truco: .play() llamado directo dentro del
 // clic cuenta como gesto del usuario para el navegador.
-function retryPlayback() {
-    prepareReceiver();
-    receiverAudio?.play().then(() => {
+async function unlockAudioPlayback() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error('Este navegador no permite reactivar el audio desde la página.');
+
+    playbackAudioContext ??= new AudioContextClass();
+    if (playbackAudioContext.state === 'suspended') await playbackAudioContext.resume();
+    if (playbackAudioContext.state !== 'running') throw new Error('El sistema todavía mantiene bloqueado el sonido.');
+
+    // Reproducimos una muestra silenciosa dentro del gesto del usuario. Esto
+    // desbloquea el motor sin llamar play() sobre un MediaSource vacío, cuya
+    // promesa puede quedar pendiente para siempre en Chrome.
+    const source = playbackAudioContext.createBufferSource();
+    source.buffer = playbackAudioContext.createBuffer(1, 1, playbackAudioContext.sampleRate);
+    source.connect(playbackAudioContext.destination);
+    source.start(0);
+}
+
+async function retryPlayback() {
+    if (reactivatingAudio.value) return;
+
+    reactivatingAudio.value = true;
+    playbackError.value = '';
+
+    try {
+        await unlockAudioPlayback();
+
+        // Solo llamamos play() si ya existe audio reproducible. Cuando aún no
+        // habla nadie, el desbloqueo anterior es suficiente y el aviso puede
+        // cerrarse inmediatamente.
+        if (receiverAudio && receiverAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            await receiverAudio.play();
+        }
+
         playbackBlocked.value = false;
-    }).catch(() => {
+    } catch (error) {
         playbackBlocked.value = true;
-    });
+        playbackError.value = error?.message || 'No se pudo reactivar el sonido. Revise el volumen y los permisos del sitio.';
+    } finally {
+        reactivatingAudio.value = false;
+    }
 }
 
 function stopCapture() {
@@ -580,6 +620,7 @@ function receiveAudioChunk(payload) {
     appendNextReceiverChunk();
     receiverAudio.play().then(() => {
         playbackBlocked.value = false;
+        playbackError.value = '';
     }).catch(() => {
         playbackBlocked.value = true;
     });
@@ -695,6 +736,8 @@ onBeforeUnmount(() => {
     window.clearTimeout(receiverCleanupTimer);
     window.clearTimeout(participantNoticeTimer);
     window.clearTimeout(availabilityTimer);
+    playbackAudioContext?.close();
+    playbackAudioContext = null;
     disconnectRadio();
 });
 </script>
@@ -785,71 +828,47 @@ onBeforeUnmount(() => {
                         Este navegador no puede reproducir el audio de la radio. Probá desde Chrome (Android o Windows) o desde una versión más reciente de tu navegador.
                     </p>
                     <div v-if="config" class="space-y-4">
-                        <div v-if="activeChannels.length > 1" class="space-y-2">
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-arka-text-muted">Canales activos</p>
-                            <div class="grid gap-2">
-                                <button
-                                    v-for="channel in activeChannels"
-                                    :key="channel.public_id"
-                                    type="button"
-                                    class="flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm"
-                                    :class="channel.public_id === config.publicId ? 'border-arka-primary bg-arka-primary/10 text-arka-text' : 'border-arka-text-muted/15 bg-arka-base text-arka-text-muted'"
-                                    @click="selectChannel(channel)"
-                                >
-                                    <span class="truncate font-semibold">{{ channel.label }}</span>
-                                    <span class="ml-3 shrink-0 text-xs">{{ channel.owner.name }}</span>
+                        <label v-if="activeChannels.length > 1" class="block">
+                            <span class="mb-1.5 block text-xs font-medium text-arka-text-muted">Canal activo</span>
+                            <select
+                                :value="config.publicId"
+                                class="w-full rounded-xl border border-arka-text-muted/20 bg-arka-base px-3 py-2.5 text-sm text-arka-text"
+                                @change="selectChannel(activeChannels.find((channel) => channel.public_id === $event.target.value))"
+                            >
+                                <option v-for="channel in activeChannels" :key="channel.public_id" :value="channel.public_id">{{ channel.label }}</option>
+                            </select>
+                        </label>
+
+                        <div class="rounded-2xl border border-arka-primary/20 bg-arka-primary/5 p-4">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="truncate font-semibold text-arka-text">{{ config.channelName }}</p>
+                                    <p class="mt-1 text-xs text-arka-text-muted">{{ config.isOwner ? 'Tu círculo de seguridad' : `Canal de ${config.owner.name}` }}</p>
+                                </div>
+                                <span class="shrink-0 rounded-full bg-arka-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-arka-primary">{{ ridePhase === 'searching' ? 'Solicitando' : 'En carrera' }}</span>
+                            </div>
+                            <div class="mt-3 flex items-center justify-between border-t border-arka-primary/10 pt-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="relative flex h-2.5 w-2.5">
+                                        <span v-if="isMeSpeaking" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-arka-primary opacity-60"></span>
+                                        <span class="relative inline-flex h-2.5 w-2.5 rounded-full" :class="connected ? 'bg-arka-primary' : 'bg-arka-text-muted'"></span>
+                                    </span>
+                                    <p class="text-sm font-semibold text-arka-text">{{ statusLabel }}</p>
+                                </div>
+                                <button type="button" class="text-xs font-semibold text-arka-primary" @click="showListeners = !showListeners">
+                                    {{ connected ? `${onlineParticipants.length} conectado(s)` : 'Sin conectar' }}
                                 </button>
                             </div>
                         </div>
 
-                        <div class="flex items-start justify-between gap-3 rounded-2xl border border-arka-text-muted/10 bg-arka-base/70 p-4">
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-arka-primary">{{ config.isOwner ? 'Mi canal principal' : 'Canal compartido conmigo' }}</p>
-                                <p class="mt-1 truncate font-semibold text-arka-text">{{ config.channelName }}</p>
-                                <p class="mt-1 text-xs text-arka-text-muted">{{ config.owner.name }} · {{ config.owner.role }}</p>
-                            </div>
-                            <span class="shrink-0 rounded-full bg-arka-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-arka-primary">{{ ridePhase === 'searching' ? 'Solicitando' : 'En carrera' }}</span>
-                        </div>
-
-                        <div class="rounded-2xl border border-arka-text-muted/10 bg-arka-base/60 p-4">
-                            <div class="flex items-center justify-between gap-3">
-                                <p class="text-sm font-semibold text-arka-text">Escuchando ahora</p>
-                                <span class="rounded-full bg-arka-primary/10 px-2.5 py-1 text-xs font-bold text-arka-primary">{{ onlineParticipants.length }}</span>
-                            </div>
-                            <p v-if="!connected" class="mt-2 text-xs text-arka-text-muted">Active la radio para ver quién está conectado.</p>
-                            <p v-else-if="onlineParticipants.length === 1" class="mt-2 text-xs text-arka-text-muted">Solo usted está conectado por ahora.</p>
-                            <div v-else class="mt-3 flex flex-wrap gap-2">
-                                <span v-for="participant in onlineParticipants" :key="participant.id" class="rounded-full border border-arka-text-muted/15 px-2.5 py-1 text-xs text-arka-text-muted">
-                                    {{ participant.name }}<template v-if="participant.id === userPublicId"> · tú</template>
-                                </span>
-                            </div>
-                            <p class="mt-3 text-[11px] text-arka-text-muted">{{ config.memberCount }} integrante(s) autorizado(s) en el círculo.</p>
-                        </div>
-
-                        <div v-if="config.isOwner && config.inviteUrl" class="grid grid-cols-2 gap-2">
-                            <button type="button" class="min-h-11 rounded-xl border border-arka-primary/40 px-3 text-xs font-semibold text-arka-primary" @click="shareChannelByWhatsApp">Compartir por WhatsApp</button>
-                            <button type="button" class="min-h-11 rounded-xl border border-arka-text-muted/20 px-3 text-xs font-semibold text-arka-text" @click="shareChannel">Compartir por otra red</button>
-                        </div>
-
-                        <div class="flex items-center gap-3 rounded-2xl border px-4 py-3" :class="isMeSpeaking ? 'border-arka-primary/40 bg-arka-primary/10' : channelBusy ? 'border-arka-text-muted/20 bg-arka-base' : 'border-arka-primary/20 bg-arka-primary/5'">
-                            <span class="relative flex h-3 w-3 shrink-0">
-                                <span v-if="isMeSpeaking" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-arka-primary opacity-60"></span>
-                                <span class="relative inline-flex h-3 w-3 rounded-full" :class="isMeSpeaking ? 'bg-arka-primary' : channelBusy ? 'bg-arka-text-muted' : connected ? 'bg-arka-primary' : 'bg-arka-danger'"></span>
-                            </span>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-semibold text-arka-text">{{ statusLabel }}</p>
-                                <p class="text-xs text-arka-text-muted">{{ connected ? 'Audio en vivo · sin grabaciones' : 'Entre al canal para escuchar y hablar' }}</p>
-                            </div>
-                        </div>
-
-                        <button v-if="!connected" type="button" class="min-h-12 w-full rounded-xl bg-arka-primary px-4 text-sm font-bold text-arka-base disabled:opacity-60" :disabled="connectionState === 'connecting'" @click="connectRadio({ userGesture: true })">
-                            {{ connectionState === 'connecting' ? 'Conectando…' : 'Activar radio' }}
+                        <button v-if="!connected" type="button" class="min-h-14 w-full rounded-xl bg-arka-primary px-4 text-sm font-bold text-arka-base shadow-lg disabled:opacity-60" :disabled="connectionState === 'connecting'" @click="connectRadio({ userGesture: true })">
+                            {{ connectionState === 'connecting' ? 'Conectando…' : 'Entrar y escuchar' }}
                         </button>
 
                         <div v-else class="flex flex-col items-center py-1">
                             <button
                                 type="button"
-                                class="grid h-44 w-44 touch-none select-none place-items-center rounded-full border-4 text-center shadow-2xl transition duration-100 focus:outline-none focus:ring-4 focus:ring-arka-primary/25"
+                                class="grid h-40 w-40 touch-none select-none place-items-center rounded-full border-4 text-center shadow-xl transition duration-100 focus:outline-none focus:ring-4 focus:ring-arka-primary/25"
                                 :class="isMeSpeaking ? 'scale-[0.97] border-arka-primary-bright bg-arka-primary text-arka-base' : channelBusy ? 'cursor-not-allowed border-arka-text-muted/20 bg-arka-base text-arka-text-muted' : 'border-arka-primary/35 bg-arka-primary/10 text-arka-primary active:scale-[0.97]'"
                                 :disabled="channelBusy"
                                 :aria-label="buttonLabel"
@@ -867,12 +886,42 @@ onBeforeUnmount(() => {
                                     <span class="mt-3 block text-xs font-black leading-4 tracking-wide">{{ buttonLabel }}</span>
                                 </span>
                             </button>
-                            <p class="mt-3 text-center text-xs text-arka-text-muted">Mantenga pulsado mientras habla. Al soltar, el canal queda libre.</p>
+                            <p class="mt-3 text-center text-xs text-arka-text-muted">Mantén presionado para hablar · Suelta para escuchar</p>
                         </div>
 
-                        <div v-if="playbackBlocked" class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/20 bg-arka-warning/10 px-3 py-2 text-sm text-arka-warning">
-                            <span>El navegador bloqueó el audio automático.</span>
-                            <button type="button" class="shrink-0 rounded-lg border border-arka-warning/40 px-3 py-1.5 text-xs font-bold" @click="retryPlayback">Reactivar audio</button>
+                        <div v-if="showListeners" class="rounded-xl border border-arka-text-muted/15 bg-arka-base/60 p-3">
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm font-semibold text-arka-text">Personas conectadas</p>
+                                <button type="button" class="text-xs text-arka-text-muted" @click="showListeners = false">Ocultar</button>
+                            </div>
+                            <p v-if="!connected" class="mt-2 text-xs text-arka-text-muted">Entra al canal para consultar la presencia.</p>
+                            <p v-else-if="onlineParticipants.length === 1" class="mt-2 text-xs text-arka-text-muted">Solo tú estás conectado por ahora.</p>
+                            <div v-else class="mt-3 grid gap-2">
+                                <div v-for="participant in onlineParticipants" :key="participant.id" class="flex items-center gap-2 text-sm text-arka-text-muted">
+                                    <span class="h-2 w-2 rounded-full bg-arka-primary"></span>
+                                    <span>{{ participant.name }}<template v-if="participant.id === userPublicId"> · tú</template></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="config.isOwner && config.inviteUrl" class="border-t border-arka-text-muted/10 pt-3">
+                            <button type="button" class="flex min-h-11 w-full items-center justify-between text-sm font-semibold text-arka-primary" @click="showShareOptions = !showShareOptions">
+                                <span>Invitar a mi círculo</span><span aria-hidden="true">{{ showShareOptions ? '−' : '+' }}</span>
+                            </button>
+                            <div v-if="showShareOptions" class="grid grid-cols-2 gap-2 pt-2">
+                                <button type="button" class="min-h-11 rounded-xl border border-arka-primary/40 px-3 text-xs font-semibold text-arka-primary" @click="shareChannelByWhatsApp">WhatsApp</button>
+                                <button type="button" class="min-h-11 rounded-xl border border-arka-text-muted/20 px-3 text-xs font-semibold text-arka-text" @click="shareChannel">Otra aplicación</button>
+                            </div>
+                        </div>
+
+                        <div v-if="playbackBlocked" class="rounded-xl border border-arka-warning/20 bg-arka-warning/10 px-3 py-2 text-sm text-arka-warning">
+                            <div class="flex items-center justify-between gap-3">
+                                <span>El navegador bloqueó el audio automático.</span>
+                                <button type="button" class="shrink-0 rounded-lg border border-arka-warning/40 px-3 py-1.5 text-xs font-bold disabled:opacity-60" :disabled="reactivatingAudio" @click="retryPlayback">
+                                    {{ reactivatingAudio ? 'Activando…' : 'Reactivar audio' }}
+                                </button>
+                            </div>
+                            <p v-if="playbackError" class="mt-2 border-t border-arka-warning/20 pt-2 text-xs leading-4">{{ playbackError }}</p>
                         </div>
                         <div v-if="microphonePermissionBlocked" class="rounded-xl border border-arka-danger/25 bg-arka-danger/10 p-3 text-sm text-arka-danger">
                             <p>El micrófono está bloqueado para este sitio.</p>

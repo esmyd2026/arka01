@@ -54,16 +54,27 @@ class RegisterUser
         $hasCoordinates = isset($data['lat'], $data['lng']);
         $city = $hasCoordinates ? $this->nearestCity((float) $data['lat'], (float) $data['lng']) : null;
 
-        $fullName = filled($data['first_name'] ?? null)
-            ? Str::squish($data['first_name'].' '.$data['last_name'])
-            : Str::squish($data['name']);
+        // Bug real reportado por el usuario ("luego que el cliente va a su
+        // perfil aparecen en el nombre los dos"): esto juntaba nombre y
+        // apellido en un solo `name` y nunca guardaba `last_name` —
+        // User::$fullName ya combina ambas columnas para mostrar (ver
+        // User::getFullNameAttribute()), así que acá tienen que quedar
+        // separadas de verdad. El fallback a `name` sin separar sigue
+        // existiendo solo para el formulario viejo (clientes con el bundle
+        // cacheado que todavía manda un único campo, ver el comentario en
+        // RegisteredUserController::store()).
+        $name = filled($data['first_name'] ?? null) ? Str::squish($data['first_name']) : Str::squish($data['name']);
+        $lastName = filled($data['first_name'] ?? null) && filled($data['last_name'] ?? null)
+            ? Str::squish($data['last_name'])
+            : null;
 
         $referrer = isset($data['ref'])
             ? User::query()->where('public_id', $data['ref'])->first()
             : null;
 
         $user = User::create([
-            'name' => $fullName,
+            'name' => $name,
+            'last_name' => $lastName,
             'email' => $data['email'],
             'phone' => $data['phone'],
             'password' => Hash::make($data['password']),

@@ -1,36 +1,37 @@
-# Radio temporal de carrera de Arka01
+# Canal de seguridad temporal de Arka01
 
-La radio web funciona como una ayuda durante una solicitud o carrera y no
-como un sistema permanente de canales privados. La sala es creada por el
-servidor, pertenece a una sola carrera y admite únicamente al cliente y al
-conductor asignado.
+Cada cliente o conductor tiene un canal principal persistente para su círculo:
+familiares y contactos de seguridad en el caso del cliente; compañeros o
+miembros de su cooperativa en el caso del conductor. La membresía se conserva,
+pero la transmisión solo se habilita durante una solicitud o carrera del dueño.
 
 ## Cuándo aparece
 
 - Cliente: desde que envía una solicitud inmediata con origen y coordenadas.
 - Conductor: después de aceptar la solicitud.
 - Carreras programadas: para ambos cuando la carrera pasa a `in_progress`.
-- Cancelación o finalización: se desconecta y desaparece automáticamente.
+- Integrantes invitados: ven el canal mientras la carrera del propietario esté activa.
+- Cancelación o finalización: el canal se desconecta y desaparece automáticamente.
 
-El botón no abre un selector. La primera pulsación activa el audio de la radio
-autorizada y, una vez conectado, el botón grande funciona directamente como
-Push-to-Talk: se mantiene presionado para hablar y se suelta para liberar el
-turno.
+La primera pulsación entra al canal para escuchar. Una vez conectado, el botón
+grande funciona directamente como Push-to-Talk. La lista de oyentes y las
+opciones para invitar están plegadas para mantener una interfaz simple. Si
+coinciden varios canales activos, aparece un selector compacto.
 
 ## Seguridad
 
-`RideRadioAccess` decide en Laravel si la persona tiene acceso. El navegador
-no envía un identificador de sala en `POST /radio/session`; por tanto, no puede
-inventar ni sustituir el canal.
+`RideRadioAccess` decide en Laravel si la persona es propietaria o integrante
+del canal y si el dueño está en una carrera. El navegador puede pedir uno de
+los `public_id` que recibió, pero no inventar ni sustituir una sala.
 
-La sala se deriva del ID interno de la solicitud mediante HMAC. Ni ese ID ni
-el secreto se exponen. El token firmado incluye `public_id`, rol, sala y
-caducidad. Node valida la firma, la expiración y que todos los eventos usen la
-sala firmada.
+La sala se deriva del UUID del canal mediante HMAC. Los enlaces de invitación
+usan un código aleatorio revocable y nunca un ID incremental. El token firmado
+incluye `public_id`, rol, sala y caducidad. Node valida la firma, la expiración
+y que todos los eventos usen la sala firmada.
 
 No se almacena audio en disco, base de datos ni logs. Socket.IO solo retransmite
-fragmentos en memoria al otro participante. Solo un socket posee el turno de
-micrófono a la vez.
+fragmentos en memoria a los integrantes conectados. Solo un socket posee el
+turno de micrófono a la vez.
 
 ## Flujo técnico
 
@@ -55,7 +56,7 @@ La disponibilidad se reconcilia al navegar, volver a enfocar la aplicación y
 periódicamente. Esto hace que el acceso desaparezca aunque la carrera cambie
 de estado desde otro dispositivo.
 
-Cuando el segundo participante se conecta, quien ya escucha recibe un aviso
+Cuando otro integrante se conecta, quien ya escucha recibe un aviso
 dentro de la app, un sonido y, si el navegador tiene permiso y está en segundo
 plano, una notificación del sistema. El mensaje identifica a la persona sin
 mostrar nombres ni IDs técnicos de canales.
@@ -63,6 +64,9 @@ mostrar nombres ni IDs técnicos de canales.
 ## Archivos principales
 
 - `app/Services/RideRadioAccess.php`: autorización y contexto de la carrera.
+- `app/Models/RadioChannel.php`: canal principal y enlace revocable.
+- `app/Models/RadioChannelMember.php`: integrantes autorizados.
+- `app/Http/Controllers/RadioChannelController.php`: invitaciones y membresía.
 - `app/Services/RadioAccessToken.php`: sala opaca y token HMAC.
 - `app/Http/Controllers/RadioSessionController.php`: estado y sesión.
 - `resources/js/Components/WalkieTalkie.vue`: estado, PTT, audio y avisos.

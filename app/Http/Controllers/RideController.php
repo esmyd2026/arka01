@@ -2,14 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\DriverLocationUpdated;
-use App\Events\RideArrived;
-use App\Events\RideCancelled;
 use App\Events\RideCompleted;
-use App\Events\RidePickedUp;
 use App\Events\RideRescheduleProposed;
 use App\Events\RideRescheduleResponded;
-use App\Events\RideStarted;
 use App\Models\DriverProfile;
 use App\Models\FleetMember;
 use App\Models\RatingReason;
@@ -17,14 +12,11 @@ use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\RideStop;
-use App\Notifications\RideArrivedPushNotification;
-use App\Notifications\RideCancelledPushNotification;
 use App\Notifications\RideCompletedPushNotification;
-use App\Notifications\RidePickedUpPushNotification;
 use App\Notifications\RideReschedulePushNotification;
 use App\Notifications\RideRescheduleResponsePushNotification;
-use App\Notifications\RideStartedPushNotification;
-use App\Services\Haversine;
+use App\Services\Ride\IncomingRideRequestFinder;
+use App\Services\Ride\RideLifecycle;
 use App\Services\RideDispatchAdvancer;
 use App\Services\WhatsAppFreeformSender;
 use Illuminate\Http\JsonResponse;
@@ -32,7 +24,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -41,43 +32,10 @@ use Inertia\Response;
 
 class RideController extends Controller
 {
-    /**
-     * Motivos de cancelación (pedido explícito del usuario: "que agregue un
-     * motivo") — lista fija de código, no un catálogo administrable como
-     * `RatingReason`: acá alcanza con unas pocas opciones reales por lado,
-     * sin necesidad de mantenimiento desde el panel admin.
-     */
-    private const CLIENT_CANCEL_REASONS = [
-        'Cambié de planes',
-        'Encontré otro medio de transporte',
-        'Pedí la carrera por error',
-        'El conductor demoró demasiado',
-        'Otro motivo',
-    ];
-
-    private const DRIVER_CANCEL_REASONS = [
-        'Imprevisto personal',
-        'Problema con el vehículo',
-        'No voy a poder llegar a tiempo',
-        'El cliente no responde o no aparece',
-        'Motivo de seguridad',
-        'Otro motivo',
-    ];
-
-    /**
-     * Pedido explícito del usuario: si el conductor completa la carrera
-     * estando lejos del destino, tiene que decir por qué — misma lógica que
-     * CLIENT_CANCEL_REASONS/DRIVER_CANCEL_REASONS de arriba (lista fija en
-     * código, no un catálogo administrable: alcanza con unas pocas opciones
-     * reales, sin necesidad de mantenimiento desde el panel admin).
-     */
-    private const EARLY_COMPLETION_REASONS = [
-        'El cliente pidió terminar el viaje antes de llegar',
-        'El cliente no colocó la ubicación de destino correcta',
-        'No se puede llegar hasta el punto exacto (acceso cerrado, obra, tráfico, etc.)',
-        'Problema con el GPS del celular',
-        'Otro motivo',
-    ];
+    public function __construct(
+        private readonly IncomingRideRequestFinder $incomingRideRequestFinder,
+        private readonly RideLifecycle $rideLifecycle,
+    ) {}
 
     /**
      * Solicitudes que el cliente todavía tiene que ver o responder.
@@ -96,143 +54,12 @@ class RideController extends Controller
             ->get();
     }
 
-    /**
-     * Solicitudes que este conductor puede atender, incluida su propia
-     * contrapropuesta mientras espera la decisión del cliente.
-     *
-     * @return Collection<int, RideRequest>
-     */
-    private function incomingRequestsForDriver(Request $request): Collection
-    {
-        $userId = $request->user()->id;
-
-        $incoming = RideRequest::query()
-            ->where(function ($query) use ($userId) {
-                $query->where('status', 'pending')
-                    ->where(function ($query) use ($userId) {
-                        $query->where('driver_user_id', $userId)
-                            ->orWhere(function ($query) use ($userId) {
-                                $query->whereNull('driver_user_id')
-                                    ->whereIn('fleet_id', function ($sub) use ($userId) {
-                                        $sub->select('fleet_id')
-                                            ->from('fleet_members')
-                                            ->where('driver_user_id', $userId)
-                                            ->whereNull('left_at');
-                                    });
-                            });
-                    });
-            })
-            ->orWhere(function ($query) use ($userId) {
-                $query->where('status', 'negotiating')->where('negotiating_driver_user_id', $userId);
-            })
-            ->with(['client', 'originSector', 'destinationSector'])
-            ->latest()
-            ->get();
-
-        $disabledFleetIds = FleetMember::query()
-            ->where('driver_user_id', $userId)
-            ->where('requests_disabled', true)
-            ->pluck('fleet_id');
-
-        $incoming = $incoming
-            ->filter(fn (RideRequest $rideRequest) => $rideRequest->driver_user_id === $userId
-                || $rideRequest->negotiating_driver_user_id === $userId
-                || (! $disabledFleetIds->contains($rideRequest->fleet_id)
-                    && ($request->user()->driverProfile?->isWithinRangeOf((float) $rideRequest->origin_lat, (float) $rideRequest->origin_lng) ?? true)))
-            ->values();
-
-        $ratings = Review::query()
-            ->whereIn('reviewee_user_id', $incoming->pluck('client_user_id')->unique())
-            ->selectRaw('reviewee_user_id, avg(rating) as avg_rating, count(*) as review_count')
-            ->groupBy('reviewee_user_id')
-            ->get()
-            ->keyBy('reviewee_user_id');
-
-        $incoming->each(function (RideRequest $rideRequest) use ($ratings) {
-            $rating = $ratings->get($rideRequest->client_user_id);
-
-            $rideRequest->client_name = $rideRequest->client->name;
-            $rideRequest->client_rating = $rating ? round((float) $rating->avg_rating, 1) : 0;
-            $rideRequest->client_review_count = $rating->review_count ?? 0;
-            $rideRequest->client_member_code = $rideRequest->client->member_code;
-        });
-
-        return $incoming;
-    }
-
-    /**
-     * Recuperación ante una desconexión temporal de Reverb. Devuelve solo
-     * las dos listas que cambian durante la búsqueda/negociación, evitando
-     * recalcular historial, estadísticas y viajes completos cada 10 segundos.
-     */
     public function syncRequests(Request $request): JsonResponse
     {
         return response()->json([
             'pending_requests_as_client' => $this->pendingRequestsForClient($request->user()->id),
-            'incoming_requests_as_driver' => $this->incomingRequestsForDriver($request),
+            'incoming_requests_as_driver' => $this->incomingRideRequestFinder->forDriver($request->user()),
         ]);
-    }
-
-    /**
-     * Pedido explícito del usuario: "validá que las acciones del conductor
-     * en una carrera... estén acorde a la ubicación de origen [o] destino" —
-     * un radio generoso a propósito. El GPS de un celular en una ciudad
-     * puede errar 100-300 m fácil, y el pin de origen/destino que puso el
-     * cliente puede caer del otro lado de la cuadra — la idea es agarrar un
-     * "marcó llegada estando a kilómetros de ahí" real, no trabar a un
-     * conductor de verdad por un margen de error normal.
-     */
-    private const RIDE_ACTION_LOCATION_TOLERANCE_KM = 1.5;
-
-    // Detección automática de llegada al punto de recogida. Es mucho más
-    // estricta que el botón manual: 150 m tolera el error normal del GPS y
-    // que el pin esté al otro lado de una cuadra, sin marcar llegada desde
-    // una zona lejana.
-    private const AUTOMATIC_PICKUP_ARRIVAL_RADIUS_KM = 0.15;
-
-    /**
-     * Pedido explícito del usuario: "el conductor podrá marcar como
-     * completada la carrera cuando se encuentre a unos 20 metros" del
-     * destino — mucho más estricto que RIDE_ACTION_LOCATION_TOLERANCE_KM
-     * (1.5 km, que sigue aplicando tal cual a arrived()/pickedUp()). Acá
-     * adentro de este radio no hace falta motivo; más lejos, sí.
-     */
-    private const RIDE_COMPLETION_ARRIVAL_RADIUS_KM = 0.02;
-
-    /**
-     * Pedido explícito del usuario: "validá que las acciones del
-     * conductor... estén acorde a la ubicación de origen [o] destino" — el
-     * frontend manda la posición fresca del navegador en el momento mismo
-     * del clic (`Ride/Show.vue`, no la `driver_profiles.current_lat/lng` en
-     * vivo, que solo se actualiza mientras el conductor está "disponible" y
-     * podría estar vieja). Sin coordenadas (el navegador la negó, no la
-     * soporta, o dio timeout) NO se bloquea la acción — mismo criterio
-     * "permisivo si falta el dato" que ya usa `DriverProfile::isWithinRangeOf()`
-     * en el resto de la app: mejor dejar pasar una acción real que trabar a
-     * un conductor por un permiso que puede rechazar.
-     */
-    private function assertNearRideLocation(Request $request, float $targetLat, float $targetLng, string $message): void
-    {
-        if (! $request->filled('lat') || ! $request->filled('lng')) {
-            return;
-        }
-
-        $validated = $request->validate([
-            'lat' => ['numeric', 'between:-90,90'],
-            'lng' => ['numeric', 'between:-180,180'],
-        ]);
-
-        $distanceKm = Haversine::distanceKm($targetLat, $targetLng, (float) $validated['lat'], (float) $validated['lng']);
-
-        if ($distanceKm > self::RIDE_ACTION_LOCATION_TOLERANCE_KM) {
-            $distanceLabel = $distanceKm < 1
-                ? round($distanceKm * 1000).' m'
-                : number_format($distanceKm, 1).' km';
-
-            throw ValidationException::withMessages([
-                'ride' => $message.' Su ubicación está a '.$distanceLabel.' del punto requerido.',
-            ]);
-        }
     }
 
     /**
@@ -245,7 +72,7 @@ class RideController extends Controller
         $userId = $request->user()->id;
 
         $pendingRequestsAsClient = $this->pendingRequestsForClient($userId);
-        $incomingRequestsAsDriver = $this->incomingRequestsForDriver($request);
+        $incomingRequestsAsDriver = $this->incomingRideRequestFinder->forDriver($request->user());
 
         $activeRides = Ride::query()
             ->where(fn ($query) => $query->where('client_user_id', $userId)->orWhere('driver_user_id', $userId))
@@ -423,76 +250,27 @@ class RideController extends Controller
      * Recibe la posición del conductor mientras atiende ESTA carrera.
      * Es independiente del switch "Disponible": al aceptar un viaje puede
      * dejar de recibir solicitudes nuevas, pero debe continuar compartiendo
-     * su recorrido con el cliente hasta completar o cancelar.
+     * su recorrido con el cliente hasta completar o cancelar. Lógica real
+     * en App\Services\Ride\RideLifecycle::updateLocation() (roadmap app
+     * móvil, Hito 5).
      */
     public function updateLocation(Request $request, Ride $ride): JsonResponse
     {
-        if ((int) $ride->driver_user_id !== (int) $request->user()->id) {
-            abort(403);
-        }
-
-        if ($ride->status !== 'in_progress') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera ya no admite actualizaciones de ubicación.',
-            ]);
-        }
-
         $validated = $request->validate([
             'lat' => ['required', 'numeric', 'between:-90,90'],
             'lng' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
-        $profile = $request->user()->driverProfile;
-
-        if (! $profile) {
-            abort(403, 'Todavía no activó su perfil de conductor.');
-        }
-
-        // No se modifica is_available: disponibilidad para nuevas carreras
-        // y seguimiento del viaje actual son estados diferentes.
-        $profile->update([
-            'current_lat' => $validated['lat'],
-            'current_lng' => $validated['lng'],
-            'location_updated_at' => now(),
-        ]);
-
-        // La ubicación ya llega cada pocos segundos; aprovechar este mismo
-        // ping evita otra petición del navegador. El lock impide que dos
-        // lecturas simultáneas generen dos avisos de llegada.
-        $automaticallyArrived = DB::transaction(function () use ($ride, $validated) {
-            $lockedRide = Ride::query()->lockForUpdate()->findOrFail($ride->id);
-
-            if ($lockedRide->status !== 'in_progress' || $lockedRide->arrived_at || $lockedRide->picked_up_at) {
-                return null;
-            }
-
-            $distanceToPickup = Haversine::distanceKm(
-                (float) $lockedRide->origin_lat,
-                (float) $lockedRide->origin_lng,
-                (float) $validated['lat'],
-                (float) $validated['lng'],
-            );
-
-            if ($distanceToPickup > self::AUTOMATIC_PICKUP_ARRIVAL_RADIUS_KM) {
-                return null;
-            }
-
-            $lockedRide->update(['arrived_at' => now()]);
-
-            return $lockedRide->fresh(['client', 'driver']);
-        });
-
-        broadcast(new DriverLocationUpdated($profile))->toOthers();
-
-        if ($automaticallyArrived) {
-            broadcast(new RideArrived($automaticallyArrived))->toOthers();
-            $automaticallyArrived->client->notify(new RideArrivedPushNotification($automaticallyArrived));
-            WhatsAppFreeformSender::sendRideArrivedToClient($automaticallyArrived);
-        }
+        $arrivedAt = $this->rideLifecycle->updateLocation(
+            $ride,
+            $request->user(),
+            (float) $validated['lat'],
+            (float) $validated['lng'],
+        );
 
         return response()->json([
             'ok' => true,
-            'arrived_at' => $automaticallyArrived?->arrived_at?->toIso8601String(),
+            'arrived_at' => $arrivedAt?->toIso8601String(),
         ]);
     }
 
@@ -502,37 +280,11 @@ class RideController extends Controller
      * sin contar como "en carrera" en ningún lado, para no dejarlo "ocupado"
      * desde que aceptó hasta la hora programada. Solo el conductor puede
      * arrancarla (es quien decide cuándo sale a buscar al cliente de verdad).
+     * Lógica real en App\Services\Ride\RideLifecycle::start().
      */
     public function start(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if ($ride->status !== 'scheduled') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera no está programada o ya arrancó.',
-            ]);
-        }
-
-        // No se puede arrancar con un horario en disputa (pedido explícito
-        // del usuario, ver proposeReschedule()) — primero hay que
-        // confirmarlo o rechazarlo.
-        if ($ride->hasPendingReschedule()) {
-            throw ValidationException::withMessages([
-                'ride' => 'El cliente propuso otro horario — confirmalo o rechazalo antes de arrancar.',
-            ]);
-        }
-
-        $ride->update([
-            'status' => 'in_progress',
-            'started_at' => now(),
-        ]);
-
-        broadcast(new RideStarted($ride))->toOthers();
-
-        $ride->client->notify(new RideStartedPushNotification($ride));
-        WhatsAppFreeformSender::sendRideStartedToClient($ride);
+        $this->rideLifecycle->start($ride, $request->user());
 
         return back();
     }
@@ -544,23 +296,12 @@ class RideController extends Controller
      * en un ref local de Vue (a propósito, para no disparar el conteo de
      * cortesía de 5 minutos que sí dispara `arrived_at`), así que recargar
      * la página o volver a entrar perdía el estado. Se guarda acá, en una
-     * columna aparte que nunca toca `arrived_at` ni ese conteo.
+     * columna aparte que nunca toca `arrived_at` ni ese conteo. Lógica
+     * real en App\Services\Ride\RideLifecycle::headingToPassenger().
      */
     public function headingToPassenger(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if ($ride->status !== 'in_progress') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera no está en curso.',
-            ]);
-        }
-
-        if ($ride->heading_to_passenger_at === null) {
-            $ride->update(['heading_to_passenger_at' => now()]);
-        }
+        $this->rideLifecycle->headingToPassenger($ride, $request->user());
 
         return back();
     }
@@ -571,38 +312,21 @@ class RideController extends Controller
      * esperando. Solo tiene sentido una vez ('in_progress' y sin marcar
      * antes); no bloquea nada más del flujo (el conductor igual puede
      * completar la carrera sin haber pasado por acá, por si se olvida).
+     * Lógica real en App\Services\Ride\RideLifecycle::arrived().
      */
     public function arrived(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
+        $validated = $request->validate([
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
 
-        if ($ride->status !== 'in_progress') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera no está en curso.',
-            ]);
-        }
-
-        if ($ride->arrived_at !== null) {
-            throw ValidationException::withMessages([
-                'ride' => 'Ya se había marcado como llegada.',
-            ]);
-        }
-
-        $this->assertNearRideLocation(
-            $request,
-            (float) $ride->origin_lat,
-            (float) $ride->origin_lng,
-            'Parece que todavía no está en el punto de origen — inténtelo cuando esté más cerca.',
+        $this->rideLifecycle->arrived(
+            $ride,
+            $request->user(),
+            isset($validated['lat']) ? (float) $validated['lat'] : null,
+            isset($validated['lng']) ? (float) $validated['lng'] : null,
         );
-
-        $ride->update(['arrived_at' => now()]);
-
-        broadcast(new RideArrived($ride))->toOthers();
-
-        $ride->client->notify(new RideArrivedPushNotification($ride));
-        WhatsAppFreeformSender::sendRideArrivedToClient($ride);
 
         return back();
     }
@@ -612,42 +336,21 @@ class RideController extends Controller
      * usuario: guardar la fecha y hora para poder calcular esa información
      * después — tiempo de espera, duración real del viaje, etc.). Mismo
      * criterio que arrived(): no bloquea completar() si el conductor se
-     * saltea este paso.
+     * saltea este paso. Lógica real en App\Services\Ride\RideLifecycle::pickedUp().
      */
     public function pickedUp(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
+        $validated = $request->validate([
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
 
-        if ($ride->status !== 'in_progress') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera no está en curso.',
-            ]);
-        }
-
-        if ($ride->picked_up_at !== null) {
-            throw ValidationException::withMessages([
-                'ride' => 'Ya se había marcado como recogido.',
-            ]);
-        }
-
-        $this->assertNearRideLocation(
-            $request,
-            (float) $ride->origin_lat,
-            (float) $ride->origin_lng,
-            'Parece que todavía no está en el punto de origen — inténtelo cuando esté más cerca.',
+        $this->rideLifecycle->pickedUp(
+            $ride,
+            $request->user(),
+            isset($validated['lat']) ? (float) $validated['lat'] : null,
+            isset($validated['lng']) ? (float) $validated['lng'] : null,
         );
-
-        $ride->update(['picked_up_at' => now()]);
-
-        broadcast(new RidePickedUp($ride))->toOthers();
-
-        // Pedido explícito del usuario (roadmap de mejoras, sección 5): cada
-        // cambio de estado visible para el cliente necesita también un aviso
-        // push, no solo el refresco en vivo por WebSocket.
-        $ride->client->notify(new RidePickedUpPushNotification($ride));
-        WhatsAppFreeformSender::sendRidePickedUpToClient($ride);
 
         return back();
     }
@@ -656,99 +359,26 @@ class RideController extends Controller
      * Pedido explícito del usuario: la carrera la finaliza ÚNICAMENTE el
      * conductor (antes cualquiera de las dos partes podía) — después de esto
      * el siguiente paso es la calificación obligatoria, primero del cliente
-     * y luego del conductor (ver ReviewController::store()).
+     * y luego del conductor (ver ReviewController::store()). Lógica real en
+     * App\Services\Ride\RideLifecycle::complete().
      */
     public function complete(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if ($ride->status !== 'in_progress') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera ya no está en curso.',
-            ]);
-        }
-
-        // Paradas adicionales (pedido explícito del usuario): la carrera
-        // solo se completa entera cuando ya no queda ninguna parada
-        // pendiente — evita saltarse el orden. El conductor completa las
-        // paradas una por una con completeStop() antes de llegar acá.
-        if ($ride->stops()->whereNotIn('status', ['completed', 'cancelled'])->exists()) {
-            throw ValidationException::withMessages([
-                'ride' => 'Todavía queda una parada pendiente antes de completar la carrera.',
-            ]);
-        }
-
         $validated = $request->validate([
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
-            'completion_reason' => ['nullable', 'string', Rule::in(self::EARLY_COMPLETION_REASONS)],
+            'completion_reason' => ['nullable', 'string', Rule::in(RideLifecycle::EARLY_COMPLETION_REASONS)],
             'completion_note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        // Pedido explícito del usuario: dentro de 20 m del destino completa
-        // directo, como siempre. Más lejos (o sin coordenadas para
-        // comprobarlo — mismo criterio permisivo que assertNearRideLocation())
-        // hace falta elegir un motivo antes de dejarlo completar igual.
-        $isNearDestination = ! isset($validated['lat'], $validated['lng']) || Haversine::distanceKm(
-            (float) $ride->destination_lat,
-            (float) $ride->destination_lng,
-            (float) $validated['lat'],
-            (float) $validated['lng'],
-        ) <= self::RIDE_COMPLETION_ARRIVAL_RADIUS_KM;
-
-        if (! $isNearDestination && ! ($validated['completion_reason'] ?? null)) {
-            throw ValidationException::withMessages([
-                'completion_reason' => 'Parece que todavía no llegó al destino — elija un motivo para completar la carrera igual.',
-            ]);
-        }
-
-        // Puntos por carrera completada (pedido explícito del usuario:
-        // fidelizar el uso de la app — cada carrera pedida y cumplida por
-        // acá suma, arreglar directo por WhatsApp no da nada). El corte de
-        // distancia es a propósito una regla de código, no del panel admin
-        // (el usuario pidió configurables las MEDALLAS, no esto) — 2 puntos
-        // desde 5 km, 1 punto por debajo. Ajustable acá si se quiere otro corte.
-        $pointsEarned = $ride->distance_km >= 5 ? 2 : 1;
-
-        $ride->update([
-            'status' => 'completed',
-            'completed_at' => now(),
-            'points_earned' => $pointsEarned,
-            // Solo se guarda si de verdad se completó lejos del destino — un
-            // conductor que completa normal, cerca, no deja rastro de motivo.
-            'completion_reason' => $isNearDestination ? null : $validated['completion_reason'] ?? null,
-            'completion_note' => $isNearDestination ? null : ($validated['completion_note'] ?? null),
-            // Monto real cobrado (pedido explícito del usuario): sin
-            // paradas, es simplemente el precio de siempre — con paradas
-            // (todas ya completadas, por el guard de arriba), se le suma lo
-            // cobrado en cada tramo.
-            'settled_price' => $ride->stops()->where('status', 'completed')->sum('leg_price') + $ride->price,
-        ]);
-
-        // increment() es atómico (sin condición de carrera si dos carreras
-        // se completan casi al mismo tiempo) — ver App\Models\DriverTier::forPoints()
-        // para cómo esto se traduce en la medalla vigente del conductor.
-        DriverProfile::where('user_id', $ride->driver_user_id)->increment('total_points', $pointsEarned);
-
-        // El conductor queda libre de nuevo (consideración agregada al
-        // alcance) — sin esto, "Mi flota" y "¿A quién se la pedís?" seguían
-        // mostrándolo "en carrera" hasta que alguien recargara la pantalla.
-        broadcast(new RideCompleted($ride))->toOthers();
-
-        // Lista de espera (pedido explícito del usuario: "puedo dejar la
-        // carrera pendiente hasta que uno se desocupe y me atienda") — este
-        // conductor recién liberado puede ser justo lo que le faltaba a
-        // alguien que estaba esperando. Va DESPUÉS del update() de arriba:
-        // recién ahí el conductor deja de contar como "ocupado".
-        RideDispatchAdvancer::activateNextWaitingRequest();
-
-        // Aviso push al cliente (pedido explícito del usuario: notificaciones
-        // habilitadas en cada acción) — para que se entere y pueda calificar,
-        // aunque tenga la app cerrada.
-        $ride->client->notify(new RideCompletedPushNotification($ride));
-        WhatsAppFreeformSender::sendRideCompletedToClient($ride);
+        $this->rideLifecycle->complete(
+            $ride,
+            $request->user(),
+            isset($validated['lat']) ? (float) $validated['lat'] : null,
+            isset($validated['lng']) ? (float) $validated['lng'] : null,
+            $validated['completion_reason'] ?? null,
+            $validated['completion_note'] ?? null,
+        );
 
         return back();
     }
@@ -796,8 +426,9 @@ class RideController extends Controller
         // Mismo radio/criterio permisivo que arrived()/pickedUp() (1.5 km) —
         // el radio de 20 m de complete() quedó a propósito solo para el
         // destino final, no para paradas intermedias.
-        $this->assertNearRideLocation(
-            $request,
+        $this->rideLifecycle->assertNearRideLocation(
+            isset($validated['lat']) ? (float) $validated['lat'] : null,
+            isset($validated['lng']) ? (float) $validated['lng'] : null,
             (float) $stop->lat,
             (float) $stop->lng,
             'Parece que todavía no está en la parada — inténtelo cuando esté más cerca.',
@@ -841,7 +472,8 @@ class RideController extends Controller
      * aceptó para más tarde ('scheduled'), se avisa a quien NO canceló por
      * WebSocket + push — importante sobre todo si ya iba en camino de
      * verdad. Se cuenta como cancelación real (`cancelled_at`) para poder
-     * medirlo después (pedido explícito del usuario).
+     * medirlo después (pedido explícito del usuario). Lógica real en
+     * App\Services\Ride\RideLifecycle::cancel().
      */
     public function cancel(Request $request, Ride $ride): RedirectResponse
     {
@@ -859,26 +491,11 @@ class RideController extends Controller
         }
 
         $validated = $request->validate([
-            'reason' => ['required', 'string', Rule::in($isDriver ? self::DRIVER_CANCEL_REASONS : self::CLIENT_CANCEL_REASONS)],
+            'reason' => ['required', 'string', Rule::in($isDriver ? RideLifecycle::DRIVER_CANCEL_REASONS : RideLifecycle::CLIENT_CANCEL_REASONS)],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $ride->update([
-            'status' => 'cancelled',
-            'cancelled_at' => now(),
-            'cancelled_by' => $isDriver ? 'driver' : 'client',
-            'cancellation_reason' => $validated['reason'],
-            'cancellation_note' => $validated['note'] ?? null,
-        ]);
-
-        // Quien no canceló queda libre de nuevo si era el conductor (mismo
-        // criterio que al completar una carrera) — si iba en camino, esto lo
-        // saca de "en carrera" en todos lados sin esperar a que recargue.
-        broadcast(new RideCancelled($ride))->toOthers();
-
-        // A quien NO canceló, nunca a quien mandó la acción.
-        $recipient = $isDriver ? $ride->client : $ride->driver;
-        $recipient->notify(new RideCancelledPushNotification($ride));
+        $this->rideLifecycle->cancel($ride, $request->user(), $validated['reason'], $validated['note'] ?? null);
 
         return redirect()->route('rides.index');
     }

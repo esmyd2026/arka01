@@ -45,7 +45,14 @@ class RegistrationTest extends TestCase
         $response->assertRedirect(RouteServiceProvider::HOME);
     }
 
-    public function test_registration_joins_first_name_and_last_name_into_the_existing_name_field(): void
+    /**
+     * Bug real reportado por el usuario ("luego que el cliente va a su
+     * perfil aparecen en el nombre los dos"): `name` y `last_name` tienen
+     * que quedar separados de verdad — `User::getFullNameAttribute()` ya se
+     * encarga de combinarlos para mostrar, no hace falta (ni conviene)
+     * juntarlos al guardar.
+     */
+    public function test_registration_keeps_first_name_and_last_name_in_separate_columns(): void
     {
         $this->post('/register', [
             'account_type' => 'cliente',
@@ -60,8 +67,10 @@ class RegistrationTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'email' => 'laura.mendoza@example.com',
-            'name' => 'Laura Mendoza',
+            'name' => 'Laura',
+            'last_name' => 'Mendoza',
         ]);
+        $this->assertSame('Laura Mendoza', User::where('email', 'laura.mendoza@example.com')->first()->full_name);
     }
 
     public function test_registration_requires_both_first_name_and_last_name(): void
