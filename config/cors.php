@@ -17,7 +17,12 @@ return [
 
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
-    'allowed_methods' => ['GET', 'POST', 'OPTIONS'],
+    // DELETE agregado por la app móvil (Api\V1\AccountController::destroy(),
+    // DELETE /api/v1/account) — sin esto, el preflight CORS del WebView
+    // rechazaba la eliminación de cuenta antes de que la petición real
+    // llegara a salir (bug encontrado probando en el emulador: el botón se
+    // quedaba en "Eliminando…" para siempre).
+    'allowed_methods' => ['GET', 'POST', 'DELETE', 'OPTIONS'],
 
     // Auditoría de seguridad: estaba en '*' (cualquier sitio podía llamar a
     // /api/* con el navegador de un usuario logueado). El riesgo real acá era
@@ -32,11 +37,21 @@ return [
         env('APP_URL'),
         env('APP_ENV') === 'local' ? 'http://localhost:5173' : null,
         env('APP_ENV') === 'local' ? 'http://127.0.0.1:5173' : null,
+        // App móvil Capacitor (ROADMAP_APLICACION_MOVIL_CAPACITOR.md, Hito 2):
+        // el WebView siempre presenta este origen fijo sin importar a qué
+        // backend apunte la app (dev, staging o producción) — no depende de
+        // un dominio real, así que no tiene sentido atarlo a APP_ENV=local.
+        // Autenticación por token (Sanctum Bearer, sin cookies:
+        // supports_credentials abajo sigue en false), así que esto no abre
+        // ningún vector CSRF nuevo — CORS acá solo decide si el WebView
+        // puede LEER la respuesta, no si puede mandar el pedido.
+        'https://localhost', // Android
+        'capacitor://localhost', // iOS
     ])),
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'X-CSRF-TOKEN', 'X-Inertia'],
+    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'X-CSRF-TOKEN', 'X-Inertia', 'Authorization'],
 
     'exposed_headers' => [],
 

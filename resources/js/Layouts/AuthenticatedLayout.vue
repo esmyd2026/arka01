@@ -12,6 +12,7 @@ import OnboardingTour from '@/Components/OnboardingTour.vue';
 import PermissionsPrompt from '@/Components/PermissionsPrompt.vue';
 import HelpTip from '@/Components/HelpTip.vue';
 import SessionDataUsage from '@/Components/SessionDataUsage.vue';
+import WalkieTalkie from '@/Components/WalkieTalkie.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush, syncGrantedPushSubscription } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
@@ -478,6 +479,13 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="arka-app-background min-h-screen">
+        <!-- Radio PTT web: disponible para cliente y conductor desde cualquier
+             pantalla autenticada. El componente conserva su propia conexión
+             y no modifica los flujos de carreras ni los módulos móviles. -->
+        <WalkieTalkie
+            v-if="showClientNav || showDriverNav"
+            :hide-bottom-nav="hideBottomNav"
+        />
         <button
             v-if="clientRideAlert"
             type="button"

@@ -3,9 +3,12 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "dev:mobile": "vite --config vite.mobile.config.js",
+        "build:mobile": "vite build --config vite.mobile.config.js && node -e \"require('fs').renameSync('dist-mobile/index.mobile.html','dist-mobile/index.html')\""
     },
     "devDependencies": {
+        "@capacitor/cli": "^8.5.0",
         "@inertiajs/vue3": "^2.0.0",
         "@tailwindcss/forms": "^0.5.3",
         "@vitejs/plugin-vue": "^5.0.0",
@@ -21,7 +24,14 @@
         "vue": "^3.4.0"
     },
     "dependencies": {
+        "@aparajita/capacitor-secure-storage": "^8.0.0",
+        "@capacitor/android": "^8.5.0",
+        "@capacitor/app": "^8.1.1",
+        "@capacitor/browser": "^8.0.4",
+        "@capacitor/core": "^8.5.0",
+        "@capacitor/preferences": "^8.0.1",
         "leaflet": "^1.9.4",
-        "qrcode": "^1.5.4"
+        "qrcode": "^1.5.4",
+        "vue-router": "^4.6.4"
     }
 }

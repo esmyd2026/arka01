@@ -82,7 +82,10 @@ class SecurityHeaders
         $response->headers->set('X-Frame-Options', $isPrivateDriverDocument ? 'SAMEORIGIN' : 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
+        // La radio privada necesita capturar audio desde páginas de Arka01.
+        // Se mantiene limitado al mismo origen: ningún iframe o sitio externo
+        // puede solicitar el micrófono usando nuestra política.
+        $response->headers->set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=(self)');
 
         // HSTS solo tiene sentido si de verdad se sirve por HTTPS (en local,
         // sobre HTTP, este header no hace nada dañino pero tampoco aporta).

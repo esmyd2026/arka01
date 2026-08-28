@@ -55,7 +55,12 @@ class CooperativeDriverMembership extends Model
             ->where('driver_user_id', $driverUserId)
             ->where('status', 'accepted')
             ->whereNull('ended_at')
-            ->with('cooperative:id,name,logo_path')
+            // public_id es obligatorio acá: AuthenticatedLayout arma el link
+            // "Cooperativa: ..." del menú de cuenta con route('cooperatives.show',
+            // $cooperative->public_id) — sin esta columna llegaba null y Ziggy
+            // tiraba "'cooperative' parameter is required" (bug reportado por
+            // el usuario: el menú del avatar del conductor no se desplegaba).
+            ->with('cooperative:id,public_id,name,logo_path')
             ->first()?->cooperative;
     }
 }

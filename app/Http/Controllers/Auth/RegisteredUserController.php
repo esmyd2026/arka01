@@ -2,25 +2,16 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Actions\Auth\RegisterUser;
 use App\Http\Controllers\Controller;
-use App\Jobs\ResolveRegistrationNeighborhood;
-use App\Mail\WelcomeMail;
-use App\Models\City;
 use App\Models\Cooperative;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Rules\ValidPhoneNumberLocal;
-use App\Services\Haversine;
 use App\Services\ReferralAttribution;
-use App\Services\WhatsAppVerificationSender;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
@@ -54,7 +45,7 @@ class RegisteredUserController extends Controller
      */
     public const COUNTRY_CODES = ['+593', '+51', '+57', '+58', '+56', '+54'];
 
-    public function store(Request $request, ReferralAttribution $referralAttribution): RedirectResponse
+    public function store(Request $request, ReferralAttribution $referralAttribution, RegisterUser $registerUser): RedirectResponse
     {
         // Pedido explícito del usuario: si escribe el 0 inicial (ej.
         // "0988492339"), se lo quitamos solo en vez de rechazarlo.
@@ -110,116 +101,32 @@ class RegisteredUserController extends Controller
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
-        // Pedido explícito del usuario ("la gente se pierde" entre iniciar
-        // sesión y crear cuenta): si el correo o el teléfono ya tienen
-        // cuenta, se lo dice claro invitándolo a iniciar sesión en vez de
-        // dejarlo solo con "ya está en uso" — Auth/Register.vue detecta
-        // estos mensajes puntuales y ofrece el atajo.
-        if (User::where('email', $validated['email'])->exists()) {
-            throw ValidationException::withMessages([
-                'email' => 'Ya existe una cuenta con este correo. ¿Ya tiene una cuenta? Inicie sesión.',
-            ]);
-        }
-
         $phone = $validated['country_code'].$validated['phone_local'];
 
-        if (User::where('phone', $phone)->exists()) {
-            throw ValidationException::withMessages([
-                'phone_local' => 'Ese número de teléfono ya está registrado. ¿Ya tiene una cuenta? Inicie sesión.',
-            ]);
-        }
-
-        $hasCoordinates = isset($validated['lat'], $validated['lng']);
-        $city = $hasCoordinates ? $this->nearestCity((float) $validated['lat'], (float) $validated['lng']) : null;
-
-        $fullName = filled($validated['first_name'] ?? null)
-            ? Str::squish($validated['first_name'].' '.$validated['last_name'])
-            : Str::squish($validated['name']);
+        $user = $registerUser->execute([
+            'account_type' => $validated['account_type'],
+            'name' => $validated['name'] ?? null,
+            'first_name' => $validated['first_name'] ?? null,
+            'last_name' => $validated['last_name'] ?? null,
+            'email' => $validated['email'],
+            'phone' => $phone,
+            'password' => $validated['password'],
+            'ref' => $validated['ref'] ?? null,
+            'lat' => $validated['lat'] ?? null,
+            'lng' => $validated['lng'] ?? null,
+        ]);
 
         $referrer = isset($validated['ref'])
             ? User::query()->where('public_id', $validated['ref'])->first()
             : null;
 
-        $user = User::create([
-            'name' => $fullName,
-            'email' => $validated['email'],
-            'phone' => $phone,
-            'password' => Hash::make($validated['password']),
-            'referred_by_user_id' => $referrer?->id,
-            'city_id' => $city?->id,
-            'registration_lat' => $hasCoordinates ? $validated['lat'] : null,
-            'registration_lng' => $hasCoordinates ? $validated['lng'] : null,
-            // Bug reportado por el usuario: "se estan registrando como
-            // conductor y el sistema termina creandole como cliente" — si
-            // abandonaba el segundo paso (completar el vehículo), no
-            // quedaba ninguna señal de que le faltaba algo. Ver
-            // EnsureDriverOnboardingIsComplete, que usa esto para
-            // devolverlo a terminar en vez de dejarlo operar como
-            // cliente en silencio.
-            'intends_to_drive' => $validated['account_type'] === 'conductor',
-        ]);
-
-        // El registro normal ya recibe `ref` como campo oculto. Esta llamada
-        // limpia el referente recordado para OAuth y, si hiciera falta, lo
-        // aplica sin sobrescribir la atribución que acaba de guardarse.
+        // El registro normal ya recibe `ref` como campo oculto (ya asignado
+        // dentro de RegisterUser). Esta llamada limpia el referente
+        // recordado para OAuth y, si hiciera falta, lo aplica sin
+        // sobrescribir la atribución que acaba de guardarse.
         $referralAttribution->attribute($request, $user);
 
-        // A diferencia de una cuenta creada por Google (contraseña al azar
-        // que nadie conoce, ver GoogleAuthController), acá el usuario SÍ
-        // acaba de elegir la suya — marcarlo es lo que le permite después
-        // cambiarla pidiéndole la actual, en vez de quedar bloqueado como le
-        // pasaba a las cuentas de Google (ver PasswordController::update()).
-        $user->forceFill(['password_set_at' => now()])->save();
-
-        event(new Registered($user));
-
-        // El nombre del barrio/zona es informativo (panel admin) y depende
-        // de un servicio externo — se resuelve aparte, en cola, para no
-        // demorar ni arriesgar el registro por eso (ver la clase del job).
-        if ($hasCoordinates) {
-            ResolveRegistrationNeighborhood::dispatch($user->id, (float) $validated['lat'], (float) $validated['lng']);
-        }
-
-        Log::info('Cuenta nueva registrada.', ['user_id' => $user->id, 'username' => $user->username, 'member_code' => $user->member_code]);
-
-        // Correo de bienvenida (pedido explícito del usuario): un correo mal
-        // configurado o caído no debería tumbar el registro — mismo criterio
-        // que el resto de los correos del proyecto (ej. SosAlertController).
-        try {
-            Mail::to($user->email)->send(new WelcomeMail($user));
-        } catch (\Throwable $e) {
-            Log::warning('No se pudo enviar el correo de bienvenida.', ['user_id' => $user->id, 'error' => $e->getMessage()]);
-        }
-
         Auth::login($user);
-
-        // Verificación de teléfono por WhatsApp (consideración de seguridad
-        // agregada al alcance): si no está configurada todavía, el teléfono
-        // queda auto-verificado para no bloquear a nadie por una integración
-        // pendiente (mismo criterio que googleLoginEnabled).
-        //
-        // Bug crítico reportado por el usuario: si SÍ está configurada pero
-        // el envío falla de verdad (token vencido, límite de Meta, etc.),
-        // antes quedaba igual esperando un código que nunca iba a llegar —
-        // EnsurePhoneIsVerified lo trababa ahí para siempre, sin ninguna
-        // salida (ni reenviar, que repetía el mismo fallo en silencio, ni un
-        // escape del lado admin). Mismo criterio que "no configurada": si el
-        // envío no salió, no puede quedar bloqueando la cuenta.
-        if (WhatsAppVerificationSender::enabled()) {
-            $code = $user->issuePhoneVerificationCode();
-            $sent = WhatsAppVerificationSender::sendCode($user->phone, $code);
-            Log::info('Código de verificación de teléfono enviado al registrarse.', ['user_id' => $user->id, 'enviado_por_whatsapp' => $sent]);
-
-            if (! $sent) {
-                $user->forceFill([
-                    'phone_verified_at' => now(),
-                    'phone_verification_code' => null,
-                    'phone_verification_expires_at' => null,
-                ])->save();
-            }
-        } else {
-            $user->forceFill(['phone_verified_at' => now()])->save();
-        }
 
         // "Conductor" elegido en el primer paso del registro: en vez de dejarlo
         // en el Inicio (todavía no puede recibir carreras), lo llevamos directo
@@ -254,24 +161,5 @@ class RegisteredUserController extends Controller
         }
 
         return redirect(RouteServiceProvider::HOME);
-    }
-
-    /**
-     * Ciudad más cercana a la ubicación real que dio el navegador al
-     * registrarse (pedido explícito del usuario) — mismo cálculo de
-     * cercanía (Haversine) que ya usa OperationsController::notifyNearby()
-     * contra conductores, acá contra el catálogo de `cities` (que sí tiene
-     * lat/lng propio, a diferencia de `sectors`). Reemplaza directo al
-     * `city_id` que antes solo se completaba a mano en el perfil.
-     */
-    private function nearestCity(float $lat, float $lng): ?City
-    {
-        return City::query()
-            ->where('is_active', true)
-            ->whereNotNull('lat')
-            ->whereNotNull('lng')
-            ->get(['id', 'lat', 'lng'])
-            ->sortBy(fn (City $city) => Haversine::distanceKm($lat, $lng, (float) $city->lat, (float) $city->lng))
-            ->first();
     }
 }

@@ -200,11 +200,20 @@ class WhatsAppRideAlertTest extends TestCase
     public function test_the_new_ride_alert_includes_the_requested_date_and_time_in_ecuador_time(): void
     {
         $this->enableWhatsApp();
+
+        // El viaje en el tiempo va antes de crear al conductor: su perfil
+        // guarda location_updated_at = now() al crearse (DriverProfileFactory)
+        // y DriverProfile::isStale() lo compara contra el reloj actual — si
+        // se viajara en el tiempo después, la brecha entre la hora real de
+        // creación y las 21:45 fijas podía superar la ventana de frescura y
+        // el conductor quedaba fuera del despacho según la hora real en que
+        // corriera la suite (test intermitente, no relacionado con la fecha
+        // ni la hora que se está probando).
+        $this->travelTo(now('America/Guayaquil')->setTime(21, 45));
+
         [$client, $driver] = $this->clientWithFleetDriver();
 
         WhatsAppSession::query()->create(['user_id' => $driver->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
-
-        $this->travelTo(now('America/Guayaquil')->setTime(21, 45));
 
         $this->actingAs($client)->post(route('ride-requests.store'), [
             'driver_user_id' => $driver->id,

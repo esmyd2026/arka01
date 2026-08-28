@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Exceptions\ActiveSessionExistsException;
 use App\Mail\ConcurrentLoginAttemptMail;
+use App\Models\User;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
@@ -42,6 +43,14 @@ use Illuminate\Support\Str;
  * compartida. En ese caso se cierra la sesión vieja sola y el login sigue
  * normal. Solo se bloquea (con el aviso de siempre) cuando la otra sesión
  * activa viene de un navegador/dispositivo distinto.
+ *
+ * Roadmap app móvil (ROADMAP_APLICACION_MOVIL_CAPACITOR.md, Hito 2): la
+ * misma regla cubre los tokens de Sanctum que emite el login móvil
+ * (Api\V1\AuthController) — "otra sesión activa" es una fila en `sessions`
+ * O un token vigente en `personal_access_tokens`, lo primero que aparezca.
+ * Así una cuenta no puede tener a la vez una sesión web y un token móvil (o
+ * dos tokens móviles) desde dispositivos distintos, sin tener que duplicar
+ * esta lógica en dos sitios.
  */
 class EnforceSingleActiveSession
 {
@@ -53,30 +62,27 @@ class EnforceSingleActiveSession
     public function handle(Login $event): void
     {
         $deviceId = $this->deviceId();
-
+        $userId = $event->user->getAuthIdentifier();
         $activeSince = now()->subMinutes(self::CONCURRENT_WINDOW_MINUTES)->getTimestamp();
 
-        $otherSession = DB::table('sessions')
-            ->where('user_id', $event->user->getAuthIdentifier())
-            ->where('id', '!=', session()->getId())
-            ->where('last_activity', '>=', $activeSince)
-            ->first();
+        $competing = $this->findCompetingSession($userId, $activeSince)
+            ?? $this->findCompetingToken($userId, $activeSince);
 
-        if (! $otherSession) {
+        if (! $competing) {
             session(['device_id' => $deviceId]);
 
             return;
         }
 
-        if ($this->deviceIdFromPayload($otherSession->payload) === $deviceId) {
-            // Mismo navegador: se cierra la sesión vieja sin avisar por
-            // correo ni bloquear — no es una cuenta compartida, es la misma
-            // persona reingresando.
-            DB::table('sessions')->where('id', $otherSession->id)->delete();
+        if ($competing['device_id'] === $deviceId) {
+            // Mismo dispositivo: se cierra la sesión/token viejo sin avisar
+            // por correo ni bloquear — no es una cuenta compartida, es la
+            // misma persona reingresando.
+            $this->revokeCompeting($competing);
             session(['device_id' => $deviceId]);
 
             Log::info('Sesión anterior del mismo dispositivo cerrada sola al reingresar.', [
-                'user_id' => $event->user->getAuthIdentifier(),
+                'user_id' => $userId,
             ]);
 
             return;
@@ -113,13 +119,20 @@ class EnforceSingleActiveSession
     }
 
     /**
-     * Identificador de este navegador — no de la persona ni de la cuenta:
-     * una cookie propia (separada de la de sesión), larga duración, que
-     * sobrevive un logout. Si no existe todavía (primera vez en este
-     * navegador), se genera y se deja en cola para la respuesta.
+     * Identificador del dispositivo. En web es una cookie propia (separada de
+     * la de sesión), larga duración, que sobrevive un logout — si no existe
+     * todavía (primera vez en este navegador), se genera y se deja en cola
+     * para la respuesta. En móvil no hay cookies: el cliente Capacitor manda
+     * su propio device_id (generado una vez y guardado en el dispositivo) en
+     * el body del login, y ese es el que se usa.
      */
     private function deviceId(): string
     {
+        $fromMobile = request()?->input('device_id');
+        if (is_string($fromMobile) && $fromMobile !== '') {
+            return $fromMobile;
+        }
+
         $existing = request()?->cookie(self::DEVICE_COOKIE);
         if (is_string($existing) && $existing !== '') {
             return $existing;
@@ -129,6 +142,77 @@ class EnforceSingleActiveSession
         Cookie::queue(Cookie::forever(self::DEVICE_COOKIE, $new));
 
         return $new;
+    }
+
+    /**
+     * Otra sesión web activa para este usuario, si hay. Devuelve la forma
+     * común que también usa findCompetingToken(), para que handle() no tenga
+     * que saber de cuál de las dos fuentes salió.
+     *
+     * @return array{type: string, id: int|string, device_id: ?string}|null
+     */
+    private function findCompetingSession(int|string $userId, int $activeSince): ?array
+    {
+        $session = DB::table('sessions')
+            ->where('user_id', $userId)
+            ->where('id', '!=', session()->getId())
+            ->where('last_activity', '>=', $activeSince)
+            ->first();
+
+        if (! $session) {
+            return null;
+        }
+
+        return [
+            'type' => 'session',
+            'id' => $session->id,
+            'device_id' => $this->deviceIdFromPayload($session->payload),
+        ];
+    }
+
+    /**
+     * Igual que findCompetingSession() pero para tokens de Sanctum emitidos
+     * por el login móvil (Api\V1\AuthController) — ver la migración que le
+     * agrega device_id a personal_access_tokens.
+     *
+     * @return array{type: string, id: int|string, device_id: ?string}|null
+     */
+    private function findCompetingToken(int|string $userId, int $activeSince): ?array
+    {
+        $token = DB::table('personal_access_tokens')
+            ->where('tokenable_type', User::class)
+            ->where('tokenable_id', $userId)
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->where(function ($query) use ($activeSince) {
+                $query->where('last_used_at', '>=', date('Y-m-d H:i:s', $activeSince))
+                    ->orWhere('created_at', '>=', date('Y-m-d H:i:s', $activeSince));
+            })
+            ->latest('id')
+            ->first();
+
+        if (! $token) {
+            return null;
+        }
+
+        return [
+            'type' => 'token',
+            'id' => $token->id,
+            'device_id' => $token->device_id,
+        ];
+    }
+
+    /**
+     * @param  array{type: string, id: int|string, device_id: ?string}  $competing
+     */
+    private function revokeCompeting(array $competing): void
+    {
+        if ($competing['type'] === 'session') {
+            DB::table('sessions')->where('id', $competing['id'])->delete();
+
+            return;
+        }
+
+        DB::table('personal_access_tokens')->where('id', $competing['id'])->delete();
     }
 
     /**

@@ -17,7 +17,9 @@ class GoogleRoutesService
     public function route(float $originLat, float $originLng, float $destinationLat, float $destinationLng): ?array
     {
         $key = (string) config('services.google_maps.server_api_key');
-        if ($key === '') return null;
+        if ($key === '') {
+            return null;
+        }
 
         $coordinates = array_map(fn (float $value) => round($value, 4), [
             $originLat, $originLng, $destinationLat, $destinationLng,
@@ -40,7 +42,9 @@ class GoogleRoutesService
                     'polylineQuality' => 'OVERVIEW',
                 ]);
 
-            if (! $response->successful() || ! $response->json('routes.0.polyline.encodedPolyline')) return null;
+            if (! $response->successful() || ! $response->json('routes.0.polyline.encodedPolyline')) {
+                return null;
+            }
 
             $duration = (string) $response->json('routes.0.duration', '');
 

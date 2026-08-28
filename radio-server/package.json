@@ -1,0 +1,22 @@
+{
+    "name": "arka01-radio-server",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Repetidor de audio PTT en memoria para Arka01",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "test": "node --test"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "dependencies": {
+        "dotenv": "^16.4.7",
+        "express": "^4.21.2",
+        "socket.io": "^4.8.1"
+    },
+    "devDependencies": {
+        "socket.io-client": "^4.8.1"
+    }
+}

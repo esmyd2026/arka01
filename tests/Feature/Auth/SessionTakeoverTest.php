@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Mail\SessionTakeoverCodeMail;
 use App\Models\User;
 use App\Models\WhatsAppSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -52,7 +54,7 @@ class SessionTakeoverTest extends TestCase
 
         $this->postJson(route('session-takeover.request'), ['login' => $user->email])->assertOk();
 
-        Mail::assertSent(\App\Mail\SessionTakeoverCodeMail::class, fn ($mail) => $mail->user->id === $user->id
+        Mail::assertSent(SessionTakeoverCodeMail::class, fn ($mail) => $mail->user->id === $user->id
             // Pedido explícito del usuario: "si no es usted, solicitar
             // bloquear la cuenta" — el correo tiene que traer ese link.
             && str_contains($mail->lockUrl, "/sesion/bloquear/{$user->id}"));
@@ -145,7 +147,7 @@ class SessionTakeoverTest extends TestCase
         $user = User::factory()->create();
         $this->fakeOtherDeviceSession($user);
 
-        $url = \Illuminate\Support\Facades\URL::temporarySignedRoute('session-takeover.lock', now()->addMinutes(30), ['user' => $user->id]);
+        $url = URL::temporarySignedRoute('session-takeover.lock', now()->addMinutes(30), ['user' => $user->id]);
 
         $this->get($url)->assertOk();
 

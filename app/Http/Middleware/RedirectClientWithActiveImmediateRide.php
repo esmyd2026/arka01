@@ -14,7 +14,7 @@ class RedirectClientWithActiveImmediateRide
     {
         $user = $request->user();
 
-        if (! $user || ! $user->isClient() || ! $request->isMethod('GET') || $request->routeIs('rides.*')) {
+        if (! $user || ! $user->isClient() || ! $request->isMethod('GET') || $request->routeIs(['rides.*', 'radio.*'])) {
             return $next($request);
         }
 

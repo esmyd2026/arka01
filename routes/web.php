@@ -63,6 +63,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\PublicRideTrackingController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\RadioChannelController;
+use App\Http\Controllers\RadioSessionController;
 use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\RideController;
@@ -152,6 +154,12 @@ Route::get('/privacidad', function () {
     ]);
 })->name('legal.privacy');
 
+// Enlace compartible por WhatsApp u otra red. El código es aleatorio y
+// revocable; no revela el ID del canal ni de quien lo creó.
+Route::get('/radio/invitacion/{radioChannel:share_code}', [RadioChannelController::class, 'showInvitation'])
+    ->middleware('throttle:60,1')
+    ->name('radio.invitation.show');
+
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'phone_verified', 'driver_onboarding'])
     ->name('dashboard');
@@ -161,6 +169,27 @@ Route::post('/dashboard/ubicacion', [DashboardController::class, 'updateLocation
     ->name('dashboard.location.update');
 
 Route::middleware('auth')->group(function () {
+    // Canal personal de seguridad: su membresía persiste, pero el audio solo
+    // se habilita mientras el propietario solicita o realiza una carrera.
+    Route::get('/radio/status', [RadioSessionController::class, 'status'])
+        ->middleware('throttle:60,1')
+        ->name('radio.status');
+    Route::post('/radio/session', RadioSessionController::class)
+        ->middleware('throttle:30,1')
+        ->name('radio.session');
+    Route::post('/radio/invitacion/{radioChannel:share_code}', [RadioChannelController::class, 'join'])
+        ->middleware('throttle:12,1')
+        ->name('radio.invitation.join');
+    Route::patch('/radio/canales/{radioChannel:public_id}', [RadioChannelController::class, 'update'])
+        ->name('radio.channels.update');
+    Route::post('/radio/canales/{radioChannel:public_id}/renovar-enlace', [RadioChannelController::class, 'rotateInvitation'])
+        ->middleware('throttle:6,1')
+        ->name('radio.channels.rotate-invitation');
+    Route::delete('/radio/canales/{radioChannel:public_id}/miembros/{memberPublicId}', [RadioChannelController::class, 'removeMember'])
+        ->name('radio.channels.members.destroy');
+    Route::delete('/radio/canales/{radioChannel:public_id}/salir', [RadioChannelController::class, 'leave'])
+        ->name('radio.channels.leave');
+
     // Recorrido guiado por rol, una sola vez (pedido explícito del usuario).
     Route::post('/onboarding/completar', [OnboardingController::class, 'complete'])->name('onboarding.complete');
 

@@ -392,4 +392,36 @@ class CooperativeModuleTest extends TestCase
         $this->get('/cooperativas/'.$cooperative->id)->assertNotFound();
         $this->get(route('cooperatives.show', $cooperative->public_id))->assertOk();
     }
+
+    /**
+     * Bug reportado por el usuario: el menú de cuenta del conductor no se
+     * desplegaba. Causa real: CooperativeDriverMembership::activeCooperativeFor()
+     * cargaba la cooperativa con ->with('cooperative:id,name,logo_path') —
+     * sin public_id, AuthenticatedLayout.vue armaba
+     * route('cooperatives.show', null) y Ziggy tiraba una excepción en cada
+     * render, dejando el dropdown roto.
+     */
+    public function test_the_shared_cooperative_prop_includes_a_public_id(): void
+    {
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeUser->id,
+            'name' => 'Coop con conductor afiliado',
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->create(['user_id' => $driver->id, 'driver_type' => 'independent']);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($driver)->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('auth.cooperative.public_id', $cooperative->public_id));
+    }
 }

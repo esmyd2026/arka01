@@ -9,6 +9,20 @@ use Tests\TestCase;
 
 class ContentSecurityPolicyTest extends TestCase
 {
+    public function test_permissions_policy_allows_microphone_only_for_arka01_pages(): void
+    {
+        $response = (new SecurityHeaders)->handle(
+            Request::create('/dashboard'),
+            fn () => new Response,
+        );
+
+        $policy = (string) $response->headers->get('Permissions-Policy');
+
+        $this->assertStringContainsString('microphone=(self)', $policy);
+        $this->assertStringContainsString('camera=()', $policy);
+        $this->assertStringNotContainsString('microphone=()', $policy);
+    }
+
     public function test_production_csp_allows_required_external_images(): void
     {
         // Validamos directamente el middleware para no acoplar esta prueba a

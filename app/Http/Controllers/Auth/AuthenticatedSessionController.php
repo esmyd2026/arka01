@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Events\DriverLocationUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Jobs\NotifyDriverDisconnectedByWhatsApp;
 use App\Providers\RouteServiceProvider;
-use App\Services\DriverActivityTracker;
+use App\Services\Auth\DriverOfflineOnLogout;
 use App\Services\ReferralAttribution;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
@@ -20,7 +18,7 @@ use Inertia\Response;
 class AuthenticatedSessionController extends Controller
 {
     public function __construct(
-        private readonly DriverActivityTracker $activityTracker,
+        private readonly DriverOfflineOnLogout $driverOfflineOnLogout,
         private readonly ReferralAttribution $referralAttribution,
     ) {}
 
@@ -71,17 +69,9 @@ class AuthenticatedSessionController extends Controller
         // Se reportó: un conductor que cerró sesión (o a quien se le venció
         // la sesión) seguía apareciendo "disponible" para su flota, aunque ni
         // siquiera estuviera logueado. Se apaga acá mismo, igual que si
-        // hubiera tocado "Desconectarme" a mano antes de irse.
-        $user = $request->user();
-        if ($user?->isDriver() && $user->driverProfile->is_available) {
-            $user->driverProfile->update(['is_available' => false]);
-            $this->activityTracker->close($user->id, now());
-            broadcast(new DriverLocationUpdated($user->driverProfile));
-            // Pedido explícito del usuario: avisarle por WhatsApp que se
-            // desconectó (mismo criterio que el toggle "Activarme" en
-            // DriverLocationController::update()).
-            NotifyDriverDisconnectedByWhatsApp::dispatch($user->id);
-        }
+        // hubiera tocado "Desconectarme" a mano antes de irse (misma lógica
+        // que usa el logout móvil, ver DriverOfflineOnLogout).
+        $this->driverOfflineOnLogout->handle($request->user());
 
         Auth::guard('web')->logout();
 

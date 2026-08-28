@@ -3,6 +3,7 @@
 /public/build
 /public/hot
 /public/storage
+/dist-mobile
 /storage/*.key
 /vendor
 .env
@@ -24,6 +25,7 @@ Manual_Conductorv2.md
 Arka01_Progresov2.md
 Arka01_Conceptov2.html
 ROADMAP_APLICACION_MOVIL_CAPACITOR.md
+ROADMAP_APLICACION_MOVIL_PROGRESO.md
 SECURITY_*
 ARKA01_Rediseno_UX_Flujo_Carreras.md
 DESIGN_COMPARISON.md
@@ -33,3 +35,28 @@ Arka01_Costos_Operativos.md
 Arka01_Alcance_Proyectov2.md
 Manual_Bondades_Arka01.md
 Arka01_Identidad_Visual.md
+
+# --- App móvil (Capacitor) — pedido explícito del usuario: no subir todavía,
+# sin que esto afecte a la web. Son todos archivos/carpetas NUEVOS, propios
+# y exclusivos de la app móvil: excluirlos no le saca nada a la plataforma
+# web porque ella nunca los importa ni depende de ellos.
+/android
+/resources/js-mobile
+/index.mobile.html
+/vite.mobile.config.js
+/capacitor.config.json
+/config/mobile.php
+/app/Http/Controllers/Api
+/app/Http/Resources
+/tests/Feature/Api
+/database/migrations/2026_08_27_190000_add_device_info_to_personal_access_tokens_table.php
+
+# OJO — a propósito NO están acá (y no deberían agregarse):
+# - app/Actions/Auth/RegisterUser.php
+# - app/Services/Auth/DriverOfflineOnLogout.php
+# Aunque nacieron para la app móvil, la web YA los usa de verdad
+# (RegisteredUserController y AuthenticatedSessionController los llaman
+# directo) — si se ignoran, un `git pull` en otra máquina rompe el registro
+# y el logout de la web con "class not found". Estos dos archivos van
+# siempre junto con sus controladores web.
+

@@ -12,8 +12,14 @@ use NotificationChannels\WebPush\WebPushMessage;
 class CooperativeRideRequestedPushNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+
     public function __construct(private readonly RideRequest $rideRequest) {}
-    public function via($notifiable): array { return [WebPushChannel::class]; }
+
+    public function via($notifiable): array
+    {
+        return [WebPushChannel::class];
+    }
+
     public function toWebPush($notifiable, $notification): WebPushMessage
     {
         return (new WebPushMessage)->title('Nueva solicitud para la cooperativa')
