@@ -78,6 +78,7 @@ use App\Http\Controllers\SurveyController;
 use App\Http\Controllers\TrustedContactController;
 use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
+use App\Http\Controllers\WhatsAppLocationPickerController;
 use App\Models\Cooperative;
 use App\Models\SiteSetting;
 use Illuminate\Support\Facades\Route;
@@ -159,6 +160,21 @@ Route::get('/privacidad', function () {
 Route::get('/radio/invitacion/{radioChannel:share_code}', [RadioChannelController::class, 'showInvitation'])
     ->middleware('throttle:60,1,radio.invitation.show')
     ->name('radio.invitation.show');
+
+// Mapa para elegir origen/destino desde el bot de WhatsApp (pedido explícito
+// del usuario): el enlace lo manda WhatsAppRideBookingHandler::askLocation()
+// junto con el pedido de dirección escrita — público a propósito, quien lo
+// abre viene desde WhatsApp sin sesión en la app; la firma temporal (30 min,
+// atada a la conversación) es la única protección, mismo patrón que
+// guest-account.complete-registration en routes/auth.php.
+Route::get('/whatsapp/ubicacion/{conversation}/{step}', [WhatsAppLocationPickerController::class, 'show'])
+    ->where('step', 'origin|destination')
+    ->middleware('signed')
+    ->name('whatsapp.location-picker.show');
+Route::post('/whatsapp/ubicacion/{conversation}/{step}', [WhatsAppLocationPickerController::class, 'store'])
+    ->where('step', 'origin|destination')
+    ->middleware(['signed', 'throttle:20,1,whatsapp.location-picker.store'])
+    ->name('whatsapp.location-picker.store');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'phone_verified', 'driver_onboarding'])

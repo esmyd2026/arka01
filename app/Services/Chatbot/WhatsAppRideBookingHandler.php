@@ -374,6 +374,16 @@ class WhatsAppRideBookingHandler
     private function askLocation(string $phone, ChatbotConversation $conversation, string $state, array $context, string $message, ?User $user): bool
     {
         $field = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
+
+        // Pedido explícito del usuario: además de la dirección escrita (o
+        // ubicación compartida), un enlace para abrir un mapa, buscar el
+        // lugar ahí y mandar coordenadas exactas — más confiable que confiar
+        // solo en que el texto libre geocodifique bien. Mismo patrón de link
+        // firmado que offerFullRegistrationIfFirstGuestRide() más abajo,
+        // atado a esta conversación (nunca a un usuario: en WA_BOOKING_NAME
+        // el cliente todavía puede no tener cuenta creada).
+        $message .= "\n\nO abra el mapa para buscar el lugar y mandarnos la ubicación exacta:\n".$this->locationPickerLink($conversation, $field);
+
         $recent = $this->recentAddressOptions($user, $field);
 
         if ($recent) {
@@ -438,6 +448,30 @@ class WhatsAppRideBookingHandler
         WhatsAppFreeformSender::sendText($phone, '¿Cuántas personas son?');
 
         return true;
+    }
+
+    private function locationPickerLink(ChatbotConversation $conversation, string $field): string
+    {
+        return URL::temporarySignedRoute('whatsapp.location-picker.show', now()->addMinutes(30), [
+            'conversation' => $conversation->id,
+            'step' => $field,
+        ]);
+    }
+
+    /**
+     * Punto de entrada desde WhatsAppLocationPickerController::store() —
+     * el cliente eligió el punto en el mapa web (enlace de askLocation())
+     * en vez de escribirlo o compartir ubicación por WhatsApp. Reusa el
+     * mismo commitPoint() de siempre para que el mensaje de continuación
+     * (pedir destino, o cuántas personas son) salga igual sea cual sea el
+     * camino que se usó para resolver el punto.
+     */
+    public function commitLocationPickerPoint(ChatbotConversation $conversation, string $field, array $point): void
+    {
+        $state = $field === 'origin' ? 'WA_BOOKING_ORIGIN' : 'WA_BOOKING_DESTINATION';
+        $context = $conversation->context ?? [];
+
+        $this->commitPoint($conversation->phone, $conversation->user, $conversation, $state, $context, $point);
     }
 
     /** @param array{lat: float, lng: float}|null $biasPoint */
