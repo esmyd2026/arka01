@@ -25,23 +25,23 @@ Route::middleware('guest')->group(function () {
     // contraseñas contra muchos usuarios distintos desde la misma IP — el
     // bloqueo de LoginRequest (5 intentos) es por email+IP, no cubre eso.
     Route::post('register', [RegisteredUserController::class, 'store'])
-        ->middleware('throttle:6,1');
+        ->middleware('throttle:6,1,auth.register');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
 
     Route::post('login', [AuthenticatedSessionController::class, 'store'])
-        ->middleware('throttle:10,1');
+        ->middleware('throttle:10,1,auth.login');
 
     // Sesión única por cuenta (pedido explícito del usuario, caso real: no
     // sabía en qué navegador había quedado logueado) — pedir/confirmar un
     // código para cerrar la otra sesión sin esperar a que venza sola.
     Route::post('sesion/liberar', [SessionTakeoverController::class, 'request'])
-        ->middleware('throttle:3,1')
+        ->middleware('throttle:3,1,session-takeover.request')
         ->name('session-takeover.request');
 
     Route::post('sesion/liberar/confirmar', [SessionTakeoverController::class, 'confirm'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,session-takeover.confirm')
         ->name('session-takeover.confirm');
 
     // Iniciar sesión con Google (Socialite/OAuth) — alternativa al usuario y
@@ -57,7 +57,7 @@ Route::middleware('guest')->group(function () {
     // direcciones ajenas (email bombing) — mismo límite que pedir el código
     // de liberación de sesión, otro endpoint "guest" que manda un correo.
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
-        ->middleware('throttle:3,1')
+        ->middleware('throttle:3,1,password.email')
         ->name('password.email');
 
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
@@ -66,7 +66,7 @@ Route::middleware('guest')->group(function () {
     // Auditoría de seguridad: sin esto, no había límite para probar tokens
     // de reset al voleo.
     Route::post('reset-password', [NewPasswordController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,password.store')
         ->name('password.store');
 });
 
@@ -93,11 +93,11 @@ Route::middleware('auth')->group(function () {
         ->name('verification.notice');
 
     Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
-        ->middleware(['signed', 'throttle:6,1'])
+        ->middleware(['signed', 'throttle:6,1,verification.verify'])
         ->name('verification.verify');
 
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,verification.send')
         ->name('verification.send');
 
     Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])
@@ -113,11 +113,11 @@ Route::middleware('auth')->group(function () {
         ->name('phone.verify.show');
 
     Route::post('verificar-telefono', [PhoneVerificationController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,phone.verify.store')
         ->name('phone.verify.store');
 
     Route::post('verificar-telefono/reenviar', [PhoneVerificationController::class, 'resend'])
-        ->middleware('throttle:3,1')
+        ->middleware('throttle:3,1,phone.verify.resend')
         ->name('phone.verify.resend');
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])

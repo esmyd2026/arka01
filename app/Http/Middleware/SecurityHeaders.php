@@ -77,6 +77,14 @@ class SecurityHeaders
                 // por el usuario: sin este origen, el CSP bloqueaba la conexión
                 // en silencio (el script cargaba bien, la sugerencia nunca volvía).
                 "connect-src 'self' ws: wss: https://router.project-osrm.org https://nominatim.openstreetmap.org https://maps.googleapis.com https://places.googleapis.com",
+                // La radio arma el audio recibido con MediaSource y lo
+                // reproduce como <audio src="blob:...">
+                // (WalkieTalkie.vue). Sin "media-src" explícito, esa
+                // reproducción cae al default-src 'self' — que NO incluye
+                // blob: — y el navegador bloquea el audio en silencio: el
+                // socket conecta y el turno de palabra funciona, pero la voz
+                // nunca suena. Bug real reportado por el usuario.
+                "media-src 'self' blob:",
                 "worker-src 'self'",
                 "object-src 'none'",
                 "base-uri 'self'",

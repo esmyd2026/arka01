@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ConfigController;
 use App\Http\Controllers\Api\V1\FleetController;
+use App\Http\Controllers\Api\V1\RideRequestController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -29,11 +30,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::get('/config', [ConfigController::class, 'show'])->name('config');
 
     Route::post('/auth/register', [AuthController::class, 'register'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,api.auth.register')
         ->name('auth.register');
 
     Route::post('/auth/login', [AuthController::class, 'login'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,api.auth.login')
         ->name('auth.login');
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -42,10 +43,17 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::delete('/account', [AccountController::class, 'destroy'])->name('account.destroy');
         Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
         Route::get('/fleet/{fleet}/search-drivers', [FleetController::class, 'searchDrivers'])
-            ->middleware('throttle:30,1')
+            ->middleware('throttle:30,1,api.fleet.search-drivers')
             ->name('fleet.search-drivers');
         Route::post('/fleet/{fleet}/invitations', [FleetController::class, 'invite'])->name('fleet.invite');
         Route::delete('/fleet/members/{member}', [FleetController::class, 'removeMember'])->name('fleet.members.destroy');
+
+        Route::get('/ride-requests', [RideRequestController::class, 'index'])->name('ride-requests.index');
+        Route::post('/ride-requests', [RideRequestController::class, 'store'])
+            ->middleware('throttle:10,1,api.ride-requests.store')
+            ->name('ride-requests.store');
+        Route::get('/ride-requests/{rideRequest}', [RideRequestController::class, 'show'])->name('ride-requests.show');
+        Route::post('/ride-requests/{rideRequest}/cancel', [RideRequestController::class, 'cancel'])->name('ride-requests.cancel');
     });
 });
 

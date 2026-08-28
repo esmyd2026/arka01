@@ -124,6 +124,22 @@ async function fetchRadioToken() {
 async function connectRadio({ userGesture = false } = {}) {
     if (!config.value || connectionState.value === 'connecting' || connected.value) return;
 
+    // Desbloquea la reproducción DENTRO de este mismo clic — el primer audio
+    // real recién llega por el socket segundos después, sin ningún gesto del
+    // usuario en ese momento, y ahí Chrome/Safari lo tratan como autoplay
+    // con sonido y lo bloquean en silencio. Reproducir ahora el <audio>
+    // (todavía sin datos, MediaSource vacío) alcanza para que el mismo
+    // elemento pueda seguir sonando más tarde cuando sí lleguen los chunks.
+    // Bug real reportado por el usuario: "todo funciona pero no llega la voz".
+    if (userGesture) {
+        prepareReceiver();
+        receiverAudio?.play().then(() => {
+            playbackBlocked.value = false;
+        }).catch(() => {
+            playbackBlocked.value = true;
+        });
+    }
+
     if (socket && !socket.connected) {
         connectionState.value = 'connecting';
         socket.connect();
@@ -486,6 +502,21 @@ function reloadToApplyMicrophonePermission() {
     window.location.reload();
 }
 
+// Reintento manual del aviso "El navegador bloqueó el audio automático" — a
+// diferencia del desbloqueo silencioso de connectRadio() (que corre solo al
+// activar la radio), este botón le da al usuario algo concreto para tocar
+// si el navegador volvió a suspender el audio más tarde (p. ej. tras un
+// rato en segundo plano). Mismo truco: .play() llamado directo dentro del
+// clic cuenta como gesto del usuario para el navegador.
+function retryPlayback() {
+    prepareReceiver();
+    receiverAudio?.play().then(() => {
+        playbackBlocked.value = false;
+    }).catch(() => {
+        playbackBlocked.value = true;
+    });
+}
+
 function stopCapture() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     microphoneStream?.getTracks().forEach((track) => track.stop());
@@ -827,7 +858,10 @@ onBeforeUnmount(() => {
                             <p class="mt-3 text-center text-xs text-arka-text-muted">Mantenga pulsado mientras habla. Al soltar, el canal queda libre.</p>
                         </div>
 
-                        <p v-if="playbackBlocked" class="rounded-xl border border-arka-warning/20 bg-arka-warning/10 px-3 py-2 text-sm text-arka-warning">El navegador bloqueó el audio automático. Toque nuevamente “Radio” o revise los permisos de sonido.</p>
+                        <div v-if="playbackBlocked" class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/20 bg-arka-warning/10 px-3 py-2 text-sm text-arka-warning">
+                            <span>El navegador bloqueó el audio automático.</span>
+                            <button type="button" class="shrink-0 rounded-lg border border-arka-warning/40 px-3 py-1.5 text-xs font-bold" @click="retryPlayback">Reactivar audio</button>
+                        </div>
                         <div v-if="microphonePermissionBlocked" class="rounded-xl border border-arka-danger/25 bg-arka-danger/10 p-3 text-sm text-arka-danger">
                             <p>El micrófono está bloqueado para este sitio.</p>
                             <button

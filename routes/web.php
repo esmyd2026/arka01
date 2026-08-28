@@ -113,14 +113,14 @@ Route::get('/', function () {
 });
 
 Route::post('/viajar-como-invitado', [GuestRideController::class, 'store'])
-    ->middleware(['guest', 'throttle:4,1'])
+    ->middleware(['guest', 'throttle:4,1,guest-rides.store'])
     ->name('guest-rides.store');
 
 // "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): formulario
 // público en el Home, sin necesidad de sesión — throttle porque no hay
 // cuenta detrás que limite cuántas veces se puede mandar.
 Route::post('/opiniones', [PlatformFeedbackController::class, 'store'])
-    ->middleware('throttle:6,1')
+    ->middleware('throttle:6,1,platform-feedback.store')
     ->name('platform-feedback.store');
 
 // Encuesta corta de conductor/pasajero (pedido explícito del usuario:
@@ -130,7 +130,7 @@ Route::post('/opiniones', [PlatformFeedbackController::class, 'store'])
 // arriba): alguien YA logueado también tiene que poder responderla desde el Home.
 Route::get('/encuesta', [SurveyController::class, 'show'])->name('survey.show');
 Route::post('/encuesta', [SurveyController::class, 'store'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:10,1,survey.store')
     ->name('survey.store');
 
 // Páginas legales (pedido explícito del usuario, gap identificado antes del
@@ -157,7 +157,7 @@ Route::get('/privacidad', function () {
 // Enlace compartible por WhatsApp u otra red. El código es aleatorio y
 // revocable; no revela el ID del canal ni de quien lo creó.
 Route::get('/radio/invitacion/{radioChannel:share_code}', [RadioChannelController::class, 'showInvitation'])
-    ->middleware('throttle:60,1')
+    ->middleware('throttle:60,1,radio.invitation.show')
     ->name('radio.invitation.show');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -165,25 +165,25 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
     ->name('dashboard');
 
 Route::post('/dashboard/ubicacion', [DashboardController::class, 'updateLocation'])
-    ->middleware(['auth', 'verified', 'phone_verified', 'throttle:12,1'])
+    ->middleware(['auth', 'verified', 'phone_verified', 'throttle:12,1,dashboard.location.update'])
     ->name('dashboard.location.update');
 
 Route::middleware('auth')->group(function () {
     // Canal personal de seguridad: su membresía persiste, pero el audio solo
     // se habilita mientras el propietario solicita o realiza una carrera.
     Route::get('/radio/status', [RadioSessionController::class, 'status'])
-        ->middleware('throttle:60,1')
+        ->middleware('throttle:60,1,radio.status')
         ->name('radio.status');
     Route::post('/radio/session', RadioSessionController::class)
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,radio.session')
         ->name('radio.session');
     Route::post('/radio/invitacion/{radioChannel:share_code}', [RadioChannelController::class, 'join'])
-        ->middleware('throttle:12,1')
+        ->middleware('throttle:12,1,radio.invitation.join')
         ->name('radio.invitation.join');
     Route::patch('/radio/canales/{radioChannel:public_id}', [RadioChannelController::class, 'update'])
         ->name('radio.channels.update');
     Route::post('/radio/canales/{radioChannel:public_id}/renovar-enlace', [RadioChannelController::class, 'rotateInvitation'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,radio.channels.rotate-invitation')
         ->name('radio.channels.rotate-invitation');
     Route::delete('/radio/canales/{radioChannel:public_id}/miembros/{memberPublicId}', [RadioChannelController::class, 'removeMember'])
         ->name('radio.channels.members.destroy');
@@ -268,7 +268,7 @@ Route::middleware('auth')->group(function () {
     // Rendimiento/seguridad en producción (pedido explícito del usuario):
     // sin esto, nada impedía inundar de solicitudes de carrera a un mismo
     // usuario autenticado.
-    Route::post('/flota/solicitudes', [RideRequestController::class, 'store'])->middleware('throttle:10,1')->name('ride-requests.store');
+    Route::post('/flota/solicitudes', [RideRequestController::class, 'store'])->middleware('throttle:10,1,ride-requests.store')->name('ride-requests.store');
 
     Route::get('/flota/{fleet}', [FleetController::class, 'show'])->name('fleet.show');
     // Auditoría de seguridad: buscador en vivo (debounce de 300ms del lado
@@ -277,7 +277,7 @@ Route::middleware('auth')->group(function () {
     // barrer nombres/teléfonos reales probando términos de búsqueda uno
     // atrás de otro. 30/min deja de sobra margen para escribir a mano.
     Route::get('/flota/{fleet}/buscar-conductores', [FleetController::class, 'searchDrivers'])
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,fleet.search-drivers')
         ->name('fleet.search-drivers');
     Route::post('/flota/{fleet}/invitaciones', [FleetInvitationController::class, 'store'])->name('fleet.invitations.store');
     Route::delete('/flota/invitaciones/{invitation}', [FleetInvitationController::class, 'destroy'])->name('fleet.invitations.destroy');
@@ -287,7 +287,7 @@ Route::middleware('auth')->group(function () {
     // misma flota — mismo límite de auditoría de seguridad que el resto de
     // los buscadores por código.
     Route::get('/flota/{fleet}/referir/buscar-amigo', [FleetInvitationController::class, 'searchFriends'])
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,fleet.referral.search-friends')
         ->name('fleet.referral.search-friends');
     Route::post('/flota/{fleet}/referir', [FleetInvitationController::class, 'storeReferral'])->name('fleet.referral.store');
     // Pedido explícito del usuario: un conductor busca clientes y les manda
@@ -306,7 +306,7 @@ Route::middleware('auth')->group(function () {
     // criterio que fleet.search-drivers, del otro lado, mismo límite de
     // auditoría de seguridad.
     Route::get('/mis-clientes/buscar', [DriverInvitationController::class, 'searchClients'])
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,driver.clients.search')
         ->name('driver.clients.search');
     Route::post('/mis-clientes/invitaciones/{invitation}/aceptar', [DriverInvitationController::class, 'accept'])->name('driver.invitations.accept');
     Route::post('/mis-clientes/invitaciones/{invitation}/rechazar', [DriverInvitationController::class, 'reject'])->name('driver.invitations.reject');
@@ -316,14 +316,14 @@ Route::middleware('auth')->group(function () {
     // Ruta Google calculada desde el servidor: protege la clave privada y
     // aplica caché/throttle para controlar costos.
     Route::post('/mapas/ruta', MapRouteController::class)
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,maps.route')
         ->name('maps.route');
 
     // Ubicación en vivo del conductor (sección 9.3). El frontend la llama
     // cada ~15s (DriverAvailabilityToggle.vue) — 20/min da margen de sobra
     // sin dejar la puerta abierta a inundarla (pedido explícito del usuario:
     // rendimiento/seguridad de cara a producción).
-    Route::post('/driver/location', [DriverLocationController::class, 'update'])->middleware('throttle:20,1')->name('driver.location.update');
+    Route::post('/driver/location', [DriverLocationController::class, 'update'])->middleware('throttle:20,1,driver.location.update')->name('driver.location.update');
 
     // Resto de la negociación de precio de una solicitud (sección 3.5 y 5).
     Route::post('/solicitudes/{rideRequest}/aceptar', [RideRequestController::class, 'accept'])->name('ride-requests.accept');
@@ -338,7 +338,7 @@ Route::middleware('auth')->group(function () {
     // segundos la conexión WebSocket, Carreras reconcilia solicitudes sin
     // obligar al usuario a recargar toda la página manualmente.
     Route::get('/carreras/sincronizar', [RideController::class, 'syncRequests'])
-        ->middleware('throttle:12,1')
+        ->middleware('throttle:12,1,rides.sync-requests')
         ->name('rides.sync-requests');
     // OJO con el orden (mismo caso que "/flota/solicitar"): "/carreras/{ride}"
     // es comodín, así que el tramo literal "indicadores" tiene que ir antes,
@@ -348,7 +348,7 @@ Route::middleware('auth')->group(function () {
     // Seguimiento GPS durante la carrera, separado del estado Disponible.
     // 30/min permite una posición cada pocos segundos sin aceptar abuso.
     Route::post('/carreras/{ride}/ubicacion', [RideController::class, 'updateLocation'])
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,rides.location.update')
         ->name('rides.location.update');
     Route::post('/carreras/{ride}/arrancar', [RideController::class, 'start'])->name('rides.start');
     // "Ir por el pasajero" (pedido explícito del usuario, bug real con
@@ -374,7 +374,7 @@ Route::middleware('auth')->group(function () {
     // — cada una manda correo a los contactos de confianza. 5/min alcanza de
     // sobra para una emergencia real y frena el abuso.
     Route::post('/carreras/{ride}/sos', [SosAlertController::class, 'store'])
-        ->middleware('throttle:5,1')
+        ->middleware('throttle:5,1,sos.store')
         ->name('sos.store');
 
     // Directorio de conductores (sección 3.4) — a diferencia del perfil
@@ -397,7 +397,7 @@ Route::middleware('auth')->group(function () {
     // Auditoría de seguridad: sin límite, se podía spamear la subida de
     // comprobantes (cada uno queda en disco).
     Route::post('/mi-plan/pedidos/{subscriptionRequest}/comprobante', [SubscriptionRequestController::class, 'uploadProof'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,subscription-requests.upload-proof')
         ->name('subscription-requests.upload-proof');
     Route::delete('/mi-plan/pedidos/{subscriptionRequest}', [SubscriptionRequestController::class, 'cancel'])->name('subscription-requests.cancel');
     // Auditoría de seguridad: el comprobante vive en disco privado — este
