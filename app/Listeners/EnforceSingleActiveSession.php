@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
  *
  * Bug/pedido real del usuario: la sesión "otra activa" se medía contra
  * config('session.lifetime') — bien cuando ese valor eran 2 horas, pero desde
- * que se subió a 30 días (para que la sesión no se cierre sola, ver
+ * que se amplió a un año (para que la sesión no se cierre sola, ver
  * Arka01_Progreso.md) esto empezó a bloquear logins legítimos por una sesión
  * de hace semanas que el usuario ni recordaba. "Otra sesión activa" ahora se
  * mide con una ventana corta y propia (CONCURRENT_WINDOW_MINUTES), separada

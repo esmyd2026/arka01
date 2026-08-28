@@ -76,7 +76,7 @@ class SingleActiveSessionTest extends TestCase
     /**
      * "Otra sesión activa" se mide con una ventana propia y corta
      * (EnforceSingleActiveSession::CONCURRENT_WINDOW_MINUTES) — separada de
-     * cuánto dura la sesión en sí (config('session.lifetime'), 30 días desde
+     * cuánto dura la sesión en sí (config('session.lifetime'), un año desde
      * que se pidió que no se cierre sola). Antes de ese cambio esta prueba
      * usaba config('session.lifetime') como referencia, pero eso ya no
      * refleja qué cuenta como "concurrente" — ver el comentario en el listener.

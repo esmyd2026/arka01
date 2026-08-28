@@ -6,6 +6,7 @@ import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
+import SectionIcon from '@/Components/SectionIcon.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -220,8 +221,11 @@ async function switchToClient() {
                                 @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
                             </p>
                             <div class="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-arka-primary/15 text-arka-primary-bright">
-                                    🤝 Círculo de confianza
+                                <span class="inline-flex items-center gap-1.5 rounded-full bg-arka-primary/15 px-2.5 py-0.5 text-xs font-medium text-arka-primary-bright">
+                                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                                    </svg>
+                                    Círculo de confianza
                                 </span>
                                 <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
                             </div>
@@ -301,7 +305,7 @@ async function switchToClient() {
                      la página. -->
                 <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('personal')">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">👤</span>
+                        <SectionIcon name="user" />
                         <span class="min-w-0 flex-1">
                             <span class="block font-semibold text-arka-text">Datos personales</span>
                             <span class="mt-0.5 block text-xs" :class="$page.props.auth.isProfileIncomplete ? 'text-arka-warning' : 'text-arka-primary'">
@@ -329,7 +333,7 @@ async function switchToClient() {
                      tarjeta de perfil — sin repetirlos acá. -->
                 <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('account')">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">⚙️</span>
+                        <SectionIcon name="settings" />
                         <span class="min-w-0 flex-1">
                             <span class="block font-semibold text-arka-text">Cuenta y preferencias</span>
                             <span class="mt-0.5 block text-xs text-arka-text-muted">
@@ -359,8 +363,11 @@ async function switchToClient() {
                     <!-- Verificar teléfono (pedido explícito del usuario: que el
                          cliente también pueda, no solo quedar bloqueado esperando
                          a que el sistema se lo exija de golpe). -->
-                    <p v-if="$page.props.auth.user.phone && !$page.props.auth.user.phone_verified_at" class="mt-4 text-sm text-arka-warning">
-                        📵 Su teléfono todavía no está verificado.
+                    <p v-if="$page.props.auth.user.phone && !$page.props.auth.user.phone_verified_at" class="mt-4 flex flex-wrap items-center gap-1.5 text-sm text-arka-warning">
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm3 16h4M3 3l18 18" />
+                        </svg>
+                        Su teléfono todavía no está verificado.
                         <Link :href="route('phone.verify.show')" class="underline hover:opacity-80 font-medium">
                             Verificar ahora
                         </Link>
@@ -429,7 +436,7 @@ async function switchToClient() {
                      lectura. -->
                 <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('referrals')">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">🤝</span>
+                        <SectionIcon name="referrals" />
                         <span class="min-w-0 flex-1">
                             <span class="block font-semibold text-arka-text">Recomendaciones</span>
                             <span class="mt-0.5 block text-xs text-arka-text-muted">
@@ -538,7 +545,7 @@ async function switchToClient() {
 
                 <section v-if="Object.keys(subscriptionSummary).length" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('subscription')">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">💳</span>
+                        <SectionIcon name="subscription" />
                         <span class="min-w-0 flex-1">
                             <span class="block font-semibold text-arka-text">Mi suscripción</span>
                             <span class="mt-0.5 block text-xs text-arka-text-muted">Plan vigente, límites y opciones para mejorar</span>
@@ -554,7 +561,7 @@ async function switchToClient() {
 
                 <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('security')">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">🔒</span>
+                        <SectionIcon name="security" />
                         <span class="min-w-0 flex-1">
                             <span class="block font-semibold text-arka-text">Seguridad</span>
                             <span class="mt-0.5 block text-xs text-arka-text-muted">Cambiar contraseña o eliminar la cuenta</span>

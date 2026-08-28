@@ -124,12 +124,21 @@ function dismiss() {
 <template>
     <div v-if="visible" class="p-3 rounded-arka bg-arka-warning/10 border border-arka-warning/30 text-sm space-y-2">
         <div class="flex items-start justify-between gap-3">
-            <p class="text-arka-text font-medium">🔔 Active ubicación y notificaciones para no perderse nada</p>
+            <p class="flex items-center gap-2 text-arka-text font-medium">
+                <svg class="h-4 w-4 shrink-0 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" />
+                </svg>
+                Active ubicación y notificaciones para no perderse nada
+            </p>
             <button type="button" class="text-arka-text-muted hover:text-arka-text shrink-0" @click="dismiss">✕</button>
         </div>
 
         <p v-if="needsGeo" class="text-arka-text-muted flex items-center flex-wrap gap-x-1.5">
-            📍 Sin ubicación activa, el mapa no puede ubicarlo ni mostrarle conductores cerca.
+            <svg class="h-4 w-4 shrink-0 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
+                <circle cx="12" cy="10" r="2.5" />
+            </svg>
+            Sin ubicación activa, el mapa no puede ubicarlo ni mostrarle conductores cerca.
             <button
                 v-if="geoStatus === 'prompt'"
                 type="button"
@@ -142,7 +151,10 @@ function dismiss() {
         </p>
 
         <p v-if="needsNotif" class="text-arka-text-muted flex items-center flex-wrap gap-x-1.5">
-            🔔 Sin notificaciones activas, puede no enterarse de solicitudes o avisos aunque no tenga la app abierta.
+            <svg class="h-4 w-4 shrink-0 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" />
+            </svg>
+            Sin notificaciones activas, puede no enterarse de solicitudes o avisos aunque no tenga la app abierta.
             <button
                 v-if="notifStatus === 'default' || notifStatus === 'unsubscribed'"
                 type="button"

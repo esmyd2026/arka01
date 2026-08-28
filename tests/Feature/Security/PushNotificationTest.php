@@ -76,7 +76,17 @@ class PushNotificationTest extends TestCase
             'destination_lng' => -78.5000,
         ]);
 
-        Notification::assertSentTo($driver, RideRequestedPushNotification::class);
+        Notification::assertSentTo(
+            $driver,
+            RideRequestedPushNotification::class,
+            function (RideRequestedPushNotification $notification) use ($driver): bool {
+                $payload = $notification->toWebPush($driver, $notification)->toArray();
+
+                return $payload['data']['category'] === 'incoming_ride'
+                    && $payload['data']['url'] === '/carreras'
+                    && filled($payload['data']['ride_request_id']);
+            }
+        );
     }
 
     /**

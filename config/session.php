@@ -33,9 +33,10 @@ return [
 
     // Pedido explícito del usuario: la sesión (cliente y conductor por
     // igual) no debe cerrarse sola por inactividad — solo con "Cerrar
-    // sesión". 30 días de margen en vez de las 2 horas por defecto de
-    // Laravel; sigue siendo configurable por variable de entorno.
-    'lifetime' => env('SESSION_LIFETIME', 43200),
+    // sesión". Un año de inactividad en vez de las 2 horas por defecto de
+    // Laravel; sigue siendo configurable y el cierre de sesión manual,
+    // cambio de contraseña o revocación de seguridad continúan funcionando.
+    'lifetime' => env('SESSION_LIFETIME', 525600),
 
     'expire_on_close' => false,
 

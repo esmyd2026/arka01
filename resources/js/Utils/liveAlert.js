@@ -63,10 +63,10 @@ export function armAudioUnlockOnFirstInteraction() {
     document.addEventListener('keydown', unlock, { once: true });
 }
 
-function tone(ctx, frequency, startAt, durationSeconds, peakGain) {
+function tone(ctx, frequency, startAt, durationSeconds, peakGain, waveType = 'sine') {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = 'sine';
+    osc.type = waveType;
     osc.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, startAt);
     gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peakGain), startAt + 0.01);
@@ -156,12 +156,11 @@ const SOUND_PRESETS = {
         },
     },
     siren: {
-        vibrate: [150, 100, 150, 100, 150],
+        vibrate: [350, 120, 350, 120, 350, 120, 350],
         play(ctx, now, scale) {
-            tone(ctx, 600, now, 0.12, 0.7 * scale);
-            tone(ctx, 850, now + 0.13, 0.12, 0.7 * scale);
-            tone(ctx, 600, now + 0.26, 0.12, 0.7 * scale);
-            tone(ctx, 850, now + 0.39, 0.12, 0.7 * scale);
+            for (let index = 0; index < 8; index += 1) {
+                tone(ctx, index % 2 === 0 ? 620 : 920, now + index * 0.3, 0.27, 0.82 * scale, 'square');
+            }
         },
     },
     ding_dong: {
@@ -169,6 +168,37 @@ const SOUND_PRESETS = {
         play(ctx, now, scale) {
             bellTone(ctx, 783.99, now, 0.3, 0.5 * scale);
             bellTone(ctx, 659.25, now + 0.28, 0.4, 0.5 * scale);
+        },
+    },
+    emergency_siren: {
+        vibrate: [600, 150, 600, 150, 600, 150, 600, 150, 600],
+        play(ctx, now, scale) {
+            // La secuencia completa se agenda de una vez en Web Audio: así
+            // conserva la duración aunque la pestaña quede en segundo plano
+            // y el navegador reduzca la frecuencia de sus temporizadores.
+            for (let index = 0; index < 12; index += 1) {
+                tone(ctx, index % 2 === 0 ? 680 : 1040, now + index * 0.42, 0.38, 0.9 * scale, 'square');
+            }
+        },
+    },
+    repeating_alarm: {
+        vibrate: [500, 180, 500, 180, 500, 180, 500, 180, 500, 180, 500],
+        play(ctx, now, scale) {
+            for (let group = 0; group < 6; group += 1) {
+                const start = now + group * 0.95;
+                tone(ctx, 880, start, 0.32, 0.88 * scale, 'sawtooth');
+                tone(ctx, 880, start + 0.4, 0.32, 0.88 * scale, 'sawtooth');
+            }
+        },
+    },
+    dispatch_horn: {
+        vibrate: [700, 200, 700, 200, 700, 200, 700],
+        play(ctx, now, scale) {
+            for (let index = 0; index < 4; index += 1) {
+                const start = now + index * 1.05;
+                tone(ctx, 420, start, 0.78, 0.72 * scale, 'square');
+                tone(ctx, 630, start, 0.78, 0.28 * scale, 'square');
+            }
         },
     },
 };
@@ -181,7 +211,7 @@ const DEFAULT_CATEGORY_SOUND = {
     attention: 'attention',
     update: 'soft',
     cabin: 'cabin',
-    incoming_ride: 'urgent',
+    incoming_ride: 'emergency_siren',
 };
 
 // Configuración vigente (pedido explícito del usuario: "y que tenga todo el

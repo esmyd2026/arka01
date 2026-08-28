@@ -309,7 +309,10 @@ class AdminSystemControllerTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->has('notificationSounds', 4)
             ->where('notificationSounds.0.sound', 'attention')
-            ->has('notificationSoundOptions', 9)
+            ->has('notificationSoundOptions', 12)
+            ->where('notificationSoundOptions.9.key', 'emergency_siren')
+            ->where('notificationSoundOptions.10.key', 'repeating_alarm')
+            ->where('notificationSoundOptions.11.key', 'dispatch_horn')
             ->where('notificationVolume', 100)
         );
     }

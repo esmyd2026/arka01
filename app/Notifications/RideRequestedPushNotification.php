@@ -44,7 +44,11 @@ class RideRequestedPushNotification extends Notification implements ShouldQueue
             ->title($this->rideRequest->is_scheduled ? 'Carrera programada nueva' : 'Nueva solicitud de carrera')
             ->body($body)
             ->icon('/icons/icon.svg')
-            ->data(['url' => '/carreras'])
+            ->data([
+                'url' => '/carreras',
+                'category' => 'incoming_ride',
+                'ride_request_id' => $this->rideRequest->id,
+            ])
             ->action('Ver', 'view');
     }
 }

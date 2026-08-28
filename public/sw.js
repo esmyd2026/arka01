@@ -40,20 +40,32 @@ self.addEventListener('push', (event) => {
     if (!event.data) return;
 
     const payload = event.data.json();
+    const payloadData = payload.data ?? {};
+    const category = payload.category ?? payloadData.category;
+    const isIncomingRide = category === 'incoming_ride';
+    const rideRequestId = payload.ride_request_id ?? payloadData.ride_request_id;
 
     event.waitUntil(
         self.registration.showNotification(payload.title ?? 'Arka01', {
             body: payload.body ?? '',
             icon: '/icons/icon.svg',
             badge: '/icons/icon.svg',
-            data: { url: payload.url ?? '/dashboard' },
+            data: { url: payload.url ?? payloadData.url ?? '/dashboard' },
             // Sonido del sistema + vibración (pedido explícito del usuario):
             // `silent: false` es el default, pero se deja explícito para que
             // quede claro que es intencional; el patrón de vibración es lo
             // único que la Push API permite controlar de verdad (no hay forma
             // estándar entre navegadores de elegir un sonido propio).
             silent: false,
-            vibrate: [200, 100, 200],
+            vibrate: isIncomingRide
+                ? [700, 150, 700, 150, 700, 150, 700, 150, 700]
+                : [200, 100, 200],
+            // En navegadores compatibles, una carrera nueva permanece a la
+            // vista hasta que el conductor la atienda. `renotify` permite
+            // que otra solicitud vuelva a vibrar aun compartiendo etiqueta.
+            requireInteraction: isIncomingRide,
+            tag: isIncomingRide ? `incoming-ride-${rideRequestId ?? 'new'}` : undefined,
+            renotify: isIncomingRide,
         })
     );
 });

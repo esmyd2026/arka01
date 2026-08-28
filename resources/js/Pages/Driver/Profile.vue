@@ -12,6 +12,7 @@ import SearchableSelect from '@/Components/SearchableSelect.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
 import SessionDataUsage from '@/Components/SessionDataUsage.vue';
+import SectionIcon from '@/Components/SectionIcon.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
@@ -590,7 +591,7 @@ const VERIFICATION_LABELS = {
                              corregirlo si se equivocó o cambió de celular. -->
                         <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('contact')">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">📱</span>
+                                <SectionIcon name="phone" />
                                 <span class="min-w-0 flex-1">
                                     <span class="block font-semibold text-arka-text">Contacto y WhatsApp</span>
                                     <span class="mt-0.5 block truncate text-xs text-arka-text-muted">
@@ -646,7 +647,7 @@ const VERIFICATION_LABELS = {
 
                         <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('vehicle')">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">🚘</span>
+                                <SectionIcon name="vehicle" />
                                 <span class="min-w-0 flex-1">
                                     <span class="block font-semibold text-arka-text">Vehículo y comodidades</span>
                                     <span class="mt-0.5 block text-xs" :class="vehicleInfoComplete ? 'text-arka-primary' : 'text-arka-warning'">
@@ -821,7 +822,7 @@ const VERIFICATION_LABELS = {
 
                         <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('work')">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">💵</span>
+                                <SectionIcon name="rates" />
                                 <span class="min-w-0 flex-1">
                                     <span class="block font-semibold text-arka-text">Tarifas y forma de trabajo</span>
                                     <span class="mt-0.5 block text-xs text-arka-text-muted">
@@ -915,7 +916,7 @@ const VERIFICATION_LABELS = {
                              solo pueden verlos el conductor y un administrador. -->
                         <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('verification')">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">🪪</span>
+                                <SectionIcon name="identity" />
                                 <span class="min-w-0 flex-1">
                                     <span class="block font-semibold text-arka-text">Identidad y documentos</span>
                                     <span class="mt-0.5 block text-xs"
@@ -1083,7 +1084,7 @@ const VERIFICATION_LABELS = {
 
                         <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('visibility')">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-arka-primary/10 text-lg">👁️</span>
+                                <SectionIcon name="visibility" />
                                 <span class="min-w-0 flex-1">
                                     <span class="block font-semibold text-arka-text">Visibilidad e invitación</span>
                                     <span class="mt-0.5 block text-xs text-arka-text-muted">

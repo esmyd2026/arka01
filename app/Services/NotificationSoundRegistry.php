@@ -28,7 +28,7 @@ class NotificationSoundRegistry
         'attention' => ['label' => 'Cancelaciones, cambios e invitaciones de flota', 'default' => 'attention'],
         'update' => ['label' => 'Avisos generales (soporte, carrera aceptada)', 'default' => 'soft'],
         'cabin' => ['label' => 'Progreso de la carrera (en camino, llegó, recogió, completó)', 'default' => 'cabin'],
-        'incoming_ride' => ['label' => 'Carrera nueva para el conductor', 'default' => 'urgent'],
+        'incoming_ride' => ['label' => 'Carrera nueva para el conductor', 'default' => 'emergency_siren'],
     ];
 
     public const SOUNDS = [
@@ -39,8 +39,11 @@ class NotificationSoundRegistry
         'classic_bell' => 'Timbre clásico',
         'double_knock' => 'Doble golpe',
         'marimba' => 'Marimba',
-        'siren' => 'Sirena breve',
+        'siren' => 'Sirena intensa',
         'ding_dong' => 'Timbre de puerta',
+        'emergency_siren' => 'Sirena de emergencia (5 segundos)',
+        'repeating_alarm' => 'Alarma insistente (6 segundos)',
+        'dispatch_horn' => 'Alerta de despacho (4 segundos)',
     ];
 
     /**
