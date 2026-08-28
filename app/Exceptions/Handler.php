@@ -5,6 +5,7 @@ namespace App\Exceptions;
 use App\Services\SystemEventLogger;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -101,6 +102,15 @@ class Handler extends ExceptionHandler
     {
         if ($e instanceof TokenMismatchException && $request->header('X-Inertia')) {
             return back()->with('status', 'La página expiró — vuelva a intentarlo.');
+        }
+
+        // Mismo problema que el 419 de arriba, pero con el 429 que devuelve
+        // el middleware `throttle` (ride-requests.store, radio.invitation.join,
+        // etc. — cualquier ruta con ese middleware): bug real reportado por
+        // el usuario, "Volver al inicio" atrapado sin funcionar tras pedir
+        // varias carreras seguidas o unirse repetido a un canal de radio.
+        if ($e instanceof ThrottleRequestsException && $request->header('X-Inertia')) {
+            return back()->with('status', 'Demasiados intentos. Espere un momento antes de volver a intentarlo.');
         }
 
         // Una página HTML de error dentro de una visita Inertia termina en
