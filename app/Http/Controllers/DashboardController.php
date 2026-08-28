@@ -92,6 +92,21 @@ class DashboardController extends Controller
                             && ($user->driverProfile?->isWithinRangeOf((float) $rideRequest->origin_lat, (float) $rideRequest->origin_lng) ?? true)))
                     ->count(),
                 'completed_rides' => Ride::query()->where('driver_user_id', $userId)->where('status', 'completed')->count(),
+                // El tablero diferencia producción de hoy, del mes y el
+                // histórico. Antes solo enviaba el total y la interfaz lo
+                // presentaba debajo de "Ingresos de hoy", lo que podía
+                // hacer creer que todas esas carreras correspondían al día.
+                'completed_rides_today' => Ride::query()
+                    ->where('driver_user_id', $userId)
+                    ->where('status', 'completed')
+                    ->whereDate('completed_at', today())
+                    ->count(),
+                'completed_rides_this_month' => Ride::query()
+                    ->where('driver_user_id', $userId)
+                    ->where('status', 'completed')
+                    ->whereMonth('completed_at', now()->month)
+                    ->whereYear('completed_at', now()->year)
+                    ->count(),
                 // Pedido explícito del usuario: "que le muestre también la
                 // cantidad de $ que ha hecho en el día y lo que lleva del
                 // mes" — mismo criterio que earnings_this_month, de abajo,

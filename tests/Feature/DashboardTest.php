@@ -519,6 +519,9 @@ class DashboardTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->where('driverStats.earnings_today', 15)
             ->where('driverStats.earnings_this_month', 35)
+            ->where('driverStats.completed_rides_today', 1)
+            ->where('driverStats.completed_rides_this_month', 2)
+            ->where('driverStats.completed_rides', 2)
         );
     }
 
