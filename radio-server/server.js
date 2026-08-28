@@ -55,6 +55,16 @@ function createRadioServer(options = {}) {
         path: socketPath,
         serveClient: true,
         transports: ['websocket'],
+        // Bug real reportado por el usuario ("se cae"): con los valores por
+        // defecto de Socket.IO (pingInterval 25s, pingTimeout 20s), una
+        // conexión WebSocket muerta en silencio (típico de datos móviles o
+        // wifi inestable — nadie manda nada mientras nadie habla) tarda
+        // hasta 45s en detectarse y recién ahí arranca la reconexión del
+        // cliente. Achicar esto a la mitad no cambia nada con la conexión
+        // sana (solo son paquetes de ping de más), pero corta a la mitad
+        // cuánto tiempo se ve "conectado" sin estarlo de verdad.
+        pingInterval: 10000,
+        pingTimeout: 10000,
         maxHttpBufferSize: maxPacket,
         cors: {
             origin(origin, callback) {

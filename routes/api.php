@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ConfigController;
+use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\FleetController;
 use App\Http\Controllers\Api\V1\RideRequestController;
 use App\Http\Controllers\WhatsAppWebhookController;
@@ -54,6 +55,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('ride-requests.store');
         Route::get('/ride-requests/{rideRequest}', [RideRequestController::class, 'show'])->name('ride-requests.show');
         Route::post('/ride-requests/{rideRequest}/cancel', [RideRequestController::class, 'cancel'])->name('ride-requests.cancel');
+
+        Route::get('/driver/status', [DriverController::class, 'status'])->name('driver.status');
+        Route::post('/driver/location', [DriverController::class, 'updateLocation'])
+            ->middleware('throttle:20,1,api.driver.location')
+            ->name('driver.location');
     });
 });
 

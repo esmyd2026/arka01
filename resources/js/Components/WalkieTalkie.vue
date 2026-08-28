@@ -23,6 +23,13 @@ const socketPath = String(import.meta.env.VITE_RADIO_SOCKET_PATH || '/radio/sock
 const authEndpoint = String(import.meta.env.VITE_RADIO_AUTH_ENDPOINT || '').trim();
 const statusEndpoint = String(import.meta.env.VITE_RADIO_STATUS_ENDPOINT || '/radio/status').trim();
 
+// Bug real reportado por el usuario ("algunos no escuchan"): Safari/iOS no
+// decodifica webm/opus, ni por MediaSource ni como archivo suelto — sin este
+// aviso, esas personas se quedan sin escuchar NUNCA, en silencio, sin ningún
+// mensaje que lo explique (ver receiveAudioChunk() y playStandaloneChunk()
+// más abajo, que dependen de este mismo códec).
+const audioPlaybackUnsupported = !window.MediaSource?.isTypeSupported?.('audio/webm;codecs=opus');
+
 const isOpen = ref(false);
 const config = ref(null);
 const activeChannels = ref([]);
@@ -558,6 +565,8 @@ function prepareReceiver() {
 }
 
 function receiveAudioChunk(payload) {
+    if (audioPlaybackUnsupported) return;
+
     const buffer = toArrayBuffer(payload);
     if (!buffer) return;
 
@@ -772,6 +781,9 @@ onBeforeUnmount(() => {
                 </header>
 
                 <div class="max-h-[calc(100dvh-6rem)] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+                    <p v-if="audioPlaybackUnsupported" class="mb-4 rounded-xl border border-arka-danger/25 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">
+                        Este navegador no puede reproducir el audio de la radio. Probá desde Chrome (Android o Windows) o desde una versión más reciente de tu navegador.
+                    </p>
                     <div v-if="config" class="space-y-4">
                         <div v-if="activeChannels.length > 1" class="space-y-2">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-arka-text-muted">Canales activos</p>
