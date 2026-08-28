@@ -7,7 +7,8 @@ import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { playAttentionAlert, playCabinChime, playUpdateChime } from '@/Utils/liveAlert';
+import { playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime } from '@/Utils/liveAlert';
+import { pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { waitingMessage as sharedWaitingMessage, secondsLeft as sharedSecondsLeft } from '@/Utils/rideWaitingMessage';
 
 const props = defineProps({
@@ -119,7 +120,62 @@ watch(
 const counterAmounts = ref({});
 const processingRequestId = ref(null);
 
-const channels = [];
+const ownedChannelListeners = [];
+let requestSyncTimer = null;
+let requestSyncRunning = false;
+
+// El canal personal también lo usa AuthenticatedLayout para la alarma global.
+// Guardamos cada callback propio para desmontarlo sin ejecutar Echo.leave(),
+// que apagaría el canal compartido y dejaría de avisar hasta recargar.
+function listenOwned(channel, event, callback) {
+    channel.listen(event, callback);
+    ownedChannelListeners.push({ channel, event, callback });
+}
+
+// Reverb da la respuesta inmediata, pero una conexión móvil puede perder un
+// evento durante un cambio de red, bloqueo de pantalla o reinicio del socket.
+// Esta reconciliación consulta solo solicitudes activas: no recarga historial,
+// mapas ni toda la página. Si descubre una solicitud nueva que el WebSocket no
+// entregó, reproduce la misma alarma y abre el mismo modal global.
+async function syncActiveRequests() {
+    if (document.hidden || requestSyncRunning || processingRequestId.value) return;
+
+    requestSyncRunning = true;
+
+    try {
+        const { data } = await window.axios.get(route('rides.sync-requests'));
+        const nextIncoming = data.incoming_requests_as_driver ?? [];
+        const nextPending = data.pending_requests_as_client ?? [];
+        const currentIncomingIds = new Set(incoming.value.map((request) => request.id));
+        const currentPendingStatuses = new Map(myPending.value.map((request) => [request.id, request.status]));
+
+        const missedIncoming = nextIncoming.filter(
+            (request) => request.status === 'pending' && !currentIncomingIds.has(request.id)
+        );
+        const missedCounterOffer = nextPending.find(
+            (request) => request.status === 'negotiating' && currentPendingStatuses.get(request.id) !== 'negotiating'
+        );
+
+        incoming.value = nextIncoming;
+        myPending.value = nextPending;
+
+        if (missedIncoming.length > 0 && pushIncomingRideRequest(missedIncoming[0])) {
+            playIncomingRideAlert();
+        }
+
+        if (missedCounterOffer) playUpdateChime();
+    } catch (error) {
+        // El siguiente ciclo vuelve a intentarlo. No se muestra un error cada
+        // 10 segundos porque una pérdida corta de red en el celular es normal.
+        console.warn('No se pudieron sincronizar las solicitudes activas.', error);
+    } finally {
+        requestSyncRunning = false;
+    }
+}
+
+function syncWhenVisible() {
+    if (!document.hidden) syncActiveRequests();
+}
 
 onMounted(() => {
     // Mi propio canal: acá llegan las solicitudes dirigidas a mí como conductor,
@@ -144,7 +200,7 @@ onMounted(() => {
     // pasaba de "esperando, todos ocupados" a tener un candidato real sin que
     // yo tuviera que recargar la página — actualiza la tarjeta en el lugar,
     // sin el chime fuerte (ese es para conductores recibiendo algo nuevo).
-    personal.listen('.ride-request.created', (e) => {
+    listenOwned(personal, '.ride-request.created', (e) => {
         const req = myPending.value.find((r) => r.id === e.id);
         if (req) {
             const assignedNow = e.cooperative_id && e.driver_user_id && req.driver_user_id !== e.driver_user_id;
@@ -159,10 +215,10 @@ onMounted(() => {
     // Pedido explícito del usuario: apenas el conductor acepta, el cliente
     // pasa directo al detalle de esa carrera en vez de quedarse mirando la
     // lista — ahí es donde puede seguir la ubicación en vivo y chatear.
-    personal.listen('.ride-request.accepted', (e) => {
+    listenOwned(personal, '.ride-request.accepted', (e) => {
         router.visit(route('rides.show', e.ride_id));
     });
-    personal.listen('.ride-request.countered', (e) => {
+    listenOwned(personal, '.ride-request.countered', (e) => {
         playUpdateChime();
         const req = myPending.value.find((r) => r.id === e.ride_request_id);
         if (req) {
@@ -171,13 +227,13 @@ onMounted(() => {
             req.negotiating_driver_name = e.driver_name;
         }
     });
-    personal.listen('.ride-request.cancelled', (e) => {
+    listenOwned(personal, '.ride-request.cancelled', (e) => {
         incoming.value = incoming.value.filter((r) => r.id !== e.ride_request_id);
     });
     // Despacho secuencial estilo Uber (pedido explícito del usuario): nadie
     // de la bolsa respondió a tiempo — la tarjeta "Esperando respuesta" tiene
     // que decirlo, no quedarse pegada en silencio.
-    personal.listen('.ride-request.expired', (e) => {
+    listenOwned(personal, '.ride-request.expired', (e) => {
         playUpdateChime();
         const req = myPending.value.find((r) => r.id === e.ride_request_id);
         if (req) req.status = 'expired';
@@ -185,7 +241,7 @@ onMounted(() => {
     // Bug reportado por el usuario: el conductor puntual al que le pedí la
     // carrera la rechazó, y no me enteraba de nada — la tarjeta se quedaba
     // pegada en "buscando" para siempre, en silencio.
-    personal.listen('.ride-request.declined', (e) => {
+    listenOwned(personal, '.ride-request.declined', (e) => {
         playUpdateChime();
         const req = myPending.value.find((r) => r.id === e.ride_request_id);
         if (req) {
@@ -195,7 +251,7 @@ onMounted(() => {
     });
     // El cliente subió su propia oferta (sin esperar a que yo contraoferte) —
     // se actualiza el monto ahí mismo en la lista, sin recargar.
-    personal.listen('.ride-request.price-raised', (e) => {
+    listenOwned(personal, '.ride-request.price-raised', (e) => {
         const req = incoming.value.find((r) => r.id === e.ride_request_id);
         if (req) req.current_offered_price = e.offered_amount;
     });
@@ -207,7 +263,7 @@ onMounted(() => {
     // no algo que exija una respuesta — usan la campanita de cabina en vez
     // del tono de atención (ese queda para lo que sí necesita reacción,
     // como una cancelación o una carrera nueva).
-    personal.listen('.ride.completed', () => {
+    listenOwned(personal, '.ride.completed', () => {
         if (!isClient) playCabinChime();
         router.reload({ only: ['activeRides', 'rideHistory'] });
     });
@@ -216,14 +272,14 @@ onMounted(() => {
     // "Programados" se actualicen solos para quien no la canceló. Con el
     // tono de atención + vibración: a diferencia de los demás, esto corta
     // el viaje, no es un avance normal.
-    personal.listen('.ride.cancelled', () => {
+    listenOwned(personal, '.ride.cancelled', () => {
         if (!isClient) playAttentionAlert();
         router.reload({ only: ['activeRides', 'scheduledRides', 'rideHistory'] });
     });
     // El conductor arrancó una carrera que venía PROGRAMADA (consideración
     // agregada al alcance) — pasa de "Programados" a "En curso" solo, sin
     // esperar a que alguien recargue la página.
-    personal.listen('.ride.started', () => {
+    listenOwned(personal, '.ride.started', () => {
         if (!isClient) playCabinChime();
         router.reload({ only: ['scheduledRides', 'activeRides'] });
     });
@@ -235,22 +291,22 @@ onMounted(() => {
     // marcaba "ya llegué" o "ya recogí al cliente". La etiqueta de estado de
     // "En curso" (activeRideStatusLabel) ya refleja esto solo con recargar
     // activeRides — acá solo faltaba el aviso.
-    personal.listen('.ride.arrived', () => {
+    listenOwned(personal, '.ride.arrived', () => {
         if (!isClient) playCabinChime();
         router.reload({ only: ['activeRides'] });
     });
-    personal.listen('.ride.picked_up', () => {
+    listenOwned(personal, '.ride.picked_up', () => {
         if (!isClient) playCabinChime();
         router.reload({ only: ['activeRides'] });
     });
     // Cambio de horario propuesto/respondido en una carrera programada
     // (pedido explícito del usuario: editar si se equivocaron) — "Programados"
     // tiene que reflejarlo sin que nadie recargue a mano.
-    personal.listen('.ride.reschedule-proposed', () => {
+    listenOwned(personal, '.ride.reschedule-proposed', () => {
         playAttentionAlert();
         router.reload({ only: ['scheduledRides'] });
     });
-    personal.listen('.ride.reschedule-responded', () => {
+    listenOwned(personal, '.ride.reschedule-responded', () => {
         if (!isClient) playAttentionAlert();
         router.reload({ only: ['scheduledRides'] });
     });
@@ -258,43 +314,45 @@ onMounted(() => {
     // explícito del usuario) — solo le llega al conductor (ver
     // RideReminderDue::broadcastOn()), acá solo hace falta el sonido: la
     // tarjeta ya muestra la hora, no hace falta recargar nada.
-    personal.listen('.ride.reminder-due', (event) => {
+    listenOwned(personal, '.ride.reminder-due', (event) => {
         playAttentionAlert();
         reminderRideIds.value = new Set([...reminderRideIds.value, event.ride_id]);
     });
-    channels.push(personal);
-
     // Una por cada flota donde soy conductor activo: acá llegan las
     // solicitudes "a toda la flota disponible".
     props.driverFleetIds.forEach((fleetId) => {
         const fleetChannel = window.Echo.private(`fleet.${fleetId}`);
-        fleetChannel.listen('.ride-request.created', (e) => {
+        listenOwned(fleetChannel, '.ride-request.created', (e) => {
             playAttentionAlert();
             incoming.value.unshift(e);
         });
-        fleetChannel.listen('.ride-request.accepted', (e) => {
+        listenOwned(fleetChannel, '.ride-request.accepted', (e) => {
             incoming.value = incoming.value.filter((r) => r.id !== e.ride_request_id);
         });
         // Otro conductor de la flota ya tomó esta solicitud contraofertando:
         // deja de estar disponible para mí.
-        fleetChannel.listen('.ride-request.countered', (e) => {
+        listenOwned(fleetChannel, '.ride-request.countered', (e) => {
             incoming.value = incoming.value.filter((r) => r.id !== e.ride_request_id);
         });
-        fleetChannel.listen('.ride-request.cancelled', (e) => {
+        listenOwned(fleetChannel, '.ride-request.cancelled', (e) => {
             incoming.value = incoming.value.filter((r) => r.id !== e.ride_request_id);
         });
-        fleetChannel.listen('.ride-request.price-raised', (e) => {
+        listenOwned(fleetChannel, '.ride-request.price-raised', (e) => {
             const req = incoming.value.find((r) => r.id === e.ride_request_id);
             if (req) req.current_offered_price = e.offered_amount;
         });
-        channels.push(fleetChannel);
     });
+
+    requestSyncTimer = window.setInterval(syncActiveRequests, 10000);
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncActiveRequests);
 });
 
 onBeforeUnmount(() => {
-    channels.forEach((channel) => channel.stopListening('.ride-request.created'));
-    window.Echo.leave(`App.Models.User.${userId}`);
-    props.driverFleetIds.forEach((fleetId) => window.Echo.leave(`fleet.${fleetId}`));
+    ownedChannelListeners.forEach(({ channel, event, callback }) => channel.stopListening(event, callback));
+    window.clearInterval(requestSyncTimer);
+    document.removeEventListener('visibilitychange', syncWhenVisible);
+    window.removeEventListener('focus', syncActiveRequests);
 });
 
 function acceptRequest(id) {
@@ -307,13 +365,20 @@ function acceptRequest(id) {
 }
 
 function rejectRequest(id) {
-    router.post(route('ride-requests.reject', id), {}, { preserveScroll: true });
-    incoming.value = incoming.value.filter((r) => r.id !== id);
+    if (processingRequestId.value) return;
+    processingRequestId.value = id;
+    router.post(route('ride-requests.reject', id), {}, {
+        preserveScroll: true,
+        onSuccess: () => (incoming.value = incoming.value.filter((r) => r.id !== id)),
+        onFinish: () => (processingRequestId.value = null),
+    });
 }
 
 function counterRequest(id) {
     const amount = counterAmounts.value[id];
-    if (!amount) return;
+    if (!amount || processingRequestId.value) return;
+
+    processingRequestId.value = id;
 
     router.post(
         route('ride-requests.counter', id),
@@ -325,6 +390,7 @@ function counterRequest(id) {
                 // espero la respuesta del cliente, no me queda más por hacer acá.
                 incoming.value = incoming.value.filter((r) => r.id !== id);
             },
+            onFinish: () => (processingRequestId.value = null),
         }
     );
 }

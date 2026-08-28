@@ -148,7 +148,7 @@ function submitIncident() {
 
                     <div v-if="expressRoute.assigned_driver" class="pt-2 text-sm text-arka-text">
                         Conductor asignado:
-                        <Link :href="route('profiles.show', expressRoute.assigned_driver.id)" class="text-arka-primary hover:text-arka-primary-bright">
+                        <Link :href="route('profiles.show', expressRoute.assigned_driver.public_id)" class="text-arka-primary hover:text-arka-primary-bright">
                             {{ expressRoute.assigned_driver.name }}
                         </Link>
                     </div>

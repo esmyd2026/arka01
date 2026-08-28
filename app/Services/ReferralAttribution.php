@@ -13,15 +13,20 @@ class ReferralAttribution
      * Conserva el referente de un enlace público durante todo el recorrido
      * de autenticación, incluido el salto externo de Google OAuth.
      */
-    public function remember(Request $request): ?int
+    public function remember(Request $request): ?string
     {
-        $referrerId = filter_var($request->query('ref'), FILTER_VALIDATE_INT);
+        $publicId = trim((string) $request->query('ref'));
+        $referrer = $publicId !== ''
+            ? User::query()->where('public_id', $publicId)->first(['id', 'public_id'])
+            : null;
 
-        if ($referrerId && User::query()->whereKey($referrerId)->exists()) {
-            $request->session()->put(self::SESSION_KEY, $referrerId);
+        if ($referrer) {
+            // La sesión conserva la llave interna; el navegador recibe solo
+            // el UUID público al continuar entre login, registro y OAuth.
+            $request->session()->put(self::SESSION_KEY, $referrer->id);
         }
 
-        return $request->session()->get(self::SESSION_KEY);
+        return User::query()->whereKey($request->session()->get(self::SESSION_KEY))->value('public_id');
     }
 
     /**

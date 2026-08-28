@@ -173,7 +173,7 @@ const hasAnyLocatedNearbyDriver = computed(() => props.waitingRequests.some((r) 
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="request.client" size-class="h-10 w-10 text-sm shrink-0" />
                                 <div class="min-w-0">
-                                    <Link :href="route('profiles.show', request.client.id)" class="font-semibold text-arka-text hover:text-arka-primary truncate block">
+                                    <Link :href="route('profiles.show', request.client.public_id)" class="font-semibold text-arka-text hover:text-arka-primary truncate block">
                                         {{ request.client.name }}
                                     </Link>
                                     <p class="text-xs text-arka-text-muted">
@@ -235,9 +235,9 @@ const hasAnyLocatedNearbyDriver = computed(() => props.waitingRequests.some((r) 
                                 <UserAvatar :user="ride.driver" size-class="h-10 w-10 text-sm shrink-0" />
                                 <div class="min-w-0">
                                     <p class="font-semibold text-arka-text truncate">
-                                        <Link :href="route('profiles.show', ride.driver.id)" class="hover:text-arka-primary">{{ ride.driver.name }}</Link>
+                                        <Link :href="route('profiles.show', ride.driver.public_id)" class="hover:text-arka-primary">{{ ride.driver.name }}</Link>
                                         <span class="text-arka-text-muted font-normal"> lleva a </span>
-                                        <Link :href="route('profiles.show', ride.client.id)" class="hover:text-arka-primary">{{ ride.client.name }}</Link>
+                                        <Link :href="route('profiles.show', ride.client.public_id)" class="hover:text-arka-primary">{{ ride.client.name }}</Link>
                                     </p>
                                     <p class="text-xs text-arka-text-muted">Carrera #{{ ride.id }} · en curso hace {{ elapsedLabel(ride.started_at) }}</p>
                                 </div>

@@ -405,7 +405,7 @@ class RegistrationTest extends TestCase
             'phone_local' => '991234567',
             'password' => 'Password123',
             'password_confirmation' => 'Password123',
-            'ref' => $referrer->id,
+            'ref' => $referrer->public_id,
         ]);
 
         $user = User::where('email', 'juan@example.com')->firstOrFail();
@@ -432,7 +432,7 @@ class RegistrationTest extends TestCase
             'phone_local' => '991234567',
             'password' => 'Password123',
             'password_confirmation' => 'Password123',
-            'ref' => $driver->id,
+            'ref' => $driver->public_id,
         ]);
 
         $response->assertRedirect(route('referrals.show', $driverProfile->invite_code));

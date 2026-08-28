@@ -91,7 +91,7 @@ class GoogleAuthTest extends TestCase
     {
         $referrer = User::factory()->create();
 
-        $this->get(route('login', ['ref' => $referrer->id]))->assertOk();
+        $this->get(route('login', ['ref' => $referrer->public_id]))->assertOk();
         $this->fakeGoogleUser('google-referral', 'referido-google@example.com', 'Referido Google');
 
         $this->get(route('auth.google.callback'))->assertRedirect(route('account-type.choose'));

@@ -212,7 +212,7 @@ class ReviewFlowTest extends TestCase
 
         $viewer = User::factory()->create();
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id));
 
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page

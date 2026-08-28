@@ -8,9 +8,11 @@ use App\Models\FleetMember;
 use App\Models\PricingSetting;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Notifications\RideRequestCounteredPushNotification;
 use App\Services\PriceCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -181,6 +183,8 @@ class RidePriceNegotiationTest extends TestCase
 
     public function test_driver_can_counter_offer_once(): void
     {
+        Notification::fake();
+
         [$client, $driver] = $this->clientWithFleetDriver();
 
         $rideRequest = RideRequest::factory()->create([
@@ -207,6 +211,39 @@ class RidePriceNegotiationTest extends TestCase
             'offered_by_user_id' => $driver->id,
             'offered_amount' => '8.00',
         ]);
+
+        Notification::assertSentTo($client, RideRequestCounteredPushNotification::class);
+    }
+
+    public function test_request_sync_recovers_a_counter_offer_missed_by_reverb(): void
+    {
+        Notification::fake();
+
+        [$client, $driver, $fleet] = $this->clientWithFleetDriver();
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+            'current_offered_price' => 5,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.counter', $rideRequest), ['offered_amount' => 8])
+            ->assertRedirect();
+
+        $this->actingAs($client)
+            ->getJson(route('rides.sync-requests'))
+            ->assertOk()
+            ->assertJsonPath('pending_requests_as_client.0.id', $rideRequest->id)
+            ->assertJsonPath('pending_requests_as_client.0.status', 'negotiating')
+            ->assertJsonPath('pending_requests_as_client.0.current_offered_price', '8.00');
+
+        $this->actingAs($driver)
+            ->getJson(route('rides.sync-requests'))
+            ->assertOk()
+            ->assertJsonPath('incoming_requests_as_driver.0.id', $rideRequest->id)
+            ->assertJsonPath('incoming_requests_as_driver.0.status', 'negotiating');
     }
 
     public function test_driver_cannot_counter_offer_twice(): void

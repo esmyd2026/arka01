@@ -115,15 +115,14 @@ class RideRequestFlowTest extends TestCase
     {
         [$client, $driver] = $this->clientWithFleetDriver();
 
-        $response = $this->actingAs($client)->get(route('ride-requests.create', ['conductor' => $driver->id]));
+        $response = $this->actingAs($client)->get(route('ride-requests.create', ['conductor' => $driver->public_id]));
 
         $response->assertInertia(fn ($page) => $page->where('preselectedDriverId', $driver->id));
     }
 
     /**
-     * El backend pasa el id tal cual llegue (validarlo contra quién es
-     * seleccionable de verdad es responsabilidad del frontend, que ya tiene
-     * `fleetDrivers`/`publicDrivers` cargados) — sin el query param, no hay
+     * El backend traduce el UUID público a la llave interna y el frontend lo
+     * valida contra `fleetDrivers`/`publicDrivers`; sin el query param, no hay
      * preselección.
      */
     public function test_no_driver_is_preselected_without_the_query_param(): void

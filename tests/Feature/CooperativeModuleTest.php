@@ -331,7 +331,7 @@ class CooperativeModuleTest extends TestCase
         ]);
 
         $viewer = User::factory()->create();
-        $response = $this->actingAs($viewer)->get(route('cooperatives.show', $cooperative));
+        $response = $this->actingAs($viewer)->get(route('cooperatives.show', $cooperative->public_id));
 
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
@@ -356,7 +356,7 @@ class CooperativeModuleTest extends TestCase
             'invited_by_user_id' => $cooperativeUser->id, 'status' => 'accepted', 'responded_at' => now(),
         ]);
 
-        $response = $this->actingAs($cooperativeUser)->get(route('cooperatives.show', $cooperative));
+        $response = $this->actingAs($cooperativeUser)->get(route('cooperatives.show', $cooperative->public_id));
 
         $response->assertInertia(fn (Assert $page) => $page
             ->where('fleetVisible', true)
@@ -369,7 +369,7 @@ class CooperativeModuleTest extends TestCase
         $this->seed(DemoDataSeeder::class);
         $cooperative = Cooperative::query()->where('name', 'Cooperativa Amazonas')->firstOrFail();
 
-        $this->get(route('cooperatives.show', $cooperative))
+        $this->get(route('cooperatives.show', $cooperative->public_id))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Cooperative/Show')
@@ -378,5 +378,18 @@ class CooperativeModuleTest extends TestCase
                 ->where('reputation.review_count', 57)
                 ->has('drivers', 3)
                 ->has('reviews', 20));
+    }
+
+    public function test_a_numeric_cooperative_id_cannot_open_its_public_profile(): void
+    {
+        $owner = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Cooperativa con enlace privado',
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->get('/cooperativas/'.$cooperative->id)->assertNotFound();
+        $this->get(route('cooperatives.show', $cooperative->public_id))->assertOk();
     }
 }

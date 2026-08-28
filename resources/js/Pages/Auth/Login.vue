@@ -32,7 +32,7 @@ const props = defineProps({
         default: null,
     },
     referrerId: {
-        type: Number,
+        type: String,
         default: null,
     },
 });

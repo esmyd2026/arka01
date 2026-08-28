@@ -23,7 +23,7 @@ class User extends Authenticatable
 
     // Se agrega a la serialización para que el frontend tenga la URL lista
     // (login con Google guarda ahí la foto de perfil de la cuenta de Google).
-    protected $appends = ['avatar_url', 'full_name'];
+    protected $appends = ['avatar_url', 'full_name', 'public_profile_url'];
 
     // Mismo default que la columna en la migración — sin esto, un modelo
     // recién creado en memoria (sin releerlo de la BD con fresh()) muestra
@@ -63,7 +63,7 @@ class User extends Authenticatable
         'whatsapp_privacy_accepted_at',
         // Trazabilidad de referidos (pedido explícito del usuario): siempre
         // se pasa por RegisteredUserController::store() ya validado
-        // (exists:users,id), nunca directo desde un formulario del propio
+        // (exists:users,public_id), nunca directo desde un formulario del propio
         // usuario, así que mass-assignment acá no es un riesgo real.
         'referred_by_user_id',
     ];
@@ -127,6 +127,8 @@ class User extends Authenticatable
         // se generan solos apenas se crea la cuenta, sea por el formulario
         // de registro o por Google — nunca hay que pedírselos al usuario.
         static::creating(function (User $user) {
+            $user->public_id ??= (string) Str::uuid();
+
             if (empty($user->username)) {
                 $user->username = UsernameGenerator::generate($user->name);
             }
@@ -149,6 +151,11 @@ class User extends Authenticatable
                     : ($user->isCooperative() ? 'cooperativa' : ($user->isDriver() ? 'conductor' : 'cliente'));
             }
         });
+    }
+
+    public function getPublicProfileUrlAttribute(): ?string
+    {
+        return $this->public_id ? route('profiles.show', $this->public_id) : null;
     }
 
     /**

@@ -172,7 +172,7 @@ const referModalFleet = computed(() => props.fleets.find((f) => f.fleet.id === r
                             <!-- Pedido explícito del usuario: ver el perfil público
                                  de la cooperativa tocando el logo o el nombre, sin
                                  un botón aparte que le compita al de Agregar/Retirar. -->
-                            <Link :href="route('cooperatives.show', cooperative.id)" target="_blank" class="flex items-center gap-3">
+                            <Link :href="route('cooperatives.show', cooperative.public_id)" target="_blank" class="flex items-center gap-3">
                                 <img v-if="cooperative.logo_url" :src="cooperative.logo_url" :alt="`Logo de ${cooperative.name}`" class="h-14 w-14 rounded-2xl bg-white object-contain p-1.5 shrink-0" />
                                 <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-arka-primary/15 text-lg font-bold text-arka-primary">{{ cooperative.name.charAt(0) }}</div>
                                 <div class="min-w-0 flex-1">

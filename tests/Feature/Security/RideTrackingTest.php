@@ -30,7 +30,7 @@ class RideTrackingTest extends TestCase
         $response = $this->actingAs($client)->getJson(route('rides.tracking-link', $ride));
 
         $response->assertOk();
-        $this->assertStringContainsString('/seguimiento/'.$ride->id, $response->json('url'));
+        $this->assertStringContainsString('/seguimiento/'.$ride->public_id, $response->json('url'));
     }
 
     public function test_a_stranger_cannot_generate_a_tracking_link(): void
@@ -51,7 +51,7 @@ class RideTrackingTest extends TestCase
         ]);
         $ride = Ride::factory()->create(['driver_user_id' => $driver->id, 'status' => 'in_progress']);
 
-        $url = URL::temporarySignedRoute('public.rides.track', now()->addHours(24), ['ride' => $ride->id]);
+        $url = URL::temporarySignedRoute('public.rides.track', now()->addHours(24), ['ride' => $ride->public_id]);
 
         $response = $this->get($url);
 
@@ -71,7 +71,7 @@ class RideTrackingTest extends TestCase
 
         // Firma vencida: cualquier momento en el pasado alcanza para que
         // ValidateSignature la rechace.
-        $expiredUrl = URL::temporarySignedRoute('public.rides.track', now()->subMinute(), ['ride' => $ride->id]);
+        $expiredUrl = URL::temporarySignedRoute('public.rides.track', now()->subMinute(), ['ride' => $ride->public_id]);
 
         $this->get($expiredUrl)->assertForbidden();
     }
@@ -82,11 +82,21 @@ class RideTrackingTest extends TestCase
         DriverProfile::factory()->for($driver)->create(['current_lat' => -0.18, 'current_lng' => -78.47]);
         $ride = Ride::factory()->create(['driver_user_id' => $driver->id, 'status' => 'completed']);
 
-        $url = URL::temporarySignedRoute('public.rides.track.status', now()->addHours(24), ['ride' => $ride->id]);
+        $url = URL::temporarySignedRoute('public.rides.track.status', now()->addHours(24), ['ride' => $ride->public_id]);
 
         $response = $this->getJson($url);
 
         $response->assertOk();
         $response->assertJsonPath('driver_lat', null);
+    }
+
+    public function test_a_signed_tracking_link_still_rejects_a_numeric_ride_id(): void
+    {
+        $ride = Ride::factory()->create(['status' => 'in_progress']);
+        $numericUrl = URL::temporarySignedRoute('public.rides.track', now()->addHours(24), [
+            'ride' => $ride->id,
+        ]);
+
+        $this->get($numericUrl)->assertNotFound();
     }
 }

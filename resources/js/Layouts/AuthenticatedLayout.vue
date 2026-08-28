@@ -13,7 +13,7 @@ import PermissionsPrompt from '@/Components/PermissionsPrompt.vue';
 import HelpTip from '@/Components/HelpTip.vue';
 import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { pushSupported, subscribeToPush } from '@/push.js';
+import { pushSupported, subscribeToPush, syncGrantedPushSubscription } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
 import { armAudioUnlockOnFirstInteraction, configureNotificationSounds, playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime, unlockAudioContext } from '@/Utils/liveAlert';
 import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
@@ -287,6 +287,39 @@ let clientRideChannel = null;
 let adminChannel = null;
 let clientRideAlertTimer = null;
 const clientRideAlert = ref(null);
+let incomingRideFallbackTimer = null;
+let incomingRideFallbackRunning = false;
+let knownIncomingRideIds = new Set();
+
+// Respaldo global para el conductor cuando está en Inicio, Perfil u otra
+// sección. En /carreras la propia pantalla ya hace esta reconciliación y se
+// evita duplicarla. La pestaña oculta queda cubierta por Web Push.
+async function syncIncomingRidesGlobally() {
+    if (!showDriverNav.value || document.hidden || route().current('rides.index') || incomingRideFallbackRunning) return;
+
+    incomingRideFallbackRunning = true;
+
+    try {
+        const { data } = await window.axios.get(route('rides.sync-requests'));
+        const pending = (data.incoming_requests_as_driver ?? []).filter((request) => request.status === 'pending');
+        const nextIds = new Set(pending.map((request) => request.id));
+        const missed = pending.find((request) => !knownIncomingRideIds.has(request.id));
+
+        knownIncomingRideIds = nextIds;
+
+        if (missed && pushIncomingRideRequest(missed)) {
+            playIncomingRideAlert();
+        }
+    } catch (error) {
+        console.warn('No se pudieron reconciliar las carreras entrantes.', error);
+    } finally {
+        incomingRideFallbackRunning = false;
+    }
+}
+
+function syncIncomingRidesWhenVisible() {
+    if (!document.hidden) syncIncomingRidesGlobally();
+}
 
 // Bug reportado por el usuario ("los sonidos... para cuando se envian
 // solicitudes de agregar a la flota... no estan sonando"): FleetInvitationCreated
@@ -349,10 +382,11 @@ onMounted(() => {
     if (showDriverNav.value) {
         incomingRideChannel = window.Echo.private(`App.Models.User.${userId}`);
         incomingRideChannel.listen('.ride-request.created', (e) => {
-            playIncomingRideAlert();
-            pushIncomingRideRequest(e);
+            knownIncomingRideIds.add(e.id);
+            if (pushIncomingRideRequest(e)) playIncomingRideAlert();
         });
         incomingRideChannel.listen('.ride-request.cancelled', (e) => {
+            knownIncomingRideIds.delete(e.ride_request_id);
             dismissIncomingRideRequest(e.ride_request_id);
         });
         // Un cliente lo invitó a su flota (bug reportado por el usuario: no
@@ -371,6 +405,11 @@ onMounted(() => {
             }
         });
         clientRideChannel.listen('.ride-request.accepted', (e) => showClientRideAlert(`🚗 ${e.driver_name} aceptó su carrera.`, e.ride_id));
+        clientRideChannel.listen('.ride-request.countered', (e) => showClientRideAlert(
+            `${e.driver_name} propone $${Number(e.offered_amount).toFixed(2)}. Revise la contrapropuesta.`,
+            null,
+            'attention'
+        ));
         clientRideChannel.listen('.ride.started', (e) => showClientRideAlert('🚗 Su conductor ya va en camino.', e.ride_id, 'cabin'));
         clientRideChannel.listen('.ride.arrived', (e) => showClientRideAlert('📍 Su conductor llegó y lo está esperando.', e.ride_id, 'cabin'));
         clientRideChannel.listen('.ride.picked_up', (e) => showClientRideAlert('▶️ Su viaje comenzó hacia el destino.', e.ride_id, 'cabin'));
@@ -401,6 +440,18 @@ onMounted(() => {
     // en cada request (HandleInertiaRequests::share()) — se carga una sola
     // vez acá para que todos los playX() de arriba lo usen sin pedirlo aparte.
     configureNotificationSounds(usePage().props.notificationSounds, usePage().props.notificationVolume);
+
+    // Si este navegador ya tenía permiso, restaura/actualiza su endpoint en
+    // el backend sin volver a preguntar. Así el Push sigue cubriendo carreras
+    // nuevas cuando la pestaña está en segundo plano o Reverb se reconecta.
+    void syncGrantedPushSubscription(usePage().props.vapidPublicKey);
+
+    if (showDriverNav.value) {
+        incomingRideFallbackTimer = window.setInterval(syncIncomingRidesGlobally, 10000);
+        window.addEventListener('focus', syncIncomingRidesGlobally);
+        document.addEventListener('visibilitychange', syncIncomingRidesWhenVisible);
+        void syncIncomingRidesGlobally();
+    }
 });
 
 onBeforeUnmount(() => {
@@ -419,6 +470,9 @@ onBeforeUnmount(() => {
     clearTimeout(clientRideAlertTimer);
     clearTimeout(adminSupportAlertTimer);
     clearTimeout(fleetInvitationAlertTimer);
+    window.clearInterval(incomingRideFallbackTimer);
+    window.removeEventListener('focus', syncIncomingRidesGlobally);
+    document.removeEventListener('visibilitychange', syncIncomingRidesWhenVisible);
 });
 </script>
 
@@ -736,7 +790,7 @@ onBeforeUnmount(() => {
                                              cualquier pantalla. -->
                                         <Link
                                             v-if="$page.props.auth.cooperative"
-                                            :href="route('cooperatives.show', $page.props.auth.cooperative.id)"
+                                            :href="route('cooperatives.show', $page.props.auth.cooperative.public_id)"
                                             class="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-arka-primary-bright hover:border-arka-primary/60 hover:bg-arka-primary/15"
                                         >
                                             <span aria-hidden="true">◉</span>
@@ -781,7 +835,7 @@ onBeforeUnmount(() => {
                                     <DropdownLink :href="route('profile.edit') + '#suscripcion'"> Ver mi suscripción </DropdownLink>
                                     <DropdownLink
                                         v-if="hasRoute('profiles.show')"
-                                        :href="route('profiles.show', $page.props.auth.user.id)"
+                                        :href="route('profiles.show', $page.props.auth.user.public_id)"
                                     >
                                         Ver mi perfil público
                                     </DropdownLink>

@@ -305,6 +305,12 @@ Route::middleware('auth')->group(function () {
 
     // Carreras (sección 3.5, 8 y 9.5).
     Route::get('/carreras', [RideController::class, 'index'])->name('rides.index');
+    // Respaldo liviano del tiempo real: si el celular pierde por unos
+    // segundos la conexión WebSocket, Carreras reconcilia solicitudes sin
+    // obligar al usuario a recargar toda la página manualmente.
+    Route::get('/carreras/sincronizar', [RideController::class, 'syncRequests'])
+        ->middleware('throttle:12,1')
+        ->name('rides.sync-requests');
     // OJO con el orden (mismo caso que "/flota/solicitar"): "/carreras/{ride}"
     // es comodín, así que el tramo literal "indicadores" tiene que ir antes,
     // si no Laravel lo toma como {ride}="indicadores" y tira 404.
@@ -692,8 +698,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 // Seguimiento en vivo compartible (sección 8): páginas públicas, sin login,
 // protegidas por firma temporal en vez de autenticación (middleware 'signed').
 Route::middleware('signed')->group(function () {
-    Route::get('/seguimiento/{ride}', [PublicRideTrackingController::class, 'show'])->name('public.rides.track');
-    Route::get('/seguimiento/{ride}/estado', [PublicRideTrackingController::class, 'status'])->name('public.rides.track.status');
+    Route::get('/seguimiento/{ride:public_id}', [PublicRideTrackingController::class, 'show'])->name('public.rides.track');
+    Route::get('/seguimiento/{ride:public_id}/estado', [PublicRideTrackingController::class, 'status'])->name('public.rides.track.status');
 });
 
 // "Referí a tu conductor" (pedido explícito del usuario): landing pública,
@@ -708,10 +714,10 @@ Route::get('/referir/{driverProfile:invite_code}', [ReferralController::class, '
 // todavía, y es justo a esa persona a la que se lo quiere mostrar. El
 // controlador ya manda solo los campos pensados para verse en público (ver
 // PublicProfileController::show()), nunca datos sensibles.
-Route::get('/perfil/{user}', [PublicProfileController::class, 'show'])->name('profiles.show');
+Route::get('/perfil/{user:public_id}', [PublicProfileController::class, 'show'])->name('profiles.show');
 
 // Perfil público de una cooperativa aprobada. Una cooperativa pendiente solo
 // puede previsualizarlo con su propia sesión; un admin también puede verlo.
-Route::get('/cooperativas/{cooperative}', [CooperativeDirectoryController::class, 'show'])->name('cooperatives.show');
+Route::get('/cooperativas/{cooperative:public_id}', [CooperativeDirectoryController::class, 'show'])->name('cooperatives.show');
 
 require __DIR__.'/auth.php';

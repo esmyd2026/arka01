@@ -65,6 +65,7 @@ class CooperativeReputation
 
             return [
                 'id' => $driver->id,
+                'public_id' => $driver->public_id,
                 'name' => $driver->name,
                 'avatar_url' => $driver->avatar_url,
                 'vehicle' => trim(implode(' ', array_filter([$driver->driverProfile?->vehicle_make, $driver->driverProfile?->vehicle_model]))),

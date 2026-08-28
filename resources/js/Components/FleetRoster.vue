@@ -358,7 +358,7 @@ onBeforeUnmount(() => {
                         </div>
                         <div class="min-w-0 flex-1">
                             <Link
-                                :href="route('profiles.show', member.driver.id)"
+                                :href="route('profiles.show', member.driver.public_id)"
                                 class="flex flex-wrap items-center gap-1.5 font-semibold text-arka-text transition hover:text-arka-primary-bright"
                             >
                                 {{ member.driver.name }}
@@ -403,7 +403,7 @@ onBeforeUnmount(() => {
                          acción destructiva para evitar pulsaciones accidentales. -->
                     <div class="mt-4 grid grid-cols-2 items-center gap-2">
                         <Link
-                            :href="route('ride-requests.create', { flota: fleet.id, conductor: member.driver.id })"
+                            :href="route('ride-requests.create', { flota: fleet.id, conductor: member.driver.public_id })"
                             class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-arka-primary px-2 text-[11px] font-semibold text-arka-base shadow-sm transition hover:bg-arka-primary-bright focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base"
                         >
                             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

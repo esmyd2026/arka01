@@ -69,7 +69,7 @@ class ProfileController extends Controller
             // "Compartir mi perfil" (pedido explícito del usuario: QR +
             // WhatsApp) — absoluto, con dominio, porque termina en un lector
             // de QR o un mensaje de WhatsApp, fuera de la app.
-            'profileUrl' => route('profiles.show', $user->id),
+            'profileUrl' => route('profiles.show', $user->public_id),
             // Trazabilidad de referidos (pedido explícito del usuario): tabla
             // de quiénes se registraron a través de un enlace compartido por
             // este usuario — ver User::referrals().

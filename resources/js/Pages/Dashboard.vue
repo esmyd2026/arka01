@@ -391,7 +391,20 @@ function handleAvailabilityChange(nowAvailable) {
 // la flota disponible" (ver RideRequested::broadcastOn()).
 const pendingRequestsCount = ref(props.driverStats?.pending_requests ?? 0);
 const newRequestAlert = ref(null);
-const driverChannels = [];
+const driverChannelListeners = [];
+
+function listenToDriverChannel(channel, event, callback) {
+    channel.listen(event, callback);
+    driverChannelListeners.push({ channel, event, callback });
+}
+
+function handlePersonalNewRequest(e) {
+    handleNewRequest(e, { alert: false });
+}
+
+function handleRideReminderDue() {
+    playAttentionAlert();
+}
 
 function handleNewRequest(e, { alert = true } = {}) {
     // Aviso con sonido + vibración (pedido explícito del usuario) — más
@@ -433,25 +446,23 @@ onMounted(() => {
     window.addEventListener('arka:ride-request-answered', handleRequestGoneWhileWaiting);
 
     const personal = window.Echo.private(`App.Models.User.${userId}`);
-    personal.listen('.ride-request.created', (e) => handleNewRequest(e, { alert: false }));
-    personal.listen('.ride-request.cancelled', handleRequestGoneWhileWaiting);
-    personal.listen('.fleet-invitation.created', handleNewInvitation);
+    listenToDriverChannel(personal, '.ride-request.created', handlePersonalNewRequest);
+    listenToDriverChannel(personal, '.ride-request.cancelled', handleRequestGoneWhileWaiting);
+    listenToDriverChannel(personal, '.fleet-invitation.created', handleNewInvitation);
     // Recordatorio de 15-20 min antes de una carrera programada (pedido
     // explícito del usuario) — "Próximos viajes" ya muestra la hora, acá
     // solo hace falta el aviso sonoro.
-    personal.listen('.ride.reminder-due', () => playAttentionAlert());
-    driverChannels.push(`App.Models.User.${userId}`);
+    listenToDriverChannel(personal, '.ride.reminder-due', handleRideReminderDue);
 
     (props.driverFleetIds ?? []).forEach((fleetId) => {
         const channel = window.Echo.private(`fleet.${fleetId}`);
-        channel.listen('.ride-request.created', handleNewRequest);
-        channel.listen('.ride-request.cancelled', handleRequestGoneWhileWaiting);
-        driverChannels.push(`fleet.${fleetId}`);
+        listenToDriverChannel(channel, '.ride-request.created', handleNewRequest);
+        listenToDriverChannel(channel, '.ride-request.cancelled', handleRequestGoneWhileWaiting);
     });
 });
 
 onBeforeUnmount(() => {
-    driverChannels.forEach((name) => window.Echo.leave(name));
+    driverChannelListeners.forEach(({ channel, event, callback }) => channel.stopListening(event, callback));
     window.removeEventListener('arka:ride-request-answered', handleRequestGoneWhileWaiting);
 });
 

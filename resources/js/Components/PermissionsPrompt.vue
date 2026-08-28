@@ -74,11 +74,9 @@ function refreshWhenVisible() {
 
 const needsGeo = computed(() => geoStatus.value === 'prompt' || geoStatus.value === 'denied');
 const needsNotif = computed(() => {
-    // Si el navegador ya concedió el permiso, el aviso de activación no debe
-    // seguir ocupando la pantalla. La ausencia puntual de una suscripción
-    // push se repara desde los controles de cuenta, sin confundir al usuario
-    // diciendo que el permiso continúa desactivado.
-    if ('Notification' in window && Notification.permission === 'granted') return false;
+    // Permiso concedido no equivale a endpoint activo. Si la resincronización
+    // automática falló, se ofrece repararlo manualmente en vez de ocultar el
+    // problema y dejar al conductor creyendo que recibirá notificaciones.
     return ['default', 'denied', 'unsubscribed'].includes(notifStatus.value);
 });
 const visible = computed(() => !dismissed.value && (needsGeo.value || needsNotif.value));

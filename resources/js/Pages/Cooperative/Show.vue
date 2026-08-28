@@ -146,7 +146,7 @@ function toggle() {
                     <Link
                         v-for="driver in drivers"
                         :key="driver.id"
-                        :href="route('profiles.show', driver.id)"
+                        :href="route('profiles.show', driver.public_id)"
                         class="group rounded-2xl border border-arka-text-muted/10 bg-arka-base/40 p-4 transition hover:border-arka-primary/40"
                     >
                         <div class="flex items-center gap-3">

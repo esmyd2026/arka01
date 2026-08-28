@@ -77,6 +77,7 @@ class DashboardController extends Controller
             $driverStats = [
                 'cooperative' => $cooperative ? [
                     'id' => $cooperative->id,
+                    'public_id' => $cooperative->public_id,
                     'name' => $cooperative->name,
                     'logo_url' => $cooperative->logo_url,
                 ] : null,

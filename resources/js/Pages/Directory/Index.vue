@@ -85,7 +85,7 @@ function invite(driver) {
                             <UserAvatar :user="driver" size-class="h-12 w-12 text-sm shrink-0" />
                             <div class="flex-1">
                                 <Link
-                                    :href="route('profiles.show', driver.user_id)"
+                                    :href="route('profiles.show', driver.public_id)"
                                     class="text-arka-text font-medium hover:text-arka-primary-bright"
                                 >
                                     {{ driver.name }}
@@ -110,7 +110,7 @@ function invite(driver) {
                                 </div>
                                 <p v-if="driver.trust_label" class="mt-1 text-xs font-medium text-arka-primary-bright">✓ {{ driver.trust_label }}</p>
                                 <p v-if="driver.cooperative" class="mt-1 text-xs text-arka-text-muted">
-                                    Afiliado a <Link :href="route('cooperatives.show', driver.cooperative.id)" class="text-arka-primary hover:underline">{{ driver.cooperative.name }}</Link>
+                                    Afiliado a <Link :href="route('cooperatives.show', driver.cooperative.public_id)" class="text-arka-primary hover:underline">{{ driver.cooperative.name }}</Link>
                                 </p>
                                 <p class="mt-1 text-xs text-arka-text-muted">{{ driver.clients_count }} cliente{{ driver.clients_count === 1 ? '' : 's' }} lo tienen agregado</p>
                                 <p class="mt-1 text-sm text-arka-text-muted">
@@ -131,7 +131,7 @@ function invite(driver) {
                                      tiene que ofrecer pedirle una carrera directo a él. -->
                                 <Link
                                     v-if="isClient"
-                                    :href="route('ride-requests.create', { flota: targetFleetId, conductor: driver.user_id })"
+                                    :href="route('ride-requests.create', { flota: targetFleetId, conductor: driver.public_id })"
                                     class="text-xs text-arka-primary hover:text-arka-primary-bright font-medium"
                                 >
                                     Pedir carrera

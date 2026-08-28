@@ -37,7 +37,7 @@ class AuthenticationTest extends TestCase
         $referrer = User::factory()->create();
         $user = User::factory()->create(['referred_by_user_id' => null]);
 
-        $this->get(route('login', ['ref' => $referrer->id]))->assertOk();
+        $this->get(route('login', ['ref' => $referrer->public_id]))->assertOk();
 
         $this->post(route('login'), [
             'login' => $user->email,

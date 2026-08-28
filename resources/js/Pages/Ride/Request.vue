@@ -1887,7 +1887,7 @@ function submit() {
                                 <span class="min-w-0">
                                     <span class="block truncate font-medium text-arka-base">{{ cooperative.name }}</span>
                                     <Link
-                                        :href="route('cooperatives.show', cooperative.id)"
+                                        :href="route('cooperatives.show', cooperative.public_id)"
                                         target="_blank"
                                         class="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-arka-primary hover:underline"
                                         aria-label="Ver el perfil público de la cooperativa en otra pestaña"

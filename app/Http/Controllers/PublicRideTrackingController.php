@@ -29,7 +29,7 @@ class PublicRideTrackingController extends Controller
             'statusUrl' => URL::temporarySignedRoute(
                 'public.rides.track.status',
                 now()->addHours(24),
-                ['ride' => $ride->id]
+                ['ride' => $ride->public_id]
             ),
         ]);
     }
@@ -51,7 +51,7 @@ class PublicRideTrackingController extends Controller
         $profile = $ride->driver->driverProfile;
 
         return [
-            'id' => $ride->id,
+            'public_id' => $ride->public_id,
             'status' => $ride->status,
             'driver_name' => $ride->driver->name,
             'vehicle' => trim(($profile?->vehicle_make ?? '').' '.($profile?->vehicle_model ?? '')) ?: null,

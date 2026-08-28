@@ -60,7 +60,7 @@ function toggle(cooperative) {
                             <img v-if="cooperative.logo_url" :src="cooperative.logo_url" :alt="cooperative.name" class="h-14 w-14 rounded-xl bg-white object-contain p-1" />
                             <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-arka-primary/15 text-xl font-bold text-arka-primary">{{ cooperative.name.charAt(0) }}</div>
                             <div class="min-w-0 flex-1">
-                                <Link :href="route('cooperatives.show', cooperative.id)" class="font-semibold text-arka-text hover:text-arka-primary-bright">{{ cooperative.name }}</Link>
+                                <Link :href="route('cooperatives.show', cooperative.public_id)" class="font-semibold text-arka-text hover:text-arka-primary-bright">{{ cooperative.name }}</Link>
                                 <p class="mt-1 text-xs font-medium text-arka-primary-bright">✓ Cooperativa verificada</p>
                                 <p class="mt-2 text-sm text-arka-text-muted">{{ cooperative.city }}<span v-if="cooperative.province"> · {{ cooperative.province }}</span></p>
                             </div>
@@ -74,7 +74,7 @@ function toggle(cooperative) {
                             <span class="rounded-full bg-arka-base px-2.5 py-1">{{ cooperative.client_count }} clientes</span>
                         </div>
                         <div class="mt-5 flex items-center justify-between gap-3">
-                            <Link :href="route('cooperatives.show', cooperative.id)" class="text-sm font-medium text-arka-primary hover:text-arka-primary-bright">Ver perfil →</Link>
+                            <Link :href="route('cooperatives.show', cooperative.public_id)" class="text-sm font-medium text-arka-primary hover:text-arka-primary-bright">Ver perfil →</Link>
                             <SecondaryButton v-if="isClient" @click="toggle(cooperative)">{{ cooperative.is_attached ? 'Retirar de mi red' : 'Agregar a mi red' }}</SecondaryButton>
                         </div>
                     </article>

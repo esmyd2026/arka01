@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class Cooperative extends Model
 {
@@ -54,10 +55,14 @@ class Cooperative extends Model
         'suspended_at' => 'datetime',
     ];
 
-    protected $appends = ['logo_url'];
+    protected $appends = ['logo_url', 'public_url'];
 
     protected static function booted(): void
     {
+        static::creating(function (Cooperative $cooperative) {
+            $cooperative->public_id ??= (string) Str::uuid();
+        });
+
         static::created(fn (Cooperative $cooperative) => User::whereKey($cooperative->user_id)->update(['role' => 'cooperativa']));
 
         static::deleted(function (Cooperative $cooperative) {
@@ -116,5 +121,10 @@ class Cooperative extends Model
     public function getLogoUrlAttribute(): ?string
     {
         return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
+    }
+
+    public function getPublicUrlAttribute(): ?string
+    {
+        return $this->public_id ? route('cooperatives.show', $this->public_id) : null;
     }
 }

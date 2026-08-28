@@ -88,3 +88,39 @@ export async function subscribeToPush(vapidPublicKey) {
         return false;
     }
 }
+
+// El permiso puede seguir en "granted" aunque el endpoint haya desaparecido
+// de la base de datos por una restauración, un despliegue o una suscripción
+// anterior incompleta. Al entrar a una sesión autenticada se vuelve a guardar
+// silenciosamente; nunca abre el diálogo de permisos porque solo actúa cuando
+// el usuario ya lo concedió previamente.
+export async function syncGrantedPushSubscription(vapidPublicKey) {
+    if (!pushSupported() || Notification.permission !== 'granted') return false;
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (subscription && !applicationServerKeysMatch(subscription, applicationServerKey)) {
+            await subscription.unsubscribe();
+            subscription = null;
+        }
+
+        subscription ??= await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+        });
+
+        await window.axios.post(route('push-subscriptions.store'), subscription.toJSON());
+
+        return true;
+    } catch (error) {
+        // A diferencia del flujo manual, un fallo transitorio de red no borra
+        // el endpoint local: se conserva para volver a sincronizarlo al entrar
+        // o recuperar el foco más adelante.
+        console.warn('No se pudo resincronizar la suscripción push.', error);
+
+        return false;
+    }
+}

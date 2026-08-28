@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Ride extends Model
 {
@@ -72,6 +73,13 @@ class Ride extends Model
         'driver_reminder_sent_at' => 'datetime',
         'overdue_alert_sent_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Ride $ride) {
+            $ride->public_id ??= (string) Str::uuid();
+        });
+    }
 
     /**
      * true si esta carrera viene de una solicitud PROGRAMADA que un

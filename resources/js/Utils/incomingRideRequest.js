@@ -12,8 +12,10 @@ export const incomingRideRequestState = reactive({
 
 export function pushIncomingRideRequest(request) {
     // Evita duplicar si el mismo evento llega dos veces (reconexión de Echo).
-    if (incomingRideRequestState.queue.some((r) => r.id === request.id)) return;
+    if (incomingRideRequestState.queue.some((r) => r.id === request.id)) return false;
     incomingRideRequestState.queue.push(request);
+
+    return true;
 }
 
 export function dismissIncomingRideRequest(id) {

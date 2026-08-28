@@ -97,19 +97,21 @@ const invitations = ref([...props.pendingInvitations]);
 const userId = usePage().props.auth.user.id;
 let personalChannel = null;
 
+function handleFleetInvitationCreated(e) {
+    invitations.value.unshift({
+        id: e.id,
+        fleet: { owner: { name: e.owner_name } },
+        message: e.message,
+    });
+}
+
 onMounted(() => {
     personalChannel = window.Echo.private(`App.Models.User.${userId}`);
-    personalChannel.listen('.fleet-invitation.created', (e) => {
-        invitations.value.unshift({
-            id: e.id,
-            fleet: { owner: { name: e.owner_name } },
-            message: e.message,
-        });
-    });
+    personalChannel.listen('.fleet-invitation.created', handleFleetInvitationCreated);
 });
 
 onBeforeUnmount(() => {
-    window.Echo.leave(`App.Models.User.${userId}`);
+    personalChannel?.stopListening('.fleet-invitation.created', handleFleetInvitationCreated);
 });
 
 const accept = (invitationId) => {
@@ -397,12 +399,12 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                      público que ya existe para cualquier
                                      usuario logueado (Profile/Show.vue, sección
                                      3.6), sin tener que ser admin para verlo. -->
-                                <Link :href="route('profiles.show', member.fleet.owner.id)" class="shrink-0">
+                                <Link :href="route('profiles.show', member.fleet.owner.public_id)" class="shrink-0">
                                     <UserAvatar :user="member.fleet.owner" size-class="h-12 w-12 text-base" />
                                 </Link>
                                 <div class="min-w-0">
                                     <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
-                                        <Link :href="route('profiles.show', member.fleet.owner.id)" class="hover:text-arka-primary-bright">
+                                        <Link :href="route('profiles.show', member.fleet.owner.public_id)" class="hover:text-arka-primary-bright">
                                             {{ member.fleet.owner.name }}
                                         </Link>
                                         <span v-if="member.client_review_count > 0" class="text-xs text-arka-lime">

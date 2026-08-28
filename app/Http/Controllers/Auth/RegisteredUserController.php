@@ -100,7 +100,7 @@ class RegisteredUserController extends Controller
             // la URL de registro (Referral/Show.vue, Profile/Edit.vue vía
             // ShareProfileQr, o cualquier perfil público) y viaja oculto en el
             // formulario (Auth/Register.vue), nunca lo escribe la persona.
-            'ref' => ['nullable', 'integer', 'exists:users,id'],
+            'ref' => ['nullable', 'uuid', 'exists:users,public_id'],
             // Ubicación real del navegador al registrarse (pedido explícito
             // del usuario: "ver de dónde se registran las personas, por su
             // ubicación") — con su permiso (ver Register.vue), nunca
@@ -136,12 +136,16 @@ class RegisteredUserController extends Controller
             ? Str::squish($validated['first_name'].' '.$validated['last_name'])
             : Str::squish($validated['name']);
 
+        $referrer = isset($validated['ref'])
+            ? User::query()->where('public_id', $validated['ref'])->first()
+            : null;
+
         $user = User::create([
             'name' => $fullName,
             'email' => $validated['email'],
             'phone' => $phone,
             'password' => Hash::make($validated['password']),
-            'referred_by_user_id' => $validated['ref'] ?? null,
+            'referred_by_user_id' => $referrer?->id,
             'city_id' => $city?->id,
             'registration_lat' => $hasCoordinates ? $validated['lat'] : null,
             'registration_lng' => $hasCoordinates ? $validated['lng'] : null,
@@ -243,7 +247,7 @@ class RegisteredUserController extends Controller
         // enlace de invitación de un conductor, lo volvemos a esa pantalla
         // para que complete el único paso que le falta — agregarlo a su
         // flota nueva — en vez de dejarlo en el Inicio sin rumbo.
-        $referrerDriverCode = User::find($validated['ref'] ?? null)?->driverProfile?->invite_code;
+        $referrerDriverCode = $referrer?->driverProfile?->invite_code;
         if ($referrerDriverCode) {
             return redirect()->route('referrals.show', $referrerDriverCode)
                 ->with('status', '¡Cuenta creada! Ya puede agregarlo a su flota de confianza.');

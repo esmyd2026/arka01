@@ -64,7 +64,7 @@ async function cancelTrip() {
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-2">
                     <div class="flex items-center gap-2">
                         <UserAvatar :user="trip.driver" size-class="h-8 w-8 text-xs shrink-0" />
-                        <Link :href="route('profiles.show', trip.driver.id)" class="text-arka-text hover:text-arka-primary-bright">
+                        <Link :href="route('profiles.show', trip.driver.public_id)" class="text-arka-text hover:text-arka-primary-bright">
                             {{ trip.driver.name }}
                         </Link>
                     </div>

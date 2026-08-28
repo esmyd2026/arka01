@@ -46,7 +46,7 @@ defineProps({
             </span>
             <Link
                 v-if="isDriver && profileUser.driver_profile?.cooperative"
-                :href="route('cooperatives.show', profileUser.driver_profile.cooperative.id)"
+                :href="route('cooperatives.show', profileUser.driver_profile.cooperative.public_id)"
                 class="inline-flex items-center gap-1.5 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright hover:border-arka-primary/60"
             >
                 <span aria-hidden="true">◉</span>
@@ -104,7 +104,7 @@ defineProps({
                  con sesión iniciada. -->
             <Link
                 v-if="canRequestRide"
-                :href="route('ride-requests.create', { conductor: profileUser.id })"
+                :href="route('ride-requests.create', { conductor: profileUser.public_id })"
                 class="inline-block mt-2 px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-xs font-semibold uppercase tracking-widest hover:opacity-90"
             >
                 Pedir carrera

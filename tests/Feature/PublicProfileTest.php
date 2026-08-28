@@ -23,7 +23,7 @@ class PublicProfileTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create();
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('isDriver', true)
@@ -37,7 +37,7 @@ class PublicProfileTest extends TestCase
         $client = User::factory()->create();
         Fleet::factory()->for($client, 'owner')->create();
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $client));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $client->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('isDriver', false)
@@ -60,7 +60,7 @@ class PublicProfileTest extends TestCase
         DriverProfile::factory()->for($driver)->create();
         Fleet::factory()->for($driver, 'owner')->create();
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('isDriver', true)
@@ -84,10 +84,10 @@ class PublicProfileTest extends TestCase
             'is_admin' => true,
         ]);
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $target));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $target->public_id));
 
         $response->assertInertia(fn ($page) => $page
-            ->where('profileUser.id', $target->id)
+            ->where('profileUser.public_id', $target->public_id)
             ->where('profileUser.name', $target->name)
             ->missing('profileUser.email')
             ->missing('profileUser.phone')
@@ -107,10 +107,10 @@ class PublicProfileTest extends TestCase
         $viewer = User::factory()->create();
         $target = User::factory()->create();
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $target));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $target->public_id));
 
         $response->assertInertia(fn ($page) => $page
-            ->where('profileUrl', route('profiles.show', $target->id))
+            ->where('profileUrl', route('profiles.show', $target->public_id))
         );
     }
 
@@ -125,13 +125,13 @@ class PublicProfileTest extends TestCase
         $target = User::factory()->create(['name' => 'Juan Pérez']);
 
         $response = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23.20 A'])
-            ->get(route('profiles.show', $target));
+            ->get(route('profiles.show', $target->public_id));
 
         $response->assertOk();
         $response->assertViewIs('profile-preview');
         $response->assertSee('og:title', false);
         $response->assertSee('Juan Pérez — Arka01', false);
-        $response->assertSee(route('profiles.show', $target->id), false);
+        $response->assertSee(route('profiles.show', $target->public_id), false);
     }
 
     /**
@@ -145,7 +145,7 @@ class PublicProfileTest extends TestCase
         $target = User::factory()->create(['name' => 'Juan Pérez']);
 
         $response = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23.20 A'])
-            ->get(route('profiles.show', $target));
+            ->get(route('profiles.show', $target->public_id));
 
         $response->assertOk();
         $response->assertSee('únase y hagamos que la movilidad sea más segura en Ecuador', false);
@@ -161,12 +161,12 @@ class PublicProfileTest extends TestCase
     {
         $target = User::factory()->create();
 
-        $response = $this->get(route('profiles.show', $target));
+        $response = $this->get(route('profiles.show', $target->public_id));
 
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page
             ->component('Profile/Show')
-            ->where('profileUser.id', $target->id)
+            ->where('profileUser.public_id', $target->public_id)
         );
     }
 
@@ -186,7 +186,7 @@ class PublicProfileTest extends TestCase
             'vehicle_photo_path' => 'driver-documents/vehiculo.jpg',
         ]);
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('profileUser.driver_profile.vehicle_plate', 'Axxx34')
@@ -207,7 +207,7 @@ class PublicProfileTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['profile_public' => false, 'vehicle_make' => 'Chevrolet']);
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('profilePrivate', true)
@@ -223,7 +223,7 @@ class PublicProfileTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['profile_public' => false]);
 
-        $response = $this->get(route('profiles.show', $driver));
+        $response = $this->get(route('profiles.show', $driver->public_id));
 
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page->where('profilePrivate', true));
@@ -234,7 +234,7 @@ class PublicProfileTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['profile_public' => false, 'vehicle_make' => 'Chevrolet']);
 
-        $response = $this->actingAs($driver)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($driver)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('profilePrivate', false)
@@ -248,7 +248,7 @@ class PublicProfileTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['profile_public' => false, 'vehicle_make' => 'Chevrolet']);
 
-        $response = $this->actingAs($admin)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($admin)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('profilePrivate', false)
@@ -263,7 +263,7 @@ class PublicProfileTest extends TestCase
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['vehicle_make' => 'Chevrolet']);
 
-        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver));
+        $response = $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id));
 
         $response->assertInertia(fn ($page) => $page
             ->where('profilePrivate', false)
@@ -277,8 +277,16 @@ class PublicProfileTest extends TestCase
         $target = User::factory()->create();
 
         $response = $this->withHeaders(['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'])
-            ->actingAs($viewer)->get(route('profiles.show', $target));
+            ->actingAs($viewer)->get(route('profiles.show', $target->public_id));
 
         $response->assertInertia(fn ($page) => $page->component('Profile/Show'));
+    }
+
+    public function test_a_numeric_user_id_cannot_open_a_public_profile(): void
+    {
+        $target = User::factory()->create();
+
+        $this->get('/perfil/'.$target->id)->assertNotFound();
+        $this->get(route('profiles.show', $target->public_id))->assertOk();
     }
 }

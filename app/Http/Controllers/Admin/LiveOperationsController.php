@@ -133,6 +133,7 @@ class LiveOperationsController extends Controller
             'id' => $request->id,
             'client' => [
                 'id' => $request->client->id,
+                'public_id' => $request->client->public_id,
                 'name' => $request->client->name,
                 'avatar_url' => $request->client->avatar_url,
             ],
@@ -184,11 +185,13 @@ class LiveOperationsController extends Controller
             'id' => $ride->id,
             'client' => [
                 'id' => $ride->client->id,
+                'public_id' => $ride->client->public_id,
                 'name' => $ride->client->name,
                 'avatar_url' => $ride->client->avatar_url,
             ],
             'driver' => [
                 'id' => $ride->driver->id,
+                'public_id' => $ride->driver->public_id,
                 'name' => $ride->driver->name,
                 'avatar_url' => $ride->driver->avatar_url,
                 'lat' => $driverProfile?->current_lat !== null ? (float) $driverProfile->current_lat : null,

@@ -54,7 +54,7 @@ class SosAlertController extends Controller
 
         $contacts = $request->user()->trustedContacts()->whereNotNull('email')->get();
 
-        $trackingUrl = URL::temporarySignedRoute('public.rides.track', now()->addHours(48), ['ride' => $ride->id]);
+        $trackingUrl = URL::temporarySignedRoute('public.rides.track', now()->addHours(48), ['ride' => $ride->public_id]);
 
         $notified = 0;
         foreach ($contacts as $contact) {

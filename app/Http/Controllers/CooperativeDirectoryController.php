@@ -44,6 +44,7 @@ class CooperativeDirectoryController extends Controller
 
             return [
                 'id' => $cooperative->id,
+                'public_id' => $cooperative->public_id,
                 'name' => $cooperative->name,
                 'logo_url' => $cooperative->logo_url,
                 'city' => $cooperative->city?->name,

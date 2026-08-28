@@ -37,7 +37,7 @@ class PublicProfileController extends Controller
             ? FleetMember::query()->where('driver_user_id', $user->id)->whereNull('left_at')->count()
             : 0;
 
-        $profileUrl = route('profiles.show', $user->id);
+        $profileUrl = route('profiles.show', $user->public_id);
 
         // Pedido explícito del usuario ("mejoremos la privacidad de los
         // conductores"): esta pantalla es visible para CUALQUIERA con el
@@ -91,7 +91,7 @@ class PublicProfileController extends Controller
             // muestra — mismo criterio que ya usa
             // PublicRideTrackingController::publicPayload().
             'profileUser' => [
-                'id' => $user->id,
+                'public_id' => $user->public_id,
                 'name' => $user->full_name,
                 'username' => $user->username,
                 'member_code' => $user->member_code,
@@ -112,7 +112,10 @@ class PublicProfileController extends Controller
                     'verification_status' => $user->driverProfile->verification_status,
                     'driver_type' => $user->driverProfile->driver_type,
                     'trust_label' => $user->driverProfile->verification_status === 'approved' ? $user->driverProfile->trust_label : null,
-                    'cooperative' => $activeCooperative ? ['id' => $activeCooperative->id, 'name' => $activeCooperative->name] : null,
+                    'cooperative' => $activeCooperative ? [
+                        'public_id' => $activeCooperative->public_id,
+                        'name' => $activeCooperative->name,
+                    ] : null,
                     'clients_count' => $fleetClientsCount,
                 ] : null,
             ],

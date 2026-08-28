@@ -116,6 +116,7 @@ class DriverDirectoryController extends Controller
 
                 return [
                     'user_id' => $profile->user_id,
+                    'public_id' => $profile->user->public_id,
                     'name' => $profile->user->full_name,
                     'avatar_url' => $profile->user->avatar_url,
                     'rate_per_km' => $profile->rate_per_km,
@@ -143,7 +144,10 @@ class DriverDirectoryController extends Controller
                     'vehicle_type' => $profile->vehicleTypeLabel(),
                     'trust_label' => $profile->verification_status === 'approved' ? $profile->trust_label : null,
                     'driver_type' => $profile->driver_type,
-                    'cooperative' => $cooperative ? ['id' => $cooperative->id, 'name' => $cooperative->name] : null,
+                    'cooperative' => $cooperative ? [
+                        'public_id' => $cooperative->public_id,
+                        'name' => $cooperative->name,
+                    ] : null,
                     'clients_count' => (int) ($clientCounts[$profile->user_id] ?? 0),
                     // Medalla por puntos (pedido explícito del usuario): se
                     // usa abajo para filtrar (solo Oro para arriba entra al

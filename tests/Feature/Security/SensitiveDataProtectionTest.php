@@ -57,7 +57,7 @@ class SensitiveDataProtectionTest extends TestCase
             'email' => 'privado@example.com',
         ]);
 
-        $response = $this->get(route('profiles.show', $stranger));
+        $response = $this->get(route('profiles.show', $stranger->public_id));
 
         $response->assertOk();
         $response->assertInertia(fn ($page) => $page

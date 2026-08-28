@@ -26,6 +26,7 @@ use App\Models\User;
 use App\Notifications\CooperativeRideAssignedPushNotification;
 use App\Notifications\CooperativeRideRequestedPushNotification;
 use App\Notifications\RideAcceptedPushNotification;
+use App\Notifications\RideRequestCounteredPushNotification;
 use App\Notifications\RideRequestDeclinedPushNotification;
 use App\Notifications\RideRequestedPushNotification;
 use App\Services\FrequentPlaces;
@@ -100,6 +101,10 @@ class RideRequestController extends Controller
             return redirect()->route('dashboard')->with('status', self::SINGLE_ROLE_MESSAGE);
         }
 
+        $preselectedDriverId = $request->filled('conductor')
+            ? User::query()->where('public_id', $request->query('conductor'))->value('id')
+            : null;
+
         $fleet = $this->resolveFleet($request, $request->query('flota'));
         $fleet->load('activeMembers.driver.driverProfile');
 
@@ -155,7 +160,7 @@ class RideRequestController extends Controller
             // no "toda la flota disponible". Se valida del lado del frontend
             // contra `fleetDrivers`/`publicDrivers` (si el id no aparece ahí,
             // simplemente no queda nada preseleccionado).
-            'preselectedDriverId' => $request->filled('conductor') ? (int) $request->query('conductor') : null,
+            'preselectedDriverId' => $preselectedDriverId,
             // Reintento después de rechazo/expiración: el cliente ya eligió
             // ruta y el botón indica la bolsa concreta. La pantalla abre esa
             // categoría directamente, sin volver a pedir destino.
@@ -219,7 +224,7 @@ class RideRequestController extends Controller
                 ->with('activeDriverMemberships.driver.driverProfile')
                 ->withCount('activeDriverMemberships')
                 ->orderBy('name')
-                ->get(['id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng'])
+                ->get(['id', 'public_id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng'])
                 ->map(function ($cooperative) use ($request) {
                     $lat = $request->query('origin_lat');
                     $lng = $request->query('origin_lng');
@@ -1231,7 +1236,14 @@ class RideRequestController extends Controller
             'offered_amount' => round($validated['offered_amount'], 2),
         ]);
 
-        broadcast(new RideRequestCountered($rideRequest->fresh()))->toOthers();
+        $updatedRequest = $rideRequest->fresh(['client', 'negotiatingDriver']);
+
+        broadcast(new RideRequestCountered($updatedRequest))->toOthers();
+        $updatedRequest->client->notify(new RideRequestCounteredPushNotification(
+            $updatedRequest->id,
+            $updatedRequest->negotiatingDriver->name,
+            (float) $updatedRequest->current_offered_price,
+        ));
 
         return back();
     }

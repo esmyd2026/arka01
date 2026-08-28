@@ -89,9 +89,10 @@ class FleetController extends Controller
                 ->whereNull('suspended_at')
                 ->withCount('activeDriverMemberships')
                 ->orderBy('name')
-                ->get(['id', 'name', 'logo_path', 'main_address', 'stand_lat', 'stand_lng'])
+                ->get(['id', 'public_id', 'name', 'logo_path', 'main_address', 'stand_lat', 'stand_lng'])
                 ->map(fn (Cooperative $cooperative) => [
                     'id' => $cooperative->id,
+                    'public_id' => $cooperative->public_id,
                     'name' => $cooperative->name,
                     'logo_url' => $cooperative->logo_url,
                     'main_address' => $cooperative->main_address,

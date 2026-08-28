@@ -113,7 +113,7 @@ class HandleInertiaRequests extends Middleware
                 // (Dashboard.vue), ahora en el menú de cuenta se ve en
                 // cualquier pantalla.
                 'cooperative' => $user?->isDriver()
-                    ? CooperativeDriverMembership::activeCooperativeFor($user->id)?->only(['id', 'name'])
+                    ? CooperativeDriverMembership::activeCooperativeFor($user->id)?->only(['id', 'public_id', 'name'])
                     : null,
             ],
             // Pedido explícito del usuario ("permiteme en el modulo de

@@ -142,13 +142,13 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
 
                     <div class="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Link
-                            :href="route('register', { ref: profileUser.id })"
+                            :href="route('register', { ref: profileUser.public_id })"
                             class="inline-flex min-h-11 items-center justify-center rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold text-arka-base transition hover:bg-arka-primary-bright"
                         >
                             Unirme a Arka01
                         </Link>
                         <Link
-                            :href="route('login', { ref: profileUser.id })"
+                            :href="route('login', { ref: profileUser.public_id })"
                             class="inline-flex min-h-11 items-center justify-center rounded-xl border border-arka-primary/40 bg-arka-primary/10 px-4 py-2.5 text-sm font-semibold text-arka-primary-bright transition hover:bg-arka-primary/20"
                         >
                             Iniciar sesión

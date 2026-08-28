@@ -31,6 +31,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
@@ -77,6 +78,100 @@ class RideController extends Controller
         'Problema con el GPS del celular',
         'Otro motivo',
     ];
+
+    /**
+     * Solicitudes que el cliente todavía tiene que ver o responder.
+     * Compartido por la carga completa y la reconciliación liviana para
+     * que ambas rutas apliquen exactamente el mismo criterio de estado.
+     *
+     * @return Collection<int, RideRequest>
+     */
+    private function pendingRequestsForClient(int $userId): Collection
+    {
+        return RideRequest::query()
+            ->where('client_user_id', $userId)
+            ->whereIn('status', ['pending', 'negotiating', 'waiting'])
+            ->with(['driver', 'negotiatingDriver', 'originSector', 'destinationSector'])
+            ->latest()
+            ->get();
+    }
+
+    /**
+     * Solicitudes que este conductor puede atender, incluida su propia
+     * contrapropuesta mientras espera la decisión del cliente.
+     *
+     * @return Collection<int, RideRequest>
+     */
+    private function incomingRequestsForDriver(Request $request): Collection
+    {
+        $userId = $request->user()->id;
+
+        $incoming = RideRequest::query()
+            ->where(function ($query) use ($userId) {
+                $query->where('status', 'pending')
+                    ->where(function ($query) use ($userId) {
+                        $query->where('driver_user_id', $userId)
+                            ->orWhere(function ($query) use ($userId) {
+                                $query->whereNull('driver_user_id')
+                                    ->whereIn('fleet_id', function ($sub) use ($userId) {
+                                        $sub->select('fleet_id')
+                                            ->from('fleet_members')
+                                            ->where('driver_user_id', $userId)
+                                            ->whereNull('left_at');
+                                    });
+                            });
+                    });
+            })
+            ->orWhere(function ($query) use ($userId) {
+                $query->where('status', 'negotiating')->where('negotiating_driver_user_id', $userId);
+            })
+            ->with(['client', 'originSector', 'destinationSector'])
+            ->latest()
+            ->get();
+
+        $disabledFleetIds = FleetMember::query()
+            ->where('driver_user_id', $userId)
+            ->where('requests_disabled', true)
+            ->pluck('fleet_id');
+
+        $incoming = $incoming
+            ->filter(fn (RideRequest $rideRequest) => $rideRequest->driver_user_id === $userId
+                || $rideRequest->negotiating_driver_user_id === $userId
+                || (! $disabledFleetIds->contains($rideRequest->fleet_id)
+                    && ($request->user()->driverProfile?->isWithinRangeOf((float) $rideRequest->origin_lat, (float) $rideRequest->origin_lng) ?? true)))
+            ->values();
+
+        $ratings = Review::query()
+            ->whereIn('reviewee_user_id', $incoming->pluck('client_user_id')->unique())
+            ->selectRaw('reviewee_user_id, avg(rating) as avg_rating, count(*) as review_count')
+            ->groupBy('reviewee_user_id')
+            ->get()
+            ->keyBy('reviewee_user_id');
+
+        $incoming->each(function (RideRequest $rideRequest) use ($ratings) {
+            $rating = $ratings->get($rideRequest->client_user_id);
+
+            $rideRequest->client_name = $rideRequest->client->name;
+            $rideRequest->client_rating = $rating ? round((float) $rating->avg_rating, 1) : 0;
+            $rideRequest->client_review_count = $rating->review_count ?? 0;
+            $rideRequest->client_member_code = $rideRequest->client->member_code;
+        });
+
+        return $incoming;
+    }
+
+    /**
+     * Recuperación ante una desconexión temporal de Reverb. Devuelve solo
+     * las dos listas que cambian durante la búsqueda/negociación, evitando
+     * recalcular historial, estadísticas y viajes completos cada 10 segundos.
+     */
+    public function syncRequests(Request $request): JsonResponse
+    {
+        return response()->json([
+            'pending_requests_as_client' => $this->pendingRequestsForClient($request->user()->id),
+            'incoming_requests_as_driver' => $this->incomingRequestsForDriver($request),
+        ]);
+    }
 
     /**
      * Pedido explícito del usuario: "validá que las acciones del conductor
@@ -149,89 +244,8 @@ class RideController extends Controller
     {
         $userId = $request->user()->id;
 
-        // "pending" y "negotiating" (sección 5): mientras se negocia el precio
-        // la solicitud sigue activa, todavía no hay carrera confirmada.
-        // "waiting" (pedido explícito del usuario): todos los conductores
-        // elegibles estaban ocupados al pedirla — sigue sin un candidato
-        // puntual, pero el cliente la tiene que seguir viendo acá mientras
-        // espera a que alguien se desocupe (ver RideDispatchAdvancer).
-        $pendingRequestsAsClient = RideRequest::query()
-            ->where('client_user_id', $userId)
-            ->whereIn('status', ['pending', 'negotiating', 'waiting'])
-            ->with(['driver', 'negotiatingDriver', 'originSector', 'destinationSector'])
-            ->latest()
-            ->get();
-
-        $incomingRequestsAsDriver = RideRequest::query()
-            ->where(function ($query) use ($userId) {
-                $query->where('status', 'pending')
-                    ->where(function ($query) use ($userId) {
-                        $query->where('driver_user_id', $userId)
-                            ->orWhere(function ($query) use ($userId) {
-                                // Solicitudes "a toda la flota" en flotas donde este
-                                // usuario es conductor activo.
-                                $query->whereNull('driver_user_id')
-                                    ->whereIn('fleet_id', function ($sub) use ($userId) {
-                                        $sub->select('fleet_id')
-                                            ->from('fleet_members')
-                                            ->where('driver_user_id', $userId)
-                                            ->whereNull('left_at');
-                                    });
-                            });
-                    });
-            })
-            // Además, mis propias contraofertas todavía esperando al cliente.
-            ->orWhere(function ($query) use ($userId) {
-                $query->where('status', 'negotiating')->where('negotiating_driver_user_id', $userId);
-            })
-            ->with(['client', 'originSector', 'destinationSector'])
-            ->latest()
-            ->get();
-
-        // Flotas donde deshabilité las solicitudes del cliente dueño (pedido
-        // explícito del usuario) — una "a toda la flota" de esa flota no
-        // debería aparecer acá, aunque siga siendo parte de ella.
-        $disabledFleetIds = FleetMember::query()
-            ->where('driver_user_id', $userId)
-            ->where('requests_disabled', true)
-            ->pluck('fleet_id');
-
-        $incomingRequestsAsDriver = $incomingRequestsAsDriver
-            // Zona de cobertura + cliente deshabilitado (pedido explícito del
-            // usuario): una "a toda la flota" que me queda lejos de mi zona,
-            // o de una flota donde deshabilité a ese cliente, no debería
-            // aparecer acá tampoco, no solo en el aviso en vivo — las
-            // dirigidas a mí ya se validaron al pedirse, siempre se muestran.
-            ->filter(fn (RideRequest $rideRequest) => $rideRequest->driver_user_id === $userId
-                || $rideRequest->negotiating_driver_user_id === $userId
-                || (! $disabledFleetIds->contains($rideRequest->fleet_id)
-                    && ($request->user()->driverProfile?->isWithinRangeOf((float) $rideRequest->origin_lat, (float) $rideRequest->origin_lng) ?? true)))
-            ->values();
-
-        // Perfil de confianza del cliente (sección 3.6 y 8: "app segura", el
-        // conductor tiene que ver quién le pide la carrera antes de aceptar).
-        // Consulta aparte (no withAvg/withCount encadenado por relación
-        // belongsTo → hasMany, que Eloquent no resuelve así) — mismo patrón
-        // que DriverDirectoryController. Mismos nombres de campo que
-        // RideRequested::broadcastWith() para que la carga inicial y el aviso
-        // en vivo por WebSocket se vean exactamente igual en la pantalla.
-        $clientIds = $incomingRequestsAsDriver->pluck('client_user_id')->unique();
-
-        $clientRatings = Review::query()
-            ->whereIn('reviewee_user_id', $clientIds)
-            ->selectRaw('reviewee_user_id, avg(rating) as avg_rating, count(*) as review_count')
-            ->groupBy('reviewee_user_id')
-            ->get()
-            ->keyBy('reviewee_user_id');
-
-        $incomingRequestsAsDriver->each(function (RideRequest $rideRequest) use ($clientRatings) {
-            $rating = $clientRatings->get($rideRequest->client_user_id);
-
-            $rideRequest->client_name = $rideRequest->client->name;
-            $rideRequest->client_rating = $rating ? round((float) $rating->avg_rating, 1) : 0;
-            $rideRequest->client_review_count = $rating->review_count ?? 0;
-            $rideRequest->client_member_code = $rideRequest->client->member_code;
-        });
+        $pendingRequestsAsClient = $this->pendingRequestsForClient($userId);
+        $incomingRequestsAsDriver = $this->incomingRequestsForDriver($request);
 
         $activeRides = Ride::query()
             ->where(fn ($query) => $query->where('client_user_id', $userId)->orWhere('driver_user_id', $userId))
@@ -400,7 +414,7 @@ class RideController extends Controller
             abort(403);
         }
 
-        $url = URL::temporarySignedRoute('public.rides.track', now()->addHours(24), ['ride' => $ride->id]);
+        $url = URL::temporarySignedRoute('public.rides.track', now()->addHours(24), ['ride' => $ride->public_id]);
 
         return response()->json(['url' => $url]);
     }
