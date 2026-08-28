@@ -75,6 +75,7 @@ use App\Http\Controllers\SosAlertController;
 use App\Http\Controllers\SubscriptionRequestController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SurveyController;
+use App\Http\Controllers\TrustCircleController;
 use App\Http\Controllers\TrustedContactController;
 use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
@@ -480,6 +481,21 @@ Route::middleware('auth')->group(function () {
     Route::get('/contactos-de-confianza', [TrustedContactController::class, 'index'])->name('trusted-contacts.index');
     Route::post('/contactos-de-confianza', [TrustedContactController::class, 'store'])->name('trusted-contacts.store');
     Route::delete('/contactos-de-confianza/{contact}', [TrustedContactController::class, 'destroy'])->name('trusted-contacts.destroy');
+
+    // Círculo social privado entre cuentas reales. Es distinto de los
+    // contactos SOS: aquí ambas personas deben aceptar la conexión y cada
+    // una controla si comparte su flota y su índice con la otra.
+    Route::get('/circulo-de-confianza', [TrustCircleController::class, 'index'])->name('trust-circle.index');
+    Route::get('/circulo-de-confianza/buscar', [TrustCircleController::class, 'search'])
+        ->middleware('throttle:30,1,trust-circle.search')
+        ->name('trust-circle.search');
+    Route::post('/circulo-de-confianza/solicitudes', [TrustCircleController::class, 'store'])
+        ->middleware('throttle:10,1,trust-circle.store')
+        ->name('trust-circle.store');
+    Route::post('/circulo-de-confianza/solicitudes/{connection}/responder', [TrustCircleController::class, 'respond'])->name('trust-circle.respond');
+    Route::put('/circulo-de-confianza/{connection}/privacidad', [TrustCircleController::class, 'updateSettings'])->name('trust-circle.settings.update');
+    Route::delete('/circulo-de-confianza/{connection}', [TrustCircleController::class, 'destroy'])->name('trust-circle.destroy');
+    Route::post('/circulo-de-confianza/invitar-conductor', [TrustCircleController::class, 'inviteDriver'])->name('trust-circle.drivers.invite');
 
     // "Mis rutas" (pedido explícito del usuario): origen+destino guardados
     // para pedir la próxima carrera sin escribir ni marcar nada de nuevo.

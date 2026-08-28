@@ -219,6 +219,11 @@ const quickLinks = computed(() =>
             help: 'Su plan vigente, cuántas unidades puede afiliar, y el descuento que reciben sus conductores en su propio plan mientras estén afiliados.',
         },
         {
+            route: 'trust-circle.index',
+            label: 'Mi círculo de confianza',
+            help: 'Familiares y amigos conectados, personas en común e índices de confianza explicables.',
+        },
+        {
             route: 'trusted-contacts.index',
             label: 'Contactos de confianza',
             help: 'A quién avisa el botón SOS si lo activa durante un viaje.',

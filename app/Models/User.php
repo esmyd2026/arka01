@@ -412,6 +412,18 @@ class User extends Authenticatable
         return $this->hasMany(TrustedContact::class);
     }
 
+    /** Solicitudes que esta cuenta envió para formar su círculo privado. */
+    public function trustCircleRequestsSent(): HasMany
+    {
+        return $this->hasMany(TrustCircleConnection::class, 'requester_user_id');
+    }
+
+    /** Solicitudes de círculo que esta cuenta recibió. */
+    public function trustCircleRequestsReceived(): HasMany
+    {
+        return $this->hasMany(TrustCircleConnection::class, 'addressee_user_id');
+    }
+
     /**
      * Historial de aperturas de la ventana de 24h de WhatsApp (pedido
      * explícito del usuario) — cada vez que este usuario le escribe al
