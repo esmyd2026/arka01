@@ -132,6 +132,13 @@ class RideRequestController extends Controller
             // frontend puede replicar el mismo `max(...)` y avisar cuándo se
             // está aplicando el mínimo en vez del cálculo por km.
             'minimumFare' => (float) PricingSetting::current()->minimum_fare,
+            // Cargo por trayecto de recogida (pedido explícito del usuario:
+            // "debe bajar un costo porque la recogida es más cerca" — el
+            // precio mostrado por conductor tiene que reflejar su distancia
+            // real de recogida, no solo la del viaje). El frontend replica
+            // PriceCalculator::pickupSurcharge() con estos dos valores.
+            'pickupSurchargeThresholdKm' => (float) PricingSetting::current()->pickup_surcharge_threshold_km,
+            'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
             // Pedido explícito del usuario ("guardá las que ya ha realizado
             // para que aparezcan como favoritas"): direcciones que este
             // cliente ya usó antes (de origen o de destino, da igual — "casa"

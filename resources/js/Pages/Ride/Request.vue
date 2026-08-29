@@ -47,6 +47,12 @@ const props = defineProps({
     // mostraba "0.7 km × $0.45/km = $0.31" para una carrera que en realidad
     // iba a cobrar el mínimo configurado.
     minimumFare: { type: Number, required: true },
+    // Cargo por trayecto de recogida (pedido explícito del usuario: "debe
+    // bajar un costo porque la recogida es más cerca") — el precio mostrado
+    // por conductor en la lista de "Elige tu conductor" incluye este
+    // estimado, replicando App\Services\PriceCalculator::pickupSurcharge().
+    pickupSurchargeThresholdKm: { type: Number, required: true },
+    pickupSurchargePercent: { type: Number, required: true },
     // Pedido explícito del usuario ("guardá las que ya ha realizado para que
     // aparezcan como favoritas"): direcciones que este cliente ya usó antes.
     frequentPlaces: { type: Array, default: () => [] },
@@ -935,15 +941,37 @@ const estimatedTotalPrice = computed(() => {
     return estimatedPrice.value + (stopsTotalPrice.value ?? 0);
 });
 
+// Cargo por trayecto de recogida (pedido explícito del usuario: "debe bajar
+// un costo porque la recogida es más cerca" — al invertir origen/destino, la
+// distancia real de CADA conductor hasta el nuevo origen cambia, y el precio
+// mostrado tiene que reflejarlo). `driver.distance` ya es esa distancia
+// (Haversine origin↔conductor, calculada en withDistanceAndFilters/
+// selectedDriverInfo) — acá solo se replica
+// App\Services\PriceCalculator::pickupSurcharge() con esos datos. Ojo: esto
+// SOLO afecta el precio que se MUESTRA por conductor (para comparar antes de
+// elegir) — nunca el que se manda como offered_price (ver estimatedPrice más
+// arriba), así que no hay riesgo de que el conductor termine cobrando este
+// cargo dos veces si después decide sumarlo al aceptar.
+function pickupFareEstimateFor(driver) {
+    if (driver.distance == null || !driver.pickup_surcharge_enabled) return 0;
+    if (driver.distance <= props.pickupSurchargeThresholdKm) return 0;
+
+    const rate = Number(driver.rate_per_km ?? 0);
+    return Math.round(driver.distance * rate * (props.pickupSurchargePercent / 100) * 100) / 100;
+}
+
 // Precio estimado POR CONDUCTOR (rediseño UX, con mockup de referencia: cada
 // fila de la lista muestra su propio precio, no solo el del elegido) — mismo
 // cálculo que rawPriceByDistance/referenceMinimumFare de acá arriba, aplicado
-// a un conductor puntual en vez de al elegido o al promedio de la flota.
+// a un conductor puntual en vez de al elegido o al promedio de la flota. Ya
+// incluye el estimado de recogida de ESE conductor (de acá arriba), para que
+// dos conductores con la misma tarifa no se vean igual de "baratos" si uno
+// está mucho más lejos del origen que el otro.
 function estimatedPriceForDriver(driver) {
     if (estimatedDistanceKm.value == null) return null;
     const raw = roundUpToDime(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0));
     const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
-    return Math.max(raw, floor);
+    return Math.max(raw, floor) + pickupFareEstimateFor(driver);
 }
 
 // Valor orientativo de cada grupo para la ruta actual. Se muestra como
