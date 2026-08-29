@@ -51,6 +51,25 @@ const dragOffset = { x: 0, y: 0 };
 // ubicación antigua guardada no siga dejando la radio sobre los controles de
 // cancelar/completar carrera.
 const BUBBLE_POSITION_KEY = 'arka-radio-bubble-position-v2';
+const CHANNEL_SELECTION_KEY = `arka-radio-selected-channel-${userPublicId.value}`;
+
+function rememberedChannelPublicId() {
+    try {
+        return window.localStorage.getItem(CHANNEL_SELECTION_KEY);
+    } catch {
+        return null;
+    }
+}
+
+function rememberChannel(publicId) {
+    try {
+        if (publicId) window.localStorage.setItem(CHANNEL_SELECTION_KEY, publicId);
+        else window.localStorage.removeItem(CHANNEL_SELECTION_KEY);
+    } catch {
+        // La selección continúa en memoria aunque el modo privado no permita
+        // conservarla al navegar o recargar.
+    }
+}
 
 const floatingRadioStyle = computed(() => bubblePosition.value
     ? { left: `${bubblePosition.value.x}px`, top: `${bubblePosition.value.y}px` }
@@ -372,6 +391,7 @@ async function syncRadioAvailability() {
             activeChannels.value = [];
             ridePhase.value = null;
             isOpen.value = false;
+            rememberChannel(null);
 
             if (radioWasAvailable) {
                 participantNotice.value = 'La radio se cerró porque la solicitud o la carrera terminó.';
@@ -384,12 +404,15 @@ async function syncRadioAvailability() {
         }
 
         activeChannels.value = Array.isArray(context.channels) ? context.channels : [context];
-        // Durante su propia solicitud/carrera el canal principal siempre debe
-        // ser el personal. Si solo está acompañando a un familiar o compañero,
-        // conserva el canal que escucha o usa el primero autorizado.
+        // Una selección manual manda sobre el canal personal. El estado se
+        // consulta cada cinco segundos, por lo que priorizar siempre `is_owner`
+        // hacía que el selector regresara solo al canal del cliente.
+        const currentChannel = activeChannels.value.find((channel) => channel.public_id === config.value?.publicId);
+        const rememberedChannel = activeChannels.value.find((channel) => channel.public_id === rememberedChannelPublicId());
         const ownChannel = activeChannels.value.find((channel) => channel.is_owner);
-        const selected = ownChannel
-            || activeChannels.value.find((channel) => channel.public_id === config.value?.publicId)
+        const selected = currentChannel
+            || rememberedChannel
+            || ownChannel
             || activeChannels.value[0];
 
         if (config.value?.roomId && config.value.roomId !== selected.room_id) {
@@ -407,6 +430,7 @@ async function syncRadioAvailability() {
             members: selected.members || [],
         };
         ridePhase.value = selected.phase;
+        rememberChannel(selected.public_id);
 
         // Entrar al canal no necesita permiso de micrófono. Lo conectamos en
         // cuanto comienza la solicitud/carrera para que pueda escuchar sin
@@ -743,6 +767,7 @@ function openRadio() {
 async function selectChannel(channel) {
     if (!channel || channel.public_id === config.value?.publicId) return;
     disconnectRadio();
+    rememberChannel(channel.public_id);
     config.value = {
         publicId: channel.public_id,
         roomId: channel.room_id,
