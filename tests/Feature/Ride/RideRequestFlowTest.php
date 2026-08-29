@@ -452,7 +452,7 @@ class RideRequestFlowTest extends TestCase
 
         $tripPrice = PriceCalculator::suggestedPrice((float) $rideRequest->distance_km, 0.50)['total'];
         $this->assertEquals(
-            round($tripPrice + (float) $rideRequest->pickup_fare, 2),
+            PriceCalculator::roundUpToDime($tripPrice + (float) $rideRequest->pickup_fare),
             round((float) $rideRequest->current_offered_price, 2)
         );
     }

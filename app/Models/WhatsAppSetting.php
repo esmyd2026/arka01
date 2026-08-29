@@ -48,6 +48,7 @@ class WhatsAppSetting extends Model
         'notify_scheduled_overdue',
         'notify_offer_expired',
         'notify_driver_disconnected',
+        'notify_session_expiring_soon',
         // Pedido explícito del usuario: "coloquemos precios estimados por
         // las cantidades de mensajes enviados" — editable a mano, el precio
         // real de Meta varía por categoría y país.
@@ -77,6 +78,7 @@ class WhatsAppSetting extends Model
         'notify_scheduled_overdue' => 'boolean',
         'notify_offer_expired' => 'boolean',
         'notify_driver_disconnected' => 'boolean',
+        'notify_session_expiring_soon' => 'boolean',
         'estimated_cost_per_message' => 'decimal:4',
     ];
 

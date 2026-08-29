@@ -83,6 +83,18 @@ class WhatsAppDriverConnectHandler
             return true;
         }
 
+        // Pedido explícito del usuario ("un botón tipo permanecer conectado
+        // para restablecer la sesión de WhatsApp"): tocar este botón ya
+        // cuenta como mensaje entrante y reabre la ventana de 24h por sí
+        // solo (WhatsAppWebhookController::openWindowFor()) — acá solo hace
+        // falta reconocerlo y confirmar, sin tocar disponibilidad.
+        if ($text === 'wa_session_keepalive') {
+            $this->clear($conversation);
+            WhatsAppFreeformSender::sendText($phone, '✅ Perfecto, seguimos en contacto por acá.');
+
+            return true;
+        }
+
         if ($text === 'wa_driver_disconnect') {
             $profile->update(['is_available' => false]);
             $this->activityTracker->record($profile->user_id, false);

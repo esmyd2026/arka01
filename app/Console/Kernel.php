@@ -38,6 +38,13 @@ class Kernel extends ConsoleKernel
         // Job con delay() que ya usa la bolsa. Cada 2 min, mismo criterio
         // de cadencia que el barrido de disponibilidad de arriba.
         $schedule->command('rides:expire-overdue-directed-requests')->everyTwoMinutes();
+
+        // Pedido explícito del usuario: avisar al conductor antes de que se
+        // le cierre la ventana de WhatsApp de 24h, con un botón para
+        // reabrirla — ver el comando para el detalle. El umbral de "por
+        // vencer" es de 2h (WhatsAppSession::EXPIRING_SOON_THRESHOLD_HOURS),
+        // así que cada 15 min alcanza para no dejar pasar el aviso.
+        $schedule->command('whatsapp:notify-expiring-sessions')->everyFifteenMinutes();
     }
 
     /**

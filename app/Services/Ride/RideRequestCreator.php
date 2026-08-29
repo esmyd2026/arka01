@@ -416,7 +416,12 @@ class RideRequestCreator
         $offeredPrice = round((float) ($validated['offered_price'] ?? $minimumAcceptablePrice), 2);
 
         if (! $driverWasChosenByClient) {
-            $offeredPrice = round($offeredPrice + $pickupFare, 2);
+            // Redondeo hacia arriba a la década (pedido explícito del
+            // usuario, mismo criterio que PriceCalculator::suggestedPrice()
+            // en toda la app): sin esto, el precio final de una solicitud "a
+            // toda la flota" con cargo de recogida quedaba con centavos
+            // sueltos en vez de terminar en una década como el resto.
+            $offeredPrice = PriceCalculator::roundUpToDime($offeredPrice + $pickupFare);
         }
 
         $smartDispatchVersion = null;

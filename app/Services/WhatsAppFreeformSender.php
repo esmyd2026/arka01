@@ -579,9 +579,52 @@ class WhatsAppFreeformSender
         }
 
         $message = "👋 Se desconectó de Arka01 y dejó de recibir carreras.\n"
-            .'Cuando quiera volver a estar disponible, actívese de nuevo desde la app.';
+            .'Puede volver a activarse desde acá mismo o desde la app.';
 
-        self::sendText($driver->phone, $message, 'driver_disconnected');
+        // Botón "Conectarme" (pedido explícito del usuario): mismo id que ya
+        // reconoce App\Services\Chatbot\WhatsAppDriverConnectHandler::handleRegisteredDriver().
+        // Ese handler solo entra si el texto es exactamente "conectarme" o si
+        // la conversación ya está en un estado que empiece con "WA_DRIVER_"
+        // — como este aviso es proactivo (el conductor no escribió nada
+        // antes), hay que dejar ese estado seteado de antemano para que el
+        // toque del botón se reconozca igual que si lo hubiera escrito.
+        ChatbotConversation::forPhone($driver->phone)
+            ->update(['pending_intent' => 'WA_DRIVER_STATUS', 'context' => null, 'last_message_at' => now()]);
+
+        self::sendButtons($driver->phone, $message, [
+            ['id' => 'wa_driver_connect', 'title' => 'Conectarme'],
+        ], 'driver_disconnected');
+    }
+
+    /**
+     * Pedido explícito del usuario ("que le mande un mensaje que se le
+     * cerrar la sesion... para restablecer la sesion de whatsapp"): avisar
+     * al conductor antes de que Meta le cierre la ventana de 24 horas, con
+     * un botón — tocar CUALQUIER botón ya cuenta como un mensaje entrante
+     * (WhatsAppWebhookController::openWindowFor()), así que alcanza con que
+     * responda algo para que la ventana se reabra sola; el botón "Seguir
+     * conectado" solo existe para darle algo concreto que tocar. Encolada
+     * desde App\Console\Commands\NotifyExpiringWhatsAppSessions, nunca
+     * sincrónica, mismo criterio que sendDisconnectedAlert().
+     */
+    public static function sendSessionExpiringSoonNotice(User $driver): void
+    {
+        if (! WhatsAppRideAccess::notificationTypeEnabled('session_expiring_soon') || ! $driver->phone || ! $driver->hasActiveWhatsAppSession()) {
+            return;
+        }
+
+        ChatbotConversation::forPhone($driver->phone)
+            ->update(['pending_intent' => 'WA_DRIVER_STATUS', 'context' => null, 'last_message_at' => now()]);
+
+        self::sendButtons(
+            $driver->phone,
+            '⏳ Su sesión de WhatsApp con Arka01 está por cerrarse. Si no escribe nada, dejará de recibir avisos por acá hasta que vuelva a escribirnos.',
+            [
+                ['id' => 'wa_session_keepalive', 'title' => 'Seguir conectado'],
+                ['id' => 'wa_driver_disconnect', 'title' => 'Desconectarme'],
+            ],
+            'session_expiring_soon'
+        );
     }
 
     /**

@@ -27,18 +27,26 @@ class WhatsAppSession extends Model
         'user_id',
         'opened_at',
         'expires_at',
+        // Pedido explícito del usuario: avisar por WhatsApp antes de que se
+        // cierre la ventana — este campo evita mandar el mismo aviso una y
+        // otra vez mientras siga "por vencer" (ver
+        // App\Console\Commands\NotifyExpiringWhatsAppSessions).
+        'expiring_soon_notified_at',
     ];
 
     protected $casts = [
         'opened_at' => 'datetime',
         'expires_at' => 'datetime',
+        'expiring_soon_notified_at' => 'datetime',
     ];
 
     /**
      * Cuánto falta para que Meta exija volver a escribir "Hola" (pedido
-     * explícito del usuario: avisar cuando está "próxima a vencer").
+     * explícito del usuario: avisar cuando está "próxima a vencer"). Pública
+     * porque App\Console\Commands\NotifyExpiringWhatsAppSessions la necesita
+     * para acotar su propia consulta a las sesiones candidatas.
      */
-    private const EXPIRING_SOON_THRESHOLD_HOURS = 2;
+    public const EXPIRING_SOON_THRESHOLD_HOURS = 2;
 
     public function user(): BelongsTo
     {

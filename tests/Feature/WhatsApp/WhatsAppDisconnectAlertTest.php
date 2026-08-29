@@ -108,6 +108,13 @@ class WhatsAppDisconnectAlertTest extends TestCase
         Queue::assertPushed(NotifyDriverDisconnectedByWhatsApp::class, fn ($job) => $job->driverUserId === $driver->id);
     }
 
+    /**
+     * Pedido explícito del usuario ("que le ponga un botón a ese mensaje
+     * conectarme"): el aviso de desconexión pasó de texto plano a un botón
+     * interactivo con el mismo id que ya reconoce
+     * WhatsAppDriverConnectHandler — así el conductor se reconecta con un
+     * toque, sin tener que escribir nada.
+     */
     public function test_the_job_sends_a_whatsapp_message_when_the_driver_has_an_active_session(): void
     {
         $this->enableWhatsApp();
@@ -117,7 +124,8 @@ class WhatsAppDisconnectAlertTest extends TestCase
         WhatsAppFreeformSender::sendDisconnectedAlert($driver);
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com')
-            && $request['type'] === 'text'
+            && $request['type'] === 'interactive'
+            && $request['interactive']['action']['buttons'][0]['reply']['id'] === 'wa_driver_connect'
             && $request['to'] === '593991234567');
     }
 
@@ -129,5 +137,38 @@ class WhatsAppDisconnectAlertTest extends TestCase
         WhatsAppFreeformSender::sendDisconnectedAlert($driver);
 
         Http::assertNothingSent();
+    }
+
+    /**
+     * Pedido explícito del usuario: tocar "Conectarme" en el aviso de
+     * desconexión reactiva al conductor con un solo toque, sin tener que
+     * escribir nada ni abrir la app.
+     */
+    public function test_tapping_the_connect_button_reactivates_the_driver(): void
+    {
+        $this->enableWhatsApp();
+        $driver = User::factory()->create(['phone' => '+593991234567']);
+        DriverProfile::factory()->for($driver)->create(['is_available' => false]);
+        WhatsAppSession::query()->create(['user_id' => $driver->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+
+        WhatsAppFreeformSender::sendDisconnectedAlert($driver);
+
+        $payload = [
+            'entry' => [[
+                'changes' => [[
+                    'value' => [
+                        'messages' => [[
+                            'from' => '593991234567',
+                            'type' => 'interactive',
+                            'interactive' => ['button_reply' => ['id' => 'wa_driver_connect']],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/webhooks/whatsapp', $payload)->assertOk();
+
+        $this->assertTrue($driver->driverProfile->fresh()->is_available);
     }
 }

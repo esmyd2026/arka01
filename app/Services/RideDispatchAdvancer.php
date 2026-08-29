@@ -325,7 +325,11 @@ class RideDispatchAdvancer
                     'driver_user_id' => $candidateIds[0],
                     'pickup_distance_km' => $pickupSurcharge['distance_km'],
                     'pickup_fare' => $pickupSurcharge['fare'],
-                    'current_offered_price' => round((float) $rideRequest->current_offered_price + $pickupFare, 2),
+                    // Redondeo hacia arriba a la década (pedido explícito del
+                    // usuario, mismo criterio que RideRequestCreator::create()
+                    // para este mismo caso): el precio final siempre termina
+                    // en una década, nunca con centavos sueltos.
+                    'current_offered_price' => PriceCalculator::roundUpToDime((float) $rideRequest->current_offered_price + $pickupFare),
                     'smart_dispatch_version' => config('smart_dispatch.enabled', true) ? SmartDispatchScorer::VERSION : null,
                     'smart_dispatch_snapshot' => SmartDispatchScorer::safeSnapshot(
                         $candidateIds,

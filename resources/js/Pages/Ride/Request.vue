@@ -911,9 +911,16 @@ const estimatedPickupFareForSelected = computed(() => {
     return pickupFareEstimateFor(selectedDriverInfo.value);
 });
 
+// Bug reportado por el usuario ("dice el estimado 7.97 y luego al pedir sale
+// 8.00"): el backend redondea hacia arriba a la décima el TOTAL completo
+// (viaje + recogida, ver RideRequestCreator::create() con conductor puntual
+// elegido) — acá se sumaba la recogida DESPUÉS de redondear solo el viaje,
+// dejando el estimado con centavos sueltos que nunca iban a ser el número
+// final. roundUpToDime() sobre la suma completa hace que el estimado ya sea
+// ese mismo número, sin sorpresas al confirmar.
 const estimatedPrice = computed(() => {
     if (rawPriceByDistance.value == null) return null;
-    return Math.max(rawPriceByDistance.value, referenceMinimumFare.value) + estimatedPickupFareForSelected.value;
+    return roundUpToDime(Math.max(rawPriceByDistance.value, referenceMinimumFare.value) + estimatedPickupFareForSelected.value);
 });
 
 // Paradas adicionales (pedido explícito del usuario: "esto recalcule las
@@ -958,11 +965,7 @@ const estimatedTotalPrice = computed(() => {
 // mostrado tiene que reflejarlo). `driver.distance` ya es esa distancia
 // (Haversine origin↔conductor, calculada en withDistanceAndFilters/
 // selectedDriverInfo) — acá solo se replica
-// App\Services\PriceCalculator::pickupSurcharge() con esos datos. Ojo: esto
-// SOLO afecta el precio que se MUESTRA por conductor (para comparar antes de
-// elegir) — nunca el que se manda como offered_price (ver estimatedPrice más
-// arriba), así que no hay riesgo de que el conductor termine cobrando este
-// cargo dos veces si después decide sumarlo al aceptar.
+// App\Services\PriceCalculator::pickupSurcharge() con esos datos.
 function pickupFareEstimateFor(driver) {
     if (driver.distance == null || !driver.pickup_surcharge_enabled) return 0;
     if (driver.distance <= props.pickupSurchargeThresholdKm) return 0;
@@ -982,7 +985,10 @@ function estimatedPriceForDriver(driver) {
     if (estimatedDistanceKm.value == null) return null;
     const raw = roundUpToDime(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0));
     const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
-    return Math.max(raw, floor) + pickupFareEstimateFor(driver);
+    // Mismo fix que estimatedPrice de acá arriba: redondear hacia arriba el
+    // TOTAL (viaje + recogida), no solo el viaje, para que este número ya
+    // sea el mismo que el cliente va a ver después al elegir a este conductor.
+    return roundUpToDime(Math.max(raw, floor) + pickupFareEstimateFor(driver));
 }
 
 // Valor orientativo de cada grupo para la ruta actual. Se muestra como

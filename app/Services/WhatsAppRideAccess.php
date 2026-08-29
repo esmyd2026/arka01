@@ -29,6 +29,7 @@ class WhatsAppRideAccess
         'scheduled_overdue' => ['label' => 'Carrera programada vencida', 'group' => 'conductor'],
         'offer_expired' => ['label' => 'Se acabó el tiempo para responder', 'group' => 'conductor'],
         'driver_disconnected' => ['label' => 'Aviso de desconexión', 'group' => 'conductor'],
+        'session_expiring_soon' => ['label' => 'Sesión de WhatsApp por vencer', 'group' => 'conductor'],
     ];
 
     public static function notificationsEnabled(): bool
