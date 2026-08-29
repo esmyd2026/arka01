@@ -81,6 +81,8 @@ class FleetDriverSearch
                 'average_rating' => $averageRating,
                 'review_count' => $reviewCount,
                 'tier' => DriverTier::forPoints($driver->total_points)->toBadge(),
+                'public_category' => $driver->public_category,
+                'public_category_label' => $driver->visiblePublicCategoryLabel(),
                 'rides_count' => $rideCounts->get($driver->user_id, 0),
                 'active_clients_count' => $driver->activeClientCount(),
                 'trust' => $this->trustIndex->calculate($driver->user, $viewer),

@@ -690,6 +690,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/conductores/{driverProfile}/reactivar', [AdminDriverController::class, 'reactivate'])->name('drivers.reactivate');
     Route::patch('/conductores/{driverProfile}/whatsapp', [AdminDriverController::class, 'updateWhatsApp'])->name('drivers.whatsapp');
     Route::patch('/conductores/{driverProfile}/categoria', [AdminDriverController::class, 'updateCategory'])->name('drivers.category');
+    Route::patch('/conductores/{driverProfile}/categoria-publica', [AdminDriverController::class, 'updatePublicCategory'])->name('drivers.public-category');
 
     // Panel de clientes registrados (pedido explícito del usuario): mismo
     // criterio que el de conductores, del otro lado — ver Admin\ClientController.

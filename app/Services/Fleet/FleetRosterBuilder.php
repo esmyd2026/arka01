@@ -53,18 +53,21 @@ class FleetRosterBuilder
             ->groupBy('driver_user_id')
             ->pluck('clients_count', 'driver_user_id');
 
-        $points = DriverProfile::query()->whereIn('user_id', $driverIds)->pluck('total_points', 'user_id');
+        $profiles = DriverProfile::query()->whereIn('user_id', $driverIds)->get()->keyBy('user_id');
 
-        $memberStats = $driverIds->mapWithKeys(function ($driverId) use ($ratings, $rideCounts, $clientCounts, $points) {
+        $memberStats = $driverIds->mapWithKeys(function ($driverId) use ($ratings, $rideCounts, $clientCounts, $profiles) {
             $rating = $ratings->get($driverId);
             $averageRating = $rating ? round((float) $rating->avg_rating, 1) : null;
             $reviewCount = $rating->review_count ?? 0;
+            $profile = $profiles->get($driverId);
 
             return [$driverId => [
                 'average_rating' => $averageRating,
                 'review_count' => $reviewCount,
                 'rides_count' => $rideCounts->get($driverId, 0),
-                'tier' => DriverTier::forPoints($points->get($driverId, 0))->toBadge(),
+                'tier' => DriverTier::forPoints($profile?->total_points ?? 0)->toBadge(),
+                'public_category' => $profile?->public_category,
+                'public_category_label' => $profile?->visiblePublicCategoryLabel(),
                 'active_clients_count' => $clientCounts->get($driverId, 0),
             ]];
         });

@@ -122,6 +122,8 @@ class DriverController extends Controller
             'whatsapp_ride_actions_enabled' => $profile->whatsapp_ride_actions_enabled,
             'service_category' => $profile->service_category,
             'service_category_label' => $profile->serviceCategoryLabel(),
+            'public_category' => $profile->public_category,
+            'public_category_label' => $profile->publicCategoryLabel(),
             'vehicle' => trim(implode(' ', array_filter([
                 $profile->vehicle_make,
                 $profile->vehicle_model,
@@ -139,6 +141,7 @@ class DriverController extends Controller
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['q', 'city_id', 'status']),
             'serviceCategories' => DriverProfile::serviceCategories(),
+            'publicDriverCategories' => DriverProfile::publicCategories(),
         ]);
     }
 
@@ -202,5 +205,28 @@ class DriverController extends Controller
         return back()->with('status', $validated['service_category']
             ? 'Categoría de servicio actualizada.'
             : 'Categoría de servicio retirada.');
+    }
+
+    /** La etiqueta pública nunca puede ser elegida por el conductor. */
+    public function updatePublicCategory(Request $request, DriverProfile $driverProfile): RedirectResponse
+    {
+        $validated = $request->validate([
+            'public_category' => ['nullable', 'string', Rule::in(array_keys(DriverProfile::publicCategories()))],
+        ]);
+
+        $previous = $driverProfile->public_category;
+        $driverProfile->forceFill(['public_category' => $validated['public_category']])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.public_category.update',
+            module: 'drivers',
+            oldValue: ['driver_profile_id' => $driverProfile->id, 'public_category' => $previous],
+            newValue: ['driver_profile_id' => $driverProfile->id, 'public_category' => $validated['public_category']],
+        );
+
+        return back()->with('status', $validated['public_category']
+            ? 'Categoría pública del conductor actualizada.'
+            : 'Categoría pública del conductor retirada.');
     }
 }

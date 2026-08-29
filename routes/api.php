@@ -81,6 +81,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/driver/location', [DriverController::class, 'updateLocation'])
             ->middleware('throttle:20,1,api.driver.location')
             ->name('driver.location');
+        Route::get('/driver/profile', [DriverController::class, 'profile'])->name('driver.profile.show');
+        Route::post('/driver/profile', [DriverController::class, 'updateProfile'])->name('driver.profile.update');
 
         // /rides/active y /rides/history van ANTES de /rides/{ride}, mismo
         // cuidado de orden que el resto de la API.

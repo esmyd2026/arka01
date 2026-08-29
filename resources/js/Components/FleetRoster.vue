@@ -7,6 +7,7 @@ import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
+import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierLabel } from '@/Utils/tierBadge';
@@ -254,6 +255,7 @@ onBeforeUnmount(() => {
                                 ${{ driver.rate_per_km }}/km
                                 <span v-if="driver.username">· @{{ driver.username }}</span>
                             </p>
+                            <DriverCategoryBadge class="mt-1" :label="driver.public_category_label" />
                             <p class="text-xs text-arka-text-muted">
                                 <span v-if="driver.review_count > 0" class="text-arka-lime">★ {{ driver.average_rating.toFixed(1) }}</span>
                                 <span v-else>Sin calificaciones</span>
@@ -376,6 +378,11 @@ onBeforeUnmount(() => {
                             <p v-if="member.driver.driver_profile" class="mt-1 text-xs text-arka-text-muted">
                                 Tarifa · <span class="font-medium text-arka-primary">${{ member.driver.driver_profile.rate_per_km }}/km</span>
                             </p>
+                            <DriverCategoryBadge
+                                v-if="memberStats[member.driver.id]"
+                                class="mt-1"
+                                :label="memberStats[member.driver.id].public_category_label"
+                            />
                         </div>
                     </div>
 

@@ -18,6 +18,23 @@ class PublicProfileTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_public_driver_profile_uses_the_admin_category_without_exposing_internal_type(): void
+    {
+        $viewer = User::factory()->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'verification_status' => 'approved',
+            'driver_type' => 'public_transport',
+            'public_category' => 'professional',
+        ]);
+
+        $this->actingAs($viewer)->get(route('profiles.show', $driver->public_id))
+            ->assertInertia(fn ($page) => $page
+                ->where('profileUser.driver_profile.public_category_label', 'Conductor Profesional')
+                ->missing('profileUser.driver_profile.driver_type')
+                ->missing('profileUser.driver_profile.trust_label'));
+    }
+
     public function test_a_pure_driver_is_marked_as_driver_but_not_client(): void
     {
         $viewer = User::factory()->create();

@@ -65,10 +65,6 @@ class DriverDirectoryController extends Controller
             // sentido que siga apareciendo en el directorio como "no
             // disponible ahora", tiene que desaparecer del todo.
             ->whereNull('deactivated_at')
-            ->when($request->input('type') === 'independent', fn ($query) => $query->where('driver_type', 'independent'))
-            ->when($request->input('type') === 'public_transport', fn ($query) => $query->where('driver_type', 'public_transport'))
-            ->when($request->input('type') === 'cooperative', fn ($query) => $query->whereHas('user.cooperativeDriverMemberships', fn ($membership) => $membership
-                ->where('status', 'accepted')->whereNull('ended_at')))
             ->with('user.cooperativeDriverMemberships.cooperative')
             ->get();
 
@@ -147,8 +143,8 @@ class DriverDirectoryController extends Controller
                     // solo el propio conductor y un admin la ven. El tipo de
                     // vehículo (SUV, sedán, etc.) es lo que la reemplaza acá.
                     'vehicle_type' => $profile->vehicleTypeLabel(),
-                    'trust_label' => $profile->verification_status === 'approved' ? $profile->trust_label : null,
-                    'driver_type' => $profile->driver_type,
+                    'public_category' => $profile->public_category,
+                    'public_category_label' => $profile->visiblePublicCategoryLabel(),
                     'cooperative' => $cooperative ? [
                         'public_id' => $cooperative->public_id,
                         'name' => $cooperative->name,
@@ -208,7 +204,6 @@ class DriverDirectoryController extends Controller
         return Inertia::render('Directory/Index', [
             'drivers' => $paginated,
             'targetFleetId' => $fleet->id,
-            'filters' => ['type' => $request->input('type')],
         ]);
     }
 }

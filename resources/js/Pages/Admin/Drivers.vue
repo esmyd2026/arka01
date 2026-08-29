@@ -15,6 +15,7 @@ const props = defineProps({
     cities: { type: Array, required: true },
     filters: { type: Object, required: true },
     serviceCategories: { type: Object, required: true },
+    publicDriverCategories: { type: Object, required: true },
 });
 
 // Filtros de la tabla completa (pedido explícito del usuario: paginado +
@@ -71,6 +72,14 @@ function updateCategory(driver, value) {
     router.patch(
         route('admin.drivers.category', driver.id),
         { service_category: value || null },
+        { preserveScroll: true }
+    );
+}
+
+function updatePublicCategory(driver, value) {
+    router.patch(
+        route('admin.drivers.public-category', driver.id),
+        { public_category: value || null },
         { preserveScroll: true }
     );
 }
@@ -139,7 +148,7 @@ function updateCategory(driver, value) {
                                 <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
                                     <th class="py-2 pr-3">Conductor</th>
                                     <th class="py-2 pr-3">Ciudad</th>
-                                    <th class="py-2 pr-3 min-w-[240px]">Vehículo y categoría</th>
+                                    <th class="py-2 pr-3 min-w-[240px]">Vehículo y categorías</th>
                                     <th class="py-2 pr-3">Estado</th>
                                     <th class="py-2 pr-3">Carreras</th>
                                     <th class="py-2 pr-3">Rechazos</th>
@@ -169,6 +178,17 @@ function updateCategory(driver, value) {
                                         >
                                             <option value="">Sin categoría</option>
                                             <option v-for="(category, key) in serviceCategories" :key="key" :value="key">
+                                                {{ category.label }}
+                                            </option>
+                                        </select>
+                                        <select
+                                            :value="d.public_category ?? ''"
+                                            class="mt-1.5 w-full rounded-arka border-arka-primary/25 bg-arka-card px-2 py-1 text-xs font-medium text-arka-text"
+                                            aria-label="Categoría pública del conductor"
+                                            @change="updatePublicCategory(d, $event.target.value)"
+                                        >
+                                            <option value="">Sin etiqueta pública</option>
+                                            <option v-for="(category, key) in publicDriverCategories" :key="key" :value="key">
                                                 {{ category.label }}
                                             </option>
                                         </select>

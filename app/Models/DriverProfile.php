@@ -22,7 +22,6 @@ class DriverProfile extends Model
         'vehicle_photo_url',
         'identity_document_url',
         'police_record_url',
-        'trust_label',
         'registration_complete',
     ];
 
@@ -43,6 +42,7 @@ class DriverProfile extends Model
         'has_trunk',
         'vehicle_amenities',
         'service_category',
+        'public_category',
         'vehicle_photo_path',
         'rate_per_km',
         'minimum_fare',
@@ -252,6 +252,36 @@ class DriverProfile extends Model
     public function serviceCategoryLabel(): ?string
     {
         return self::serviceCategories()[$this->service_category]['label'] ?? null;
+    }
+
+    /**
+     * Clasificación pública administrada. No revela `driver_type`, que se
+     * conserva únicamente para reglas operativas internas.
+     *
+     * @return array<string, array{label: string, description: string}>
+     */
+    public static function publicCategories(): array
+    {
+        return [
+            'professional' => [
+                'label' => 'Conductor Profesional',
+                'description' => 'Conductor profesional cuya documentación y actividad fueron revisadas.',
+            ],
+            'verified' => [
+                'label' => 'Conductor Verificado',
+                'description' => 'Conductor que completó satisfactoriamente la verificación de Arka01.',
+            ],
+        ];
+    }
+
+    public function publicCategoryLabel(): ?string
+    {
+        return self::publicCategories()[$this->public_category]['label'] ?? null;
+    }
+
+    public function visiblePublicCategoryLabel(): ?string
+    {
+        return $this->verification_status === 'approved' ? $this->publicCategoryLabel() : null;
     }
 
     public function vehicleTypeLabel(): ?string

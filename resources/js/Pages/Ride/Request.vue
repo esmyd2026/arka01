@@ -11,6 +11,7 @@ import BottomSheet from '@/Components/BottomSheet.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { distanceKm } from '@/Utils/haversine';
 import { fetchOsrmRoute, fetchOsrmMultiRoute } from '@/Utils/osrmRoute';
@@ -2002,6 +2003,7 @@ function submit() {
                                     <span class="block text-xs text-arka-base/50">
                                         {{ driver.outOfRange ? 'Fuera de su zona de cobertura' : STATUS_STYLE[driver.status].label }}
                                     </span>
+                                    <DriverCategoryBadge class="mt-1" :label="driver.public_category_label" />
                                     <!-- Pedido explícito del usuario: qué vehículo tiene, para
                                          saber qué esperar antes de pedirle la carrera. Placa
                                          tapada, no completa (confidencialidad, ver
@@ -2085,6 +2087,7 @@ function submit() {
                             <p v-if="selectedDriverInfo.vehicle_make" class="text-sm text-arka-base/50 truncate">
                                 {{ selectedDriverInfo.vehicle_make }} {{ selectedDriverInfo.vehicle_model }} · {{ selectedDriverInfo.vehicle_plate }}
                             </p>
+                            <DriverCategoryBadge class="mt-1" :label="selectedDriverInfo.public_category_label" />
                         </div>
                         <!-- Píldora de ETA (mismo dato que antes, "Llegada Xmin" en texto
                              plano — ahora con el mismo lenguaje visual que el resto del

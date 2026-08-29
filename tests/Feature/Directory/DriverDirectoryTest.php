@@ -25,7 +25,13 @@ class DriverDirectoryTest extends TestCase
         // directorio también exige haber ganado la medalla marcada como
         // "aparece en público", no solo tener el plan que lo permite.
         $publicDriver = User::factory()->create(['name' => 'Conductor Público']);
-        DriverProfile::factory()->for($publicDriver)->create(['is_public' => true, 'total_points' => 500]);
+        DriverProfile::factory()->for($publicDriver)->create([
+            'is_public' => true,
+            'total_points' => 500,
+            'verification_status' => 'approved',
+            'driver_type' => 'public_transport',
+            'public_category' => 'professional',
+        ]);
 
         $privateDriver = User::factory()->create(['name' => 'Conductor Privado']);
         DriverProfile::factory()->for($privateDriver)->create(['is_public' => false]);
@@ -37,6 +43,9 @@ class DriverDirectoryTest extends TestCase
             ->component('Directory/Index')
             ->has('drivers.data', 1)
             ->where('drivers.data.0.name', 'Conductor Público')
+            ->where('drivers.data.0.public_category_label', 'Conductor Profesional')
+            ->missing('drivers.data.0.driver_type')
+            ->missing('drivers.data.0.trust_label')
             ->has('drivers.data.0.trust.score')
             ->has('drivers.data.0.trust.level')
         );

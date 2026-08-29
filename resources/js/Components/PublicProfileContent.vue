@@ -1,5 +1,6 @@
 <script setup>
 import UserAvatar from '@/Components/UserAvatar.vue';
+import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import { Link } from '@inertiajs/vue3';
 
 // Cuerpo del perfil público, aparte del layout que lo envuelve (pedido
@@ -154,9 +155,7 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
                 </span>
                 <span v-if="profileUser.driver_profile.accepts_transfer">transferencia</span>
             </p>
-            <p v-if="profileUser.driver_profile.verification_status === 'approved'" class="text-arka-primary-bright">
-                ✓ {{ profileUser.driver_profile.trust_label || 'Conductor verificado' }}
-            </p>
+            <DriverCategoryBadge :label="profileUser.driver_profile.public_category_label" />
             <p>{{ profileUser.driver_profile.clients_count }} cliente{{ profileUser.driver_profile.clients_count === 1 ? '' : 's' }} lo tienen agregado en su flota</p>
 
             <!-- Pedido explícito del usuario: elegir un conductor (acá,

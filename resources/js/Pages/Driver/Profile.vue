@@ -13,6 +13,7 @@ import UserAvatar from '@/Components/UserAvatar.vue';
 import RatingStars from '@/Components/RatingStars.vue';
 import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import SectionIcon from '@/Components/SectionIcon.vue';
+import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
@@ -61,6 +62,7 @@ const props = defineProps({
     vehicleTypes: { type: Object, required: true },
     vehicleAmenities: { type: Object, required: true },
     serviceCategories: { type: Object, required: true },
+    publicDriverCategories: { type: Object, required: true },
     // Tarjeta de perfil "profesional" (pedido explícito del usuario, mismo
     // lenguaje visual que Referral/Show.vue).
     averageRating: { type: Number, required: true },
@@ -197,6 +199,9 @@ const vehicleColorOptions = computed(() => {
 
 const assignedServiceCategory = computed(() => (
     props.serviceCategories[props.driverProfile?.service_category] ?? null
+));
+const assignedPublicCategory = computed(() => (
+    props.publicDriverCategories[props.driverProfile?.public_category] ?? null
 ));
 
 // Mismo criterio que DriverProfile::hasCompleteVehicleInfo() (backend) —
@@ -419,6 +424,7 @@ const VERIFICATION_LABELS = {
                                      de línea normal. -->
                                 <div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                                     <h3 class="break-words text-xl font-bold text-arka-text sm:text-2xl">{{ $page.props.auth.user.full_name }}</h3>
+                                    <DriverCategoryBadge :label="assignedPublicCategory?.label" />
                                     <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                                         {{ assignedServiceCategory?.label ?? 'Categoría por asignar' }}
                                     </span>

@@ -231,6 +231,8 @@ class RideRequestController extends Controller
             'average_rating' => $rating,
             'review_count' => $reviewCount,
             'tier' => DriverTier::forPoints($profile?->total_points ?? 0)->toBadge(),
+            'public_category' => $profile?->public_category,
+            'public_category_label' => $profile?->visiblePublicCategoryLabel(),
             // La insignia de verificado depende de DOS cosas, no solo de que
             // un admin haya aprobado la licencia/vehículo: el plan vigente
             // del conductor tiene que incluirla (sección 7.2). Antes de este

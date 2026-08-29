@@ -1,0 +1,877 @@
+openapi: 3.0.3
+info:
+  title: Arka01 — API móvil (v1)
+  description: >
+    Contrato de /api/v1, consumido por la app móvil Capacitor
+    (ROADMAP_APLICACION_MOVIL_CAPACITOR.md). Autenticación por token Bearer
+    de Laravel Sanctum (ver /auth/login, /auth/register). Cada endpoint reusa
+    exactamente la misma lógica de negocio que la web equivalente, extraída
+    a App\Services\* — nunca hay una regla de negocio distinta entre los dos
+    canales, solo el formato de respuesta cambia (JSON acá, Inertia allá).
+    Esta especificación cubre el contrato completo construido hasta la
+    pasada "full backend" del 2026-08-28 (ver ROADMAP_APLICACION_MOVIL_PROGRESO.md)
+    — no incluye pantallas que todavía no existen ni el catálogo de
+    planes/pago manual, deliberadamente fuera de alcance.
+  version: "1.0"
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Config
+  - name: Cuenta
+  - name: Dispositivo
+  - name: Mi plan
+  - name: Soporte
+  - name: Flota
+  - name: Solicitudes de carrera
+  - name: Conductor
+  - name: Carreras
+  - name: Expresos
+  - name: Postulaciones a Expresos
+  - name: Acompañantes de Expresos
+
+paths:
+  /config:
+    get:
+      tags: [Config]
+      summary: Versión mínima requerida por plataforma y bandera de mantenimiento
+      security: []
+      responses:
+        "200":
+          description: OK
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registro (cliente o conductor) — no cubre cooperativa
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_type, first_name, last_name, email, country_code, phone_local, password, password_confirmation, device_id, platform]
+              properties:
+                account_type: { type: string, enum: [cliente, conductor] }
+                first_name: { type: string }
+                last_name: { type: string }
+                email: { type: string, format: email }
+                country_code: { type: string, example: "+593" }
+                phone_local: { type: string }
+                password: { type: string, format: password }
+                password_confirmation: { type: string, format: password }
+                ref: { type: string, format: uuid, description: "public_id de quien refirió, opcional" }
+                lat: { type: number }
+                lng: { type: number }
+                device_id: { type: string }
+                device_name: { type: string }
+                platform: { type: string, enum: [android, ios] }
+                app_version: { type: string }
+      responses:
+        "200":
+          description: Token + usuario, igual forma que /auth/login
+        "422":
+          description: Validación fallida (duplicados, teléfono inválido, etc.)
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login por teléfono/correo/usuario, emite un token Sanctum
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password, device_id, platform]
+              properties:
+                login: { type: string, description: "teléfono, correo o usuario" }
+                password: { type: string, format: password }
+                device_id: { type: string }
+                device_name: { type: string }
+                platform: { type: string, enum: [android, ios] }
+                app_version: { type: string }
+      responses:
+        "200":
+          description: "{ token, token_type: Bearer, expires_at, user }"
+        "422":
+          description: Credenciales inválidas, cuenta bloqueada, o sesión única bloqueando otro dispositivo
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoca el token actual y desconecta al conductor si estaba disponible
+      responses:
+        "200": { description: OK }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Usuario autenticado
+      responses:
+        "200": { description: UserResource }
+
+  /account:
+    delete:
+      tags: [Cuenta]
+      summary: Elimina la cuenta (pide la contraseña actual)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, format: password }
+      responses:
+        "200": { description: OK }
+        "422": { description: Contraseña incorrecta }
+
+  /device/push-token:
+    put:
+      tags: [Dispositivo]
+      summary: Registra o limpia el token FCM/APNs del dispositivo actual
+      description: >
+        Solo guarda el dato en el token de Sanctum que autentica la petición
+        (push_token/push_provider). Enviar ambos vacíos limpia el registro.
+        Todavía no hay ningún canal FCM/APNs conectado para el envío real.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                push_token: { type: string, nullable: true }
+                push_provider: { type: string, enum: [fcm, apns], nullable: true }
+      responses:
+        "200": { description: OK }
+        "422": { description: "push_token y push_provider son obligatorios juntos" }
+
+  /my-plan:
+    get:
+      tags: [Mi plan]
+      summary: Plan vigente + cupo usado + historial de cambios, según el rol
+      description: >
+        Solo lectura. No incluye el catálogo de planes ni "pedir un cambio
+        de plan" (comprobante de pago, cupón/promoción, revisión de un
+        admin) — eso sigue siendo solo de la web.
+      responses:
+        "200":
+          description: "Forma distinta por rol (client/driver/cooperative), ver owner_type"
+
+  /support:
+    get:
+      tags: [Soporte]
+      summary: FAQs según el rol + ticket abierto y sus mensajes
+      responses:
+        "200": { description: "{ faqs, ticket, messages }" }
+
+  /support/messages:
+    post:
+      tags: [Soporte]
+      summary: "Hablar con soporte — retoma el ticket abierto o crea uno nuevo"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 1000 }
+      responses:
+        "201": { description: Mensaje creado }
+
+  /fleet:
+    get:
+      tags: [Flota]
+      summary: "Roster de la(s) flota(s) del cliente (crea 'Mi flota' si no tiene ninguna)"
+      responses:
+        "200": { description: OK }
+        "403": { description: Un conductor no puede tener flota propia }
+
+  /fleet/{fleet}/search-drivers:
+    get:
+      tags: [Flota]
+      summary: Buscar conductores para invitar (código de socio, código de invitación, nombre, usuario)
+      parameters:
+        - { name: fleet, in: path, required: true, schema: { type: integer } }
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2 } }
+      responses:
+        "200": { description: OK }
+
+  /fleet/{fleet}/invitations:
+    post:
+      tags: [Flota]
+      summary: Invitar a un conductor a la flota
+      parameters:
+        - { name: fleet, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [driver_user_id]
+              properties:
+                driver_user_id: { type: integer }
+                message: { type: string, maxLength: 255 }
+      responses:
+        "201": { description: Invitación creada }
+        "422": { description: "Cupo del plan alcanzado / ya miembro / ya invitado" }
+
+  /fleet/members/{member}:
+    delete:
+      tags: [Flota]
+      summary: Quitar un conductor de la flota
+      parameters:
+        - { name: member, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 255 }
+      responses:
+        "200": { description: OK }
+
+  /ride-requests/incoming:
+    get:
+      tags: [Solicitudes de carrera]
+      summary: Solicitudes que el conductor autenticado puede atender
+      responses:
+        "200": { description: OK }
+
+  /ride-requests:
+    get:
+      tags: [Solicitudes de carrera]
+      summary: Solicitudes activas del cliente autenticado
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Solicitudes de carrera]
+      summary: Pedir una carrera inmediata (dirigida a un conductor o a toda la flota)
+      description: Programadas/paradas/cooperativa soportadas por el backend; sin pantalla móvil todavía.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fleet_id, origin_lat, origin_lng, destination_lat, destination_lng, payment_method]
+              properties:
+                fleet_id: { type: integer }
+                driver_user_id: { type: integer, nullable: true, description: "null = a toda la flota" }
+                origin_lat: { type: number }
+                origin_lng: { type: number }
+                origin_address: { type: string }
+                destination_lat: { type: number }
+                destination_lng: { type: number }
+                destination_address: { type: string }
+                payment_method: { type: string, enum: [cash, transfer] }
+                passenger_count: { type: integer, minimum: 1 }
+                needs_trunk: { type: boolean }
+                notes: { type: string, maxLength: 500 }
+      responses:
+        "201": { description: Solicitud creada }
+        "422": { description: "Ya hay una solicitud activa / sin conductores en la bolsa / distancia fuera de cobertura" }
+
+  /ride-requests/{rideRequest}:
+    get:
+      tags: [Solicitudes de carrera]
+      summary: Estado puntual de una solicitud
+      parameters:
+        - { name: rideRequest, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+        "403": { description: No pertenece al usuario autenticado }
+
+  /ride-requests/{rideRequest}/accept:
+    post:
+      tags: [Solicitudes de carrera]
+      summary: El conductor acepta la solicitud (crea la Ride)
+      parameters:
+        - { name: rideRequest, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+
+  /ride-requests/{rideRequest}/reject:
+    post:
+      tags: [Solicitudes de carrera]
+      summary: El conductor rechaza la solicitud
+      parameters:
+        - { name: rideRequest, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+
+  /ride-requests/{rideRequest}/counter:
+    post:
+      tags: [Solicitudes de carrera]
+      summary: El conductor contraoferta un precio
+      parameters:
+        - { name: rideRequest, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offered_amount]
+              properties:
+                offered_amount: { type: number, minimum: 0.01 }
+      responses:
+        "200": { description: OK }
+
+  /ride-requests/{rideRequest}/raise-offer:
+    post:
+      tags: [Solicitudes de carrera]
+      summary: El cliente sube su oferta (tiene que ser mayor a la actual)
+      parameters:
+        - { name: rideRequest, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offered_amount]
+              properties:
+                offered_amount: { type: number, minimum: 0.01 }
+      responses:
+        "200": { description: OK }
+        "422": { description: "El monto no supera la oferta actual" }
+
+  /ride-requests/{rideRequest}/cancel:
+    post:
+      tags: [Solicitudes de carrera]
+      summary: Cancelar la propia solicitud
+      parameters:
+        - { name: rideRequest, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+
+  /driver/status:
+    get:
+      tags: [Conductor]
+      summary: Estado de conexión (para el switch de disponibilidad)
+      responses:
+        "200": { description: OK }
+        "403": { description: Todavía no activó su perfil de conductor }
+
+  /driver/location:
+    post:
+      tags: [Conductor]
+      summary: Conectarse/desconectarse y publicar ubicación general
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, lng, is_available]
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+                is_available: { type: boolean }
+      responses:
+        "200": { description: OK }
+        "403": { description: "Perfil incompleto / no aprobado / plataforma pausó el registro" }
+
+  /driver/profile:
+    get:
+      tags: [Conductor]
+      summary: Perfil completo del conductor (para prellenar la pantalla de edición)
+      responses:
+        "200": { description: "{ profile } — profile es null si todavía no tiene uno" }
+    post:
+      tags: [Conductor]
+      summary: Crear/editar el perfil de conductor (vehículo, tarifas, cobertura, documentos)
+      description: >
+        multipart/form-data si incluye archivos (profile_photo,
+        identity_document, license_photo, police_record). Los campos de
+        identidad del vehículo (marca, modelo, color, tipo, placa, año,
+        capacidad, cajuela) quedan fijados después del primer guardado —
+        el servidor ignora cualquier cambio a esos campos una vez existen.
+        Cambiar datos "revisados" o subir documentos nuevos reabre
+        verification_status a pending y desconecta al conductor.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [vehicle_make, vehicle_model, vehicle_color, vehicle_type, vehicle_plate, vehicle_year, passenger_capacity, has_trunk, rate_per_km]
+              properties:
+                country_code: { type: string }
+                phone_local: { type: string }
+                driver_type: { type: string, enum: [independent, public_transport] }
+                vehicle_make: { type: string }
+                vehicle_model: { type: string }
+                vehicle_color: { type: string }
+                vehicle_type: { type: string }
+                vehicle_plate: { type: string }
+                vehicle_year: { type: integer }
+                passenger_capacity: { type: integer, minimum: 1, maximum: 8 }
+                has_trunk: { type: boolean }
+                vehicle_amenities: { type: array, items: { type: string } }
+                rate_per_km: { type: number }
+                minimum_fare: { type: number, nullable: true }
+                max_request_distance_km: { type: integer, nullable: true }
+                accepts_cash: { type: boolean }
+                accepts_transfer: { type: boolean }
+                has_insurance: { type: boolean }
+                is_public: { type: boolean }
+                profile_public: { type: boolean }
+                profile_photo: { type: string, format: binary }
+                identity_document: { type: string, format: binary }
+                license_photo: { type: string, format: binary }
+                police_record: { type: string, format: binary }
+      responses:
+        "200": { description: "{ profile }" }
+        "422": { description: "Campo de vehículo faltante / documento obligatorio faltante para verificación / tarifa mínima por encima del tope de plataforma" }
+
+  /rides/active:
+    get:
+      tags: [Carreras]
+      summary: La carrera activa del usuario (como cliente o conductor), o null
+      responses:
+        "200": { description: "{ ride: RideResource|null }" }
+
+  /rides/history:
+    get:
+      tags: [Carreras]
+      summary: Historial paginado de carreras (excluye activas/programadas)
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: "{ rides, current_page, last_page, total }" }
+
+  /rides/{ride}:
+    get:
+      tags: [Carreras]
+      summary: Detalle de una carrera
+      parameters:
+        - { name: ride, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+        "403": { description: No pertenece al usuario autenticado }
+
+  /rides/{ride}/start:
+    post:
+      tags: [Carreras]
+      summary: El conductor marca que arrancó hacia el origen
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/heading-to-passenger:
+    post:
+      tags: [Carreras]
+      summary: El conductor marca que va camino al pasajero
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/arrived:
+    post:
+      tags: [Carreras]
+      summary: El conductor marca que llegó al origen
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { lat: { type: number }, lng: { type: number } }
+      responses:
+        "200": { description: OK }
+        "422": { description: Lejos del origen declarado }
+
+  /rides/{ride}/picked-up:
+    post:
+      tags: [Carreras]
+      summary: El conductor marca que recogió al pasajero
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { lat: { type: number }, lng: { type: number } }
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/complete:
+    post:
+      tags: [Carreras]
+      summary: Completar la carrera (exige un motivo si está lejos del destino)
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+                completion_reason: { type: string, nullable: true }
+                completion_note: { type: string, maxLength: 500 }
+      responses:
+        "200": { description: OK }
+        "422": { description: "Lejos del destino sin motivo declarado" }
+
+  /rides/{ride}/cancel:
+    post:
+      tags: [Carreras]
+      summary: Cancelar una carrera en curso/programada (motivos distintos por rol)
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string }, note: { type: string, maxLength: 500 } }
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/location:
+    post:
+      tags: [Carreras]
+      summary: Ping de ubicación durante la carrera (detecta llegada automática)
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, lng]
+              properties: { lat: { type: number }, lng: { type: number } }
+      responses:
+        "200": { description: "{ ok, arrived_at }" }
+
+  /rides/{ride}/stops/{stop}/complete:
+    post:
+      tags: [Carreras]
+      summary: Completar la próxima parada pendiente (carreras multi-tramo)
+      parameters:
+        - { name: ride, in: path, required: true, schema: { type: integer } }
+        - { name: stop, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+                cancel_rest: { type: boolean, description: "cierra la carrera cobrando solo lo completado" }
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/reschedule:
+    post:
+      tags: [Carreras]
+      summary: El cliente propone un nuevo horario para una carrera programada
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduled_date, scheduled_time]
+              properties:
+                scheduled_date: { type: string, format: date }
+                scheduled_time: { type: string, example: "14:30" }
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/reschedule/confirm:
+    post:
+      tags: [Carreras]
+      summary: El conductor confirma el nuevo horario propuesto
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/reschedule/reject:
+    post:
+      tags: [Carreras]
+      summary: El conductor rechaza el nuevo horario propuesto
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /rides/{ride}/messages:
+    get:
+      tags: [Carreras]
+      summary: Mensajes del chat de la carrera
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: "{ messages }" } }
+    post:
+      tags: [Carreras]
+      summary: Enviar un mensaje (solo mientras la carrera esté programada/en curso)
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties: { body: { type: string, maxLength: 500 } }
+      responses:
+        "201": { description: Mensaje creado }
+        "422": { description: El chat ya está cerrado }
+
+  /rides/{ride}/review:
+    post:
+      tags: [Carreras]
+      summary: Calificar al finalizar la carrera (motivo obligatorio si baja de 5 estrellas)
+      parameters: [{ name: ride, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                rating_reason_id: { type: integer, nullable: true }
+                comment: { type: string, maxLength: 500 }
+      responses:
+        "201": { description: Calificación creada }
+        "422": { description: "Ya calificó / carrera no completada / motivo obligatorio" }
+
+  /express-routes/mine:
+    get:
+      tags: [Expresos]
+      summary: "Mis Expresos (lado cliente)"
+      responses:
+        "200": { description: OK }
+        "403": { description: Un conductor no puede publicar Expresos }
+
+  /express-routes/available:
+    get:
+      tags: [Expresos]
+      summary: Expresos abiertos para el conductor + los ya asignados
+      responses: { "200": { description: OK } }
+
+  /express-routes/discover:
+    get:
+      tags: [Acompañantes de Expresos]
+      summary: Buscar Expresos abiertos a compartir cerca de mi origen/destino
+      parameters:
+        - { name: origin_lat, in: query, schema: { type: number } }
+        - { name: origin_lng, in: query, schema: { type: number } }
+        - { name: destination_lat, in: query, schema: { type: number } }
+        - { name: destination_lng, in: query, schema: { type: number } }
+      responses: { "200": { description: OK } }
+
+  /express-routes:
+    post:
+      tags: [Expresos]
+      summary: Publicar un Expreso (el precio no puede bajar del 50% del estimado)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, origin_lat, origin_lng, destination_lat, destination_lng, days_of_week, departure_time, offered_price]
+              properties:
+                name: { type: string, maxLength: 100 }
+                origin_lat: { type: number }
+                origin_lng: { type: number }
+                origin_address: { type: string }
+                destination_lat: { type: number }
+                destination_lng: { type: number }
+                destination_address: { type: string }
+                days_of_week: { type: array, items: { type: integer, minimum: 0, maximum: 6 } }
+                departure_time: { type: string, example: "07:30" }
+                is_round_trip: { type: boolean }
+                return_time: { type: string, nullable: true }
+                offered_price: { type: number, minimum: 0.01 }
+                conditions: { type: array, items: { type: string, maxLength: 150 } }
+                share_enabled: { type: boolean }
+                max_companions: { type: integer, minimum: 1, maximum: 6 }
+      responses:
+        "201": { description: Expreso creado }
+        "422": { description: "Precio por debajo del piso / conductor no puede publicar" }
+
+  /express-routes/{route}:
+    get:
+      tags: [Expresos]
+      summary: Detalle de un Expreso
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+        "403": { description: "No es el dueño, el conductor asignado, ni un postulante/acompañante" }
+    put:
+      tags: [Expresos]
+      summary: Editar un Expreso (solo mientras está abierto a postulaciones)
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, departure_time, days_of_week, offered_price]
+              properties:
+                name: { type: string }
+                departure_time: { type: string }
+                is_round_trip: { type: boolean }
+                return_time: { type: string, nullable: true }
+                days_of_week: { type: array, items: { type: integer } }
+                offered_price: { type: number }
+                share_enabled: { type: boolean }
+                max_companions: { type: integer, nullable: true }
+      responses:
+        "200": { description: OK }
+        "422": { description: "Ya no está abierto a postulaciones / precio por debajo del piso" }
+
+  /express-routes/{route}/pause:
+    post:
+      tags: [Expresos]
+      summary: Pausar un Expreso (deja de generar carreras, sin cancelar el contrato)
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-routes/{route}/resume:
+    post:
+      tags: [Expresos]
+      summary: Reanudar un Expreso pausado
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      responses:
+        "200": { description: OK }
+        "422": { description: Todavía no tiene un conductor asignado }
+
+  /express-routes/{route}/cancel:
+    post:
+      tags: [Expresos]
+      summary: Cancelar el Expreso definitivamente
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-routes/{route}/applications:
+    post:
+      tags: [Postulaciones a Expresos]
+      summary: El conductor se postula (acepta el precio o propone otro)
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { proposed_price: { type: number, nullable: true } }
+      responses:
+        "201": { description: Postulación creada }
+        "422": { description: "Plan sin Expresos habilitados / ruta cerrada / ya postulado" }
+
+  /express-applications/{application}/accept:
+    post:
+      tags: [Postulaciones a Expresos]
+      summary: El cliente acepta una postulación (activa la ruta, rechaza el resto)
+      parameters: [{ name: application, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-applications/{application}/reject:
+    post:
+      tags: [Postulaciones a Expresos]
+      summary: El cliente rechaza una postulación puntual
+      parameters: [{ name: application, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-applications/{application}/withdraw:
+    post:
+      tags: [Postulaciones a Expresos]
+      summary: El conductor retira su propia postulación pendiente
+      parameters: [{ name: application, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-routes/{route}/companions:
+    post:
+      tags: [Acompañantes de Expresos]
+      summary: Pedir sumarse a un Expreso ajeno abierto a compartir
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                origin_lat: { type: number }
+                origin_lng: { type: number }
+                origin_address: { type: string }
+                destination_lat: { type: number }
+                destination_lng: { type: number }
+                destination_address: { type: string }
+      responses:
+        "201": { description: Pedido creado }
+        "403": { description: El dueño no puede pedirse a sí mismo }
+        "422": { description: "Sin cupo / ya pidió sumarse" }
+
+  /express-companions/{companion}/accept:
+    post:
+      tags: [Acompañantes de Expresos]
+      summary: El dueño acepta un pedido de acompañante
+      parameters: [{ name: companion, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-companions/{companion}/reject:
+    post:
+      tags: [Acompañantes de Expresos]
+      summary: El dueño rechaza un pedido de acompañante
+      parameters: [{ name: companion, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-companions/{companion}/leave:
+    post:
+      tags: [Acompañantes de Expresos]
+      summary: El propio acompañante se baja
+      parameters: [{ name: companion, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-companions/{companion}/driver-accept:
+    post:
+      tags: [Acompañantes de Expresos]
+      summary: El conductor asignado confirma el acompañante aceptado por el dueño
+      parameters: [{ name: companion, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-companions/{companion}/driver-reject:
+    post:
+      tags: [Acompañantes de Expresos]
+      summary: El conductor asignado rechaza el acompañante
+      parameters: [{ name: companion, in: path, required: true, schema: { type: integer } }]
+      responses: { "200": { description: OK } }
+
+  /express-routes/{route}/incidents:
+    post:
+      tags: [Expresos]
+      summary: Reportar un incumplimiento de condición pactada, ligado a una carrera del Expreso
+      parameters: [{ name: route, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ride_id, description]
+              properties:
+                ride_id: { type: integer }
+                express_condition_id: { type: integer, nullable: true }
+                description: { type: string, maxLength: 500 }
+      responses:
+        "201": { description: Incidente creado }
+        "422": { description: "La carrera o la condición no pertenecen a este Expreso" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "Sanctum personal access token"

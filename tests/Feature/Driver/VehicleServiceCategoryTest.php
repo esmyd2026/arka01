@@ -126,4 +126,49 @@ class VehicleServiceCategoryTest extends TestCase
             'service_category' => 'luxury_fake',
         ])->assertSessionHasErrors('service_category');
     }
+
+    public function test_an_admin_can_assign_the_public_driver_category(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $profile = DriverProfile::factory()->for(User::factory())->create([
+            'verification_status' => 'approved',
+            'public_category' => null,
+        ]);
+
+        $this->actingAs($admin)->patch(route('admin.drivers.public-category', $profile), [
+            'public_category' => 'professional',
+        ])->assertRedirect();
+
+        $this->assertSame('professional', $profile->fresh()->public_category);
+        $this->assertSame('Conductor Profesional', $profile->fresh()->visiblePublicCategoryLabel());
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'admin_user_id' => $admin->id,
+            'action' => 'driver.public_category.update',
+            'module' => 'drivers',
+        ]);
+    }
+
+    public function test_an_admin_cannot_assign_an_unknown_public_driver_category(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $profile = DriverProfile::factory()->for(User::factory())->create();
+
+        $this->actingAs($admin)->patch(route('admin.drivers.public-category', $profile), [
+            'public_category' => 'informal',
+        ])->assertSessionHasErrors('public_category');
+    }
+
+    public function test_a_driver_cannot_assign_their_own_public_category(): void
+    {
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create(array_merge($this->profilePayload(), [
+            'public_category' => 'verified',
+        ]));
+
+        $this->actingAs($driver)->post(route('driver.profile.update'), $this->profilePayload([
+            'public_category' => 'professional',
+        ]))->assertSessionHasNoErrors();
+
+        $this->assertSame('verified', $profile->fresh()->public_category);
+    }
 }

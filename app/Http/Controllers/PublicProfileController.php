@@ -118,8 +118,8 @@ class PublicProfileController extends Controller
                     'accepts_cash' => $user->driverProfile->accepts_cash,
                     'accepts_transfer' => $user->driverProfile->accepts_transfer,
                     'verification_status' => $user->driverProfile->verification_status,
-                    'driver_type' => $user->driverProfile->driver_type,
-                    'trust_label' => $user->driverProfile->verification_status === 'approved' ? $user->driverProfile->trust_label : null,
+                    'public_category' => $user->driverProfile->public_category,
+                    'public_category_label' => $user->driverProfile->visiblePublicCategoryLabel(),
                     'cooperative' => $activeCooperative ? [
                         'public_id' => $activeCooperative->public_id,
                         'name' => $activeCooperative->name,
