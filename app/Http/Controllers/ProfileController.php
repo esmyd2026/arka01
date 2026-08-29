@@ -8,6 +8,7 @@ use App\Models\City;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\PlanLimits;
+use App\Services\Trust\TrustIndexCalculator;
 use App\Services\WhatsAppConfig;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -24,7 +25,10 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly TrustIndexCalculator $trustIndexCalculator,
+    ) {}
 
     /**
      * Display the user's profile form.
@@ -59,6 +63,10 @@ class ProfileController extends Controller
             // propia reputación, igual que ese conductor la mostraba.
             'averageRating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
             'reviewCount' => $user->reviewsReceived()->count(),
+            // Mismo índice que ve en su Círculo de confianza y que viaja en
+            // el perfil compartido. Se calcula una sola vez con la misma
+            // fuente para evitar puntajes distintos entre pantallas.
+            'trustIndex' => $this->trustIndexCalculator->calculate($user),
             // Ciudad donde vive (consideración agregada al alcance): arranca
             // por defecto la solicitud de carrera en esa ciudad.
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),

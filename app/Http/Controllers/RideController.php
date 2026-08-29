@@ -2,27 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\RideCompleted;
-use App\Events\RideRescheduleProposed;
-use App\Events\RideRescheduleResponded;
-use App\Models\DriverProfile;
 use App\Models\FleetMember;
 use App\Models\RatingReason;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\RideStop;
-use App\Notifications\RideCompletedPushNotification;
-use App\Notifications\RideReschedulePushNotification;
-use App\Notifications\RideRescheduleResponsePushNotification;
 use App\Services\Ride\IncomingRideRequestFinder;
 use App\Services\Ride\RideLifecycle;
-use App\Services\RideDispatchAdvancer;
-use App\Services\WhatsAppFreeformSender;
+use App\Services\Ride\RideRescheduler;
+use App\Services\Ride\RideStopCompleter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
@@ -35,6 +27,8 @@ class RideController extends Controller
     public function __construct(
         private readonly IncomingRideRequestFinder $incomingRideRequestFinder,
         private readonly RideLifecycle $rideLifecycle,
+        private readonly RideStopCompleter $rideStopCompleter,
+        private readonly RideRescheduler $rideRescheduler,
     ) {}
 
     /**
@@ -390,73 +384,24 @@ class RideController extends Controller
      * siguiente parada"). Con `cancel_rest`, cierra la carrera entera ahí
      * mismo (cobrando solo lo completado) — sin eso, la carrera sigue
      * `in_progress` y el conductor sigue a la próxima parada o al destino.
+     * Lógica real en App\Services\Ride\RideStopCompleter.
      */
     public function completeStop(Request $request, Ride $ride, RideStop $stop): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if ($stop->ride_id !== $ride->id) {
-            abort(404);
-        }
-
-        if ($ride->status !== 'in_progress' || ! $ride->picked_up_at) {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera no está en curso, o todavía no se recogió al cliente.',
-            ]);
-        }
-
-        // No se puede saltear el orden: solo la próxima parada pendiente
-        // (la de menor `sequence` que no esté completada/cancelada) se
-        // puede completar ahora.
-        $nextPendingStop = $ride->stops()->whereNotIn('status', ['completed', 'cancelled'])->first();
-        if (! $nextPendingStop || $nextPendingStop->id !== $stop->id) {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta no es la próxima parada pendiente.',
-            ]);
-        }
-
         $validated = $request->validate([
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
             'cancel_rest' => ['sometimes', 'boolean'],
         ]);
 
-        // Mismo radio/criterio permisivo que arrived()/pickedUp() (1.5 km) —
-        // el radio de 20 m de complete() quedó a propósito solo para el
-        // destino final, no para paradas intermedias.
-        $this->rideLifecycle->assertNearRideLocation(
+        $this->rideStopCompleter->complete(
+            $ride,
+            $stop,
+            $request->user(),
             isset($validated['lat']) ? (float) $validated['lat'] : null,
             isset($validated['lng']) ? (float) $validated['lng'] : null,
-            (float) $stop->lat,
-            (float) $stop->lng,
-            'Parece que todavía no está en la parada — inténtelo cuando esté más cerca.',
+            (bool) ($validated['cancel_rest'] ?? false),
         );
-
-        $stop->update(['status' => 'completed', 'completed_at' => now()]);
-
-        if ($validated['cancel_rest'] ?? false) {
-            $ride->stops()
-                ->whereNotIn('status', ['completed', 'cancelled'])
-                ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
-
-            $ride->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-                // Solo lo que de verdad se recorrió y se cobró — el tramo
-                // final (hasta el destino) nunca pasó, así que `price` no
-                // entra acá (a diferencia de complete(), que sí lo suma).
-                'settled_price' => $ride->stops()->where('status', 'completed')->sum('leg_price'),
-                'points_earned' => $ride->distance_km >= 5 ? 2 : 1,
-            ]);
-
-            DriverProfile::where('user_id', $ride->driver_user_id)->increment('total_points', $ride->points_earned);
-            broadcast(new RideCompleted($ride))->toOthers();
-            RideDispatchAdvancer::activateNextWaitingRequest();
-            $ride->client->notify(new RideCompletedPushNotification($ride));
-            WhatsAppFreeformSender::sendRideCompletedToClient($ride);
-        }
 
         return back();
     }
@@ -507,44 +452,16 @@ class RideController extends Controller
      * sola — el conductor ya se comprometió al horario original, así que
      * queda pendiente hasta que confirme o rechace el nuevo (mismo criterio
      * que la negociación de precio, ver RideRequestController::counter()).
+     * Lógica real en App\Services\Ride\RideRescheduler.
      */
     public function proposeReschedule(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->client_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if ($ride->status !== 'scheduled') {
-            throw ValidationException::withMessages([
-                'ride' => 'Esta carrera no está programada.',
-            ]);
-        }
-
         $validated = $request->validate([
             'scheduled_date' => ['required', 'date_format:Y-m-d'],
             'scheduled_time' => ['required', 'date_format:H:i'],
         ]);
 
-        // Misma zona horaria explícita que RideRequestController::store() —
-        // ver el bug real corregido ahí (config/app.php tenía 'UTC'
-        // hardcodeado, corría la hora varias horas de más o de menos).
-        $proposedAt = Carbon::createFromFormat(
-            'Y-m-d H:i',
-            "{$validated['scheduled_date']} {$validated['scheduled_time']}",
-            config('app.timezone')
-        );
-
-        if ($proposedAt->isPast()) {
-            throw ValidationException::withMessages([
-                'scheduled_time' => 'La fecha y hora tiene que ser en el futuro.',
-            ]);
-        }
-
-        $ride->update(['pending_reschedule_at' => $proposedAt]);
-
-        broadcast(new RideRescheduleProposed($ride))->toOthers();
-
-        $ride->driver->notify(new RideReschedulePushNotification($ride));
+        $this->rideRescheduler->propose($ride, $request->user(), $validated['scheduled_date'], $validated['scheduled_time']);
 
         return back()->with('status', 'Le mandamos el nuevo horario al conductor — queda a la espera de que lo confirme.');
     }
@@ -557,22 +474,7 @@ class RideController extends Controller
      */
     public function confirmReschedule(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if (! $ride->hasPendingReschedule()) {
-            throw ValidationException::withMessages([
-                'ride' => 'No hay ningún cambio de horario pendiente.',
-            ]);
-        }
-
-        $ride->rideRequest->update(['scheduled_at' => $ride->pending_reschedule_at]);
-        $ride->update(['pending_reschedule_at' => null]);
-
-        broadcast(new RideRescheduleResponded($ride, true))->toOthers();
-
-        $ride->client->notify(new RideRescheduleResponsePushNotification($ride, true));
+        $this->rideRescheduler->confirm($ride, $request->user());
 
         return back();
     }
@@ -583,21 +485,7 @@ class RideController extends Controller
      */
     public function rejectReschedule(Request $request, Ride $ride): RedirectResponse
     {
-        if ($ride->driver_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        if (! $ride->hasPendingReschedule()) {
-            throw ValidationException::withMessages([
-                'ride' => 'No hay ningún cambio de horario pendiente.',
-            ]);
-        }
-
-        $ride->update(['pending_reschedule_at' => null]);
-
-        broadcast(new RideRescheduleResponded($ride, false))->toOthers();
-
-        $ride->client->notify(new RideRescheduleResponsePushNotification($ride, false));
+        $this->rideRescheduler->reject($ride, $request->user());
 
         return back();
     }

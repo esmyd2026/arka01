@@ -28,6 +28,20 @@ class ProfileTest extends TestCase
         $response->assertOk();
     }
 
+    public function test_profile_page_exposes_the_same_explainable_trust_index_used_by_the_circle(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/profile');
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('trustIndex.role', 'Cliente')
+            ->has('trustIndex.score')
+            ->has('trustIndex.level')
+            ->has('trustIndex.components', 4)
+        );
+    }
+
     /**
      * Pedido explícito del usuario: "un botón que le invite a escribirle al
      * chatbot de arka01 para que de allí tomemos el número y que ellos

@@ -65,6 +65,7 @@ const props = defineProps({
     // que ese conductor la mostraba.
     averageRating: { type: Number, required: true },
     reviewCount: { type: Number, required: true },
+    trustIndex: { type: Object, required: true },
     // Avisos de sus carreras por WhatsApp (pedido explícito del usuario: "un
     // botón que le invite a escribirle al chatbot de arka01 para que de
     // allí tomemos el número y puedan estar notificados de sus viajes").
@@ -84,7 +85,7 @@ const props = defineProps({
 // Profile/Show.vue, botones "Crear cuenta"/"creá una cuenta").
 const whatsappProfileShareUrl = computed(() => {
     const name = usePage().props.auth.user.full_name;
-    const text = `¡Hola! Soy ${name}. Este es mi perfil público en Arka01 para que pueda conocerme y verificar mi información:\n${props.profileUrl}`;
+    const text = `¡Hola! Soy ${name}. Mi índice de confianza en Arka01 es ${props.trustIndex.score}/100. Este es mi perfil público para que pueda conocerme y verificar mi información:\n${props.profileUrl}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 });
 
@@ -151,6 +152,10 @@ async function installAppNow() {
 const isDriver = computed(() => usePage().props.auth.isDriver);
 const isAdmin = computed(() => usePage().props.auth.user.is_admin);
 
+function trustScoreStyle(score) {
+    return { '--profile-trust-score': `${Math.max(0, Math.min(100, score)) * 3.6}deg` };
+}
+
 // La cuenta reúne información personal, preferencias, referidos, plan y
 // seguridad. Mantener un solo bloque abierto evita una página interminable
 // sin desmontar formularios ni perder datos escritos.
@@ -216,23 +221,40 @@ async function switchToClient() {
                     <div class="p-6 sm:p-8 flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
                         <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl shrink-0" />
                         <div class="min-w-0 flex-1">
-                            <p class="text-xl font-semibold text-arka-text">{{ $page.props.auth.user.full_name }}</p>
-                            <p class="text-sm text-arka-text-muted">
-                                @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
-                            </p>
-                            <div class="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                                <span class="inline-flex items-center gap-1.5 rounded-full bg-arka-primary/15 px-2.5 py-0.5 text-xs font-medium text-arka-primary-bright">
-                                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-                                    </svg>
-                                    Círculo de confianza
-                                </span>
-                                <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xl font-semibold text-arka-text">{{ $page.props.auth.user.full_name }}</p>
+                                    <p class="text-sm text-arka-text-muted">
+                                        @{{ $page.props.auth.user.username }} · Socio #{{ $page.props.auth.user.member_code }}
+                                    </p>
+                                    <div class="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full bg-arka-primary/15 px-2.5 py-0.5 text-xs font-medium text-arka-primary-bright">
+                                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                                            </svg>
+                                            Círculo de confianza
+                                        </span>
+                                        <RatingStars v-if="reviewCount > 0" :rating="averageRating" :count="reviewCount" readonly />
+                                    </div>
+                                    <p class="mt-2 text-xs text-arka-text-muted">
+                                        Miembro desde
+                                        {{ new Date($page.props.auth.user.created_at).toLocaleDateString('es-EC', { dateStyle: 'long' }) }}
+                                    </p>
+                                </div>
+
+                                <Link
+                                    :href="route('trust-circle.index')"
+                                    class="group shrink-0 text-center"
+                                    :aria-label="`Ver índice de confianza: ${trustIndex.score} de 100, nivel ${trustIndex.level}`"
+                                >
+                                    <div class="profile-trust-ring" :style="trustScoreStyle(trustIndex.score)">
+                                        <div><strong>{{ trustIndex.score }}</strong><small>/100</small></div>
+                                    </div>
+                                    <span class="mt-1.5 block text-[10px] font-semibold text-arka-text-muted transition group-hover:text-arka-primary">
+                                        Índice de confianza
+                                    </span>
+                                </Link>
                             </div>
-                            <p class="mt-2 text-xs text-arka-text-muted">
-                                Miembro desde
-                                {{ new Date($page.props.auth.user.created_at).toLocaleDateString('es-EC', { dateStyle: 'long' }) }}
-                            </p>
 
                             <!-- Misma tarjeta y mismas acciones para cliente y
                                  conductor: compartir el perfil no es lo mismo
@@ -584,3 +606,51 @@ async function switchToClient() {
         </div>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+.profile-trust-ring {
+    position: relative;
+    display: grid;
+    width: 88px;
+    height: 88px;
+    place-items: center;
+    border-radius: 50%;
+    background: conic-gradient(#34d399 var(--profile-trust-score), rgba(255, 255, 255, 0.08) 0);
+}
+
+.profile-trust-ring::before {
+    position: absolute;
+    inset: 7px;
+    border-radius: inherit;
+    background: #10231b;
+    content: '';
+}
+
+.profile-trust-ring > div {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+}
+
+.profile-trust-ring strong {
+    color: #e7f4ee;
+    font-size: 1.6rem;
+}
+
+.profile-trust-ring small {
+    color: #93ada2;
+    font-size: 0.65rem;
+}
+
+@media (max-width: 420px) {
+    .profile-trust-ring {
+        width: 76px;
+        height: 76px;
+    }
+
+    .profile-trust-ring strong {
+        font-size: 1.35rem;
+    }
+}
+</style>

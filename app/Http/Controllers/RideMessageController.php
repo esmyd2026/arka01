@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\RideMessageSent;
 use App\Models\Ride;
-use App\Models\RideMessage;
+use App\Services\Ride\RideMessageSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras): solo
@@ -15,9 +13,13 @@ use Illuminate\Validation\ValidationException;
  * personas puntuales — nunca antes de que el conductor acepte, ni después de
  * que la carrera termine o se cancele (Ride::chatIsOpen()). No hay pantalla
  * de "mis chats": cada carrera es su propio hilo, ya visible en Ride/Show.vue.
+ * Lógica real en App\Services\Ride\RideMessageSender (roadmap app móvil,
+ * Hito 5).
  */
 class RideMessageController extends Controller
 {
+    public function __construct(private readonly RideMessageSender $rideMessageSender) {}
+
     /**
      * Los mensajes de rutina (respuestas rápidas + texto libre) no necesitan
      * Inertia — un POST por axios devuelve el mensaje recién creado y el
@@ -26,31 +28,11 @@ class RideMessageController extends Controller
      */
     public function store(Request $request, Ride $ride): JsonResponse
     {
-        $userId = $request->user()->id;
-
-        if ($ride->client_user_id !== $userId && $ride->driver_user_id !== $userId) {
-            abort(403);
-        }
-
-        if (! $ride->chatIsOpen()) {
-            throw ValidationException::withMessages([
-                'body' => 'El chat de esta carrera ya está cerrado.',
-            ]);
-        }
-
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:500'],
         ]);
 
-        $message = RideMessage::query()->create([
-            'ride_id' => $ride->id,
-            'sender_user_id' => $userId,
-            'body' => $validated['body'],
-        ]);
-
-        $message->setRelation('sender', $request->user());
-
-        broadcast(new RideMessageSent($message))->toOthers();
+        $message = $this->rideMessageSender->send($ride, $request->user(), $validated['body']);
 
         return response()->json([
             'id' => $message->id,
