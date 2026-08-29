@@ -8,6 +8,7 @@ use App\Models\PricingSetting;
 use App\Models\Ride;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
+use App\Services\AdminDriverAlertService;
 use App\Services\DriverVerificationRequirementRegistry;
 use App\Services\PlanLimits;
 use App\Services\SystemEventLogger;
@@ -56,13 +57,18 @@ class DriverProfileUpdater
         'has_trunk',
     ];
 
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly AdminDriverAlertService $adminDriverAlerts,
+    ) {}
 
     public function update(Request $request): DriverProfile
     {
         $user = $request->user();
         abort_if($user->isCooperative(), 403);
         $existingProfile = $user->driverProfile;
+        $wasReadyForReview = $existingProfile?->verification_status === 'pending'
+            && $existingProfile->hasCompleteRegistrationInformation();
 
         // Único bloqueo real que queda para cambiar de rol: un viaje en
         // curso. Cambiar de cliente a conductor a mitad de una carrera
@@ -417,6 +423,13 @@ class DriverProfileUpdater
         // $fillable), se limpia a mano.
         if ($profile->deactivated_at !== null) {
             $profile->forceFill(['deactivated_at' => null])->save();
+        }
+
+        $isReadyForReview = $profile->verification_status === 'pending'
+            && $profile->hasCompleteRegistrationInformation();
+
+        if ($isReadyForReview && ! $wasReadyForReview) {
+            $this->adminDriverAlerts->readyForVerification($user);
         }
 
         return $profile;

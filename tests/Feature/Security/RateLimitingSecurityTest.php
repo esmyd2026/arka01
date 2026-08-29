@@ -78,4 +78,97 @@ class RateLimitingSecurityTest extends TestCase
 
         $response->assertStatus(429);
     }
+
+    /**
+     * Mismo criterio que arriba, aplicado a la pasada "full backend" de la
+     * app móvil (roadmap Hito 2, "Limitar intentos de login, búsquedas y
+     * acciones sensibles"): los endpoints de escritura nuevos de Expresos,
+     * Soporte y perfil de conductor no tenían ningún throttle propio, solo
+     * el límite general de 60/min de toda /api — de sobra para el uso
+     * normal de una pantalla, pero no corta a un script que insista rápido.
+     */
+    public function test_mobile_express_route_creation_is_rate_limited(): void
+    {
+        $client = User::factory()->create();
+        $token = $client->createToken('test')->plainTextToken;
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->withHeader('Authorization', 'Bearer '.$token)->postJson('/api/v1/express-routes', []);
+        }
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/express-routes', [])
+            ->assertStatus(429);
+    }
+
+    public function test_mobile_express_discover_is_rate_limited(): void
+    {
+        $client = User::factory()->create();
+        $token = $client->createToken('test')->plainTextToken;
+
+        for ($i = 0; $i < 30; $i++) {
+            $this->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/v1/express-routes/discover');
+        }
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/v1/express-routes/discover')
+            ->assertStatus(429);
+    }
+
+    public function test_mobile_express_application_creation_is_rate_limited(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $token = $driver->createToken('test')->plainTextToken;
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->withHeader('Authorization', 'Bearer '.$token)->postJson('/api/v1/express-routes/1/applications', []);
+        }
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/express-routes/1/applications', [])
+            ->assertStatus(429);
+    }
+
+    public function test_mobile_express_companion_request_is_rate_limited(): void
+    {
+        $client = User::factory()->create();
+        $token = $client->createToken('test')->plainTextToken;
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->withHeader('Authorization', 'Bearer '.$token)->postJson('/api/v1/express-routes/1/companions', []);
+        }
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/express-routes/1/companions', [])
+            ->assertStatus(429);
+    }
+
+    public function test_mobile_support_messages_are_rate_limited(): void
+    {
+        $client = User::factory()->create();
+        $token = $client->createToken('test')->plainTextToken;
+
+        for ($i = 0; $i < 20; $i++) {
+            $this->withHeader('Authorization', 'Bearer '.$token)->postJson('/api/v1/support/messages', ['body' => 'x']);
+        }
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/support/messages', ['body' => 'x'])
+            ->assertStatus(429);
+    }
+
+    public function test_mobile_driver_profile_update_is_rate_limited(): void
+    {
+        $driver = User::factory()->create();
+        $token = $driver->createToken('test')->plainTextToken;
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->withHeader('Authorization', 'Bearer '.$token)->postJson('/api/v1/driver/profile', []);
+        }
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/driver/profile', [])
+            ->assertStatus(429);
+    }
 }

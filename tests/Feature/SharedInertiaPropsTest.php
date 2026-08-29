@@ -112,6 +112,21 @@ class SharedInertiaPropsTest extends TestCase
         );
     }
 
+    public function test_admin_notification_summary_counts_driver_registration_and_verification_stages(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        User::factory()->create(['intends_to_drive' => true]);
+        DriverProfile::factory()->for(User::factory())->create(['verification_status' => 'pending']);
+
+        $this->actingAs($admin)->get(route('admin.driver-verifications.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('auth.notificationSummary.total', 2)
+                ->where('auth.notificationSummary.items.0.key', 'admin-driver-registrations')
+                ->where('auth.notificationSummary.items.0.count', 1)
+                ->where('auth.notificationSummary.items.1.key', 'admin-driver-verifications')
+                ->where('auth.notificationSummary.items.1.count', 1));
+    }
+
     /**
      * Pedido explícito del usuario: "eso es para que el sepa que pertenece
      * a una cooperativa, colocalo alli [menú de cuenta] como una etiqueta

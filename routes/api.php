@@ -54,7 +54,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('/my-plan', [PlanController::class, 'mine'])->name('my-plan');
 
         Route::get('/support', [SupportController::class, 'index'])->name('support.index');
-        Route::post('/support/messages', [SupportController::class, 'storeMessage'])->name('support.messages.store');
+        Route::post('/support/messages', [SupportController::class, 'storeMessage'])
+            ->middleware('throttle:20,1,api.support.messages.store')
+            ->name('support.messages.store');
         Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
         Route::get('/fleet/{fleet}/search-drivers', [FleetController::class, 'searchDrivers'])
             ->middleware('throttle:30,1,api.fleet.search-drivers')
@@ -82,7 +84,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->middleware('throttle:20,1,api.driver.location')
             ->name('driver.location');
         Route::get('/driver/profile', [DriverController::class, 'profile'])->name('driver.profile.show');
-        Route::post('/driver/profile', [DriverController::class, 'updateProfile'])->name('driver.profile.update');
+        Route::post('/driver/profile', [DriverController::class, 'updateProfile'])
+            ->middleware('throttle:10,1,api.driver.profile.update')
+            ->name('driver.profile.update');
 
         // /rides/active y /rides/history van ANTES de /rides/{ride}, mismo
         // cuidado de orden que el resto de la API.
@@ -110,18 +114,26 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         // /express-routes/{route}, mismo cuidado de orden que el resto de la API.
         Route::get('/express-routes/mine', [ExpressRouteController::class, 'mine'])->name('express-routes.mine');
         Route::get('/express-routes/available', [ExpressRouteController::class, 'available'])->name('express-routes.available');
-        Route::get('/express-routes/discover', [ExpressRouteCompanionController::class, 'discover'])->name('express-route-companions.discover');
-        Route::post('/express-routes', [ExpressRouteController::class, 'store'])->name('express-routes.store');
+        Route::get('/express-routes/discover', [ExpressRouteCompanionController::class, 'discover'])
+            ->middleware('throttle:30,1,api.express-route-companions.discover')
+            ->name('express-route-companions.discover');
+        Route::post('/express-routes', [ExpressRouteController::class, 'store'])
+            ->middleware('throttle:10,1,api.express-routes.store')
+            ->name('express-routes.store');
         Route::get('/express-routes/{route}', [ExpressRouteController::class, 'show'])->name('express-routes.show');
         Route::put('/express-routes/{route}', [ExpressRouteController::class, 'update'])->name('express-routes.update');
         Route::post('/express-routes/{route}/pause', [ExpressRouteController::class, 'pause'])->name('express-routes.pause');
         Route::post('/express-routes/{route}/resume', [ExpressRouteController::class, 'resume'])->name('express-routes.resume');
         Route::post('/express-routes/{route}/cancel', [ExpressRouteController::class, 'cancel'])->name('express-routes.cancel');
-        Route::post('/express-routes/{route}/applications', [ExpressApplicationController::class, 'store'])->name('express-applications.store');
+        Route::post('/express-routes/{route}/applications', [ExpressApplicationController::class, 'store'])
+            ->middleware('throttle:10,1,api.express-applications.store')
+            ->name('express-applications.store');
         Route::post('/express-applications/{application}/accept', [ExpressApplicationController::class, 'accept'])->name('express-applications.accept');
         Route::post('/express-applications/{application}/reject', [ExpressApplicationController::class, 'reject'])->name('express-applications.reject');
         Route::post('/express-applications/{application}/withdraw', [ExpressApplicationController::class, 'withdraw'])->name('express-applications.withdraw');
-        Route::post('/express-routes/{route}/companions', [ExpressRouteCompanionController::class, 'store'])->name('express-route-companions.store');
+        Route::post('/express-routes/{route}/companions', [ExpressRouteCompanionController::class, 'store'])
+            ->middleware('throttle:10,1,api.express-route-companions.store')
+            ->name('express-route-companions.store');
         Route::post('/express-companions/{companion}/accept', [ExpressRouteCompanionController::class, 'accept'])->name('express-route-companions.accept');
         Route::post('/express-companions/{companion}/reject', [ExpressRouteCompanionController::class, 'reject'])->name('express-route-companions.reject');
         Route::post('/express-companions/{companion}/leave', [ExpressRouteCompanionController::class, 'leave'])->name('express-route-companions.leave');

@@ -3,10 +3,12 @@
 namespace App\Http\Middleware;
 
 use App\Models\CooperativeDriverMembership;
+use App\Models\DriverProfile;
 use App\Models\FleetInvitation;
 use App\Models\RideRequest;
 use App\Models\SiteSetting;
 use App\Models\TrustCircleConnection;
+use App\Models\User;
 use App\Services\PlanLimits;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -59,6 +61,16 @@ class HandleInertiaRequests extends Middleware
         $pendingTrustCircleRequests = $user
             ? TrustCircleConnection::query()->where('addressee_user_id', $user->id)->where('status', 'pending')->count()
             : 0;
+        $newDriverRegistrations = $user?->is_admin
+            ? User::query()->where('intends_to_drive', true)->whereDoesntHave('driverProfile')->count()
+            : 0;
+        $driversReadyForVerification = $user?->is_admin
+            ? DriverProfile::query()
+                ->where('verification_status', 'pending')
+                ->get()
+                ->filter(fn (DriverProfile $profile) => $profile->hasCompleteRegistrationInformation())
+                ->count()
+            : 0;
 
         $notificationItems = collect([
             ['key' => 'rides', 'label' => 'Solicitudes de carrera', 'detail' => 'Carreras esperando tu respuesta', 'count' => $pendingRideRequests, 'url' => route('rides.index')],
@@ -67,6 +79,8 @@ class HandleInertiaRequests extends Middleware
             ['key' => 'cooperative', 'label' => 'Invitaciones de cooperativa', 'detail' => 'Cooperativas esperando tu respuesta', 'count' => $pendingCooperativeInvitations, 'url' => route('rides.index')],
             ['key' => 'trust-circle', 'label' => 'Círculo de confianza', 'detail' => 'Personas que quieren conectar contigo', 'count' => $pendingTrustCircleRequests, 'url' => route('trust-circle.index')],
             ['key' => 'profile', 'label' => 'Perfil incompleto', 'detail' => 'Completa tus datos para usar todas las funciones', 'count' => $isProfileIncomplete ? 1 : 0, 'url' => route('profile.edit')],
+            ['key' => 'admin-driver-registrations', 'label' => 'Nuevos conductores', 'detail' => 'Registrados que todavía deben completar su expediente', 'count' => $newDriverRegistrations, 'url' => route('admin.driver-verifications.index')],
+            ['key' => 'admin-driver-verifications', 'label' => 'Conductores por verificar', 'detail' => 'Expedientes completos esperando revisión', 'count' => $driversReadyForVerification, 'url' => route('admin.driver-verifications.index')],
         ])->filter(fn (array $item) => $item['count'] > 0)->values();
 
         return [

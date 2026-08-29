@@ -5,6 +5,7 @@ namespace Tests\Feature\Security;
 use App\Models\DriverProfile;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Notifications\AdminDriverLifecyclePushNotification;
 use App\Notifications\DriverVerificationResultPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -19,13 +20,46 @@ class DriverVerificationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_verification_page_orders_drivers_by_activation_stage(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        User::factory()->create(['intends_to_drive' => true]);
+
+        DriverProfile::factory()->for(User::factory())->create([
+            'verification_status' => null,
+            'vehicle_make' => null,
+        ]);
+        DriverProfile::factory()->for(User::factory())->create(['verification_status' => 'pending']);
+        DriverProfile::factory()->for(User::factory())->create([
+            'verification_status' => 'rejected',
+            'verification_rejection_reason' => 'Documento borroso.',
+        ]);
+        DriverProfile::factory()->for(User::factory())->create([
+            'verification_status' => 'approved',
+            'verified_at' => now(),
+            'public_category' => 'verified',
+        ]);
+
+        $this->actingAs($admin)->get(route('admin.driver-verifications.index'))
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/DriverVerifications')
+                ->has('registered', 1)
+                ->has('incomplete', 1)
+                ->has('pending', 1)
+                ->has('rejected', 1)
+                ->has('approved', 1)
+                ->where('publicDriverCategories.professional.label', 'Conductor Profesional'));
+    }
+
     public function test_uploading_documents_stores_them_and_resets_verification_to_pending(): void
     {
+        Notification::fake();
         // Todos los documentos viven en privado; solo el avatar es público.
         Storage::fake('local');
         Storage::fake('public');
 
         $driver = User::factory()->create();
+        $admin = User::factory()->create(['is_admin' => true]);
         DriverProfile::factory()->for($driver)->create([
             'verification_status' => 'approved',
         ]);
@@ -56,6 +90,7 @@ class DriverVerificationTest extends TestCase
         Storage::disk('local')->assertExists($profile->license_photo_path);
         Storage::disk('local')->assertExists($profile->police_record_path);
         Storage::disk('public')->assertExists($driver->fresh()->avatar_path);
+        Notification::assertSentTo($admin, AdminDriverLifecyclePushNotification::class, fn ($notification) => $notification->stage === 'ready');
     }
 
     /**
@@ -164,11 +199,12 @@ class DriverVerificationTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->post(route('admin.driver-verifications.approve', $profile))
+            ->post(route('admin.driver-verifications.approve', $profile), ['public_category' => 'professional'])
             ->assertRedirect();
 
         $this->assertSame('approved', $profile->fresh()->verification_status);
         $this->assertSame($admin->id, $profile->fresh()->verified_by);
+        $this->assertSame('professional', $profile->fresh()->public_category);
         Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
     }
 

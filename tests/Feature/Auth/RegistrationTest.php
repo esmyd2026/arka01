@@ -7,10 +7,12 @@ use App\Mail\WelcomeMail;
 use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\User;
+use App\Notifications\AdminDriverLifecyclePushNotification;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -94,6 +96,9 @@ class RegistrationTest extends TestCase
      */
     public function test_choosing_driver_account_type_redirects_to_the_driver_profile_setup(): void
     {
+        Notification::fake();
+        $admin = User::factory()->create(['is_admin' => true]);
+
         $response = $this->post('/register', [
             'account_type' => 'conductor',
             'name' => 'Conductor Nuevo',
@@ -114,6 +119,11 @@ class RegistrationTest extends TestCase
         $user = User::where('email', 'conductor.nuevo@example.com')->firstOrFail();
         $this->assertTrue($user->intends_to_drive);
         $this->assertFalse($user->isDriver());
+        Notification::assertSentTo($admin, AdminDriverLifecyclePushNotification::class, fn ($notification) => $notification->stage === 'registered');
+        $this->assertDatabaseHas('system_events', [
+            'event_type' => 'driver_registered',
+            'user_id' => $user->id,
+        ]);
     }
 
     /**

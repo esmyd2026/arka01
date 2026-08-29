@@ -6,6 +6,7 @@ use App\Jobs\ResolveRegistrationNeighborhood;
 use App\Mail\WelcomeMail;
 use App\Models\City;
 use App\Models\User;
+use App\Services\AdminDriverAlertService;
 use App\Services\Haversine;
 use App\Services\WhatsAppVerificationSender;
 use Illuminate\Auth\Events\Registered;
@@ -32,6 +33,8 @@ use Illuminate\Validation\ValidationException;
  */
 class RegisterUser
 {
+    public function __construct(private readonly AdminDriverAlertService $adminDriverAlerts) {}
+
     /**
      * @param  array{account_type: string, name?: ?string, first_name?: ?string, last_name?: ?string, email: string, phone: string, password: string, ref?: ?string, lat?: ?float, lng?: ?float}  $data
      *
@@ -102,6 +105,10 @@ class RegisterUser
         }
 
         Log::info('Cuenta nueva registrada.', ['user_id' => $user->id, 'username' => $user->username, 'member_code' => $user->member_code]);
+
+        if ($data['account_type'] === 'conductor') {
+            $this->adminDriverAlerts->registered($user);
+        }
 
         // Un correo mal configurado o caído no debería tumbar el registro.
         try {
