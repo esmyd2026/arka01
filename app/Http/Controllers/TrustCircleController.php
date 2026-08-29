@@ -101,6 +101,13 @@ class TrustCircleController extends Controller
         $validated = $request->validate(['q' => ['required', 'string', 'min:2', 'max:100']]);
         $term = ltrim(trim($validated['q']), '@#');
         $memberCode = ctype_digit($term) ? (int) $term : null;
+        // Se retiran comodines SQL escritos por el usuario y cada palabra se
+        // busca en nombre, apellido o usuario. Así "Doris Tapia" encuentra
+        // a Doris aunque los dos datos estén guardados en columnas distintas.
+        $nameTokens = collect(preg_split('/\s+/u', mb_strtolower($term), -1, PREG_SPLIT_NO_EMPTY))
+            ->map(fn (string $token) => preg_replace('/[%_]+/u', '', $token))
+            ->filter()
+            ->take(5);
 
         $users = User::query()
             ->where('id', '!=', $request->user()->id)
@@ -109,8 +116,18 @@ class TrustCircleController extends Controller
             ->when(
                 $memberCode,
                 fn ($query) => $query->where('member_code', $memberCode),
-                fn ($query) => $query->whereRaw('LOWER(username) = ?', [mb_strtolower($term)])
+                function ($query) use ($nameTokens) {
+                    foreach ($nameTokens as $token) {
+                        $like = '%'.$token.'%';
+                        $query->where(fn ($part) => $part
+                            ->whereRaw('LOWER(name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(username) LIKE ?', [$like]));
+                    }
+                }
             )
+            ->orderBy('name')
+            ->orderBy('last_name')
             ->limit(10)
             ->get();
 

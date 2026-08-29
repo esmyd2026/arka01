@@ -23,12 +23,15 @@ defineProps({
     // conductores"): true cuando el conductor apagó su perfil individual —
     // se oculta vehículo/tarifa/reseñas y se avisa en su lugar.
     profilePrivate: { type: Boolean, default: false },
+    trustIndex: { type: Object, default: null },
 });
+
+const componentWidth = (component) => `${Math.min(100, Math.round((component.points / component.maximum) * 100))}%`;
 </script>
 
 <template>
     <div
-        v-if="showSummaryBadges || isDriver"
+        v-if="showSummaryBadges || isDriver || trustIndex"
         :class="embedded ? 'pt-5' : 'p-4 sm:p-6 bg-arka-card shadow rounded-arka'"
     >
         <!-- Marca de rol(es) + calificación compacta (sección 3.1 y 3.6):
@@ -59,6 +62,64 @@ defineProps({
                 <span class="text-sm leading-none">★</span> {{ averageRating.toFixed(1) }}
             </span>
         </div>
+
+        <!-- El índice es una referencia explicable, no una etiqueta absoluta
+             de seguridad. El resumen queda visible y el cálculo se despliega
+             solo si la persona desea entenderlo. -->
+        <section
+            v-if="trustIndex"
+            class="mt-4 rounded-2xl border border-arka-primary/20 bg-arka-base/35 p-4"
+            aria-labelledby="trust-index-title"
+        >
+            <div class="flex items-center gap-4">
+                <div
+                    class="trust-score-ring shrink-0"
+                    :style="{ '--trust-score': `${trustIndex.score * 3.6}deg` }"
+                    :aria-label="`Índice de confianza ${trustIndex.score} de 100`"
+                >
+                    <div class="trust-score-ring__inner">
+                        <strong class="text-xl leading-none text-arka-text">{{ trustIndex.score }}</strong>
+                        <span class="text-[10px] text-arka-text-muted">/100</span>
+                    </div>
+                </div>
+
+                <div class="min-w-0 flex-1">
+                    <p id="trust-index-title" class="text-xs font-semibold uppercase tracking-[0.14em] text-arka-primary-bright">
+                        Índice de confianza
+                    </p>
+                    <p class="mt-1 text-lg font-bold text-arka-text">{{ trustIndex.level }}</p>
+                    <p class="mt-1 text-xs leading-relaxed text-arka-text-muted">
+                        {{ trustIndex.completed_rides }} carrera{{ trustIndex.completed_rides === 1 ? '' : 's' }} completada{{ trustIndex.completed_rides === 1 ? '' : 's' }}
+                        · {{ trustIndex.reviews_count }} calificación{{ trustIndex.reviews_count === 1 ? '' : 'es' }}
+                        <template v-if="trustIndex.network_connections !== null">
+                            · {{ trustIndex.network_connections }} conexión{{ trustIndex.network_connections === 1 ? '' : 'es' }} en su red
+                        </template>
+                    </p>
+                </div>
+            </div>
+
+            <details class="group mt-4 border-t border-arka-text-muted/10 pt-3">
+                <summary class="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-arka-text-muted transition hover:text-arka-primary-bright">
+                    Cómo se calcula
+                    <span class="transition group-open:rotate-180" aria-hidden="true">⌄</span>
+                </summary>
+
+                <div class="mt-3 space-y-3">
+                    <div v-for="component in trustIndex.components" :key="component.key">
+                        <div class="mb-1 flex justify-between gap-3 text-xs">
+                            <span class="text-arka-text-muted">{{ component.label }}</span>
+                            <span class="font-medium text-arka-text">{{ component.points }}/{{ component.maximum }}</span>
+                        </div>
+                        <div class="h-1.5 overflow-hidden rounded-full bg-arka-text-muted/10">
+                            <div class="h-full rounded-full bg-arka-primary" :style="{ width: componentWidth(component) }"></div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] leading-relaxed text-arka-text-muted">
+                        Es una referencia basada en la actividad dentro de Arka01; no garantiza por sí sola la seguridad de una persona.
+                    </p>
+                </div>
+            </details>
+        </section>
 
         <!-- Pedido explícito del usuario: quien no sea el propio conductor
              ni un admin ve esto en vez de vehículo/tarifa/reseñas. -->
@@ -158,3 +219,25 @@ defineProps({
         </div>
     </div>
 </template>
+
+<style scoped>
+.trust-score-ring {
+    display: grid;
+    width: 4.5rem;
+    height: 4.5rem;
+    place-items: center;
+    border-radius: 9999px;
+    background: conic-gradient(rgb(52 211 153) var(--trust-score), rgb(148 163 184 / 0.14) 0deg);
+}
+
+.trust-score-ring__inner {
+    display: flex;
+    width: 3.75rem;
+    height: 3.75rem;
+    align-items: baseline;
+    justify-content: center;
+    border-radius: 9999px;
+    background: rgb(10 25 19);
+    padding-top: 1.25rem;
+}
+</style>

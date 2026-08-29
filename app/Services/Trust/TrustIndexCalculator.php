@@ -49,8 +49,13 @@ class TrustIndexCalculator
         $experiencePoints = round(min($completed / 20, 1) * 25);
         $reliabilityPoints = $total > 0 ? round(($completed / $total) * 20) : 10;
 
-        $mutualPeople = $viewer ? $this->mutualUserIds($subject, $viewer)->count() : 0;
-        $networkPoints = round(min($mutualPeople / 5, 1) * 15);
+        // En el perfil compartible la señal de red debe ser estable: usa las
+        // conexiones aceptadas del titular. Dentro del círculo sí es
+        // bidimensional y usa las personas que tiene en común con quien mira.
+        $networkPeople = $viewer
+            ? $this->mutualUserIds($subject, $viewer)->count()
+            : $this->acceptedUserIds($subject)->count();
+        $networkPoints = round(min($networkPeople / 5, 1) * 15);
         $score = max(0, min(100, $reputationPoints + $experiencePoints + $reliabilityPoints + $networkPoints));
 
         return [
@@ -65,12 +70,13 @@ class TrustIndexCalculator
             'rating' => $average,
             'reviews_count' => $reviews,
             'completed_rides' => $completed,
-            'mutual_people' => $mutualPeople,
+            'mutual_people' => $viewer ? $networkPeople : 0,
+            'network_connections' => $viewer ? null : $networkPeople,
             'components' => [
                 ['key' => 'reputation', 'label' => 'Reputación', 'points' => $reputationPoints, 'maximum' => 40],
                 ['key' => 'experience', 'label' => 'Experiencia', 'points' => $experiencePoints, 'maximum' => 25],
                 ['key' => 'reliability', 'label' => 'Viajes completados', 'points' => $reliabilityPoints, 'maximum' => 20],
-                ['key' => 'network', 'label' => 'Personas en común', 'points' => $networkPoints, 'maximum' => 15],
+                ['key' => 'network', 'label' => $viewer ? 'Personas en común' : 'Red de confianza', 'points' => $networkPoints, 'maximum' => 15],
             ],
         ];
     }

@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import PublicProfileContent from '@/Components/PublicProfileContent.vue';
@@ -21,6 +21,7 @@ const props = defineProps({
     // individual al público" y quien mira no es él ni un admin — el
     // backend ya viene sin vehículo/tarifa/reseñas en ese caso.
     profilePrivate: { type: Boolean, default: false },
+    trustIndex: { type: Object, default: null },
 });
 
 // Vista previa profesional al compartir el enlace (pedido explícito del
@@ -32,7 +33,7 @@ const props = defineProps({
 // sesión) esto no alcanza igual — ver la vista aparte
 // `profile-preview.blade.php` que sirve PublicProfileController::show(),
 // con la misma copia.
-const ogDescription = `${props.isDriver ? 'Conductor' : 'Cliente'} en Arka01${props.reviewCount > 0 ? ` · ★ ${props.averageRating.toFixed(1)}` : ''} — únase y hagamos que la movilidad sea más segura en Ecuador.`;
+const ogDescription = `${props.isDriver ? 'Conductor' : 'Cliente'} en Arka01${props.reviewCount > 0 ? ` · ★ ${props.averageRating.toFixed(1)}` : ''}${props.trustIndex ? ` · Índice de confianza ${props.trustIndex.score}/100` : ''} — únase y hagamos que la movilidad sea más segura en Ecuador.`;
 const ogImage = props.profileUser.avatar_url && !props.profileUser.avatar_url.startsWith('http')
     ? window.location.origin + props.profileUser.avatar_url
     : (props.profileUser.avatar_url ?? `${window.location.origin}/icons/icon.svg`);
@@ -44,6 +45,31 @@ const ogImage = props.profileUser.avatar_url && !props.profileUser.avatar_url.st
 // un visitante anónimo).
 const authUser = computed(() => usePage().props.auth?.user ?? null);
 const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
+const shareStatus = ref('');
+
+const shareProfile = async () => {
+    const text = `${props.profileUser.name} en Arka01${props.trustIndex ? ` · Índice de confianza ${props.trustIndex.score}/100` : ''}`;
+
+    try {
+        if (navigator.share) {
+            await navigator.share({ title: `${props.profileUser.name} — Arka01`, text, url: props.profileUrl });
+            shareStatus.value = 'Perfil compartido';
+        } else if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(props.profileUrl);
+            shareStatus.value = 'Enlace copiado';
+        } else {
+            shareStatus.value = 'Copia el enlace desde la barra del navegador';
+        }
+    } catch (error) {
+        if (error?.name !== 'AbortError') {
+            shareStatus.value = 'No se pudo compartir. Inténtalo nuevamente.';
+        }
+    }
+
+    if (shareStatus.value) {
+        window.setTimeout(() => { shareStatus.value = ''; }, 3500);
+    }
+};
 </script>
 
 <template>
@@ -75,6 +101,22 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
 
         <div class="py-12">
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
+                    <span v-if="shareStatus" class="text-xs text-arka-text-muted" role="status">{{ shareStatus }}</span>
+                    <button
+                        type="button"
+                        class="inline-flex min-h-10 items-center gap-2 rounded-xl border border-arka-primary/35 bg-arka-primary/10 px-4 py-2 text-sm font-semibold text-arka-primary-bright transition hover:bg-arka-primary/20"
+                        @click="shareProfile"
+                    >
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                            <circle cx="18" cy="5" r="3" />
+                            <circle cx="6" cy="12" r="3" />
+                            <circle cx="18" cy="19" r="3" />
+                            <path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4" />
+                        </svg>
+                        Compartir perfil e índice
+                    </button>
+                </div>
                 <PublicProfileContent
                     :profile-user="profileUser"
                     :average-rating="averageRating"
@@ -84,6 +126,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
                     :is-driver="isDriver"
                     :can-request-ride="canRequestRide"
                     :profile-private="profilePrivate"
+                    :trust-index="trustIndex"
                 />
             </div>
         </div>
@@ -160,6 +203,23 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
                         quedará registrado como quien te recomendó.
                     </p>
 
+                    <div class="mt-3 flex flex-col items-center gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-arka-primary-bright transition hover:bg-arka-primary/10"
+                            @click="shareProfile"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                <circle cx="18" cy="5" r="3" />
+                                <circle cx="6" cy="12" r="3" />
+                                <circle cx="18" cy="19" r="3" />
+                                <path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4" />
+                            </svg>
+                            Compartir perfil e índice
+                        </button>
+                        <span v-if="shareStatus" class="text-xs text-arka-text-muted" role="status">{{ shareStatus }}</span>
+                    </div>
+
                     <div class="mt-6">
                         <PublicProfileContent
                             :profile-user="profileUser"
@@ -170,6 +230,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
                             :is-driver="isDriver"
                             :can-request-ride="false"
                             :profile-private="profilePrivate"
+                            :trust-index="trustIndex"
                             :show-summary-badges="false"
                             :show-summary-rating="false"
                             embedded

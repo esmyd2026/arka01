@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FleetMember;
 use App\Models\User;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
@@ -12,6 +13,8 @@ use Inertia\Response;
 
 class PublicProfileController extends Controller
 {
+    public function __construct(private readonly TrustIndexCalculator $trustIndexCalculator) {}
+
     /**
      * User-agents conocidos de rastreadores que arman una tarjeta de vista
      * previa al compartir un enlace (pedido explícito del usuario: "que el
@@ -46,6 +49,7 @@ class PublicProfileController extends Controller
         // comentarios. El dueño del perfil y un admin siguen viendo todo.
         $isOwnerOrAdmin = $request->user()?->is($user) || $request->user()?->isAdmin();
         $isPrivateDriverProfile = $user->driverProfile && ! $user->driverProfile->profile_public && ! $isOwnerOrAdmin;
+        $trustIndex = $isPrivateDriverProfile ? null : $this->trustIndexCalculator->calculate($user);
 
         // Para el puñado de rastreadores de vista previa, se sirve una
         // página mínima aparte con las etiquetas correctas (sin pasar por
@@ -53,8 +57,11 @@ class PublicProfileController extends Controller
         // sigue viendo la app normal de siempre, esto nunca la reemplaza.
         if (preg_match(self::LINK_PREVIEW_BOTS, $request->userAgent() ?? '')) {
             $isDriver = $user->driverProfile !== null;
-            $reviewCount = $user->reviewsReceived()->count();
-            $averageRating = round((float) $user->reviewsReceived()->avg('rating'), 1);
+            // La vista previa pública debe respetar exactamente la misma
+            // privacidad que la pantalla real; de lo contrario WhatsApp
+            // revelaría reputación aunque el conductor haya cerrado el perfil.
+            $reviewCount = $isPrivateDriverProfile ? 0 : $user->reviewsReceived()->count();
+            $averageRating = $isPrivateDriverProfile ? 0 : round((float) $user->reviewsReceived()->avg('rating'), 1);
 
             return view('profile-preview', [
                 'title' => "{$user->full_name} — Arka01",
@@ -66,6 +73,7 @@ class PublicProfileController extends Controller
                 // nunca manda cookies de sesión.
                 'description' => ($isDriver ? 'Conductor' : 'Cliente').' en Arka01'
                     .($reviewCount > 0 ? " · ★ {$averageRating}" : '')
+                    .($trustIndex ? " · Índice de confianza {$trustIndex['score']}/100" : '')
                     .' — únase y hagamos que la movilidad sea más segura en Ecuador.',
                 'image' => $user->avatar_url && ! str_starts_with($user->avatar_url, 'http')
                     ? url($user->avatar_url)
@@ -125,6 +133,9 @@ class PublicProfileController extends Controller
             'profileUrl' => $profileUrl,
             'averageRating' => $isPrivateDriverProfile ? 0 : round((float) $user->reviewsReceived()->avg('rating'), 1),
             'reviewCount' => $isPrivateDriverProfile ? 0 : $user->reviewsReceived()->count(),
+            // Estable para compartir: resume la actividad y red aceptada del
+            // titular, sin revelar nombres ni relaciones de su círculo.
+            'trustIndex' => $trustIndex,
             'reviews' => $reviews,
             // Frontend (PublicProfileContent.vue): muestra un aviso de
             // "perfil privado" en vez del bloque de vehículo/tarifa/reseñas.

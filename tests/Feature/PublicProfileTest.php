@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\TrustCircleConnection;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -114,6 +115,30 @@ class PublicProfileTest extends TestCase
         );
     }
 
+    public function test_the_shared_profile_includes_a_stable_explainable_trust_index(): void
+    {
+        $target = User::factory()->create();
+        $contact = User::factory()->create();
+
+        TrustCircleConnection::query()->create([
+            'requester_user_id' => $target->id,
+            'addressee_user_id' => $contact->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $response = $this->get(route('profiles.show', $target->public_id));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('trustIndex.role', 'Cliente')
+            ->where('trustIndex.network_connections', 1)
+            ->where('trustIndex.mutual_people', 0)
+            ->has('trustIndex.score')
+            ->has('trustIndex.level')
+            ->has('trustIndex.components', 4)
+        );
+    }
+
     /**
      * WhatsApp (y Facebook/Twitter/etc.) arman la tarjeta de vista previa
      * leyendo <meta og:*> de la respuesta cruda, sin ejecutar JavaScript —
@@ -132,6 +157,7 @@ class PublicProfileTest extends TestCase
         $response->assertSee('og:title', false);
         $response->assertSee('Juan Pérez — Arka01', false);
         $response->assertSee(route('profiles.show', $target->public_id), false);
+        $response->assertSee('Índice de confianza', false);
     }
 
     /**
@@ -214,8 +240,22 @@ class PublicProfileTest extends TestCase
             ->where('profileUser.driver_profile', null)
             ->where('averageRating', 0)
             ->where('reviewCount', 0)
+            ->where('trustIndex', null)
             ->where('isDriver', true)
         );
+    }
+
+    public function test_a_private_driver_link_preview_does_not_reveal_the_trust_index_or_rating(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['profile_public' => false]);
+
+        $response = $this->withHeaders(['User-Agent' => 'WhatsApp/2.23.20 A'])
+            ->get(route('profiles.show', $driver->public_id));
+
+        $response->assertOk();
+        $response->assertDontSee('Índice de confianza', false);
+        $response->assertDontSee('★', false);
     }
 
     public function test_a_guest_without_an_account_also_gets_the_private_version(): void

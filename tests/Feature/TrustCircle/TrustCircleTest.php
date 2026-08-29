@@ -72,6 +72,22 @@ class TrustCircleTest extends TestCase
             ->assertJsonMissingPath('people.0.email');
     }
 
+    public function test_search_finds_people_by_partial_first_name_last_name_or_full_name(): void
+    {
+        $user = User::factory()->create();
+        $friend = User::factory()->create([
+            'name' => 'Doris',
+            'last_name' => 'Tapia Mendoza',
+        ]);
+
+        foreach (['Dor', 'Tapia', 'Doris Tapia'] as $term) {
+            $this->actingAs($user)
+                ->getJson(route('trust-circle.search', ['q' => $term]))
+                ->assertOk()
+                ->assertJsonPath('people.0.user_public_id', $friend->public_id);
+        }
+    }
+
     public function test_each_person_controls_their_own_directional_privacy(): void
     {
         [$connection, $first, $second] = $this->acceptedConnection();
