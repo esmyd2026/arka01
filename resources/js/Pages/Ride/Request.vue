@@ -926,11 +926,17 @@ const stopsTotalPrice = computed(() => {
 // no le pongas ese texto tan extenso, solo dile este conductor tiene
 // aplicado el costo por recogidas extensas"): solo tiene sentido avisarlo
 // cuando ya hay un conductor puntual elegido (no "toda la flota" ni una
-// cooperativa, donde todavía no se sabe quién va a tomarla) y ese conductor
-// activó la función en su perfil — ver driverCardData() en el controller.
+// cooperativa, donde todavía no se sabe quién va a tomarla) Y ese conductor
+// está lo bastante lejos del origen actual como para que el cargo aplique de
+// verdad — bug reportado por el usuario: antes se mostraba con solo que el
+// conductor tuviera la función activada en su perfil, aunque estuviera a 2
+// minutos de distancia y el cargo fuera a salir en $0. Reusa
+// pickupFareEstimateFor() (definida más abajo, function declaration con
+// hoisting) para no duplicar la misma cuenta.
 const showsPickupSurchargeNotice = computed(() => {
     if (selectedCooperativeId.value || selectedDriverId.value === WHOLE_FLEET) return false;
-    return Boolean(selectedDriverInfo.value?.pickup_surcharge_enabled);
+    if (!selectedDriverInfo.value) return false;
+    return pickupFareEstimateFor(selectedDriverInfo.value) > 0;
 });
 
 // Precio total del itinerario completo (pedido explícito del usuario) —
@@ -2216,12 +2222,16 @@ function submit() {
                         <InputError :message="form.errors.offered_price" />
 
                         <!-- Cargo por trayecto de recogida (pedido explícito del
-                             usuario): aviso corto, sin monto ni porcentaje — solo
-                             cuando ya hay un conductor puntual elegido que activó
-                             la función. El conductor decide si lo cobra de verdad
-                             recién al recibir la solicitud. -->
+                             usuario): aviso sutil, sin monto ni porcentaje — deja
+                             claro que el total de ACÁ ARRIBA ya lo incluye, no que
+                             "podría" aplicarse. Solo aparece cuando el conductor
+                             elegido tiene la función activada Y está lo bastante
+                             lejos como para que el cargo sea mayor a $0 (ver
+                             showsPickupSurchargeNotice). El conductor sigue
+                             pudiendo decidir no cobrarlo al recibir la solicitud —
+                             esto es un estimado, no una promesa de cobro. -->
                         <p v-if="showsPickupSurchargeNotice" class="text-xs italic text-emerald-600 dark:text-emerald-400">
-                            🍃 Este conductor tiene aplicado el costo por recogidas extensas.
+                            🍃 Tu conductor viene desde más lejos. El total incluye un aporte por su desplazamiento.
                         </p>
                     </div>
 
