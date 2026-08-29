@@ -121,11 +121,6 @@ watch(
 const counterAmounts = ref({});
 const processingRequestId = ref(null);
 
-// Cargo por trayecto de recogida (pedido explícito del usuario): el
-// conductor decide, solicitud por solicitud, si cobra ese cargo al aceptar —
-// arranca sin marcar, nunca se cobra por defecto.
-const chargePickup = ref({});
-
 const ownedChannelListeners = [];
 let requestSyncTimer = null;
 let requestSyncRunning = false;
@@ -364,9 +359,7 @@ onBeforeUnmount(() => {
 function acceptRequest(id) {
     if (processingRequestId.value) return;
     processingRequestId.value = id;
-    router.post(route('ride-requests.accept', id), {
-        charge_pickup_fee: chargePickup.value[id] ?? false,
-    }, {
+    router.post(route('ride-requests.accept', id), {}, {
         preserveScroll: true,
         onFinish: () => (processingRequestId.value = null),
     });
@@ -755,25 +748,26 @@ function confirmRaiseOffer(id) {
                                 <!-- Desglose de la ganancia (pedido explícito del usuario:
                                      "que se desglose... para que vea sus ganancias bien" y
                                      "si el adicional es 0 igual presentale") — siempre
-                                     visible, no solo cuando hay cargo de recogida. -->
+                                     visible, no solo cuando hay cargo de recogida. El total
+                                     de arriba (current_offered_price) YA incluye el cargo de
+                                     recogida cuando aplica (pedido explícito del usuario: "el
+                                     precio ofertado ya incluye la recogida" — sin checkbox,
+                                     ya no es una decisión del conductor al aceptar), así que
+                                     acá se resta para mostrar el viaje puro sin duplicarlo. -->
                                 <div class="space-y-2 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-text-muted">Desglose de tu ganancia</p>
                                     <div class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Origen → destino · {{ Number(r.distance_km).toFixed(1) }} km</span>
-                                        <span class="text-arka-text font-medium">${{ Number(r.current_offered_price).toFixed(2) }}</span>
+                                        <span class="text-arka-text font-medium">${{ (Number(r.current_offered_price) - Number(r.pickup_fare ?? 0)).toFixed(2) }}</span>
                                     </div>
                                     <div v-if="r.route_padding_fare != null" class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Margen fijo de ruta · {{ Number(r.route_padding_km).toFixed(1) }} km (ya incluido arriba)</span>
                                         <span class="text-arka-text font-medium">${{ Number(r.route_padding_fare).toFixed(2) }}</span>
                                     </div>
                                     <div v-if="r.pickup_distance_km != null" class="flex items-center justify-between text-sm">
-                                        <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km</span>
+                                        <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km (ya incluida arriba)</span>
                                         <span class="text-arka-text font-medium">${{ Number(r.pickup_fare).toFixed(2) }}</span>
                                     </div>
-                                    <label v-if="r.pickup_fare > 0" class="flex items-center gap-2 pt-1">
-                                        <input type="checkbox" v-model="chargePickup[r.id]" class="text-arka-primary rounded" />
-                                        <span class="text-sm text-arka-text">Cobrar ${{ Number(r.pickup_fare).toFixed(2) }} de recogida al cliente</span>
-                                    </label>
                                 </div>
 
                                 <PrimaryButton class="min-h-12 w-full justify-center text-sm" :disabled="processingRequestId === r.id || secondsLeft(r) === 0" @click="acceptRequest(r.id)">

@@ -235,6 +235,14 @@ class RideRequestCreator
         }
 
         $driverUserId = $validated['driver_user_id'] ?? null;
+        // Cargo por trayecto de recogida (pedido explícito del usuario): si
+        // el cliente eligió este conductor puntual, el frontend ya le mostró
+        // (y ya ofertó) el precio con el cargo de recogida incluido — no hay
+        // que sumarlo de nuevo más abajo. Si en cambio la solicitud es "a
+        // toda la flota"/cooperativa, el cliente no podía saber de antemano
+        // qué candidato le tocaría, así que el cargo del que de verdad resulte
+        // se suma después de forma transparente sobre el precio ya aceptado.
+        $driverWasChosenByClient = ! empty($driverUserId);
         $dispatchPool = null;
         $offerCandidateIds = [];
         $currentOfferExpiresAt = null;
@@ -384,13 +392,32 @@ class RideRequestCreator
             driverMinimumFare: $this->referenceMinimumFare($driverUserId),
         )['total'];
 
-        if (isset($validated['offered_price']) && $validated['offered_price'] < $suggestedPrice) {
+        // Cargo por trayecto de recogida (pedido explícito del usuario: "el
+        // precio ofertado ya incluye la recogida" — sin checkbox aparte del
+        // conductor, el precio queda fijo desde acá). Cuando el cliente eligió
+        // el conductor a propósito, el mínimo exigido YA incluye su cargo
+        // real (el frontend lo replicó exacto, ver Ride/Request.vue
+        // pickupFareEstimateFor()) — si no propuso un monto propio, el
+        // default ya es ese total completo. Cuando fue "toda la
+        // flota"/cooperativa, el mínimo exigido es solo el del viaje (lo
+        // único que el cliente pudo anticipar); el cargo del candidato real
+        // se suma más abajo, después de validar/aceptar su oferta.
+        $pickupFare = (float) ($pickupSurcharge['fare'] ?? 0);
+        $minimumAcceptablePrice = $driverWasChosenByClient
+            ? PriceCalculator::roundUpToDime($suggestedPrice + $pickupFare)
+            : $suggestedPrice;
+
+        if (isset($validated['offered_price']) && $validated['offered_price'] < $minimumAcceptablePrice) {
             throw ValidationException::withMessages([
-                'offered_price' => 'Su propuesta no puede ser menor al precio estimado ($'.number_format($suggestedPrice, 2).').',
+                'offered_price' => 'Su propuesta no puede ser menor al precio estimado ($'.number_format($minimumAcceptablePrice, 2).').',
             ]);
         }
 
-        $offeredPrice = round((float) ($validated['offered_price'] ?? $suggestedPrice), 2);
+        $offeredPrice = round((float) ($validated['offered_price'] ?? $minimumAcceptablePrice), 2);
+
+        if (! $driverWasChosenByClient) {
+            $offeredPrice = round($offeredPrice + $pickupFare, 2);
+        }
 
         $smartDispatchVersion = null;
         $smartDispatchSnapshot = null;

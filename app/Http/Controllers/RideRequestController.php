@@ -321,10 +321,7 @@ class RideRequestController extends Controller
      */
     public function accept(Request $request, RideRequest $rideRequest): RedirectResponse
     {
-        // Cargo por trayecto de recogida (pedido explícito del usuario): el
-        // conductor decide cobrarlo o no al momento de aceptar, ver el
-        // checkbox en Ride/Index.vue.
-        $ride = $this->rideRequestResponder->accept($rideRequest, $request->user(), $request->boolean('charge_pickup_fee'));
+        $ride = $this->rideRequestResponder->accept($rideRequest, $request->user());
 
         return redirect()->route('rides.show', $ride);
     }

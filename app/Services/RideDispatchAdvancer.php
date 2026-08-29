@@ -168,18 +168,13 @@ class RideDispatchAdvancer
                 : 30;
 
             // Cargo por trayecto de recogida (pedido explícito del usuario):
-            // el candidato que sigue está en otro lugar — hay que
-            // recalcularlo para él, no arrastrar el del candidato anterior.
-            $pickupSurcharge = PriceCalculator::pickupSurchargeForDriver(
-                $nextDriverId,
-                (float) $rideRequest->origin_lat,
-                (float) $rideRequest->origin_lng,
-            );
-
+            // el precio ya quedó fijo desde que se creó la solicitud (ver
+            // RideRequestCreator::create()) — a propósito NO se recalcula
+            // `pickup_distance_km`/`pickup_fare` acá, mismo criterio que ya
+            // usa el precio base del viaje (tampoco se recalcula por
+            // conductor en la cascada, usa siempre la tarifa del primero).
             $rideRequest->update([
                 'driver_user_id' => $nextDriverId,
-                'pickup_distance_km' => $pickupSurcharge['distance_km'],
-                'pickup_fare' => $pickupSurcharge['fare'],
                 'offer_candidate_ids' => $remaining,
                 'current_offer_expires_at' => now()->addSeconds($timeoutSeconds),
                 'cooperative_assignment_status' => $rideRequest->cooperative_id ? 'awaiting_driver' : $rideRequest->cooperative_assignment_status,
@@ -310,19 +305,27 @@ class RideDispatchAdvancer
                 }
 
                 // Cargo por trayecto de recogida (pedido explícito del
-                // usuario): mismo criterio que advanceOrExpire(), el
-                // conductor que se activa acá también puede estar lejos.
+                // usuario): a diferencia de advanceOrExpire() (donde el
+                // precio ya quedó fijo desde la creación), acá es la PRIMERA
+                // vez que se conoce un candidato real — cuando se creó la
+                // solicitud no había nadie disponible, así que no se pudo
+                // calcular. El cliente nunca pudo anticipar este cargo (fue
+                // "a toda la flota"), así que se suma de forma transparente
+                // sobre la oferta ya aceptada, mismo criterio que
+                // RideRequestCreator::create() para ese mismo caso.
                 $pickupSurcharge = PriceCalculator::pickupSurchargeForDriver(
                     $candidateIds[0],
                     (float) $rideRequest->origin_lat,
                     (float) $rideRequest->origin_lng,
                 );
+                $pickupFare = (float) ($pickupSurcharge['fare'] ?? 0);
 
                 $rideRequest->update([
                     'status' => 'pending',
                     'driver_user_id' => $candidateIds[0],
                     'pickup_distance_km' => $pickupSurcharge['distance_km'],
                     'pickup_fare' => $pickupSurcharge['fare'],
+                    'current_offered_price' => round((float) $rideRequest->current_offered_price + $pickupFare, 2),
                     'smart_dispatch_version' => config('smart_dispatch.enabled', true) ? SmartDispatchScorer::VERSION : null,
                     'smart_dispatch_snapshot' => SmartDispatchScorer::safeSnapshot(
                         $candidateIds,

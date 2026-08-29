@@ -897,9 +897,23 @@ const referenceMinimumFare = computed(() => {
 
 const isMinimumFareApplied = computed(() => rawPriceByDistance.value != null && rawPriceByDistance.value < referenceMinimumFare.value);
 
+// Cargo por trayecto de recogida (pedido explícito del usuario: "el precio
+// ofertado ya incluye la recogida" — sin checkbox aparte del conductor, el
+// precio queda fijo desde acá). Solo se puede anticipar con exactitud cuando
+// el cliente eligió un conductor puntual (se conoce su ubicación real); en
+// "toda la flota"/cooperativa no se sabe qué candidato le va a tocar, así
+// que el backend lo suma después de forma transparente — ver
+// RideRequestCreator::create()). Reusa pickupFareEstimateFor() (definida
+// más abajo, function declaration con hoisting).
+const estimatedPickupFareForSelected = computed(() => {
+    if (selectedCooperativeId.value || selectedDriverId.value === WHOLE_FLEET) return 0;
+    if (!selectedDriverInfo.value) return 0;
+    return pickupFareEstimateFor(selectedDriverInfo.value);
+});
+
 const estimatedPrice = computed(() => {
     if (rawPriceByDistance.value == null) return null;
-    return Math.max(rawPriceByDistance.value, referenceMinimumFare.value);
+    return Math.max(rawPriceByDistance.value, referenceMinimumFare.value) + estimatedPickupFareForSelected.value;
 });
 
 // Paradas adicionales (pedido explícito del usuario: "esto recalcule las
@@ -923,21 +937,12 @@ const stopsTotalPrice = computed(() => {
 });
 
 // Cargo por trayecto de recogida (pedido explícito del usuario: "al cliente
-// no le pongas ese texto tan extenso, solo dile este conductor tiene
-// aplicado el costo por recogidas extensas"): solo tiene sentido avisarlo
-// cuando ya hay un conductor puntual elegido (no "toda la flota" ni una
-// cooperativa, donde todavía no se sabe quién va a tomarla) Y ese conductor
-// está lo bastante lejos del origen actual como para que el cargo aplique de
-// verdad — bug reportado por el usuario: antes se mostraba con solo que el
-// conductor tuviera la función activada en su perfil, aunque estuviera a 2
-// minutos de distancia y el cargo fuera a salir en $0. Reusa
-// pickupFareEstimateFor() (definida más abajo, function declaration con
-// hoisting) para no duplicar la misma cuenta.
-const showsPickupSurchargeNotice = computed(() => {
-    if (selectedCooperativeId.value || selectedDriverId.value === WHOLE_FLEET) return false;
-    if (!selectedDriverInfo.value) return false;
-    return pickupFareEstimateFor(selectedDriverInfo.value) > 0;
-});
+// no le pongas ese texto tan extenso... si no dejarle claro que en el costo
+// total está el costo por recogida tan extensa"): el aviso solo aparece
+// cuando el estimado de arriba realmente incluye algo — reusa el mismo
+// computed que ya suma el cargo al precio, para que el número y el aviso
+// nunca queden desincronizados entre sí.
+const showsPickupSurchargeNotice = computed(() => estimatedPickupFareForSelected.value > 0);
 
 // Precio total del itinerario completo (pedido explícito del usuario) —
 // paradas + tramo final, mismo total que terminará guardando el backend

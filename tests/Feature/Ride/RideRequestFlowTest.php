@@ -388,6 +388,76 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
+     * Cargo por trayecto de recogida (pedido explícito del usuario: "el
+     * precio ofertado ya incluye la recogida" — sin checkbox aparte del
+     * conductor): al dirigir la solicitud a un conductor puntual que está
+     * lejos del origen, el precio por defecto (sin offered_price explícito)
+     * ya viene con el cargo sumado desde el momento en que se crea.
+     */
+    public function test_a_directed_request_to_a_far_driver_includes_the_pickup_fare_from_the_start(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        // El conductor de clientWithFleetDriver() ya declaró $0.50/km — le
+        // agrego una ubicación bien lejos del origen de la solicitud (más de
+        // 3 km, el umbral de fábrica).
+        $driver->driverProfile->update(['current_lat' => -0.30, 'current_lng' => -78.60]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $driver->id,
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::where('client_user_id', $client->id)->latest('id')->firstOrFail();
+
+        $this->assertNotNull($rideRequest->pickup_fare);
+        $this->assertGreaterThan(0, (float) $rideRequest->pickup_fare);
+
+        $tripPrice = PriceCalculator::suggestedPrice((float) $rideRequest->distance_km, 0.50)['total'];
+        $expectedTotal = PriceCalculator::roundUpToDime($tripPrice + (float) $rideRequest->pickup_fare);
+
+        $this->assertEquals($expectedTotal, (float) $rideRequest->current_offered_price);
+    }
+
+    /**
+     * Simétrico al anterior, para "toda la flota" (pedido explícito del
+     * usuario): el cliente no puede saber de antemano qué candidato le va a
+     * tocar, así que el cargo del que de verdad resulte se suma de forma
+     * transparente sobre el precio ya calculado — no se le exige haberlo
+     * anticipado.
+     */
+    public function test_a_whole_fleet_request_adds_the_resolved_driver_pickup_fare_transparently(): void
+    {
+        Queue::fake();
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $driver->driverProfile->update(['current_lat' => -0.30, 'current_lng' => -78.60]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => null,
+            'dispatch_pool' => 'fleet',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::where('client_user_id', $client->id)->latest('id')->firstOrFail();
+
+        $this->assertNotNull($rideRequest->pickup_fare);
+        $this->assertGreaterThan(0, (float) $rideRequest->pickup_fare);
+
+        $tripPrice = PriceCalculator::suggestedPrice((float) $rideRequest->distance_km, 0.50)['total'];
+        $this->assertEquals(
+            round($tripPrice + (float) $rideRequest->pickup_fare, 2),
+            round((float) $rideRequest->current_offered_price, 2)
+        );
+    }
+
+    /**
      * Bug encontrado en una auditoría del flujo completo (pedido explícito
      * del usuario: "revisa todo el flujo de una carrera... las que son
      * solicitadas a un conductor en especifico"): antes una solicitud
@@ -1295,11 +1365,15 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
-     * Cargo por trayecto de recogida (pedido explícito del usuario): el
-     * conductor decide si lo cobra al aceptar — con el flag en `true`, el
-     * precio final de la Ride lo incluye y queda marcado como cobrado.
+     * Cargo por trayecto de recogida (pedido explícito del usuario: "el
+     * precio ofertado ya incluye la recogida" — sin checkbox aparte, el
+     * precio queda fijo desde que se creó la solicitud). Acá se simula ese
+     * estado ya resuelto (`current_offered_price` ya con el cargo sumado,
+     * tal como lo dejaría RideRequestCreator::create()) — aceptar copia ese
+     * precio tal cual, sin sumarle nada más, y marca `pickup_fare_charged`
+     * automáticamente porque hubo cargo.
      */
-    public function test_driver_can_charge_the_pickup_fee_when_accepting(): void
+    public function test_accepting_copies_the_already_included_pickup_fare_and_marks_it_charged(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
 
@@ -1309,13 +1383,13 @@ class RideRequestFlowTest extends TestCase
             'driver_user_id' => $driver->id,
             'distance_km' => 10,
             'status' => 'pending',
-            'current_offered_price' => 10.0,
+            'current_offered_price' => 11.32,
             'pickup_distance_km' => 8.0,
             'pickup_fare' => 1.32,
         ]);
 
         $this->actingAs($driver)
-            ->post(route('ride-requests.accept', $rideRequest), ['charge_pickup_fee' => true])
+            ->post(route('ride-requests.accept', $rideRequest))
             ->assertRedirect();
 
         $this->assertDatabaseHas('rides', [
@@ -1328,10 +1402,10 @@ class RideRequestFlowTest extends TestCase
     }
 
     /**
-     * Simétrico al anterior: sin el flag (comportamiento por defecto), el
-     * cargo queda registrado como propuesta pero NO se cobra.
+     * Simétrico al anterior: sin cargo de recogida (`pickup_fare` en 0 o
+     * null), `pickup_fare_charged` queda en false.
      */
-    public function test_driver_does_not_charge_the_pickup_fee_by_default(): void
+    public function test_accepting_without_a_pickup_fare_is_not_marked_as_charged(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
 
@@ -1342,8 +1416,8 @@ class RideRequestFlowTest extends TestCase
             'distance_km' => 10,
             'status' => 'pending',
             'current_offered_price' => 10.0,
-            'pickup_distance_km' => 8.0,
-            'pickup_fare' => 1.32,
+            'pickup_distance_km' => null,
+            'pickup_fare' => null,
         ]);
 
         $this->actingAs($driver)
