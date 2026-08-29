@@ -6,6 +6,8 @@ use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\TrustCircleConnection;
 use App\Models\User;
+use App\Notifications\TrustCircleRequestPushNotification;
+use App\Notifications\TrustCircleResponsePushNotification;
 use App\Services\Fleet\FleetInvitationCreator;
 use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Http\JsonResponse;
@@ -178,7 +180,7 @@ class TrustCircleController extends Controller
             throw ValidationException::withMessages(['person' => 'Tu círculo llegó al máximo de 100 conexiones.']);
         }
 
-        DB::transaction(function () use ($existing, $user, $person, $validated) {
+        $connection = DB::transaction(function () use ($existing, $user, $person, $validated) {
             $connection = $existing ?? new TrustCircleConnection;
             $connection->fill([
                 'requester_user_id' => $user->id,
@@ -195,7 +197,13 @@ class TrustCircleController extends Controller
                     'share_rating' => true,
                 ]
             );
+
+            return $connection;
         });
+
+        // Web Push conserva el aviso aun con la pestaña cerrada. Se envía
+        // después del commit para que el worker nunca lea una fila incompleta.
+        $person->notify(new TrustCircleRequestPushNotification($connection->load('requester')));
 
         return back()->with('status', 'Solicitud enviada. La persona debe aceptarla antes de entrar a tu círculo.');
     }
@@ -220,6 +228,12 @@ class TrustCircleController extends Controller
                 }
             }
         });
+
+        $connection->load(['requester', 'addressee']);
+        $connection->requester->notify(new TrustCircleResponsePushNotification(
+            $connection,
+            $validated['action'] === 'accept',
+        ));
 
         return back()->with('status', $validated['action'] === 'accept' ? 'Persona agregada a tu círculo.' : 'Solicitud rechazada.');
     }
@@ -291,10 +305,14 @@ class TrustCircleController extends Controller
 
                 return [
                     'connection_public_id' => $connection->public_id,
+                    'user_public_id' => $person->public_id,
                     'name' => $person->full_name,
                     'username' => $person->username,
+                    'member_code' => $person->member_code,
                     'avatar_url' => $person->avatar_url,
-                    'relationship_label' => $connection->settings->firstWhere('user_id', $user->id)?->relationship_label,
+                    'role' => $person->isDriver() ? 'Conductor' : 'Cliente',
+                    'relationship_label' => $connection->settings->firstWhere('user_id', $person->id)?->relationship_label,
+                    'trust' => $this->trustIndex->calculate($person, $user),
                 ];
             })->values()->all();
     }

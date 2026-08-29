@@ -6,6 +6,7 @@ use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Support\Collection;
 
 /**
@@ -17,6 +18,8 @@ use Illuminate\Support\Collection;
  */
 class IncomingRideRequestFinder
 {
+    public function __construct(private readonly TrustIndexCalculator $trustIndex) {}
+
     /**
      * @return Collection<int, RideRequest>
      */
@@ -66,13 +69,14 @@ class IncomingRideRequestFinder
             ->get()
             ->keyBy('reviewee_user_id');
 
-        $incoming->each(function (RideRequest $rideRequest) use ($ratings) {
+        $incoming->each(function (RideRequest $rideRequest) use ($ratings, $driver) {
             $rating = $ratings->get($rideRequest->client_user_id);
 
             $rideRequest->client_name = $rideRequest->client->name;
             $rideRequest->client_rating = $rating ? round((float) $rating->avg_rating, 1) : 0;
             $rideRequest->client_review_count = $rating->review_count ?? 0;
             $rideRequest->client_member_code = $rideRequest->client->member_code;
+            $rideRequest->client_trust = $this->trustIndex->calculate($rideRequest->client, $driver);
         });
 
         return $incoming;

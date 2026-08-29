@@ -6,6 +6,7 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
@@ -703,6 +704,7 @@ function confirmRaiseOffer(id) {
                                 </span>
                                 <span v-else class="text-xs text-arka-text-muted">Sin calificaciones todavía</span>
                                 <span v-if="r.client_member_code" class="text-xs text-arka-text-muted">#{{ r.client_member_code }}</span>
+                                <TrustScoreBadge :trust="r.client_trust" compact />
                             </p>
                             </div>
                             <!-- Sector de origen/destino (consideración agregada al alcance): de

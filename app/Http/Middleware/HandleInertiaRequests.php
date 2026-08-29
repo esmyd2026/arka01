@@ -6,6 +6,7 @@ use App\Models\CooperativeDriverMembership;
 use App\Models\FleetInvitation;
 use App\Models\RideRequest;
 use App\Models\SiteSetting;
+use App\Models\TrustCircleConnection;
 use App\Services\PlanLimits;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -38,6 +39,35 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $siteSetting = SiteSetting::current();
+        $isProfileIncomplete = $user && $user->isClient()
+            ? blank($user->last_name) || blank($user->city_id) || blank($user->phone) || ! $user->phone_verified_at
+            : false;
+        $pendingRideRequests = $user?->isDriver() ? RideRequest::pendingIncomingFor($user->id)->count() : 0;
+        $pendingFleetInvitations = $user?->isDriver()
+            ? FleetInvitation::query()->where('driver_user_id', $user->id)->where('status', 'pending')->count()
+            : 0;
+        $pendingClientFleetRequests = $user?->isClient()
+            ? FleetInvitation::query()
+                ->where('status', 'pending')
+                ->where('initiated_by', 'driver')
+                ->whereHas('fleet', fn ($query) => $query->where('owner_user_id', $user->id))
+                ->count()
+            : 0;
+        $pendingCooperativeInvitations = $user?->isDriver()
+            ? CooperativeDriverMembership::query()->where('driver_user_id', $user->id)->where('status', 'pending')->count()
+            : 0;
+        $pendingTrustCircleRequests = $user
+            ? TrustCircleConnection::query()->where('addressee_user_id', $user->id)->where('status', 'pending')->count()
+            : 0;
+
+        $notificationItems = collect([
+            ['key' => 'rides', 'label' => 'Solicitudes de carrera', 'detail' => 'Carreras esperando tu respuesta', 'count' => $pendingRideRequests, 'url' => route('rides.index')],
+            ['key' => 'fleet-driver', 'label' => 'Invitaciones de clientes', 'detail' => 'Solicitudes para entrar a una flota', 'count' => $pendingFleetInvitations, 'url' => route('driver.invitations.index')],
+            ['key' => 'fleet-client', 'label' => 'Solicitudes de conductores', 'detail' => 'Conductores que quieren entrar a tu flota', 'count' => $pendingClientFleetRequests, 'url' => route('fleet.index')],
+            ['key' => 'cooperative', 'label' => 'Invitaciones de cooperativa', 'detail' => 'Cooperativas esperando tu respuesta', 'count' => $pendingCooperativeInvitations, 'url' => route('rides.index')],
+            ['key' => 'trust-circle', 'label' => 'Círculo de confianza', 'detail' => 'Personas que quieren conectar contigo', 'count' => $pendingTrustCircleRequests, 'url' => route('trust-circle.index')],
+            ['key' => 'profile', 'label' => 'Perfil incompleto', 'detail' => 'Completa tus datos para usar todas las funciones', 'count' => $isProfileIncomplete ? 1 : 0, 'url' => route('profile.edit')],
+        ])->filter(fn (array $item) => $item['count'] > 0)->values();
 
         return [
             ...parent::share($request),
@@ -82,12 +112,7 @@ class HandleInertiaRequests extends Middleware
                 // CUALQUIER pantalla — mismo criterio que el resto de
                 // auth.* de acá arriba. Sin queries extra: son columnas que
                 // el modelo ya trae cargadas en cada request autenticado.
-                'isProfileIncomplete' => $user && $user->isClient()
-                    ? blank($user->last_name)
-                        || blank($user->city_id)
-                        || blank($user->phone)
-                        || ! $user->phone_verified_at
-                    : false,
+                'isProfileIncomplete' => $isProfileIncomplete,
                 // Pedido explícito del usuario: "coloca solicitudes en el
                 // navbar... alli donde esta el boton de home" — el badge de
                 // la pestaña "Carreras" de la nav inferior necesita este
@@ -95,17 +120,19 @@ class HandleInertiaRequests extends Middleware
                 // vive acá y no en DashboardController. Ver
                 // RideRequest::pendingIncomingFor() — mismo criterio (algo
                 // más simple que el de /carreras) usado también ahí.
-                'pendingRideRequestsCount' => $user?->isDriver()
-                    ? RideRequest::pendingIncomingFor($user->id)->count()
-                    : 0,
+                'pendingRideRequestsCount' => $pendingRideRequests,
                 // Pedido explícito del usuario: "quitemos carreras y
                 // coloquemos clientes" — el tab "Clientes" de la nav
                 // inferior (antes "Carreras", redundante con "Solicitudes")
                 // necesita este número en cualquier pantalla, mismo
                 // criterio que pendingRideRequestsCount de arriba.
-                'pendingFleetInvitationsCount' => $user?->isDriver()
-                    ? FleetInvitation::query()->where('driver_user_id', $user->id)->where('status', 'pending')->count()
-                    : 0,
+                'pendingFleetInvitationsCount' => $pendingFleetInvitations,
+                // Centro compacto junto al avatar: un contador único y el
+                // desglose navegable evitan repartir puntos sin explicación.
+                'notificationSummary' => [
+                    'total' => $notificationItems->sum('count'),
+                    'items' => $notificationItems->all(),
+                ],
                 // Pedido explícito del usuario: "eso es para que el sepa
                 // que pertenece a una cooperativa, colocalo alli [menú de
                 // cuenta] como una etiqueta mas con su enlace... debajo de

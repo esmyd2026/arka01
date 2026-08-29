@@ -3,6 +3,7 @@
 namespace App\Events;
 
 use App\Models\RideRequest;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -85,6 +86,9 @@ class RideRequested implements ShouldBroadcast
             'client_rating' => round((float) $client->reviewsReceived()->avg('rating'), 1),
             'client_review_count' => $client->reviewsReceived()->count(),
             'client_member_code' => $client->member_code,
+            // Un evento puede llegar a varios conductores; usa el índice
+            // público estable. La carga inicial sí personaliza vínculos en común.
+            'client_trust' => app(TrustIndexCalculator::class)->calculate($client),
             'driver_user_id' => $this->rideRequest->driver_user_id,
             // Pedido explícito del usuario (lista de espera): para que la
             // pantalla del CLIENTE pueda mostrar quién es el candidato

@@ -44,6 +44,7 @@ class FleetInvitationFlowTest extends TestCase
         $byCode->assertOk();
         $byCode->assertJsonPath('drivers.0.user_id', $driver->id);
         $byCode->assertJsonPath('drivers.0.status', 'not_invited');
+        $byCode->assertJsonStructure(['drivers' => [['trust' => ['score', 'level', 'components']]]]);
 
         $byInviteCode = $this->actingAs($client)
             ->getJson(route('fleet.search-drivers', ['fleet' => $fleet->id, 'q' => $driverProfile->invite_code]));

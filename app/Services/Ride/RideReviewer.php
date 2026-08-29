@@ -42,6 +42,12 @@ class RideReviewer
             ]);
         }
 
+        if ($ratingReasonId === null && $rating <= 4) {
+            throw ValidationException::withMessages([
+                'rating_reason_id' => 'Si bajas de las 5 estrellas, tienes que elegir un motivo.',
+            ]);
+        }
+
         $direction = $userId === $ride->client_user_id ? 'client_to_driver' : 'driver_to_client';
 
         if ($ratingReasonId !== null) {

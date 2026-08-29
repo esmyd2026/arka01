@@ -89,6 +89,8 @@ const isAdmin = computed(() => usePage().props.auth.user.is_admin);
 const showClientNav = computed(() => usePage().props.auth.isClient);
 const showDriverNav = computed(() => !isAdmin.value && usePage().props.auth.isDriver);
 const showCooperativeNav = computed(() => !isAdmin.value && usePage().props.auth.isCooperative);
+const notificationSummary = computed(() => usePage().props.auth.notificationSummary ?? { total: 0, items: [] });
+const notificationCountLabel = computed(() => notificationSummary.value.total > 99 ? '99+' : String(notificationSummary.value.total));
 
 // Notificaciones push (sección 9.2 y 9.5): se activan a pedido del usuario
 // desde el menú de cuenta, nunca con un permiso pedido de entrada.
@@ -743,15 +745,11 @@ onBeforeUnmount(() => {
                                         :title="$page.props.auth.user.full_name"
                                     >
                                         <UserAvatar :user="$page.props.auth.user" />
-                                        <!-- Pedido explícito del usuario: "un puntitto
-                                             rojo con un uno para que vaya y actualice
-                                             su numero" — le falta algún dato al perfil
-                                             de cliente (ver HandleInertiaRequests). -->
                                         <span
-                                            v-if="$page.props.auth.isProfileIncomplete"
-                                            class="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-arka-danger ring-2 ring-arka-card"
-                                            aria-hidden="true"
-                                        ></span>
+                                            v-if="notificationSummary.total > 0"
+                                            class="absolute -right-2 -top-2 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-arka-primary px-1 text-[10px] font-extrabold leading-none text-arka-base ring-2 ring-arka-card"
+                                            :aria-label="`${notificationSummary.total} notificaciones pendientes`"
+                                        >{{ notificationCountLabel }}</span>
                                     </button>
                                 </template>
 
@@ -839,6 +837,34 @@ onBeforeUnmount(() => {
                                                 </span>
                                             </p>
                                         </div>
+                                    </div>
+                                    <div class="border-b border-arka-text-muted/10 px-3 py-3">
+                                        <div class="mb-2 flex items-center justify-between gap-3 px-1">
+                                            <span class="text-xs font-semibold text-arka-text">Notificaciones</span>
+                                            <span class="rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-bold text-arka-primary-bright">
+                                                {{ notificationSummary.total }} pendiente{{ notificationSummary.total === 1 ? '' : 's' }}
+                                            </span>
+                                        </div>
+                                        <div v-if="notificationSummary.items.length" class="space-y-1">
+                                            <Link
+                                                v-for="item in notificationSummary.items"
+                                                :key="item.key"
+                                                :href="item.url"
+                                                class="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-arka-base"
+                                            >
+                                                <span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-arka-primary text-[11px] font-extrabold text-arka-base">
+                                                    {{ item.count > 99 ? '99+' : item.count }}
+                                                </span>
+                                                <span class="min-w-0 flex-1">
+                                                    <span class="block truncate text-xs font-semibold text-arka-text">{{ item.label }}</span>
+                                                    <span class="mt-0.5 block truncate text-[10px] text-arka-text-muted">{{ item.detail }}</span>
+                                                </span>
+                                                <span class="text-arka-primary" aria-hidden="true">›</span>
+                                            </Link>
+                                        </div>
+                                        <p v-else class="rounded-xl bg-arka-base/40 px-3 py-3 text-xs text-arka-text-muted">
+                                            No tienes notificaciones pendientes.
+                                        </p>
                                     </div>
                                     <!-- Solo lo estrictamente de cuenta acá — Mi perfil de
                                          conductor, planes, directorio y contactos ya están en
@@ -1087,10 +1113,10 @@ onBeforeUnmount(() => {
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20a7.5 7.5 0 0 1 15 0" />
                         </svg>
                         <span
-                            v-if="$page.props.auth.isProfileIncomplete"
-                            class="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-arka-danger ring-2 ring-arka-card"
-                            aria-hidden="true"
-                        ></span>
+                            v-if="notificationSummary.total > 0"
+                            class="absolute -right-2 -top-1.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-arka-primary px-1 text-[9px] font-extrabold leading-none text-arka-base ring-2 ring-arka-card"
+                            :aria-label="`${notificationSummary.total} notificaciones pendientes`"
+                        >{{ notificationCountLabel }}</span>
                     </span>
                     <span class="text-xs font-medium">Perfil</span>
                 </Link>

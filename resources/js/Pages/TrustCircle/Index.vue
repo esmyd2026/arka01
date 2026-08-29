@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { reactive, ref, watch } from 'vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 
 const props = defineProps({
     summary: { type: Object, required: true },
@@ -121,12 +122,32 @@ function scoreStyle(score) {
             <section v-if="receivedRequests.length" class="rounded-arka border border-arka-primary/25 bg-arka-card p-4 sm:p-5">
                 <div class="mb-4"><p class="text-[10px] font-bold uppercase tracking-[.16em] text-arka-primary">Pendientes</p><h3 class="mt-1 text-lg font-semibold text-arka-text">Quieren entrar a tu círculo</h3></div>
                 <div class="grid gap-3 md:grid-cols-2">
-                    <article v-for="request in receivedRequests" :key="request.connection_public_id" class="flex items-center gap-3 rounded-arka border border-white/5 bg-black/15 p-3">
-                        <img v-if="request.avatar_url" :src="request.avatar_url" class="h-11 w-11 rounded-full object-cover" alt="">
-                        <span v-else class="grid h-11 w-11 place-items-center rounded-full bg-arka-primary/10 font-bold text-arka-primary">{{ request.name.charAt(0) }}</span>
-                        <div class="min-w-0 flex-1"><strong class="block truncate text-sm text-arka-text">{{ request.name }}</strong><span class="text-xs text-arka-text-muted">@{{ request.username }}</span></div>
-                        <button class="rounded-lg bg-arka-primary px-3 py-2 text-xs font-bold text-arka-base" @click="respond(request, 'accept')">Aceptar</button>
-                        <button class="px-2 py-2 text-xs text-arka-text-muted" @click="respond(request, 'reject')">Ahora no</button>
+                    <article v-for="request in receivedRequests" :key="request.connection_public_id" class="rounded-2xl border border-white/5 bg-black/15 p-4">
+                        <div class="flex items-start gap-3">
+                            <img v-if="request.avatar_url" :src="request.avatar_url" class="h-14 w-14 shrink-0 rounded-full object-cover" :alt="request.name">
+                            <span v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-arka-primary/10 text-lg font-bold text-arka-primary">{{ request.name.charAt(0) }}</span>
+                            <div class="min-w-0 flex-1">
+                                <strong class="block truncate text-base text-arka-text">{{ request.name }}</strong>
+                                <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                    @{{ request.username }} · Socio #{{ request.member_code }}
+                                </span>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-arka-text-muted">{{ request.role }}</span>
+                                    <span v-if="request.relationship_label" class="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-arka-text-muted">
+                                        Te identifica como {{ request.relationship_label }}
+                                    </span>
+                                    <TrustScoreBadge :trust="request.trust" compact />
+                                </div>
+                            </div>
+                        </div>
+                        <p class="mt-3 text-xs leading-5 text-arka-text-muted">
+                            Revisa su perfil, actividad e índice antes de decidir si es una persona que conoces.
+                        </p>
+                        <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <Link :href="route('profiles.show', request.user_public_id)" class="inline-flex min-h-10 items-center justify-center rounded-xl border border-arka-primary/30 px-3 text-xs font-semibold text-arka-primary">Ver perfil</Link>
+                            <button class="min-h-10 rounded-xl bg-arka-primary px-3 text-xs font-bold text-arka-base" @click="respond(request, 'accept')">Aceptar</button>
+                            <button class="min-h-10 rounded-xl px-3 text-xs font-semibold text-arka-text-muted hover:bg-white/5 hover:text-arka-text" @click="respond(request, 'reject')">Ahora no</button>
+                        </div>
                     </article>
                 </div>
             </section>

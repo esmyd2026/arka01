@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import RatingStars from '@/Components/RatingStars.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
@@ -108,6 +109,7 @@ function invite(driver) {
                                         readonly
                                     />
                                 </div>
+                                <TrustScoreBadge :trust="driver.trust" class="mt-2" />
                                 <p v-if="driver.trust_label" class="mt-1 text-xs font-medium text-arka-primary-bright">✓ {{ driver.trust_label }}</p>
                                 <p v-if="driver.cooperative" class="mt-1 text-xs text-arka-text-muted">
                                     Afiliado a <Link :href="route('cooperatives.show', driver.cooperative.public_id)" class="text-arka-primary hover:underline">{{ driver.cooperative.name }}</Link>

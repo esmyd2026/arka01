@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\City;
 use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
@@ -10,6 +11,7 @@ use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
 use App\Models\SiteSetting;
+use App\Models\TrustCircleConnection;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -82,6 +84,32 @@ class SharedInertiaPropsTest extends TestCase
         $response = $this->actingAs($client)->get(route('profile.edit'));
 
         $response->assertInertia(fn ($page) => $page->where('auth.pendingRideRequestsCount', 0));
+    }
+
+    public function test_profile_notification_summary_counts_and_explains_pending_items(): void
+    {
+        $city = City::query()->firstOrFail();
+        $user = User::factory()->create([
+            'last_name' => 'Completo',
+            'city_id' => $city->id,
+            'phone' => '+593991234567',
+            'phone_verified_at' => now(),
+        ]);
+        $requester = User::factory()->create();
+        TrustCircleConnection::query()->create([
+            'requester_user_id' => $requester->id,
+            'addressee_user_id' => $user->id,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('profile.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('auth.notificationSummary.total', 1)
+            ->where('auth.notificationSummary.items.0.key', 'trust-circle')
+            ->where('auth.notificationSummary.items.0.count', 1)
+            ->where('auth.notificationSummary.items.0.label', 'Círculo de confianza')
+        );
     }
 
     /**

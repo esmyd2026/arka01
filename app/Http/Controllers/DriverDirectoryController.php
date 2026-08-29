@@ -7,8 +7,10 @@ use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\Review;
+use App\Models\User;
 use App\Services\Haversine;
 use App\Services\PlanLimits;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -20,7 +22,10 @@ class DriverDirectoryController extends Controller
     /** Pedido explícito del usuario: "buscar conductores para mi flota" es del lado cliente. */
     private const SINGLE_ROLE_MESSAGE = 'Los conductores no tienen un directorio propio para buscar — cada cuenta es cliente o conductor, no ambas.';
 
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly TrustIndexCalculator $trustIndex,
+    ) {}
 
     /**
      * Directorio de conductores públicos (sección 3.4): la red de respaldo
@@ -190,6 +195,15 @@ class DriverDirectoryController extends Controller
             $page,
             ['path' => $request->url(), 'query' => $request->query()],
         );
+
+        // Solo la página visible recibe el cálculo personalizado para no
+        // multiplicar consultas por todos los conductores del directorio.
+        $paginated->setCollection($paginated->getCollection()->map(function (array $entry) use ($request) {
+            $driver = User::query()->findOrFail($entry['user_id']);
+            $entry['trust'] = $this->trustIndex->calculate($driver, $request->user());
+
+            return $entry;
+        }));
 
         return Inertia::render('Directory/Index', [
             'drivers' => $paginated,

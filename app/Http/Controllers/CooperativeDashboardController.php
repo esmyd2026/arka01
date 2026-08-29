@@ -7,6 +7,7 @@ use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Services\Haversine;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,6 +15,8 @@ use Inertia\Response;
 
 class CooperativeDashboardController extends Controller
 {
+    public function __construct(private readonly TrustIndexCalculator $trustIndex) {}
+
     public function updateDispatchSettings(Request $request): RedirectResponse
     {
         $validated = $request->validate(['automatic_assignment_enabled' => ['required', 'boolean']]);
@@ -78,6 +81,7 @@ class CooperativeDashboardController extends Controller
                         'cancelled_rides' => (int) ($rides?->cancelled_rides ?? 0),
                         'average_rating' => round((float) ($reviews?->average_rating ?? 0), 1),
                         'review_count' => (int) ($reviews?->review_count ?? 0),
+                        'trust' => $this->trustIndex->calculate($rideRequest->client),
                     ];
                     // Tiempo urbano estimado de la carrera. Se muestra como
                     // referencia operativa y no se confunde con el ETA de cada

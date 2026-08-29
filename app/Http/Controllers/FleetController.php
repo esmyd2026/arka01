@@ -176,7 +176,7 @@ class FleetController extends Controller
             'q' => ['required', 'string', 'min:2', 'max:100'],
         ]);
 
-        $results = $this->driverSearch->search($fleet, $validated['q'], $request->user()->id);
+        $results = $this->driverSearch->search($fleet, $validated['q'], $request->user());
 
         return response()->json(['drivers' => $results]);
     }

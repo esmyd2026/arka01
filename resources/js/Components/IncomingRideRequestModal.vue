@@ -4,6 +4,7 @@ import { router } from '@inertiajs/vue3';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { dismissIncomingRideRequest, incomingRideRequestState } from '@/Utils/incomingRideRequest';
 
 // Pedido explícito del usuario: la carrera entrante tiene que ocupar media
@@ -156,6 +157,7 @@ function discard() {
                         </span>
                         <span v-else class="text-xs text-arka-text-muted">Sin calificaciones todavía</span>
                         <span v-if="current.client_member_code" class="text-xs text-arka-text-muted">#{{ current.client_member_code }}</span>
+                        <TrustScoreBadge :trust="current.client_trust" compact />
                     </p>
                 </div>
 

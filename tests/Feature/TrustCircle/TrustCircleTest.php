@@ -9,6 +9,8 @@ use App\Models\FleetMember;
 use App\Models\TrustCircleConnection;
 use App\Models\TrustCircleSetting;
 use App\Models\User;
+use App\Notifications\TrustCircleRequestPushNotification;
+use App\Notifications\TrustCircleResponsePushNotification;
 use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -22,6 +24,7 @@ class TrustCircleTest extends TestCase
 
     public function test_a_person_enters_the_circle_only_after_accepting(): void
     {
+        Notification::fake();
         $requester = User::factory()->create();
         $relative = User::factory()->create();
 
@@ -31,11 +34,21 @@ class TrustCircleTest extends TestCase
         ])->assertRedirect();
 
         $connection = TrustCircleConnection::query()->firstOrFail();
+        Notification::assertSentTo($relative, TrustCircleRequestPushNotification::class);
         $this->assertSame('pending', $connection->status);
         $this->assertDatabaseMissing('trust_circle_settings', [
             'connection_id' => $connection->id,
             'user_id' => $relative->id,
         ]);
+
+        $this->actingAs($relative)->get(route('trust-circle.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('receivedRequests.0.user_public_id', $requester->public_id)
+                ->where('receivedRequests.0.member_code', $requester->member_code)
+                ->where('receivedRequests.0.role', 'Cliente')
+                ->where('receivedRequests.0.relationship_label', 'Familia')
+                ->has('receivedRequests.0.trust.score')
+            );
 
         $this->actingAs($relative)->post(route('trust-circle.respond', $connection), [
             'action' => 'accept',
@@ -56,6 +69,31 @@ class TrustCircleTest extends TestCase
             'share_fleet' => false,
             'share_rating' => true,
         ]);
+        Notification::assertSentTo(
+            $requester,
+            TrustCircleResponsePushNotification::class,
+            fn (TrustCircleResponsePushNotification $notification) => $notification->accepted,
+        );
+    }
+
+    public function test_rejecting_a_circle_request_notifies_the_requester(): void
+    {
+        Notification::fake();
+        $requester = User::factory()->create();
+        $recipient = User::factory()->create();
+
+        $this->actingAs($requester)->post(route('trust-circle.store'), [
+            'user_public_id' => $recipient->public_id,
+        ]);
+
+        $connection = TrustCircleConnection::query()->firstOrFail();
+        $this->actingAs($recipient)->post(route('trust-circle.respond', $connection), ['action' => 'reject']);
+
+        Notification::assertSentTo(
+            $requester,
+            TrustCircleResponsePushNotification::class,
+            fn (TrustCircleResponsePushNotification $notification) => ! $notification->accepted,
+        );
     }
 
     public function test_search_does_not_expose_phone_email_or_numeric_user_id(): void

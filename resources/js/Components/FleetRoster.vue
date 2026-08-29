@@ -6,6 +6,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierLabel } from '@/Utils/tierBadge';
@@ -263,6 +264,7 @@ onBeforeUnmount(() => {
                                      recién empezando que a alguien muy repartido. -->
                                 · {{ driver.active_clients_count }} cliente(s)
                             </p>
+                            <TrustScoreBadge :trust="driver.trust" class="mt-2" />
                         </div>
                     </div>
 

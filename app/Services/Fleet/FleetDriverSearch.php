@@ -7,6 +7,8 @@ use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\Review;
 use App\Models\Ride;
+use App\Models\User;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Support\Collection;
 
 /**
@@ -18,17 +20,19 @@ use Illuminate\Support\Collection;
  */
 class FleetDriverSearch
 {
+    public function __construct(private readonly TrustIndexCalculator $trustIndex) {}
+
     /**
      * @return Collection<int, array>
      */
-    public function search(Fleet $fleet, string $term, int $excludeUserId): Collection
+    public function search(Fleet $fleet, string $term, User $viewer): Collection
     {
         $term = ltrim($term, '@');
         $memberCode = ctype_digit($term) ? (int) $term : null;
 
         $drivers = DriverProfile::query()
             ->with('user')
-            ->where('user_id', '!=', $excludeUserId)
+            ->where('user_id', '!=', $viewer->id)
             ->whereNull('deactivated_at')
             ->where(function ($query) use ($term, $memberCode) {
                 $query->when($memberCode, fn ($query) => $query->whereHas('user', fn ($query) => $query->where('member_code', $memberCode)))
@@ -61,7 +65,7 @@ class FleetDriverSearch
             ->groupBy('driver_user_id')
             ->pluck('rides_count', 'driver_user_id');
 
-        return $drivers->map(function (DriverProfile $driver) use ($activeDriverIds, $pendingDriverIds, $ratings, $rideCounts) {
+        return $drivers->map(function (DriverProfile $driver) use ($activeDriverIds, $pendingDriverIds, $ratings, $rideCounts, $viewer) {
             $rating = $ratings->get($driver->user_id);
             $averageRating = $rating ? round((float) $rating->avg_rating, 1) : null;
             $reviewCount = $rating->review_count ?? 0;
@@ -79,6 +83,7 @@ class FleetDriverSearch
                 'tier' => DriverTier::forPoints($driver->total_points)->toBadge(),
                 'rides_count' => $rideCounts->get($driver->user_id, 0),
                 'active_clients_count' => $driver->activeClientCount(),
+                'trust' => $this->trustIndex->calculate($driver->user, $viewer),
                 'status' => match (true) {
                     $activeDriverIds->contains($driver->user_id) => 'member',
                     $pendingDriverIds->contains($driver->user_id) => 'pending',

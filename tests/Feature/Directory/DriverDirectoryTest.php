@@ -37,6 +37,8 @@ class DriverDirectoryTest extends TestCase
             ->component('Directory/Index')
             ->has('drivers.data', 1)
             ->where('drivers.data.0.name', 'Conductor Público')
+            ->has('drivers.data.0.trust.score')
+            ->has('drivers.data.0.trust.level')
         );
     }
 

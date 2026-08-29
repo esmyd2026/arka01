@@ -29,11 +29,13 @@ class ReviewController extends Controller
      */
     public function store(Request $request, Ride $ride): RedirectResponse
     {
+        // El motivo obligatorio si se baja de las 5 estrellas (pedido
+        // explícito del usuario) lo valida RideReviewer, no aquí: tiene que
+        // evaluarse DESPUÉS de "carrera no completada"/"ya calificaste" para
+        // no tapar esos errores con uno de formato.
         $validated = $request->validate([
             'rating' => ['required', 'integer', 'min:1', 'max:5'],
-            // Motivo obligatorio solo si se baja de las 5 estrellas por
-            // defecto (pedido explícito del usuario).
-            'rating_reason_id' => ['required_if:rating,1,2,3,4', 'nullable', 'integer', 'exists:rating_reasons,id'],
+            'rating_reason_id' => ['nullable', 'integer', 'exists:rating_reasons,id'],
             'comment' => ['nullable', 'string', 'max:500'],
         ]);
 

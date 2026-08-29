@@ -43,6 +43,61 @@ const speaker = ref(null);
 const speakerPublicId = ref(null);
 const holdingButton = ref(false);
 const requestingTurn = ref(false);
+const floatingRadio = ref(null);
+const bubblePosition = ref(null);
+const draggingBubble = ref(false);
+const dragOffset = { x: 0, y: 0 };
+const BUBBLE_POSITION_KEY = 'arka-radio-bubble-position-v1';
+
+const floatingRadioStyle = computed(() => bubblePosition.value
+    ? { left: `${bubblePosition.value.x}px`, top: `${bubblePosition.value.y}px` }
+    : { right: '0.75rem', bottom: props.hideBottomNav ? '1rem' : '6rem' });
+
+function clampBubblePosition(position) {
+    const rect = floatingRadio.value?.getBoundingClientRect();
+    const width = rect?.width || 128;
+    const height = rect?.height || 52;
+
+    return {
+        x: Math.max(8, Math.min(window.innerWidth - width - 8, position.x)),
+        y: Math.max(8, Math.min(window.innerHeight - height - 8, position.y)),
+    };
+}
+
+function startBubbleDrag(event) {
+    const rect = floatingRadio.value?.getBoundingClientRect();
+    if (!rect) return;
+
+    draggingBubble.value = true;
+    dragOffset.x = event.clientX - rect.left;
+    dragOffset.y = event.clientY - rect.top;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
+function moveBubble(event) {
+    if (!draggingBubble.value) return;
+    bubblePosition.value = clampBubblePosition({
+        x: event.clientX - dragOffset.x,
+        y: event.clientY - dragOffset.y,
+    });
+}
+
+function finishBubbleDrag(event) {
+    if (!draggingBubble.value) return;
+    draggingBubble.value = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+    try {
+        window.localStorage.setItem(BUBBLE_POSITION_KEY, JSON.stringify(bubblePosition.value));
+    } catch {
+        // El modo privado puede bloquear localStorage; moverla sigue funcionando
+        // durante la sesión aunque el navegador no permita recordarla.
+    }
+}
+
+function keepBubbleInsideViewport() {
+    if (bubblePosition.value) bubblePosition.value = clampBubblePosition(bubblePosition.value);
+}
 const microphoneActive = ref(false);
 const microphonePermissionBlocked = ref(false);
 const requestingMicrophonePermission = ref(false);
@@ -715,6 +770,17 @@ onMounted(() => {
     window.addEventListener('blur', releaseTransmission);
     window.addEventListener('focus', syncRadioAvailability);
     document.addEventListener('visibilitychange', refreshAvailabilityWhenVisible);
+    window.addEventListener('resize', keepBubbleInsideViewport);
+
+    try {
+        const savedPosition = JSON.parse(window.localStorage.getItem(BUBBLE_POSITION_KEY));
+        if (Number.isFinite(savedPosition?.x) && Number.isFinite(savedPosition?.y)) {
+            bubblePosition.value = savedPosition;
+            nextTick(keepBubbleInsideViewport);
+        }
+    } catch {
+        bubblePosition.value = null;
+    }
 
     // Viene de "Ir al canal de radio" en Radio/Invitation.vue: el enlace de
     // invitación no sabe abrir el bottom sheet directamente (vive en otra
@@ -731,6 +797,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('blur', releaseTransmission);
     window.removeEventListener('focus', syncRadioAvailability);
     document.removeEventListener('visibilitychange', refreshAvailabilityWhenVisible);
+    window.removeEventListener('resize', keepBubbleInsideViewport);
     stopInertiaListener?.();
     window.clearTimeout(grantTimer);
     window.clearTimeout(receiverCleanupTimer);
@@ -745,27 +812,47 @@ onBeforeUnmount(() => {
 <template>
     <div
         v-if="!isOpen && config"
-        class="fixed right-3 z-[45] flex items-center gap-2 sm:bottom-5"
-        :class="props.hideBottomNav ? 'bottom-4' : 'bottom-24'"
+        ref="floatingRadio"
+        class="fixed z-[45] flex items-center gap-1.5"
+        :style="floatingRadioStyle"
     >
+        <button
+            type="button"
+            class="grid h-8 w-5 touch-none select-none place-items-center rounded-full border border-arka-text-muted/15 bg-arka-card/90 text-arka-text-muted shadow-lg backdrop-blur active:cursor-grabbing"
+            :class="draggingBubble ? 'cursor-grabbing text-arka-primary' : 'cursor-grab'"
+            aria-label="Mover botón de radio"
+            title="Arrastra para mover la radio"
+            @pointerdown.prevent="startBubbleDrag"
+            @pointermove.prevent="moveBubble"
+            @pointerup.prevent="finishBubbleDrag"
+            @pointercancel.prevent="finishBubbleDrag"
+        >
+            <svg class="h-4 w-3" viewBox="0 0 12 18" fill="currentColor" aria-hidden="true">
+                <circle cx="3" cy="4" r="1.2" /><circle cx="9" cy="4" r="1.2" />
+                <circle cx="3" cy="9" r="1.2" /><circle cx="9" cy="9" r="1.2" />
+                <circle cx="3" cy="14" r="1.2" /><circle cx="9" cy="14" r="1.2" />
+            </svg>
+        </button>
         <button
             v-if="!connected"
             type="button"
-            class="flex min-h-14 items-center gap-2 rounded-full border border-arka-primary/40 bg-arka-card/95 px-4 text-arka-primary shadow-2xl backdrop-blur transition active:scale-[0.97] disabled:opacity-60"
+            class="grid h-12 w-12 place-items-center rounded-full border border-arka-primary/40 bg-arka-card/95 text-arka-primary shadow-2xl backdrop-blur transition active:scale-[0.95] disabled:opacity-60"
             :disabled="connectionState === 'connecting'"
+            :aria-label="connectionState === 'connecting' ? 'Conectando radio' : 'Activar radio'"
+            :title="connectionState === 'connecting' ? 'Conectando…' : 'Activar radio'"
             @click="connectRadio({ userGesture: true })"
         >
-            <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <rect x="8" y="3" width="8" height="12" rx="4" />
                 <path stroke-linecap="round" d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
             </svg>
-            <span class="text-xs font-bold">{{ connectionState === 'connecting' ? 'Conectando…' : 'Activar radio' }}</span>
+            <span class="sr-only">{{ connectionState === 'connecting' ? 'Conectando…' : 'Activar radio' }}</span>
         </button>
 
         <button
             v-else
             type="button"
-            class="flex min-h-14 touch-none select-none items-center gap-2 rounded-full border px-4 shadow-2xl backdrop-blur transition focus:outline-none focus:ring-4 focus:ring-arka-primary/25 disabled:cursor-not-allowed"
+            class="grid h-12 w-12 touch-none select-none place-items-center rounded-full border shadow-2xl backdrop-blur transition focus:outline-none focus:ring-4 focus:ring-arka-primary/25 disabled:cursor-not-allowed"
             :class="isMeSpeaking
                 ? 'scale-[0.97] border-arka-primary bg-arka-primary text-arka-base'
                 : channelBusy
@@ -773,6 +860,7 @@ onBeforeUnmount(() => {
                     : 'border-arka-primary/40 bg-arka-card/95 text-arka-primary active:scale-[0.97]'"
             :disabled="channelBusy"
             :aria-label="quickTalkLabel"
+            :title="quickTalkLabel"
             @pointerdown.prevent="requestTransmission"
             @pointerup.prevent="releaseTransmission"
             @pointercancel.prevent="releaseTransmission"
@@ -783,16 +871,16 @@ onBeforeUnmount(() => {
                 <rect x="8" y="3" width="8" height="12" rx="4" />
                 <path stroke-linecap="round" d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
             </svg>
-            <span class="text-xs font-bold">{{ quickTalkLabel }}</span>
+            <span class="sr-only">{{ quickTalkLabel }}</span>
         </button>
 
         <button
             type="button"
-            class="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-arka-primary/30 bg-arka-card/95 text-arka-primary shadow-xl backdrop-blur transition active:scale-95"
+            class="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-arka-primary/30 bg-arka-card/95 text-arka-primary shadow-xl backdrop-blur transition active:scale-95"
             aria-label="Abrir detalles del canal de seguridad"
             @click="openRadio"
         >
-            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <rect x="7" y="5" width="10" height="15" rx="2" />
                 <path stroke-linecap="round" d="M10 9h4M10 12h4M9 3h6" />
                 <circle cx="12" cy="16" r="1.5" />
