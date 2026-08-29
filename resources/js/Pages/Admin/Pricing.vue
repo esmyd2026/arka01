@@ -19,6 +19,8 @@ const form = useForm({
     peak_morning_ends_at: props.settings.peak_morning_ends_at,
     peak_evening_starts_at: props.settings.peak_evening_starts_at,
     peak_evening_ends_at: props.settings.peak_evening_ends_at,
+    pickup_surcharge_threshold_km: props.settings.pickup_surcharge_threshold_km,
+    pickup_surcharge_percent: props.settings.pickup_surcharge_percent,
     minimum_fare: props.settings.minimum_fare,
     average_ticket_price: props.settings.average_ticket_price,
     driver_stale_after_minutes: props.settings.driver_stale_after_minutes,
@@ -156,6 +158,41 @@ const submit = () => {
                             Valores de fábrica: 7-9am y 5-7pm, los horarios pico típicos de una ciudad — ajústelos si
                             no calzan con la realidad local.
                         </p>
+
+                        <!-- Cargo por trayecto de recogida (pedido explícito
+                             del usuario): bajo el umbral se sigue usando el
+                             colchón fijo de 0.8 km que ya existe, sin cargo
+                             aparte. Sobre el umbral se cobra distancia ×
+                             tarifa del conductor × este porcentaje, y el
+                             conductor decide si lo aplica al aceptar. -->
+                        <div class="pt-2 border-t border-arka-text-muted/10">
+                            <InputLabel value="Distancia de recogida a partir de la cual se cobra aparte (km)" />
+                            <TextInput
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="50"
+                                class="mt-1 block w-full"
+                                v-model="form.pickup_surcharge_threshold_km"
+                            />
+                            <InputError class="mt-1" :message="form.errors.pickup_surcharge_threshold_km" />
+                        </div>
+
+                        <div>
+                            <InputLabel value="Porcentaje que se cobra sobre ese trayecto (%)" />
+                            <TextInput
+                                type="number"
+                                min="0"
+                                max="200"
+                                class="mt-1 block w-full"
+                                v-model="form.pickup_surcharge_percent"
+                            />
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                Ejemplo: conductor a $0.30/km, 8 km hasta el cliente, 55% → 8 × 0.30 × 0.55 = $1.32.
+                                El conductor ve este desglose al recibir la solicitud y decide si lo cobra al cliente.
+                            </p>
+                            <InputError class="mt-1" :message="form.errors.pickup_surcharge_percent" />
+                        </div>
 
                         <div class="pt-2 border-t border-arka-text-muted/10">
                             <InputLabel value="Minutos sin ubicación antes de marcar a un conductor desconectado" />

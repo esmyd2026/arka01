@@ -79,7 +79,7 @@ class DriverVerificationController extends Controller
 
         $driverProfile->user->notify(new DriverVerificationResultPushNotification($driverProfile, true));
 
-        return back()->with('status', 'Conductor verificado.');
+        return back()->with('status', 'Conductor aprobado. Enviamos la bienvenida por notificación y correo.');
     }
 
     /**

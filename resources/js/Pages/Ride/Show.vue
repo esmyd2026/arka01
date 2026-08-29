@@ -2267,8 +2267,15 @@ function submitReview() {
                             <span class="text-arka-text-muted">Método de pago</span>
                             <span class="text-arka-text capitalize">{{ ride.payment_method ?? 'efectivo' }}</span>
                         </div>
+                        <!-- Cargo por trayecto de recogida (pedido explícito del usuario):
+                             solo aparece si el conductor lo cobró — columnas propias,
+                             separadas del tramo origen-destino, para trazabilidad. -->
+                        <div v-if="ride.pickup_fare_charged" class="flex items-center justify-between">
+                            <span class="text-arka-text-muted">Trayecto de recogida</span>
+                            <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · ${{ ride.pickup_fare }}</span>
+                        </div>
                         <div class="flex items-center justify-between">
-                            <span class="text-arka-text-muted">Distancia</span>
+                            <span class="text-arka-text-muted">Trayecto origen-destino</span>
                             <span class="text-arka-text">{{ Number(ride.distance_km).toFixed(1) }} km</span>
                         </div>
                         <div class="flex items-center justify-between">
@@ -2296,8 +2303,12 @@ function submitReview() {
                         <span class="text-arka-text-muted">Estado</span>
                         <span class="text-arka-text font-medium">{{ statusLabel[ride.status] }}</span>
                     </div>
+                    <div v-if="ride.pickup_fare_charged" class="flex items-center justify-between">
+                        <span class="text-arka-text-muted">Trayecto de recogida</span>
+                        <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · ${{ ride.pickup_fare }}</span>
+                    </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-arka-text-muted">Distancia</span>
+                        <span class="text-arka-text-muted">Trayecto origen-destino</span>
                         <span class="text-arka-text">{{ Number(ride.distance_km).toFixed(1) }} km</span>
                     </div>
                     <div class="flex items-center justify-between">

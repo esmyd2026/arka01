@@ -167,8 +167,19 @@ class RideDispatchAdvancer
                 ? max(15, min(300, (int) ($rideRequest->cooperative?->response_timeout_seconds ?? 30)))
                 : 30;
 
+            // Cargo por trayecto de recogida (pedido explícito del usuario):
+            // el candidato que sigue está en otro lugar — hay que
+            // recalcularlo para él, no arrastrar el del candidato anterior.
+            $pickupSurcharge = PriceCalculator::pickupSurchargeForDriver(
+                $nextDriverId,
+                (float) $rideRequest->origin_lat,
+                (float) $rideRequest->origin_lng,
+            );
+
             $rideRequest->update([
                 'driver_user_id' => $nextDriverId,
+                'pickup_distance_km' => $pickupSurcharge['distance_km'],
+                'pickup_fare' => $pickupSurcharge['fare'],
                 'offer_candidate_ids' => $remaining,
                 'current_offer_expires_at' => now()->addSeconds($timeoutSeconds),
                 'cooperative_assignment_status' => $rideRequest->cooperative_id ? 'awaiting_driver' : $rideRequest->cooperative_assignment_status,
@@ -298,9 +309,20 @@ class RideDispatchAdvancer
                     return null;
                 }
 
+                // Cargo por trayecto de recogida (pedido explícito del
+                // usuario): mismo criterio que advanceOrExpire(), el
+                // conductor que se activa acá también puede estar lejos.
+                $pickupSurcharge = PriceCalculator::pickupSurchargeForDriver(
+                    $candidateIds[0],
+                    (float) $rideRequest->origin_lat,
+                    (float) $rideRequest->origin_lng,
+                );
+
                 $rideRequest->update([
                     'status' => 'pending',
                     'driver_user_id' => $candidateIds[0],
+                    'pickup_distance_km' => $pickupSurcharge['distance_km'],
+                    'pickup_fare' => $pickupSurcharge['fare'],
                     'smart_dispatch_version' => config('smart_dispatch.enabled', true) ? SmartDispatchScorer::VERSION : null,
                     'smart_dispatch_snapshot' => SmartDispatchScorer::safeSnapshot(
                         $candidateIds,

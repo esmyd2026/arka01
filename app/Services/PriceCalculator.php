@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\DriverProfile;
 use App\Models\PricingSetting;
 use Carbon\Carbon;
 
@@ -136,5 +137,64 @@ class PriceCalculator
         }
 
         return $hour >= $start && $hour < $end;
+    }
+
+    /**
+     * Cargo aparte por el trayecto que el conductor recorre para ir a
+     * buscar al cliente (pedido explícito del usuario) — independiente de
+     * suggestedPrice() a propósito, para no tocar su firma ni el padding
+     * fijo de DISTANCE_PADDING_KM que ya usan los ~15 llamadores existentes
+     * (Expreso, paradas, WhatsApp, tests). Bajo el umbral configurado
+     * (`pricing_settings.pickup_surcharge_threshold_km`, editable desde
+     * /admin/tarifas) ese padding fijo ya cubre el acercamiento y este
+     * método no agrega nada — solo sobre el umbral se calcula el cargo real:
+     * distancia_recogida × tarifa_del_conductor × porcentaje configurado
+     * (ejemplo del usuario: 8 km a $0.30/km × 55% = $1.32). Quien llama a
+     * esto decide si lo suma al precio final o no (ver
+     * App\Services\Ride\RideRequestResponder::accept(), el conductor elige
+     * cobrarlo o no al aceptar la solicitud).
+     *
+     * @return array{distance_km: float, exceeds_threshold: bool, fare: float}
+     */
+    public static function pickupSurcharge(float $pickupDistanceKm, float $ratePerKm, ?PricingSetting $settings = null): array
+    {
+        $settings ??= PricingSetting::current();
+        $exceedsThreshold = $pickupDistanceKm > (float) $settings->pickup_surcharge_threshold_km;
+
+        return [
+            'distance_km' => round($pickupDistanceKm, 2),
+            'exceeds_threshold' => $exceedsThreshold,
+            'fare' => $exceedsThreshold
+                ? round($pickupDistanceKm * $ratePerKm * ($settings->pickup_surcharge_percent / 100), 2)
+                : 0.0,
+        ];
+    }
+
+    /**
+     * Distancia y cargo de recogida para el candidato ACTUAL de una
+     * solicitud — un solo lugar para los tres puntos que necesitan esto:
+     * App\Services\Ride\RideRequestCreator::create() al armar la solicitud,
+     * y App\Services\RideDispatchAdvancer::advanceOrExpire()/
+     * activateNextWaitingRequest() al pasar al siguiente candidato de la
+     * cascada (cada conductor está en otro lugar, hay que recalcular). Sin
+     * ubicación conocida del conductor no hay nada que calcular — se deja en
+     * null, no se inventa un cargo.
+     *
+     * @return array{distance_km: ?float, fare: ?float}
+     */
+    public static function pickupSurchargeForDriver(int $driverUserId, float $originLat, float $originLng): array
+    {
+        $profile = DriverProfile::query()->where('user_id', $driverUserId)->first();
+
+        if (! $profile || $profile->current_lat === null || $profile->current_lng === null) {
+            return ['distance_km' => null, 'fare' => null];
+        }
+
+        $distanceKm = Haversine::distanceKm($originLat, $originLng, (float) $profile->current_lat, (float) $profile->current_lng);
+
+        return [
+            'distance_km' => round($distanceKm, 2),
+            'fare' => self::pickupSurcharge($distanceKm, (float) ($profile->rate_per_km ?? 0))['fare'],
+        ];
     }
 }

@@ -338,6 +338,15 @@ class RideRequestCreator
             : $this->referenceRatePerKm($fleet, $driverUserId);
         $driverMinimumFareForStops = $this->referenceMinimumFare($driverUserId);
 
+        // Cargo por trayecto de recogida (pedido explícito del usuario): solo
+        // tiene sentido para el candidato puntual que va a recibir la oferta
+        // primero — sin conductor resuelto todavía (bolsa vacía que quedó
+        // "waiting", o cooperativa esperando asignación manual) no hay a
+        // quién calcularle la distancia, queda en null.
+        $pickupSurcharge = $driverUserId
+            ? PriceCalculator::pickupSurchargeForDriver($driverUserId, (float) $validated['origin_lat'], (float) $validated['origin_lng'])
+            : ['distance_km' => null, 'fare' => null];
+
         $stopsData = [];
         $stopsPrice = 0.0;
         $previousLat = (float) $validated['origin_lat'];
@@ -404,7 +413,7 @@ class RideRequestCreator
             $validated, $fleet, $client, $distanceKm, $offeredPrice, $isScheduled, $scheduledAt,
             $driverUserId, $dispatchPool, $offerCandidateIds, $currentOfferExpiresAt, $needsTrunk, $passengerCount, $requestStatus,
             $cooperative, $cooperativeCandidateIds, $cooperativeOfferExpiresAt, $cooperativeAssignmentStatus,
-            $smartDispatchVersion, $smartDispatchSnapshot, $stopsPrice, $stopsData,
+            $smartDispatchVersion, $smartDispatchSnapshot, $stopsPrice, $stopsData, $pickupSurcharge,
         ) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
@@ -423,6 +432,8 @@ class RideRequestCreator
                 'destination_address' => $validated['destination_address'] ?? null,
                 'destination_sector_id' => $validated['destination_sector_id'] ?? null,
                 'distance_km' => $distanceKm,
+                'pickup_distance_km' => $pickupSurcharge['distance_km'],
+                'pickup_fare' => $pickupSurcharge['fare'],
                 'payment_method' => $validated['payment_method'] ?? 'efectivo',
                 'status' => $requestStatus,
                 'current_offered_price' => $offeredPrice,

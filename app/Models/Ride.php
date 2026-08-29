@@ -26,6 +26,14 @@ class Ride extends Model
         'destination_address',
         'destination_sector_id',
         'distance_km',
+        // Cargo por trayecto de recogida (pedido explícito del usuario):
+        // snapshot final de lo ya calculado en `ride_requests`, más la
+        // decisión real del conductor al aceptar — ver
+        // App\Services\Ride\RideRequestResponder::accept(). Columnas propias
+        // (no mezcladas en `price`) para poder armar indicadores después.
+        'pickup_distance_km',
+        'pickup_fare',
+        'pickup_fare_charged',
         'payment_method',
         'notes',
         'round_trip',
@@ -57,6 +65,9 @@ class Ride extends Model
         'destination_lat' => 'decimal:7',
         'destination_lng' => 'decimal:7',
         'distance_km' => 'decimal:2',
+        'pickup_distance_km' => 'decimal:2',
+        'pickup_fare' => 'decimal:2',
+        'pickup_fare_charged' => 'boolean',
         'round_trip' => 'boolean',
         'rate_per_km_snapshot' => 'decimal:2',
         'price' => 'decimal:2',

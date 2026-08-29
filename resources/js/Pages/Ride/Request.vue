@@ -47,6 +47,11 @@ const props = defineProps({
     // mostraba "0.7 km × $0.45/km = $0.31" para una carrera que en realidad
     // iba a cobrar el mínimo configurado.
     minimumFare: { type: Number, required: true },
+    // Cargo por trayecto de recogida (pedido explícito del usuario): solo un
+    // aviso con el % configurado — nunca el monto, que depende de a qué
+    // conductor le toque la solicitud (se calcula recién del lado del
+    // servidor, ver App\Services\PriceCalculator::pickupSurcharge()).
+    pickupSurchargePercent: { type: Number, required: true },
     // Pedido explícito del usuario ("guardá las que ya ha realizado para que
     // aparezcan como favoritas"): direcciones que este cliente ya usó antes.
     frequentPlaces: { type: Array, default: () => [] },
@@ -2163,6 +2168,15 @@ function submit() {
                             No puede ser menor al precio estimado (${{ estimatedPrice.toFixed(2) }}).
                         </p>
                         <InputError :message="form.errors.offered_price" />
+
+                        <!-- Cargo por trayecto de recogida (pedido explícito
+                             del usuario): solo un aviso, sin monto — el
+                             conductor decide si lo cobra según qué tan lejos
+                             esté, recién al recibir la solicitud. -->
+                        <p class="text-xs italic text-emerald-600 dark:text-emerald-400">
+                            🍃 Puede aplicar un cargo adicional de hasta el {{ pickupSurchargePercent }}% según la
+                            distancia que el conductor deba recorrer para buscarte.
+                        </p>
                     </div>
 
                     <!-- Fila de pago tocable (sección 18: "no convertir la

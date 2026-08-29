@@ -40,6 +40,8 @@ class AdminPricingMaintenanceTest extends TestCase
             'peak_morning_ends_at' => 9,
             'peak_evening_starts_at' => 17,
             'peak_evening_ends_at' => 19,
+            'pickup_surcharge_threshold_km' => 3,
+            'pickup_surcharge_percent' => 55,
             'minimum_fare' => 2.5,
             'average_ticket_price' => 3.5,
             'driver_stale_after_minutes' => 5,
@@ -54,9 +56,41 @@ class AdminPricingMaintenanceTest extends TestCase
             'peak_morning_ends_at' => 9,
             'peak_evening_starts_at' => 17,
             'peak_evening_ends_at' => 19,
+            'pickup_surcharge_threshold_km' => 3,
+            'pickup_surcharge_percent' => 55,
             'minimum_fare' => 2.5,
             'average_ticket_price' => 3.5,
             'driver_stale_after_minutes' => 5,
+        ]);
+    }
+
+    /**
+     * Cargo por trayecto de recogida (pedido explícito del usuario): umbral
+     * y porcentaje configurables desde /admin/tarifas, no constantes.
+     */
+    public function test_an_admin_can_update_the_pickup_surcharge_settings(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.pricing.update'), [
+            'night_surcharge_percent' => 20,
+            'night_starts_at' => 20,
+            'night_ends_at' => 6,
+            'peak_surcharge_percent' => 15,
+            'peak_morning_starts_at' => 7,
+            'peak_morning_ends_at' => 9,
+            'peak_evening_starts_at' => 17,
+            'peak_evening_ends_at' => 19,
+            'pickup_surcharge_threshold_km' => 4.5,
+            'pickup_surcharge_percent' => 60,
+            'minimum_fare' => 2,
+            'average_ticket_price' => 3,
+            'driver_stale_after_minutes' => 5,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('pricing_settings', [
+            'pickup_surcharge_threshold_km' => 4.5,
+            'pickup_surcharge_percent' => 60,
         ]);
     }
 
@@ -78,6 +112,8 @@ class AdminPricingMaintenanceTest extends TestCase
             'peak_morning_ends_at' => 9,
             'peak_evening_starts_at' => 17,
             'peak_evening_ends_at' => 19,
+            'pickup_surcharge_threshold_km' => 3,
+            'pickup_surcharge_percent' => 55,
             'minimum_fare' => 2,
             'average_ticket_price' => 3,
             'driver_stale_after_minutes' => 10,

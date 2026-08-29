@@ -121,6 +121,11 @@ watch(
 const counterAmounts = ref({});
 const processingRequestId = ref(null);
 
+// Cargo por trayecto de recogida (pedido explícito del usuario): el
+// conductor decide, solicitud por solicitud, si cobra ese cargo al aceptar —
+// arranca sin marcar, nunca se cobra por defecto.
+const chargePickup = ref({});
+
 const ownedChannelListeners = [];
 let requestSyncTimer = null;
 let requestSyncRunning = false;
@@ -359,7 +364,9 @@ onBeforeUnmount(() => {
 function acceptRequest(id) {
     if (processingRequestId.value) return;
     processingRequestId.value = id;
-    router.post(route('ride-requests.accept', id), {}, {
+    router.post(route('ride-requests.accept', id), {
+        charge_pickup_fee: chargePickup.value[id] ?? false,
+    }, {
         preserveScroll: true,
         onFinish: () => (processingRequestId.value = null),
     });
@@ -745,6 +752,27 @@ function confirmRaiseOffer(id) {
                             </p>
 
                             <div v-else class="space-y-3">
+                                <!-- Cargo por trayecto de recogida (pedido explícito del
+                                     usuario): solo aparece cuando el cliente está lo bastante
+                                     lejos como para superar el umbral configurado en
+                                     /admin/tarifas — el conductor ve el desglose separado
+                                     (recogida vs. origen-destino) y decide si lo cobra. -->
+                                <div v-if="r.pickup_fare > 0" class="space-y-2 rounded-arka border border-arka-lime/25 bg-arka-lime/10 p-3">
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-lime">Trayecto de recogida</p>
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km</span>
+                                        <span class="text-arka-text font-medium">${{ Number(r.pickup_fare).toFixed(2) }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-arka-text-muted">Origen → destino · {{ Number(r.distance_km).toFixed(1) }} km</span>
+                                        <span class="text-arka-text font-medium">${{ Number(r.current_offered_price).toFixed(2) }}</span>
+                                    </div>
+                                    <label class="flex items-center gap-2 pt-1">
+                                        <input type="checkbox" v-model="chargePickup[r.id]" class="text-arka-primary rounded" />
+                                        <span class="text-sm text-arka-text">Cobrar ${{ Number(r.pickup_fare).toFixed(2) }} de recogida al cliente</span>
+                                    </label>
+                                </div>
+
                                 <PrimaryButton class="min-h-12 w-full justify-center text-sm" :disabled="processingRequestId === r.id || secondsLeft(r) === 0" @click="acceptRequest(r.id)">
                                     {{ processingRequestId === r.id ? 'Procesando…' : 'Aceptar carrera' }}
                                 </PrimaryButton>

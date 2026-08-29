@@ -132,6 +132,11 @@ class RideRequestController extends Controller
             // frontend puede replicar el mismo `max(...)` y avisar cuándo se
             // está aplicando el mínimo en vez del cálculo por km.
             'minimumFare' => (float) PricingSetting::current()->minimum_fare,
+            // Cargo por trayecto de recogida (pedido explícito del usuario):
+            // al cliente solo se le muestra el % configurado, como aviso
+            // informativo — nunca el monto, que depende de qué conductor le
+            // toque (ver App\Services\PriceCalculator::pickupSurcharge()).
+            'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
             // Pedido explícito del usuario ("guardá las que ya ha realizado
             // para que aparezcan como favoritas"): direcciones que este
             // cliente ya usó antes (de origen o de destino, da igual — "casa"
@@ -308,7 +313,10 @@ class RideRequestController extends Controller
      */
     public function accept(Request $request, RideRequest $rideRequest): RedirectResponse
     {
-        $ride = $this->rideRequestResponder->accept($rideRequest, $request->user());
+        // Cargo por trayecto de recogida (pedido explícito del usuario): el
+        // conductor decide cobrarlo o no al momento de aceptar, ver el
+        // checkbox en Ride/Index.vue.
+        $ride = $this->rideRequestResponder->accept($rideRequest, $request->user(), $request->boolean('charge_pickup_fee'));
 
         return redirect()->route('rides.show', $ride);
     }

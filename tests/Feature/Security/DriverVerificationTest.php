@@ -9,8 +9,10 @@ use App\Notifications\AdminDriverLifecyclePushNotification;
 use App\Notifications\DriverVerificationResultPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\TestCase;
 
 /**
@@ -205,7 +207,21 @@ class DriverVerificationTest extends TestCase
         $this->assertSame('approved', $profile->fresh()->verification_status);
         $this->assertSame($admin->id, $profile->fresh()->verified_by);
         $this->assertSame('professional', $profile->fresh()->public_category);
-        Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
+        Notification::assertSentTo(
+            $driver,
+            DriverVerificationResultPushNotification::class,
+            function (DriverVerificationResultPushNotification $notification) use ($driver): bool {
+                $channels = $notification->via($driver);
+                $mail = $notification->toMail($driver);
+
+                return in_array(WebPushChannel::class, $channels, true)
+                    && in_array('mail', $channels, true)
+                    && $mail instanceof MailMessage
+                    && $mail->subject === '¡Bienvenido a la red de confianza Arka01!'
+                    && $mail->actionText === 'Ir a mi panel de conductor'
+                    && $mail->actionUrl === route('dashboard');
+            }
+        );
     }
 
     public function test_an_admin_cannot_approve_an_incomplete_driver_profile(): void
@@ -256,7 +272,11 @@ class DriverVerificationTest extends TestCase
 
         $this->assertSame('rejected', $profile->fresh()->verification_status);
         $this->assertSame('Foto de licencia borrosa.', $profile->fresh()->verification_rejection_reason);
-        Notification::assertSentTo($driver, DriverVerificationResultPushNotification::class);
+        Notification::assertSentTo(
+            $driver,
+            DriverVerificationResultPushNotification::class,
+            fn (DriverVerificationResultPushNotification $notification): bool => $notification->via($driver) === [WebPushChannel::class]
+        );
     }
 
     public function test_rejecting_verification_disconnects_the_driver(): void

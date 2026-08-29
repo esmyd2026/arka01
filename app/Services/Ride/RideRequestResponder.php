@@ -29,7 +29,18 @@ use Illuminate\Validation\ValidationException;
  */
 class RideRequestResponder
 {
-    public function accept(RideRequest $rideRequest, User $actingUser): Ride
+    /**
+     * @param  bool  $chargePickupFee  Pedido explícito del usuario: el
+     *                                 desglose del trayecto de recogida se le
+     *                                 muestra al conductor antes de aceptar,
+     *                                 pero es él quien decide si lo cobra al
+     *                                 cliente o no — acá se toma esa decisión
+     *                                 real. Por WhatsApp esto siempre llega en
+     *                                 `false` (los botones interactivos no
+     *                                 dan lugar a una tercera opción, ver
+     *                                 App\Services\Chatbot\WhatsAppRideActionHandler).
+     */
+    public function accept(RideRequest $rideRequest, User $actingUser, bool $chargePickupFee = false): Ride
     {
         $userId = $actingUser->id;
 
@@ -56,7 +67,7 @@ class RideRequestResponder
             $driverId = $userId;
         }
 
-        $ride = DB::transaction(function () use ($rideRequest, $driverId) {
+        $ride = DB::transaction(function () use ($rideRequest, $driverId, $chargePickupFee) {
             $locked = RideRequest::query()->lockForUpdate()->findOrFail($rideRequest->id);
 
             if (! in_array($locked->status, ['pending', 'negotiating'], true)) {
@@ -78,6 +89,13 @@ class RideRequestResponder
 
             $ratePerKm = User::find($driverId)?->driverProfile?->rate_per_km ?? 0;
 
+            // Cargo por trayecto de recogida (pedido explícito del usuario):
+            // `pickup_fare` en la solicitud es solo la PROPUESTA calculada
+            // para este candidato — recién acá se vuelve un cargo real, y
+            // solo si el conductor lo confirmó.
+            $pickupFare = (float) ($locked->pickup_fare ?? 0);
+            $chargesPickupFee = $chargePickupFee && $pickupFare > 0;
+
             $ride = Ride::query()->create([
                 'ride_request_id' => $locked->id,
                 'fleet_id' => $locked->fleet_id,
@@ -92,11 +110,14 @@ class RideRequestResponder
                 'destination_address' => $locked->destination_address,
                 'destination_sector_id' => $locked->destination_sector_id,
                 'distance_km' => $locked->distance_km,
+                'pickup_distance_km' => $locked->pickup_distance_km,
+                'pickup_fare' => $locked->pickup_fare,
+                'pickup_fare_charged' => $chargesPickupFee,
                 'payment_method' => $locked->payment_method,
                 'notes' => $locked->notes,
                 'round_trip' => $locked->round_trip,
                 'rate_per_km_snapshot' => $ratePerKm,
-                'price' => $locked->current_offered_price,
+                'price' => $locked->current_offered_price + ($chargesPickupFee ? $pickupFare : 0),
                 'stops_price' => $locked->stops_price,
                 'status' => $locked->is_scheduled ? 'scheduled' : 'in_progress',
                 'started_at' => $locked->is_scheduled ? null : now(),

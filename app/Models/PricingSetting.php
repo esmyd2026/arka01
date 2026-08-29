@@ -24,6 +24,13 @@ class PricingSetting extends Model
         'peak_morning_ends_at',
         'peak_evening_starts_at',
         'peak_evening_ends_at',
+        // Cargo por trayecto de recogida (pedido explícito del usuario): el
+        // conductor recorre esta distancia (Haversine, su ubicación actual
+        // hasta el origen del cliente) sin pasajero — bajo el umbral se
+        // sigue usando el colchón fijo de 0.8 km ya existente, sobre el
+        // umbral se cobra aparte. Ver App\Services\PriceCalculator::pickupSurcharge().
+        'pickup_surcharge_threshold_km',
+        'pickup_surcharge_percent',
         'minimum_fare',
         // Ticket promedio por carrera (pedido explícito del usuario): valor
         // global que alimenta la proyección de ganancia mensual mostrada en

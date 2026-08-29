@@ -37,6 +37,14 @@ class PricingSettingController extends Controller
             'peak_morning_ends_at' => ['required', 'integer', 'min:0', 'max:23'],
             'peak_evening_starts_at' => ['required', 'integer', 'min:0', 'max:23'],
             'peak_evening_ends_at' => ['required', 'integer', 'min:0', 'max:23'],
+            // Cargo por trayecto de recogida (pedido explícito del usuario):
+            // bajo el umbral se sigue usando el colchón fijo de 0.8 km que ya
+            // existe (App\Services\PriceCalculator::DISTANCE_PADDING_KM), sin
+            // cargo aparte. Sobre el umbral, se cobra distancia_recogida ×
+            // tarifa_del_conductor × este porcentaje — ver
+            // App\Services\PriceCalculator::pickupSurcharge().
+            'pickup_surcharge_threshold_km' => ['required', 'numeric', 'min:0', 'max:50'],
+            'pickup_surcharge_percent' => ['required', 'integer', 'min:0', 'max:200'],
             // Tarifa base mínima (pedido explícito del usuario): toda la
             // plataforma, no por conductor (eso ya existe como campo
             // opcional propio del conductor en su perfil, para tarifas MÁS

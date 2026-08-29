@@ -51,4 +51,33 @@ class PriceCalculatorTest extends TestCase
         $this->assertEqualsWithDelta(round($result['total'] * 10) / 10, $result['total'], 0.0001);
         $this->assertGreaterThanOrEqual($result['base'] + $result['night_surcharge'] + $result['peak_surcharge'], $result['total']);
     }
+
+    /**
+     * Cargo por trayecto de recogida (pedido explícito del usuario): bajo el
+     * umbral configurado, el colchón fijo de 0.8 km ya existente sigue
+     * cubriendo el acercamiento — este método no agrega nada.
+     */
+    public function test_pickup_surcharge_is_zero_below_the_configured_threshold(): void
+    {
+        PricingSetting::current()->update(['pickup_surcharge_threshold_km' => 3, 'pickup_surcharge_percent' => 55]);
+
+        $result = PriceCalculator::pickupSurcharge(pickupDistanceKm: 2.5, ratePerKm: 0.30);
+
+        $this->assertFalse($result['exceeds_threshold']);
+        $this->assertSame(0.0, $result['fare']);
+    }
+
+    /**
+     * Ejemplo exacto dado por el usuario: conductor a $0.30/km, 8 km hasta
+     * el cliente, 55% de recargo → 8 × 0.30 × 0.55 = $1.32.
+     */
+    public function test_pickup_surcharge_matches_the_example_given_by_the_user(): void
+    {
+        PricingSetting::current()->update(['pickup_surcharge_threshold_km' => 3, 'pickup_surcharge_percent' => 55]);
+
+        $result = PriceCalculator::pickupSurcharge(pickupDistanceKm: 8, ratePerKm: 0.30);
+
+        $this->assertTrue($result['exceeds_threshold']);
+        $this->assertEqualsWithDelta(1.32, $result['fare'], 0.001);
+    }
 }

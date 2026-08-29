@@ -1294,6 +1294,69 @@ class RideRequestFlowTest extends TestCase
         ]);
     }
 
+    /**
+     * Cargo por trayecto de recogida (pedido explícito del usuario): el
+     * conductor decide si lo cobra al aceptar — con el flag en `true`, el
+     * precio final de la Ride lo incluye y queda marcado como cobrado.
+     */
+    public function test_driver_can_charge_the_pickup_fee_when_accepting(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'distance_km' => 10,
+            'status' => 'pending',
+            'current_offered_price' => 10.0,
+            'pickup_distance_km' => 8.0,
+            'pickup_fare' => 1.32,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.accept', $rideRequest), ['charge_pickup_fee' => true])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('rides', [
+            'ride_request_id' => $rideRequest->id,
+            'pickup_distance_km' => 8.0,
+            'pickup_fare' => 1.32,
+            'pickup_fare_charged' => true,
+            'price' => '11.32',
+        ]);
+    }
+
+    /**
+     * Simétrico al anterior: sin el flag (comportamiento por defecto), el
+     * cargo queda registrado como propuesta pero NO se cobra.
+     */
+    public function test_driver_does_not_charge_the_pickup_fee_by_default(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => Fleet::where('owner_user_id', $client->id)->first()->id,
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'distance_km' => 10,
+            'status' => 'pending',
+            'current_offered_price' => 10.0,
+            'pickup_distance_km' => 8.0,
+            'pickup_fare' => 1.32,
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('ride-requests.accept', $rideRequest))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('rides', [
+            'ride_request_id' => $rideRequest->id,
+            'pickup_fare_charged' => false,
+            'price' => '10.00',
+        ]);
+    }
+
     public function test_a_driver_cannot_accept_a_second_immediate_ride_while_busy(): void
     {
         [$client, $driver, $fleet] = $this->clientWithFleetDriver();

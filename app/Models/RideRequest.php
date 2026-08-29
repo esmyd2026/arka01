@@ -37,6 +37,13 @@ class RideRequest extends Model
         'destination_address',
         'destination_sector_id',
         'distance_km',
+        // Cargo por trayecto de recogida (pedido explícito del usuario): el
+        // monto PROPUESTO al candidato actual — se recalcula en cada salto
+        // del despacho secuencial (ver App\Services\RideDispatchAdvancer),
+        // todavía no es una decisión tomada. El conductor recién elige
+        // cobrarlo o no al aceptar (ver `rides.pickup_fare_charged`).
+        'pickup_distance_km',
+        'pickup_fare',
         'payment_method',
         'status',
         'current_offered_price',
@@ -66,6 +73,8 @@ class RideRequest extends Model
         'destination_lat' => 'decimal:7',
         'destination_lng' => 'decimal:7',
         'distance_km' => 'decimal:2',
+        'pickup_distance_km' => 'decimal:2',
+        'pickup_fare' => 'decimal:2',
         'current_offered_price' => 'decimal:2',
         'stops_price' => 'decimal:2',
         'negotiation_round' => 'integer',
