@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\FleetMember;
 use App\Models\PlanPromotion;
 use App\Models\PricingSetting;
 use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
+use App\Services\Plan\PlanUsageCalculator;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppConfig;
 use Illuminate\Database\Eloquent\Collection;
@@ -24,7 +24,10 @@ use Inertia\Response;
  */
 class MyPlanController extends Controller
 {
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly PlanUsageCalculator $planUsage,
+    ) {}
 
     private function pendingRequestFor(int $userId, string $ownerType): ?SubscriptionRequest
     {
@@ -141,10 +144,7 @@ class MyPlanController extends Controller
         $user = $request->user();
         $limits = $this->planLimits->forDriver($user);
 
-        $activeClientCount = FleetMember::query()
-            ->where('driver_user_id', $user->id)
-            ->whereNull('left_at')
-            ->count();
+        $activeClientCount = $this->planUsage->activeClientCountForDriver($user);
 
         // Solo planes activos, salvo que sea justo el que el usuario ya
         // tiene contratado (un plan discontinuado no debería desaparecer
@@ -165,11 +165,7 @@ class MyPlanController extends Controller
             'plans' => $this->attachCooperativeDiscount($plans, $user),
             'currentPlan' => $limits,
             'usedClients' => $activeClientCount,
-            'changes' => $user->subscriptionChanges()
-                ->whereHas('newPlan', fn ($query) => $query->where('owner_type', 'driver'))
-                ->with(['oldPlan', 'newPlan'])
-                ->latest()
-                ->get(),
+            'changes' => $this->planUsage->changesFor($user, 'driver'),
             'pendingRequest' => $this->pendingRequestFor($user->id, 'driver'),
             'requestHistory' => $this->requestHistoryFor($user->id, 'driver'),
         ]);
@@ -183,13 +179,7 @@ class MyPlanController extends Controller
         // Máximo de conductores en UNA SOLA flota (no la suma de todas) —
         // mismo cálculo que App\Services\SubscriptionPlanEligibility, para
         // poder atenuar "Elegir" en el frontend si un plan ya no alcanza.
-        $maxDriversInAnyFleet = FleetMember::query()
-            ->whereIn('fleet_id', $user->fleets()->pluck('id'))
-            ->whereNull('left_at')
-            ->selectRaw('fleet_id, count(*) as total')
-            ->groupBy('fleet_id')
-            ->get()
-            ->max('total') ?? 0;
+        $maxDriversInAnyFleet = $this->planUsage->maxDriversInAnyFleetForClient($user);
 
         // Mismo criterio que el catálogo de conductor: nunca se manda un
         // plan de nivel inferior al vigente (sección 19).
@@ -203,13 +193,9 @@ class MyPlanController extends Controller
         return Inertia::render('Plan/Client', [
             'plans' => $this->attachActivePromotions($plans, $user),
             'currentPlan' => $limits,
-            'usedFleets' => $user->fleets()->count(),
+            'usedFleets' => $this->planUsage->usedFleetsForClient($user),
             'maxDriversInAnyFleet' => $maxDriversInAnyFleet,
-            'changes' => $user->subscriptionChanges()
-                ->whereHas('newPlan', fn ($query) => $query->where('owner_type', 'client'))
-                ->with(['oldPlan', 'newPlan'])
-                ->latest()
-                ->get(),
+            'changes' => $this->planUsage->changesFor($user, 'client'),
             'pendingRequest' => $this->pendingRequestFor($user->id, 'client'),
             'requestHistory' => $this->requestHistoryFor($user->id, 'client'),
         ]);
@@ -228,7 +214,7 @@ class MyPlanController extends Controller
         $user = $request->user();
         $limits = $this->planLimits->forCooperative($user);
 
-        $usedUnits = $user->cooperative?->activeDriverMemberships()->count() ?? 0;
+        $usedUnits = $this->planUsage->usedUnitsForCooperative($user);
 
         // Mismo criterio que los catálogos de conductor/cliente: nunca se
         // manda un plan de nivel inferior al vigente (sección 19), y un
@@ -245,11 +231,7 @@ class MyPlanController extends Controller
             'plans' => $this->attachActivePromotions($plans, $user),
             'currentPlan' => $limits,
             'usedUnits' => $usedUnits,
-            'changes' => $user->subscriptionChanges()
-                ->whereHas('newPlan', fn ($query) => $query->where('owner_type', 'cooperative'))
-                ->with(['oldPlan', 'newPlan'])
-                ->latest()
-                ->get(),
+            'changes' => $this->planUsage->changesFor($user, 'cooperative'),
             'pendingRequest' => $this->pendingRequestFor($user->id, 'cooperative'),
             'requestHistory' => $this->requestHistoryFor($user->id, 'cooperative'),
             // Tarjeta "Hablemos" para cooperativas grandes (pedido explícito

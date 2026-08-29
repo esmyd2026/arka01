@@ -47,11 +47,14 @@ const floatingRadio = ref(null);
 const bubblePosition = ref(null);
 const draggingBubble = ref(false);
 const dragOffset = { x: 0, y: 0 };
-const BUBBLE_POSITION_KEY = 'arka-radio-bubble-position-v1';
+// La versión cambia cuando se modifica la posición inicial para que una
+// ubicación antigua guardada no siga dejando la radio sobre los controles de
+// cancelar/completar carrera.
+const BUBBLE_POSITION_KEY = 'arka-radio-bubble-position-v2';
 
 const floatingRadioStyle = computed(() => bubblePosition.value
     ? { left: `${bubblePosition.value.x}px`, top: `${bubblePosition.value.y}px` }
-    : { right: '0.75rem', bottom: props.hideBottomNav ? '1rem' : '6rem' });
+    : { right: '0.75rem', top: '38%' });
 
 function clampBubblePosition(position) {
     const rect = floatingRadio.value?.getBoundingClientRect();
@@ -381,7 +384,12 @@ async function syncRadioAvailability() {
         }
 
         activeChannels.value = Array.isArray(context.channels) ? context.channels : [context];
-        const selected = activeChannels.value.find((channel) => channel.public_id === config.value?.publicId)
+        // Durante su propia solicitud/carrera el canal principal siempre debe
+        // ser el personal. Si solo está acompañando a un familiar o compañero,
+        // conserva el canal que escucha o usa el primero autorizado.
+        const ownChannel = activeChannels.value.find((channel) => channel.is_owner);
+        const selected = ownChannel
+            || activeChannels.value.find((channel) => channel.public_id === config.value?.publicId)
             || activeChannels.value[0];
 
         if (config.value?.roomId && config.value.roomId !== selected.room_id) {
@@ -399,6 +407,16 @@ async function syncRadioAvailability() {
             members: selected.members || [],
         };
         ridePhase.value = selected.phase;
+
+        // Entrar al canal no necesita permiso de micrófono. Lo conectamos en
+        // cuanto comienza la solicitud/carrera para que pueda escuchar sin
+        // tener que encontrar y pulsar primero la burbuja. El navegador aún
+        // puede pedir un toque para habilitar reproducción de audio, caso en
+        // que se mantiene el aviso específico ya existente.
+        if (!connected.value && connectionState.value !== 'connecting') {
+            await nextTick();
+            connectRadio();
+        }
     } catch (error) {
         // Una falla temporal de red no debe esconder una radio que ya estaba
         // autorizada. El siguiente control vuelve a conciliar el estado.
@@ -722,7 +740,7 @@ function openRadio() {
     isOpen.value = true;
 }
 
-function selectChannel(channel) {
+async function selectChannel(channel) {
     if (!channel || channel.public_id === config.value?.publicId) return;
     disconnectRadio();
     config.value = {
@@ -736,6 +754,8 @@ function selectChannel(channel) {
         members: channel.members || [],
     };
     ridePhase.value = channel.phase;
+    await nextTick();
+    connectRadio();
 }
 
 async function shareChannel() {

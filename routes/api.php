@@ -3,12 +3,17 @@
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ConfigController;
+use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\ExpressApplicationController;
+use App\Http\Controllers\Api\V1\ExpressIncidentController;
+use App\Http\Controllers\Api\V1\ExpressRouteCompanionController;
 use App\Http\Controllers\Api\V1\ExpressRouteController;
 use App\Http\Controllers\Api\V1\FleetController;
+use App\Http\Controllers\Api\V1\PlanController;
 use App\Http\Controllers\Api\V1\RideController;
 use App\Http\Controllers\Api\V1\RideRequestController;
+use App\Http\Controllers\Api\V1\SupportController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -45,6 +50,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
         Route::delete('/account', [AccountController::class, 'destroy'])->name('account.destroy');
+        Route::put('/device/push-token', [DeviceController::class, 'updatePushToken'])->name('device.push-token');
+        Route::get('/my-plan', [PlanController::class, 'mine'])->name('my-plan');
+
+        Route::get('/support', [SupportController::class, 'index'])->name('support.index');
+        Route::post('/support/messages', [SupportController::class, 'storeMessage'])->name('support.messages.store');
         Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
         Route::get('/fleet/{fleet}/search-drivers', [FleetController::class, 'searchDrivers'])
             ->middleware('throttle:30,1,api.fleet.search-drivers')
@@ -94,10 +104,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/rides/{ride}/messages', [RideController::class, 'sendMessage'])->name('rides.messages.store');
         Route::post('/rides/{ride}/review', [RideController::class, 'review'])->name('rides.review');
 
-        // /express-routes/mine y /express-routes/available van ANTES de
+        // /express-routes/mine, /available y /discover van ANTES de
         // /express-routes/{route}, mismo cuidado de orden que el resto de la API.
         Route::get('/express-routes/mine', [ExpressRouteController::class, 'mine'])->name('express-routes.mine');
         Route::get('/express-routes/available', [ExpressRouteController::class, 'available'])->name('express-routes.available');
+        Route::get('/express-routes/discover', [ExpressRouteCompanionController::class, 'discover'])->name('express-route-companions.discover');
         Route::post('/express-routes', [ExpressRouteController::class, 'store'])->name('express-routes.store');
         Route::get('/express-routes/{route}', [ExpressRouteController::class, 'show'])->name('express-routes.show');
         Route::put('/express-routes/{route}', [ExpressRouteController::class, 'update'])->name('express-routes.update');
@@ -108,6 +119,13 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/express-applications/{application}/accept', [ExpressApplicationController::class, 'accept'])->name('express-applications.accept');
         Route::post('/express-applications/{application}/reject', [ExpressApplicationController::class, 'reject'])->name('express-applications.reject');
         Route::post('/express-applications/{application}/withdraw', [ExpressApplicationController::class, 'withdraw'])->name('express-applications.withdraw');
+        Route::post('/express-routes/{route}/companions', [ExpressRouteCompanionController::class, 'store'])->name('express-route-companions.store');
+        Route::post('/express-companions/{companion}/accept', [ExpressRouteCompanionController::class, 'accept'])->name('express-route-companions.accept');
+        Route::post('/express-companions/{companion}/reject', [ExpressRouteCompanionController::class, 'reject'])->name('express-route-companions.reject');
+        Route::post('/express-companions/{companion}/leave', [ExpressRouteCompanionController::class, 'leave'])->name('express-route-companions.leave');
+        Route::post('/express-companions/{companion}/driver-accept', [ExpressRouteCompanionController::class, 'driverAccept'])->name('express-route-companions.driver-accept');
+        Route::post('/express-companions/{companion}/driver-reject', [ExpressRouteCompanionController::class, 'driverReject'])->name('express-route-companions.driver-reject');
+        Route::post('/express-routes/{route}/incidents', [ExpressIncidentController::class, 'store'])->name('express-incidents.store');
     });
 });
 

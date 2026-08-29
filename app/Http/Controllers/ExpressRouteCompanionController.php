@@ -4,11 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\ExpressRoute;
 use App\Models\ExpressRouteCompanion;
-use App\Notifications\ExpressCompanionApprovalPushNotification;
-use App\Services\Haversine;
+use App\Services\Express\ExpressRouteCompanionResponder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -17,15 +15,13 @@ use Inertia\Response;
  * del usuario): hoy un conductor no le conviene hacer un Expreso porque va
  * vacío a buscar a una sola persona por una sola carrera — si el dueño se
  * abre a que se sumen otros, el costo se reparte y el viaje sí le conviene.
+ *
+ * Lógica real en App\Services\Express\ExpressRouteCompanionResponder
+ * (roadmap app móvil, "full backend").
  */
 class ExpressRouteCompanionController extends Controller
 {
-    /**
-     * Radio de cercanía (km) para considerar que dos rutas "van por el mismo
-     * lado" — ni tan chico que no encuentre nada, ni tan grande que sugiera
-     * compartir con alguien que en la práctica queda lejos del recorrido.
-     */
-    private const MATCH_RADIUS_KM = 2.5;
+    public function __construct(private readonly ExpressRouteCompanionResponder $companionResponder) {}
 
     /**
      * El cliente busca Expresos abiertos a compartir cuyo origen y destino
@@ -35,41 +31,13 @@ class ExpressRouteCompanionController extends Controller
      */
     public function discover(Request $request): Response
     {
-        $originLat = $request->float('origin_lat') ?: null;
-        $originLng = $request->float('origin_lng') ?: null;
-        $destinationLat = $request->float('destination_lat') ?: null;
-        $destinationLng = $request->float('destination_lng') ?: null;
-
-        $routes = collect();
-
-        if ($originLat !== null && $destinationLat !== null) {
-            $alreadyRequestedRouteIds = ExpressRouteCompanion::query()
-                ->where('passenger_user_id', $request->user()->id)
-                ->whereIn('status', ['pending', 'accepted'])
-                ->pluck('express_route_id');
-
-            $routes = ExpressRoute::query()
-                ->where('share_enabled', true)
-                ->whereIn('status', ['open', 'active'])
-                ->where('client_user_id', '!=', $request->user()->id)
-                ->whereNotIn('id', $alreadyRequestedRouteIds)
-                ->with('client')
-                ->get()
-                ->map(function (ExpressRoute $route) use ($originLat, $originLng, $destinationLat, $destinationLng) {
-                    $route->origin_distance_km = round(Haversine::distanceKm($originLat, $originLng, (float) $route->origin_lat, (float) $route->origin_lng), 2);
-                    $route->destination_distance_km = round(Haversine::distanceKm($destinationLat, $destinationLng, (float) $route->destination_lat, (float) $route->destination_lng), 2);
-                    // Precio por persona SI el que se suma llega a aceptarse (todavía
-                    // no está aceptado, es la vidriera para decidir si conviene pedir).
-                    $route->price_per_person = round((float) $route->offered_price / (2 + $route->acceptedCompanionsCount()), 2);
-
-                    return $route;
-                })
-                ->filter(fn (ExpressRoute $route) => $route->origin_distance_km <= self::MATCH_RADIUS_KM
-                    && $route->destination_distance_km <= self::MATCH_RADIUS_KM
-                    && $route->hasRoomForCompanions())
-                ->sortBy(fn (ExpressRoute $route) => $route->origin_distance_km + $route->destination_distance_km)
-                ->values();
-        }
+        $routes = $this->companionResponder->discover(
+            $request->user(),
+            $request->float('origin_lat') ?: null,
+            $request->float('origin_lng') ?: null,
+            $request->float('destination_lat') ?: null,
+            $request->float('destination_lng') ?: null,
+        );
 
         return Inertia::render('Express/Discover', [
             'routes' => $routes,
@@ -81,28 +49,6 @@ class ExpressRouteCompanionController extends Controller
      */
     public function store(Request $request, ExpressRoute $route): RedirectResponse
     {
-        if ($route->client_user_id === $request->user()->id) {
-            abort(403);
-        }
-
-        if (! $route->hasRoomForCompanions()) {
-            throw ValidationException::withMessages([
-                'route' => 'Este Expreso ya no está abierto a compartir (sin cupo, o el dueño lo desactivó).',
-            ]);
-        }
-
-        $alreadyRequested = ExpressRouteCompanion::query()
-            ->where('express_route_id', $route->id)
-            ->where('passenger_user_id', $request->user()->id)
-            ->whereIn('status', ['pending', 'accepted'])
-            ->exists();
-
-        if ($alreadyRequested) {
-            throw ValidationException::withMessages([
-                'route' => 'Ya pediste sumarte a este Expreso.',
-            ]);
-        }
-
         $validated = $request->validate([
             'origin_lat' => ['nullable', 'numeric', 'between:-90,90'],
             'origin_lng' => ['nullable', 'numeric', 'between:-180,180'],
@@ -112,50 +58,21 @@ class ExpressRouteCompanionController extends Controller
             'destination_address' => ['nullable', 'string', 'max:255'],
         ]);
 
-        ExpressRouteCompanion::query()->create([
-            'express_route_id' => $route->id,
-            'passenger_user_id' => $request->user()->id,
-            ...$validated,
-            'status' => 'pending',
-            'requested_at' => now(),
-        ]);
+        $this->companionResponder->request($route, $request->user(), $validated);
 
         return back()->with('status', 'Pedido enviado. Te avisamos cuando el dueño del Expreso responda.');
     }
 
     /**
-     * El dueño del Expreso acepta a un acompañante — no cambia el precio
-     * pactado con el conductor, solo reparte el costo entre más gente (ver
-     * ExpressRoute::pricePerPerson()).
+     * El dueño del Expreso acepta a un acompañante.
      */
     public function accept(Request $request, ExpressRouteCompanion $companion): RedirectResponse
     {
-        $route = $companion->route;
-        $this->authorize('update', $route);
+        $this->authorize('update', $companion->route);
 
-        if ($companion->status !== 'pending') {
-            throw ValidationException::withMessages([
-                'companion' => 'Este pedido ya no está pendiente.',
-            ]);
-        }
+        $this->companionResponder->accept($companion);
 
-        if (! $route->hasRoomForCompanions()) {
-            throw ValidationException::withMessages([
-                'companion' => 'Ya no hay cupo para más acompañantes.',
-            ]);
-        }
-
-        $companion->update([
-            'status' => 'accepted',
-            'responded_at' => now(),
-            'driver_approval_status' => $route->assigned_driver_user_id ? 'pending' : null,
-        ]);
-
-        if ($route->assignedDriver) {
-            $route->assignedDriver->notify(new ExpressCompanionApprovalPushNotification($companion, 'review'));
-        }
-
-        return back()->with('status', $route->assigned_driver_user_id
+        return back()->with('status', $companion->route->assigned_driver_user_id
             ? 'Aprobado por usted. Falta la confirmación del conductor.'
             : 'Acompañante aceptado. El conductor lo confirmará cuando se asigne.');
     }
@@ -164,13 +81,7 @@ class ExpressRouteCompanionController extends Controller
     {
         $this->authorize('update', $companion->route);
 
-        if ($companion->status !== 'pending') {
-            throw ValidationException::withMessages([
-                'companion' => 'Este pedido ya no está pendiente.',
-            ]);
-        }
-
-        $companion->update(['status' => 'rejected', 'responded_at' => now()]);
+        $this->companionResponder->reject($companion);
 
         return back()->with('status', 'Pedido rechazado.');
     }
@@ -181,11 +92,7 @@ class ExpressRouteCompanionController extends Controller
      */
     public function leave(Request $request, ExpressRouteCompanion $companion): RedirectResponse
     {
-        if ($companion->passenger_user_id !== $request->user()->id) {
-            abort(403);
-        }
-
-        $companion->update(['status' => 'left', 'responded_at' => now()]);
+        $this->companionResponder->leave($companion, $request->user());
 
         return back()->with('status', 'Te bajaste del Expreso compartido.');
     }
@@ -193,41 +100,15 @@ class ExpressRouteCompanionController extends Controller
     /** El conductor asignado confirma que puede realizar el desvío/cupo. */
     public function driverAccept(Request $request, ExpressRouteCompanion $companion): RedirectResponse
     {
-        $this->authorizeDriverDecision($request, $companion);
-
-        $companion->update([
-            'driver_approval_status' => 'accepted',
-            'driver_responded_at' => now(),
-        ]);
-
-        $companion->passenger->notify(new ExpressCompanionApprovalPushNotification($companion, 'accepted'));
+        $this->companionResponder->driverAccept($companion, $request->user());
 
         return back()->with('status', 'Acompañante confirmado para este Expreso.');
     }
 
     public function driverReject(Request $request, ExpressRouteCompanion $companion): RedirectResponse
     {
-        $this->authorizeDriverDecision($request, $companion);
-
-        $companion->update([
-            'status' => 'rejected',
-            'driver_approval_status' => 'rejected',
-            'driver_responded_at' => now(),
-        ]);
-
-        $companion->passenger->notify(new ExpressCompanionApprovalPushNotification($companion, 'rejected'));
+        $this->companionResponder->driverReject($companion, $request->user());
 
         return back()->with('status', 'Acompañante rechazado; no se incluirá en las carreras.');
-    }
-
-    private function authorizeDriverDecision(Request $request, ExpressRouteCompanion $companion): void
-    {
-        abort_unless($companion->route->assigned_driver_user_id === $request->user()->id, 403);
-
-        if ($companion->status !== 'accepted' || $companion->driver_approval_status !== 'pending') {
-            throw ValidationException::withMessages([
-                'companion' => 'Este acompañante ya no está esperando su decisión.',
-            ]);
-        }
     }
 }

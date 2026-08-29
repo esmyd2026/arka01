@@ -117,8 +117,12 @@ function formattedBirthDate(value) {
     if (!value) return null;
     // Se arma a mano en vez de `new Date(value)` para no arrastrar un
     // corrimiento de zona horaria (un date-only "YYYY-MM-DD" se interpreta
-    // como UTC medianoche, que en Ecuador cae al día anterior).
-    const [year, month, day] = value.split('-');
+    // como UTC medianoche, que en Ecuador cae al día anterior). Laravel puede
+    // serializar el cast `date` como ISO completo; por eso primero conservamos
+    // únicamente YYYY-MM-DD y evitamos mostrar la hora junto al día.
+    const [year, month, day] = String(value).slice(0, 10).split('-');
+
+    if (!year || !month || !day) return null;
 
     return `${day}/${month}/${year}`;
 }
