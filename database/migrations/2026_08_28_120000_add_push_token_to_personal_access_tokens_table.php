@@ -17,16 +17,54 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->string('push_token')->nullable()->after('app_version');
-            $table->string('push_provider')->nullable()->after('push_token');
-        });
+        // En producción puede existir una base que registró la migración de
+        // información del dispositivo, pero cuyo esquema no conserva todas
+        // sus columnas. No debemos depender de `after('app_version')` hasta
+        // reparar esa diferencia: MySQL aborta toda la migración si la columna
+        // de referencia no existe.
+        if (! Schema::hasColumn('personal_access_tokens', 'device_id')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('device_id')->nullable()->after('name')->index();
+            });
+        }
+
+        if (! Schema::hasColumn('personal_access_tokens', 'platform')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('platform')->nullable()->after('device_id');
+            });
+        }
+
+        if (! Schema::hasColumn('personal_access_tokens', 'app_version')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('app_version')->nullable()->after('platform');
+            });
+        }
+
+        if (! Schema::hasColumn('personal_access_tokens', 'push_token')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('push_token')->nullable()->after('app_version');
+            });
+        }
+
+        if (! Schema::hasColumn('personal_access_tokens', 'push_provider')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('push_provider')->nullable()->after('push_token');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->dropColumn(['push_token', 'push_provider']);
-        });
+        if (Schema::hasColumn('personal_access_tokens', 'push_provider')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->dropColumn('push_provider');
+            });
+        }
+
+        if (Schema::hasColumn('personal_access_tokens', 'push_token')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->dropColumn('push_token');
+            });
+        }
     }
 };

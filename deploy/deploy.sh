@@ -9,8 +9,27 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "== Preparando permisos de Laravel =="
+# Artisan y PHP-FPM escriben con usuarios distintos. Se normalizan directorios
+# y archivos ANTES del primer comando de Artisan para que incluso un error de
+# migración pueda quedar registrado y no oculte la causa original.
+mkdir -p storage/logs bootstrap/cache
+sudo chown -R "$(id -un)":www-data storage bootstrap/cache
+sudo find storage bootstrap/cache -type d -exec chmod 2775 {} +
+sudo find storage bootstrap/cache -type f -exec chmod 664 {} +
+
+maintenance_enabled=0
+restore_application() {
+  if [ "$maintenance_enabled" -eq 1 ]; then
+    echo "== El despliegue falló: restaurando la aplicación =="
+    php artisan up || true
+  fi
+}
+trap restore_application EXIT
+
 echo "== Modo mantenimiento =="
-php artisan down --render="errors::503" || true
+php artisan down --render="errors::503"
+maintenance_enabled=1
 
 echo "== Código nuevo =="
 git pull origin main
@@ -37,5 +56,7 @@ sudo supervisorctl restart arka01-queue-worker:* arka01-reverb:* arka01-radio-se
 
 echo "== Saliendo de mantenimiento =="
 php artisan up
+maintenance_enabled=0
+trap - EXIT
 
 echo "Listo."

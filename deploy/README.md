@@ -83,7 +83,8 @@ npm run build          # genera public/build/ (no está en git)
 # correr `artisan` directo, sin sudo, en el día a día) y `www-data` (quien
 # corre PHP-FPM), con el grupo con permiso de escritura.
 sudo chown -R $(whoami):www-data storage bootstrap/cache
-sudo chmod -R 775 storage bootstrap/cache
+sudo find storage bootstrap/cache -type d -exec chmod 2775 {} +
+sudo find storage bootstrap/cache -type f -exec chmod 664 {} +
 
 php artisan key:generate
 php artisan migrate --force
