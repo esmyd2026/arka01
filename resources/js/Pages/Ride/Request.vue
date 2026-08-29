@@ -47,11 +47,6 @@ const props = defineProps({
     // mostraba "0.7 km × $0.45/km = $0.31" para una carrera que en realidad
     // iba a cobrar el mínimo configurado.
     minimumFare: { type: Number, required: true },
-    // Cargo por trayecto de recogida (pedido explícito del usuario): solo un
-    // aviso con el % configurado — nunca el monto, que depende de a qué
-    // conductor le toque la solicitud (se calcula recién del lado del
-    // servidor, ver App\Services\PriceCalculator::pickupSurcharge()).
-    pickupSurchargePercent: { type: Number, required: true },
     // Pedido explícito del usuario ("guardá las que ya ha realizado para que
     // aparezcan como favoritas"): direcciones que este cliente ya usó antes.
     frequentPlaces: { type: Array, default: () => [] },
@@ -821,14 +816,26 @@ watch(
 // cobrar, en vez de quedar corto.
 const DISTANCE_PADDING_KM = 0.8;
 
-const estimatedDistanceKm = computed(() => {
+// Bug reportado por el usuario ("el km que colocas arriba en el mapa y el
+// que colocas abajo... procura que sean iguales"): la tarjeta fija de
+// origen/destino (arriba) siempre mostró la distancia real de la ruta —
+// este computed es ese mismo número, extraído para reusarlo también en el
+// desglose de precio (abajo), que antes mostraba el km CON el margen de
+// 0.8 sumado. El margen sigue afectando el precio (ver estimatedDistanceKm
+// más abajo), simplemente ya no se le muestra al cliente como si fuera
+// parte de la distancia del viaje.
+const realDistanceKm = computed(() => {
     if (originLat.value == null || destinationLat.value == null) return null;
     // Se prefiere la distancia REAL de manejo (OSRM, la misma ruta ya
     // dibujada en el mapa) apenas está disponible — la línea recta queda
     // solo como estimación de arranque mientras se calcula, o de respaldo
     // si el servicio de ruteo no responde (ver fetchOsrmRoute()).
-    const realKm = routeDistanceKm.value ?? distanceKm(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
-    return realKm + DISTANCE_PADDING_KM;
+    return routeDistanceKm.value ?? distanceKm(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+});
+
+const estimatedDistanceKm = computed(() => {
+    if (realDistanceKm.value == null) return null;
+    return realDistanceKm.value + DISTANCE_PADDING_KM;
 });
 
 // Busca con findDriverById() (no `driversWithDistance`, acotado a la
@@ -907,6 +914,17 @@ const stopsWithPrices = computed(() =>
 const stopsTotalPrice = computed(() => {
     const prices = stopsWithPrices.value.map((stop) => stop.price).filter((price) => price != null);
     return prices.length ? roundUpToDime(prices.reduce((a, b) => a + b, 0)) : null;
+});
+
+// Cargo por trayecto de recogida (pedido explícito del usuario: "al cliente
+// no le pongas ese texto tan extenso, solo dile este conductor tiene
+// aplicado el costo por recogidas extensas"): solo tiene sentido avisarlo
+// cuando ya hay un conductor puntual elegido (no "toda la flota" ni una
+// cooperativa, donde todavía no se sabe quién va a tomarla) y ese conductor
+// activó la función en su perfil — ver driverCardData() en el controller.
+const showsPickupSurchargeNotice = computed(() => {
+    if (selectedCooperativeId.value || selectedDriverId.value === WHOLE_FLEET) return false;
+    return Boolean(selectedDriverInfo.value?.pickup_surcharge_enabled);
 });
 
 // Precio total del itinerario completo (pedido explícito del usuario) —
@@ -2135,7 +2153,7 @@ function submit() {
                                  tarifa, mostrar ese cálculo sería engañoso — no es lo que se
                                  termina cobrando (fix reportado por el usuario). -->
                             <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
-                            <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km{{ stops.length ? ' (tramo final)' : '' }}</span>
+                            <span v-else>{{ realDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km{{ stops.length ? ' (tramo final)' : '' }}</span>
                             <span class="text-arka-base font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
                         </div>
 
@@ -2169,13 +2187,13 @@ function submit() {
                         </p>
                         <InputError :message="form.errors.offered_price" />
 
-                        <!-- Cargo por trayecto de recogida (pedido explícito
-                             del usuario): solo un aviso, sin monto — el
-                             conductor decide si lo cobra según qué tan lejos
-                             esté, recién al recibir la solicitud. -->
-                        <p class="text-xs italic text-emerald-600 dark:text-emerald-400">
-                            🍃 Puede aplicar un cargo adicional de hasta el {{ pickupSurchargePercent }}% según la
-                            distancia que el conductor deba recorrer para buscarte.
+                        <!-- Cargo por trayecto de recogida (pedido explícito del
+                             usuario): aviso corto, sin monto ni porcentaje — solo
+                             cuando ya hay un conductor puntual elegido que activó
+                             la función. El conductor decide si lo cobra de verdad
+                             recién al recibir la solicitud. -->
+                        <p v-if="showsPickupSurchargeNotice" class="text-xs italic text-emerald-600 dark:text-emerald-400">
+                            🍃 Este conductor tiene aplicado el costo por recogidas extensas.
                         </p>
                     </div>
 

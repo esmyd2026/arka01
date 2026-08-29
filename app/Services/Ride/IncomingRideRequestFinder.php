@@ -6,6 +6,7 @@ use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Services\PriceCalculator;
 use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Support\Collection;
 
@@ -69,7 +70,16 @@ class IncomingRideRequestFinder
             ->get()
             ->keyBy('reviewee_user_id');
 
-        $incoming->each(function (RideRequest $rideRequest) use ($ratings, $driver) {
+        // Cargo por trayecto de recogida (pedido explícito del usuario:
+        // "que se desglose... para que vea sus ganancias bien"): el margen
+        // fijo de 0.8 km ya viene incluido en `current_offered_price` sin
+        // mostrarse nunca por separado — acá se expone cuánto representa en
+        // dinero, con la tarifa vigente de ESTE conductor, para que entienda
+        // de dónde sale su ganancia antes de aceptar.
+        $ratePerKm = (float) ($driver->driverProfile?->rate_per_km ?? 0);
+        $routePaddingFare = round(PriceCalculator::DISTANCE_PADDING_KM * $ratePerKm, 2);
+
+        $incoming->each(function (RideRequest $rideRequest) use ($ratings, $driver, $routePaddingFare) {
             $rating = $ratings->get($rideRequest->client_user_id);
 
             $rideRequest->client_name = $rideRequest->client->name;
@@ -77,6 +87,8 @@ class IncomingRideRequestFinder
             $rideRequest->client_review_count = $rating->review_count ?? 0;
             $rideRequest->client_member_code = $rideRequest->client->member_code;
             $rideRequest->client_trust = $this->trustIndex->calculate($rideRequest->client, $driver);
+            $rideRequest->route_padding_km = PriceCalculator::DISTANCE_PADDING_KM;
+            $rideRequest->route_padding_fare = $routePaddingFare;
         });
 
         return $incoming;

@@ -59,6 +59,11 @@ class DriverProfile extends Model
         'verified_at',
         'verified_by',
         'max_request_distance_km',
+        // Cargo por distancia de recogida (pedido explícito del usuario): el
+        // conductor lo apaga o prende desde su propio perfil, igual que su
+        // tarifa por km — con esto en false, la función no existe para él en
+        // ninguna solicitud. Ver App\Services\PriceCalculator::pickupSurchargeForDriver().
+        'pickup_surcharge_enabled',
         'whatsapp_ride_actions_enabled',
     ];
 
@@ -75,6 +80,7 @@ class DriverProfile extends Model
         'current_lng' => 'decimal:7',
         'location_updated_at' => 'datetime',
         'max_request_distance_km' => 'integer',
+        'pickup_surcharge_enabled' => 'boolean',
         'suspended_at' => 'datetime',
         'deactivated_at' => 'datetime',
         'passenger_capacity' => 'integer',

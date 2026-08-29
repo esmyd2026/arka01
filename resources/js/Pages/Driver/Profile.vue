@@ -56,6 +56,10 @@ const props = defineProps({
     // Pedido explícito del usuario: tope de la tarifa mínima propia — puede
     // declarar una MENOR (la plataforma la respeta), pero no una mayor.
     platformMinimumFare: { type: Number, required: true },
+    // Cargo por distancia de recogida (pedido explícito del usuario): solo
+    // para explicarle al conductor qué activa el interruptor de abajo.
+    pickupSurchargeThresholdKm: { type: Number, required: true },
+    pickupSurchargePercent: { type: Number, required: true },
     // Catálogo fijo para "Tipo de vehículo" (pedido explícito del usuario:
     // confidencialidad en las pantallas públicas — este dato reemplaza a la
     // foto y a la placa completa como lo que sí se muestra al cliente).
@@ -171,6 +175,10 @@ const form = useForm({
     rate_per_km: props.driverProfile?.rate_per_km ?? '',
     minimum_fare: props.driverProfile?.minimum_fare ?? '',
     max_request_distance_km: props.driverProfile?.max_request_distance_km ?? '',
+    // Cargo por distancia de recogida (pedido explícito del usuario): el
+    // conductor lo apaga o prende desde acá — con esto en false, nunca se le
+    // calcula ni se le muestra en ninguna solicitud (ver PriceCalculator).
+    pickup_surcharge_enabled: props.driverProfile?.pickup_surcharge_enabled ?? true,
     accepts_cash: props.driverProfile?.accepts_cash ?? true,
     accepts_transfer: props.driverProfile?.accepts_transfer ?? false,
     has_insurance: props.driverProfile?.has_insurance ?? false,
@@ -900,6 +908,25 @@ const VERIFICATION_LABELS = {
                                 afuera si superan este límite.
                             </p>
                             <InputError class="mt-2" :message="form.errors.max_request_distance_km" />
+                        </div>
+
+                        <!-- Cargo por distancia de recogida (pedido explícito del
+                             usuario): interruptor general, igual jerarquía que la
+                             tarifa por km — con esto apagado, la función no existe
+                             para este conductor en ninguna solicitud. -->
+                        <div class="rounded-xl border border-arka-text-muted/15 p-3.5">
+                            <label class="flex items-start gap-3">
+                                <Checkbox v-model:checked="form.pickup_surcharge_enabled" class="mt-0.5" />
+                                <span>
+                                    <span class="block text-sm font-medium text-arka-text">Cobrar por distancia de recogida</span>
+                                    <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                        Cuando el cliente esté a más de {{ pickupSurchargeThresholdKm }} km de usted, va a poder ver un
+                                        cargo adicional (hasta el {{ pickupSurchargePercent }}%) y decidir si lo cobra, solicitud por
+                                        solicitud. Apague esto si nunca quiere ver esa opción.
+                                    </span>
+                                </span>
+                            </label>
+                            <InputError class="mt-2" :message="form.errors.pickup_surcharge_enabled" />
                         </div>
 
                         <div>

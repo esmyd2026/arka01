@@ -132,11 +132,6 @@ class RideRequestController extends Controller
             // frontend puede replicar el mismo `max(...)` y avisar cuándo se
             // está aplicando el mínimo en vez del cálculo por km.
             'minimumFare' => (float) PricingSetting::current()->minimum_fare,
-            // Cargo por trayecto de recogida (pedido explícito del usuario):
-            // al cliente solo se le muestra el % configurado, como aviso
-            // informativo — nunca el monto, que depende de qué conductor le
-            // toque (ver App\Services\PriceCalculator::pickupSurcharge()).
-            'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
             // Pedido explícito del usuario ("guardá las que ya ha realizado
             // para que aparezcan como favoritas"): direcciones que este
             // cliente ya usó antes (de origen o de destino, da igual — "casa"
@@ -233,6 +228,12 @@ class RideRequestController extends Controller
             // el navegador) para mostrarla — con esto puede marcar "fuera de
             // zona" al mismo tiempo, sin otra ida al servidor.
             'max_request_distance_km' => $profile?->max_request_distance_km,
+            // Cargo por trayecto de recogida (pedido explícito del usuario):
+            // el aviso corto que ve el cliente ("este conductor tiene
+            // aplicado...") solo tiene sentido cuando eligió a ESTE
+            // conductor puntual y él participa de la función — ver
+            // Ride/Request.vue.
+            'pickup_surcharge_enabled' => (bool) ($profile?->pickup_surcharge_enabled ?? false),
             'average_rating' => $rating,
             'review_count' => $reviewCount,
             'tier' => DriverTier::forPoints($profile?->total_points ?? 0)->toBadge(),

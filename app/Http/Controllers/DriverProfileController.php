@@ -105,6 +105,11 @@ class DriverProfileController extends Controller
             // update() la rechaza si la supera (ver PriceCalculator para
             // dónde se aplica esta jerarquía en el cálculo del precio).
             'platformMinimumFare' => (float) PricingSetting::current()->minimum_fare,
+            // Cargo por distancia de recogida (pedido explícito del usuario):
+            // umbral y porcentaje vigentes, para explicarle al conductor qué
+            // significa el interruptor de acá abajo (ver PriceCalculator).
+            'pickupSurchargeThresholdKm' => (float) PricingSetting::current()->pickup_surcharge_threshold_km,
+            'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
         ]);
     }
 

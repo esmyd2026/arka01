@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use App\Models\DriverProfile;
 use App\Models\PricingSetting;
+use App\Models\User;
 use App\Services\PriceCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -79,5 +81,48 @@ class PriceCalculatorTest extends TestCase
 
         $this->assertTrue($result['exceeds_threshold']);
         $this->assertEqualsWithDelta(1.32, $result['fare'], 0.001);
+    }
+
+    /**
+     * Pedido explícito del usuario: el conductor puede apagar esto desde su
+     * propio perfil — con el interruptor apagado, ni siquiera se calcula la
+     * distancia, sin importar qué tan lejos esté del cliente.
+     */
+    public function test_pickup_surcharge_for_driver_is_null_when_the_driver_disabled_it(): void
+    {
+        PricingSetting::current()->update(['pickup_surcharge_threshold_km' => 3, 'pickup_surcharge_percent' => 55]);
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'rate_per_km' => 0.30,
+            'current_lat' => -2.170998,
+            'current_lng' => -79.922359,
+            'pickup_surcharge_enabled' => false,
+        ]);
+
+        // Origen bien lejos de la ubicación del conductor de arriba —
+        // igual da null porque el interruptor está apagado.
+        $result = PriceCalculator::pickupSurchargeForDriver($driver->id, -2.24, -79.90);
+
+        $this->assertNull($result['distance_km']);
+        $this->assertNull($result['fare']);
+    }
+
+    public function test_pickup_surcharge_for_driver_is_calculated_when_enabled(): void
+    {
+        PricingSetting::current()->update(['pickup_surcharge_threshold_km' => 3, 'pickup_surcharge_percent' => 55]);
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'rate_per_km' => 0.30,
+            'current_lat' => -2.170998,
+            'current_lng' => -79.922359,
+            'pickup_surcharge_enabled' => true,
+        ]);
+
+        $result = PriceCalculator::pickupSurchargeForDriver($driver->id, -2.24, -79.90);
+
+        $this->assertNotNull($result['distance_km']);
+        $this->assertGreaterThan(0, $result['fare']);
     }
 }

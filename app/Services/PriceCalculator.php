@@ -24,7 +24,7 @@ class PriceCalculator
      * mover el umbral de puntos del conductor en RideController::complete())
      * — el margen queda encapsulado acá adentro, solo afecta el precio.
      */
-    private const DISTANCE_PADDING_KM = 0.8;
+    public const DISTANCE_PADDING_KM = 0.8;
 
     /**
      * Precio sugerido = distancia × tarifa del conductor × factor horario
@@ -180,13 +180,19 @@ class PriceCalculator
      * ubicación conocida del conductor no hay nada que calcular — se deja en
      * null, no se inventa un cargo.
      *
+     * Pedido explícito del usuario: el conductor puede apagar esto desde su
+     * propio perfil (`driver_profiles.pickup_surcharge_enabled`), igual que
+     * su tarifa por km — con el interruptor apagado, la función no existe
+     * para él: ni se calcula la distancia ni se le muestra nada en ninguna
+     * solicitud, sin importar qué tan lejos esté del cliente.
+     *
      * @return array{distance_km: ?float, fare: ?float}
      */
     public static function pickupSurchargeForDriver(int $driverUserId, float $originLat, float $originLng): array
     {
         $profile = DriverProfile::query()->where('user_id', $driverUserId)->first();
 
-        if (! $profile || $profile->current_lat === null || $profile->current_lng === null) {
+        if (! $profile || ! $profile->pickup_surcharge_enabled || $profile->current_lat === null || $profile->current_lng === null) {
             return ['distance_km' => null, 'fare' => null];
         }
 

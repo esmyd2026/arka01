@@ -752,22 +752,25 @@ function confirmRaiseOffer(id) {
                             </p>
 
                             <div v-else class="space-y-3">
-                                <!-- Cargo por trayecto de recogida (pedido explícito del
-                                     usuario): solo aparece cuando el cliente está lo bastante
-                                     lejos como para superar el umbral configurado en
-                                     /admin/tarifas — el conductor ve el desglose separado
-                                     (recogida vs. origen-destino) y decide si lo cobra. -->
-                                <div v-if="r.pickup_fare > 0" class="space-y-2 rounded-arka border border-arka-lime/25 bg-arka-lime/10 p-3">
-                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-lime">Trayecto de recogida</p>
-                                    <div class="flex items-center justify-between text-sm">
-                                        <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km</span>
-                                        <span class="text-arka-text font-medium">${{ Number(r.pickup_fare).toFixed(2) }}</span>
-                                    </div>
+                                <!-- Desglose de la ganancia (pedido explícito del usuario:
+                                     "que se desglose... para que vea sus ganancias bien" y
+                                     "si el adicional es 0 igual presentale") — siempre
+                                     visible, no solo cuando hay cargo de recogida. -->
+                                <div class="space-y-2 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-text-muted">Desglose de tu ganancia</p>
                                     <div class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Origen → destino · {{ Number(r.distance_km).toFixed(1) }} km</span>
                                         <span class="text-arka-text font-medium">${{ Number(r.current_offered_price).toFixed(2) }}</span>
                                     </div>
-                                    <label class="flex items-center gap-2 pt-1">
+                                    <div v-if="r.route_padding_fare != null" class="flex items-center justify-between text-sm">
+                                        <span class="text-arka-text-muted">Margen fijo de ruta · {{ Number(r.route_padding_km).toFixed(1) }} km (ya incluido arriba)</span>
+                                        <span class="text-arka-text font-medium">${{ Number(r.route_padding_fare).toFixed(2) }}</span>
+                                    </div>
+                                    <div v-if="r.pickup_distance_km != null" class="flex items-center justify-between text-sm">
+                                        <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km</span>
+                                        <span class="text-arka-text font-medium">${{ Number(r.pickup_fare).toFixed(2) }}</span>
+                                    </div>
+                                    <label v-if="r.pickup_fare > 0" class="flex items-center gap-2 pt-1">
                                         <input type="checkbox" v-model="chargePickup[r.id]" class="text-arka-primary rounded" />
                                         <span class="text-sm text-arka-text">Cobrar ${{ Number(r.pickup_fare).toFixed(2) }} de recogida al cliente</span>
                                     </label>

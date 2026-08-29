@@ -117,6 +117,12 @@ class RideController extends Controller
                 'destination_address' => $ride->destination_address,
                 'destination_sector' => $ride->destinationSector?->name,
                 'distance_km' => (float) $ride->distance_km,
+                // Cargo por trayecto de recogida (pedido explícito del
+                // usuario: "en el admin también quiero ver eso") — se
+                // muestra igual que al conductor, para indicadores y soporte.
+                'pickup_distance_km' => $ride->pickup_distance_km !== null ? (float) $ride->pickup_distance_km : null,
+                'pickup_fare' => $ride->pickup_fare !== null ? (float) $ride->pickup_fare : null,
+                'pickup_fare_charged' => (bool) $ride->pickup_fare_charged,
                 'payment_method' => $ride->payment_method,
                 'notes' => $ride->notes,
                 'round_trip' => $ride->round_trip,

@@ -148,6 +148,15 @@ const timeline = [
                     <p v-if="ride.settled_price !== null" class="text-sm text-arka-text-muted">
                         Precio final liquidado: {{ money(ride.settled_price) }}
                     </p>
+                    <!-- Cargo por trayecto de recogida (pedido explícito del usuario):
+                         se muestra siempre que haya distancia calculada, aunque el
+                         conductor no lo haya cobrado — para trazabilidad e indicadores. -->
+                    <p v-if="ride.pickup_distance_km !== null" class="text-sm text-arka-text-muted">
+                        Recogida: {{ ride.pickup_distance_km }} km — {{ money(ride.pickup_fare) }}
+                        <span :class="ride.pickup_fare_charged ? 'text-arka-primary' : ''">
+                            ({{ ride.pickup_fare_charged ? 'cobrado al cliente' : 'no cobrado' }})
+                        </span>
+                    </p>
                     <p class="text-sm text-arka-text-muted">
                         Tarifa/km usada: {{ money(ride.rate_per_km_snapshot) }} ·
                         Método: {{ PAYMENT_METHOD_LABEL[ride.payment_method] ?? ride.payment_method ?? '—' }}

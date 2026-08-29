@@ -128,6 +128,12 @@ class DriverProfileUpdater
             // Zona de cobertura (pedido explícito del usuario): en blanco =
             // sin límite, sigue recibiendo solicitudes sin importar la distancia.
             'max_request_distance_km' => ['nullable', 'integer', 'min:1', 'max:500'],
+            // Cargo por distancia de recogida (pedido explícito del usuario):
+            // el conductor lo apaga o prende acá mismo, junto al resto de su
+            // configuración de tarifas — con esto en false, nunca se le
+            // calcula ni se le muestra en ninguna solicitud (ver
+            // PriceCalculator::pickupSurchargeForDriver()).
+            'pickup_surcharge_enabled' => ['boolean'],
             'accepts_cash' => ['boolean'],
             'accepts_transfer' => ['boolean'],
             // Pedido explícito del usuario: seguro que lo proteja a él, a
