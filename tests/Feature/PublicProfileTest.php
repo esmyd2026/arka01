@@ -156,6 +156,35 @@ class PublicProfileTest extends TestCase
         );
     }
 
+    public function test_an_authenticated_viewer_sees_only_safe_mutual_people_on_a_profile(): void
+    {
+        $viewer = User::factory()->create();
+        $target = User::factory()->create();
+        $mutualPerson = User::factory()->create([
+            'email' => 'privado@arka01.test',
+            'phone' => '+593999999999',
+        ]);
+
+        foreach ([[$viewer, $mutualPerson], [$target, $mutualPerson]] as [$requester, $addressee]) {
+            TrustCircleConnection::query()->create([
+                'requester_user_id' => $requester->id,
+                'addressee_user_id' => $addressee->id,
+                'status' => 'accepted',
+                'responded_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($viewer)
+            ->get(route('profiles.show', $target->public_id))
+            ->assertInertia(fn ($page) => $page
+                ->where('trustIndex.mutual_people', 1)
+                ->where('mutualPeople.0.public_id', $mutualPerson->public_id)
+                ->where('mutualPeople.0.name', $mutualPerson->full_name)
+                ->missing('mutualPeople.0.email')
+                ->missing('mutualPeople.0.phone')
+            );
+    }
+
     /**
      * WhatsApp (y Facebook/Twitter/etc.) arman la tarjeta de vista previa
      * leyendo <meta og:*> de la respuesta cruda, sin ejecutar JavaScript —

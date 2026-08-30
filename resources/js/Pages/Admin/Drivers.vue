@@ -1,27 +1,22 @@
 <script setup>
-import { onBeforeUnmount, onMounted, reactive } from 'vue';
+import { reactive } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import FleetMap from '@/Components/FleetMap.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
-import { tierLabel } from '@/Utils/tierBadge';
 
 const props = defineProps({
     availableDrivers: { type: Array, required: true },
     allDrivers: { type: Object, required: true },
     cities: { type: Array, required: true },
     filters: { type: Object, required: true },
-    serviceCategories: { type: Object, required: true },
-    publicDriverCategories: { type: Object, required: true },
 });
 
 // Filtros de la tabla completa (pedido explícito del usuario: paginado +
-// filtros, ya que hoy trae los ~90 conductores de una sola vez) — se manda
-// por GET con preserveState para no perder el scroll ni reiniciar el
-// polling de "Disponibles ahora" de arriba.
+// filtros, para no cargar/renderizar todo el directorio de una sola vez. Se
+// manda por GET y conserva el estado de búsqueda entre páginas.
 const form = reactive({
     q: props.filters.q ?? '',
     city_id: props.filters.city_id ?? '',
@@ -37,24 +32,6 @@ function formatDate(value) {
     return new Date(value).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-// "Que cuando no estén disponibles desaparezcan" (pedido explícito del
-// usuario): no hace falta WebSocket para un panel de admin — se refresca
-// solo cada 20 seg., suficiente para algo que no necesita latencia de
-// segundos como sí la necesita el conductor pidiendo/recibiendo una carrera.
-let poll = null;
-const refreshAvailableDrivers = () => {
-    if (document.hidden) return;
-    router.reload({ only: ['availableDrivers'], preserveScroll: true, preserveState: true });
-};
-onMounted(() => {
-    poll = setInterval(refreshAvailableDrivers, 20000);
-    document.addEventListener('visibilitychange', refreshAvailableDrivers);
-});
-onBeforeUnmount(() => {
-    clearInterval(poll);
-    document.removeEventListener('visibilitychange', refreshAvailableDrivers);
-});
-
 async function suspend(driver) {
     if (!(await confirmDialog(`¿Suspender a ${driver.name}? No va a poder conectarse ni recibir carreras hasta que lo reactives.`, { danger: true, confirmLabel: 'Suspender' }))) return;
     router.post(route('admin.drivers.suspend', driver.id), {}, { preserveScroll: true });
@@ -68,62 +45,36 @@ function toggleWhatsApp(driver) {
     router.patch(route('admin.drivers.whatsapp', driver.id), { enabled: !driver.whatsapp_ride_actions_enabled }, { preserveScroll: true });
 }
 
-function updateCategory(driver, value) {
-    router.patch(
-        route('admin.drivers.category', driver.id),
-        { service_category: value || null },
-        { preserveScroll: true }
-    );
-}
-
-function updatePublicCategory(driver, value) {
-    router.patch(
-        route('admin.drivers.public-category', driver.id),
-        { public_category: value || null },
-        { preserveScroll: true }
-    );
-}
 </script>
 
 <template>
     <Head title="Admin · Conductores" />
 
     <AdminLayout title="Conductores">
-        <div class="py-12">
+        <div class="py-6 sm:py-8">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-                <!-- Disponibles ahora, en el mapa (pedido explícito del usuario) -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
-                    <h3 class="text-lg font-medium text-arka-text">Disponibles ahora ({{ availableDrivers.length }})</h3>
-
-                    <p v-if="!availableDrivers.length" class="text-sm text-arka-text-muted">
-                        Ningún conductor está disponible en este momento.
-                    </p>
-
-                    <!-- Ícono de auto (pedido explícito del usuario), no el pin
-                         celeste genérico de Leaflet — ver Components/FleetMap.vue
-                         (ICONS.car). -->
-                    <FleetMap
-                        v-else
-                        :markers="availableDrivers.map((d) => ({ id: 'car', lat: d.lat, lng: d.lng, label: d.name }))"
-                        height="360px"
-                    />
-
-                    <ul v-if="availableDrivers.length" class="divide-y divide-arka-text-muted/10">
-                        <li v-for="d in availableDrivers" :key="d.user_id" class="py-2 flex items-center justify-between gap-3">
-                            <span class="text-arka-text">{{ d.name }}</span>
-                            <span class="text-sm text-arka-text-muted flex items-center gap-2">
-                                <span>{{ tierLabel(d.tier) }}</span>
-                                <span>★ {{ d.average_rating.toFixed(1) }}</span>
-                            </span>
-                        </li>
-                    </ul>
-                </div>
+                <!-- Esta pantalla administra personas. El mapa nacional y la
+                     lista repetida de conectados pertenecen a Operación; acá
+                     solo queda el dato necesario y un acceso directo. -->
+                <section class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-2xl border border-arka-primary/20 bg-arka-card p-4">
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-text-muted">Disponibles ahora</p>
+                        <div class="mt-2 flex items-end justify-between gap-3"><strong class="text-3xl text-arka-primary-bright">{{ availableDrivers.length }}</strong><span class="mb-1 h-2.5 w-2.5 rounded-full bg-arka-primary"></span></div>
+                    </div>
+                    <div class="rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4">
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-text-muted">Conductores registrados</p>
+                        <strong class="mt-2 block text-3xl text-arka-text">{{ allDrivers.total }}</strong>
+                    </div>
+                    <Link :href="route('admin.live-operations.index')" class="group flex items-center justify-between gap-3 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 hover:border-arka-primary/35">
+                        <span><span class="block text-sm font-semibold text-arka-text">Ver operación en vivo</span><span class="mt-1 block text-xs text-arka-text-muted">Mapa y carreras activas</span></span><span class="text-xl text-arka-primary-bright group-hover:translate-x-1">→</span>
+                    </Link>
+                </section>
 
                 <!-- Roster completo: bloquear/deshabilitar/desconectar (pedido
                      explícito del usuario), ahora paginado y filtrable por
                      nombre/correo, ciudad y estado. -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
-                    <h3 class="text-lg font-medium text-arka-text">Todos los conductores ({{ allDrivers.total }})</h3>
+                <div class="space-y-4 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 shadow sm:p-6">
+                    <div class="flex flex-wrap items-end justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-primary-bright">Administración</p><h3 class="mt-1 text-lg font-semibold text-arka-text">Directorio de conductores</h3><p class="mt-1 text-xs text-arka-text-muted">Busque, revise el perfil o suspenda una cuenta. Las categorías se deciden durante la verificación.</p></div><Link :href="route('admin.driver-verifications.index')" class="rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold text-arka-base">Ir a verificaciones</Link></div>
 
                     <form @submit.prevent="applyFilters" class="flex flex-wrap items-end gap-3">
                         <div class="flex-1 min-w-[160px]">
@@ -142,91 +93,55 @@ function updatePublicCategory(driver, value) {
                         <PrimaryButton type="submit">Filtrar</PrimaryButton>
                     </form>
 
-                    <div class="overflow-x-auto">
+                    <div class="hidden overflow-x-auto md:block">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
                                     <th class="py-2 pr-3">Conductor</th>
-                                    <th class="py-2 pr-3">Ciudad</th>
-                                    <th class="py-2 pr-3 min-w-[240px]">Vehículo y categorías</th>
-                                    <th class="py-2 pr-3">Estado</th>
-                                    <th class="py-2 pr-3">Carreras</th>
-                                    <th class="py-2 pr-3">Rechazos</th>
+                                    <th class="py-2 pr-3">Vehículo</th>
+                                    <th class="py-2 pr-3">Operación</th>
                                     <th class="py-2 pr-3">Verificación</th>
-                                    <th class="py-2 pr-3">Registro</th>
-                                    <th class="py-2 pr-3">Última actividad</th>
-                                    <th class="py-2 pr-3">WhatsApp</th>
-                                    <th class="py-2"></th>
+                                    <th class="py-2 text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-arka-text-muted/10">
                                 <tr v-for="d in allDrivers.data" :key="d.user_id">
-                                    <td class="py-2 pr-3">
+                                    <td class="py-3 pr-3">
                                         <Link :href="route('admin.users.show', d.user_id)" class="text-arka-text font-medium hover:text-arka-primary-bright">
                                             {{ d.name }}
                                         </Link>
                                         <p class="text-xs text-arka-text-muted">{{ d.email }}</p>
+                                        <p class="mt-1 text-[11px] text-arka-text-muted">{{ d.city ?? 'Sin ciudad' }} · Registro {{ formatDate(d.registered_at) }}</p>
                                     </td>
-                                    <td class="py-2 pr-3 text-arka-text-muted">{{ d.city ?? '—' }}</td>
-                                    <td class="py-3 pr-3 align-top">
+                                    <td class="py-3 pr-3">
                                         <p class="text-xs font-medium text-arka-text">{{ d.vehicle || 'Vehículo sin completar' }}</p>
-                                        <select
-                                            :value="d.service_category ?? ''"
-                                            class="mt-1 w-full rounded-arka border-arka-text-muted/30 bg-arka-card px-2 py-1 text-xs text-arka-text"
-                                            aria-label="Categoría de servicio"
-                                            @change="updateCategory(d, $event.target.value)"
-                                        >
-                                            <option value="">Sin categoría</option>
-                                            <option v-for="(category, key) in serviceCategories" :key="key" :value="key">
-                                                {{ category.label }}
-                                            </option>
-                                        </select>
-                                        <select
-                                            :value="d.public_category ?? ''"
-                                            class="mt-1.5 w-full rounded-arka border-arka-primary/25 bg-arka-card px-2 py-1 text-xs font-medium text-arka-text"
-                                            aria-label="Categoría pública del conductor"
-                                            @change="updatePublicCategory(d, $event.target.value)"
-                                        >
-                                            <option value="">Sin etiqueta pública</option>
-                                            <option v-for="(category, key) in publicDriverCategories" :key="key" :value="key">
-                                                {{ category.label }}
-                                            </option>
-                                        </select>
-                                        <div v-if="d.vehicle_amenities.length" class="mt-2 flex max-w-[260px] flex-wrap gap-1">
-                                            <span
-                                                v-for="amenity in d.vehicle_amenities"
-                                                :key="amenity.key"
-                                                class="rounded-full bg-arka-primary/10 px-2 py-0.5 text-[10px] text-arka-primary-bright"
-                                            >
-                                                {{ amenity.label }}
-                                            </span>
-                                        </div>
-                                        <p v-else class="mt-1 text-[10px] text-arka-text-muted">Sin comodidades declaradas</p>
+                                        <div class="mt-1 flex flex-wrap gap-1"><span v-if="d.service_category_label" class="rounded-full bg-arka-primary/10 px-2 py-0.5 text-[10px] text-arka-primary-bright">{{ d.service_category_label }}</span><span v-if="d.public_category_label" class="rounded-full bg-arka-base px-2 py-0.5 text-[10px] text-arka-text-muted">{{ d.public_category_label }}</span></div>
                                     </td>
-                                    <td class="py-2 pr-3">
+                                    <td class="py-3 pr-3">
                                         <span v-if="d.is_suspended" class="text-arka-danger font-medium">Suspendido</span>
                                         <span v-else-if="d.is_available" class="text-arka-primary-bright font-medium">Disponible</span>
                                         <span v-else class="text-arka-text-muted">Desconectado</span>
+                                        <p class="mt-1 text-[11px] text-arka-text-muted">{{ d.completed_rides_count }} completadas · {{ d.rides_rejected_count }} rechazos</p>
+                                        <button type="button" class="mt-1 text-[11px] font-medium" :class="d.whatsapp_ride_actions_enabled ? 'text-arka-primary' : 'text-arka-text-muted'" @click="toggleWhatsApp(d)">{{ d.whatsapp_ride_actions_enabled ? 'WhatsApp activo' : 'Solo avisos WhatsApp' }}</button>
                                     </td>
-                                    <td class="py-2 pr-3 text-arka-text">{{ d.completed_rides_count }}</td>
-                                    <td class="py-2 pr-3 text-arka-text">{{ d.rides_rejected_count }}</td>
-                                    <td class="py-2 pr-3 text-arka-text-muted">{{ d.verification_status }}</td>
-                                    <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(d.registered_at) }}</td>
-                                    <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(d.last_active_at) }}</td>
-                                    <td class="py-2 pr-3">
-                                        <button type="button" class="text-xs font-medium" :class="d.whatsapp_ride_actions_enabled ? 'text-arka-primary' : 'text-arka-text-muted'" @click="toggleWhatsApp(d)">
-                                            {{ d.whatsapp_ride_actions_enabled ? 'Operación activa' : 'Solo avisos' }}
-                                        </button>
+                                    <td class="py-3 pr-3 text-arka-text-muted">
+                                        <span class="rounded-full px-2 py-1 text-xs" :class="d.verification_status === 'approved' ? 'bg-arka-primary/10 text-arka-primary-bright' : d.verification_status === 'rejected' ? 'bg-arka-danger/10 text-arka-danger' : 'bg-arka-warning/10 text-arka-warning'">{{ d.verification_status || 'Incompleta' }}</span>
+                                        <p class="mt-2 text-[11px]">Actividad {{ formatDate(d.last_active_at) }}</p>
                                     </td>
-                                    <td class="py-2">
-                                        <!-- Mismo criterio que Admin/Subscriptions.vue (pedido
-                                             explícito del usuario: botones más chicos en tablas). -->
-                                        <DangerButton v-if="!d.is_suspended" size="sm" @click="suspend(d)">Suspender</DangerButton>
-                                        <PrimaryButton v-else size="sm" @click="reactivate(d)">Reactivar</PrimaryButton>
+                                    <td class="py-3 text-right">
+                                        <div class="flex justify-end gap-2"><Link :href="route('admin.users.show', d.user_id)" class="rounded-lg border border-arka-text-muted/20 px-2.5 py-1.5 text-xs font-medium text-arka-text">Ver perfil</Link><DangerButton v-if="!d.is_suspended" size="sm" @click="suspend(d)">Suspender</DangerButton><PrimaryButton v-else size="sm" @click="reactivate(d)">Reactivar</PrimaryButton></div>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <div class="space-y-2 md:hidden">
+                        <article v-for="d in allDrivers.data" :key="d.user_id" class="rounded-xl border border-arka-text-muted/10 bg-arka-base/40 p-3">
+                            <div class="flex items-start justify-between gap-3"><div class="min-w-0"><Link :href="route('admin.users.show', d.user_id)" class="truncate font-semibold text-arka-text">{{ d.name }}</Link><p class="truncate text-xs text-arka-text-muted">{{ d.email }}</p></div><span class="shrink-0 rounded-full px-2 py-1 text-[10px]" :class="d.is_suspended ? 'bg-arka-danger/10 text-arka-danger' : d.is_available ? 'bg-arka-primary/10 text-arka-primary-bright' : 'bg-arka-card text-arka-text-muted'">{{ d.is_suspended ? 'Suspendido' : d.is_available ? 'Disponible' : 'Desconectado' }}</span></div>
+                            <p class="mt-3 text-xs text-arka-text">{{ d.vehicle || 'Vehículo sin completar' }}</p><p class="mt-1 text-[11px] text-arka-text-muted">{{ d.completed_rides_count }} carreras · {{ d.verification_status || 'Verificación incompleta' }}</p>
+                            <div class="mt-3 flex gap-2"><Link :href="route('admin.users.show', d.user_id)" class="flex-1 rounded-lg border border-arka-text-muted/20 px-3 py-2 text-center text-xs font-medium text-arka-text">Ver perfil</Link><button v-if="!d.is_suspended" type="button" class="rounded-lg px-3 py-2 text-xs font-medium text-arka-danger" @click="suspend(d)">Suspender</button><button v-else type="button" class="rounded-lg px-3 py-2 text-xs font-medium text-arka-primary" @click="reactivate(d)">Reactivar</button></div>
+                        </article>
                     </div>
 
                     <!-- Paginado simple: nunca se carga todo de una vez (sección 9.7) -->

@@ -12,6 +12,8 @@ use App\Models\FleetMember;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
+use App\Models\SupportTicket;
+use App\Models\SystemEvent;
 use App\Models\User;
 use App\Services\FrequentPlaces;
 use App\Services\Haversine;
@@ -217,6 +219,36 @@ class DashboardController extends Controller
                 'clients' => $countsFor(User::query()->where('role', 'cliente')),
                 'drivers' => $countsFor(User::query()->where('role', 'conductor')),
                 'cooperatives' => $countsFor(Cooperative::query()),
+                // La primera lectura del administrador debe ser operativa:
+                // cuántas solicitudes siguen esperando, cuántas carreras se
+                // están ejecutando y qué ocurrió hoy. Las cancelaciones de
+                // solicitud y de carrera se suman porque representan etapas
+                // distintas del flujo y nunca son la misma fila.
+                'rides' => [
+                    'requests' => [
+                        'current' => RideRequest::query()->whereIn('status', ['pending', 'negotiating', 'waiting'])->count(),
+                        'today' => RideRequest::query()->where('created_at', '>=', $today)->count(),
+                    ],
+                    'active' => [
+                        'current' => Ride::query()->where('status', 'in_progress')->count(),
+                        'scheduled' => Ride::query()->where('status', 'scheduled')->count(),
+                    ],
+                    'completed' => [
+                        'today' => Ride::query()->where('status', 'completed')->where('completed_at', '>=', $today)->count(),
+                        'month' => Ride::query()->where('status', 'completed')->where('completed_at', '>=', $month)->count(),
+                    ],
+                    'cancelled' => [
+                        'today' => Ride::query()->where('status', 'cancelled')->where('cancelled_at', '>=', $today)->count()
+                            + RideRequest::query()->where('status', 'cancelled')->where('updated_at', '>=', $today)->count(),
+                        'month' => Ride::query()->where('status', 'cancelled')->where('cancelled_at', '>=', $month)->count()
+                            + RideRequest::query()->where('status', 'cancelled')->where('updated_at', '>=', $month)->count(),
+                    ],
+                ],
+                'attention' => [
+                    'cooperatives' => Cooperative::query()->whereIn('status', ['pending', 'in_review'])->count(),
+                    'support' => SupportTicket::query()->where('status', '!=', 'cerrado')->count(),
+                    'monitoring' => SystemEvent::query()->where('status', '!=', 'resolved')->count(),
+                ],
             ];
         }
 

@@ -7,11 +7,10 @@ namespace App\Services;
  * sistema de habilitar o no estas opciones del menu tanto las del conductor
  * como las del cliente." Lista curada de los accesos rápidos de
  * `quickLinks` (resources/js/Layouts/AuthenticatedLayout.vue) que tiene
- * sentido dejar apagar desde el admin — solo los exclusivos de un rol
- * (driverOnly/clientOnly ahí). Quedan afuera a propósito los universales
- * (Contactos de confianza, Centro de ayuda, Cupones, Encuesta) y los de
- * cooperativa: no es lo que se pidió, y alguno de esos es demasiado crítico
- * para dejarlo apagable sin querer.
+ * sentido dejar apagar desde el admin. Incluye los exclusivos de conductor,
+ * los exclusivos de cliente y los compartidos por ambos roles. Los accesos
+ * operativos de cooperativa permanecen fuera de este control porque tienen
+ * su propia navegación administrativa.
  *
  * Única fuente de verdad para Admin\SystemController (arma la lista de
  * checkboxes) — el `route` de cada renglón es la misma key que
@@ -23,6 +22,7 @@ namespace App\Services;
 class QuickLinkRegistry
 {
     public const ITEMS = [
+        'driver.profile.edit' => ['label' => 'Mi perfil de conductor', 'group' => 'conductor'],
         'driver.invitations.index' => ['label' => 'Mis clientes de confianza', 'group' => 'conductor'],
         'express-routes.available' => ['label' => 'Expresos disponibles', 'group' => 'conductor'],
         'driver.plan.edit' => ['label' => 'Mi plan de conductor', 'group' => 'conductor'],
@@ -33,6 +33,11 @@ class QuickLinkRegistry
         'express-routes.index' => ['label' => 'Mis Expresos', 'group' => 'cliente'],
         'client.plan.edit' => ['label' => 'Mi plan de cliente', 'group' => 'cliente'],
         'van-trips.browse' => ['label' => 'Rutas y Turismo', 'group' => 'cliente'],
+        'trust-circle.index' => ['label' => 'Mi círculo de confianza', 'group' => 'ambos'],
+        'trusted-contacts.index' => ['label' => 'Contactos de confianza', 'group' => 'ambos'],
+        'support.index' => ['label' => 'Centro de ayuda', 'group' => 'ambos'],
+        'coupons.index' => ['label' => 'Cupones y beneficios', 'group' => 'ambos'],
+        'survey.show' => ['label' => 'Encuesta', 'group' => 'ambos'],
     ];
 
     /**

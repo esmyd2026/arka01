@@ -3,15 +3,25 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Fila única con los parámetros del cálculo de precio sugerido (sección 5).
  * Ver la migración create_pricing_settings_table: siempre existe una fila,
  * sembrada ahí mismo, así que current() nunca necesita un valor por defecto
  * en código — el único "default" real es el de esa migración inicial.
+ *
+ * Optimización de escala (pedido explícito del usuario: "anticiparme a que
+ * esto no suceda cuando comience a crecer la demanda"): current() se llama
+ * decenas de veces por request bajo carga real (cada cálculo de precio,
+ * cada parada de una carrera con paradas) — todas leyendo la misma fila que
+ * casi nunca cambia. Cachearla evita esa cantidad de queries redundantes;
+ * el hook de abajo invalida el cache apenas se guarda un cambio real, así
+ * que nunca queda una lectura vieja después de tocar /admin/tarifas.
  */
 class PricingSetting extends Model
 {
+    private const CACHE_KEY = 'pricing_settings.current';
     protected $fillable = [
         'night_surcharge_percent',
         'night_starts_at',
@@ -45,6 +55,16 @@ class PricingSetting extends Model
 
     public static function current(): self
     {
-        return self::query()->firstOrFail();
+        return Cache::remember(self::CACHE_KEY, now()->addHour(), fn () => self::query()->firstOrFail());
+    }
+
+    protected static function booted(): void
+    {
+        // Invalida el cache de arriba con CUALQUIER cambio real — sin
+        // importar si vino de Admin\PricingSettingController::update() o de
+        // un ->update() directo (ej. en tests) — nunca queda una lectura
+        // vieja después de tocar /admin/tarifas.
+        static::saved(fn () => Cache::forget(self::CACHE_KEY));
+        static::deleted(fn () => Cache::forget(self::CACHE_KEY));
     }
 }

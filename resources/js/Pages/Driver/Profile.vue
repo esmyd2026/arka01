@@ -14,7 +14,8 @@ import RatingStars from '@/Components/RatingStars.vue';
 import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import SectionIcon from '@/Components/SectionIcon.vue';
 import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import DriverAvailabilityToggle from '@/Components/DriverAvailabilityToggle.vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import { canInstallApp, installApp } from '@/pwaInstall';
@@ -38,6 +39,7 @@ const props = defineProps({
     },
     canConnect: { type: Boolean, default: false },
     connectionBlockReason: { type: String, default: null },
+    missingDriverRequirements: { type: Array, default: () => [] },
     planLimits: { type: Object, required: true },
     // Avisos de carrera nueva por WhatsApp (pedido explícito del usuario).
     whatsappSession: { type: Object, default: null },
@@ -74,10 +76,17 @@ const props = defineProps({
     // si no pertenece a ninguna cooperativa, o si esa cooperativa todavía no
     // configuró sus tarifas (nunca hay saldo que mostrar en ese caso).
     cooperativeWallet: { type: Object, default: null },
+    // Cuentas bancarias (pedido explícito del usuario): varias, con una
+    // favorita — ver DriverBankAccountController.
+    bankAccounts: { type: Array, default: () => [] },
+    // Catálogo de bancos de Ecuador (pedido explícito del usuario: "que sea
+    // un seleccionable... con los principales primero") — ver
+    // App\Models\DriverBankAccount::banks(). El último valor es siempre
+    // "Otro", que revela un campo de texto libre en vez de forzar una
+    // opción de la lista.
+    banks: { type: Array, default: () => [] },
     reviewCount: { type: Number, required: true },
 });
-
-const WHATSAPP_STATUS_LABEL = { active: 'Activa', expiring_soon: 'Próxima a vencer', expired: 'Expirada' };
 
 // Pedido explícito del usuario: el recuadro de tarifa en Inicio
 // (Dashboard.vue) enlaza acá con "#rate_per_km" — sin esto, la pantalla se
@@ -215,6 +224,7 @@ const assignedServiceCategory = computed(() => (
 const assignedPublicCategory = computed(() => (
     props.publicDriverCategories[props.driverProfile?.public_category] ?? null
 ));
+const profileAvailable = ref(Boolean(props.driverProfile?.is_available));
 
 // Mismo criterio que DriverProfile::hasCompleteVehicleInfo() (backend) —
 // duplicado acá nomás para el aviso, la validación real siempre la hace el
@@ -232,6 +242,27 @@ const vehicleInfoComplete = computed(() => {
         && p?.has_trunk !== null
     );
 });
+
+const missingVehicleLabels = computed(() => {
+    const p = props.driverProfile ?? {};
+    const fields = [
+        ['vehicle_make', 'marca'],
+        ['vehicle_model', 'modelo'],
+        ['vehicle_color', 'color'],
+        ['vehicle_type', 'tipo de vehículo'],
+        ['vehicle_plate', 'placa'],
+        ['vehicle_year', 'año'],
+        ['passenger_capacity', 'cantidad de pasajeros'],
+    ];
+    const missing = fields.filter(([field]) => p[field] === null || p[field] === undefined || String(p[field]).trim() === '').map(([, label]) => label);
+    if (p.has_trunk === null || p.has_trunk === undefined) missing.push('disponibilidad de cajuela');
+    return missing;
+});
+
+const missingRequirementLabels = (section = null) => props.missingDriverRequirements
+    .filter((item) => !section || item.section === section)
+    .map((item) => item.label);
+const missingSummary = (labels) => `Falta${labels.length === 1 ? '' : 'n'}: ${labels.join(', ')}.`;
 
 // Los datos persistidos de identificación del vehículo quedan protegidos de
 // forma individual. Esto permite completar un perfil antiguo al que todavía
@@ -254,6 +285,61 @@ const toggleProfileSection = (section) => {
 };
 
 const completedStatusCount = computed(() => statusItems.value.filter((item) => item.ok).length);
+
+// Cuentas bancarias (pedido explícito del usuario): form propio, aparte del
+// principal, porque postea a un endpoint distinto
+// (DriverBankAccountController::store()) — una entidad de varias filas no
+// encaja en el mismo useForm() 1:1 del resto del perfil.
+const bankAccountForm = useForm({
+    account_holder_name: usePage().props.auth.user.full_name,
+    identity_number: '',
+    bank_name: '',
+    account_type: 'ahorros',
+    account_number: '',
+});
+
+// Selector de banco con "Otro" (pedido explícito del usuario): el
+// desplegable maneja las opciones fijas, y solo cuando elige "Otro" aparece
+// un campo de texto libre — bank_name (lo que de verdad se envía) sigue el
+// valor de cualquiera de los dos según corresponda.
+const selectedBank = ref('');
+const customBankName = ref('');
+watch([selectedBank, customBankName], () => {
+    bankAccountForm.bank_name = selectedBank.value === 'Otro' ? customBankName.value : selectedBank.value;
+});
+
+function submitBankAccount() {
+    bankAccountForm.post(route('driver.bank-accounts.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            bankAccountForm.reset();
+            bankAccountForm.account_holder_name = usePage().props.auth.user.full_name;
+            selectedBank.value = '';
+            customBankName.value = '';
+        },
+    });
+}
+
+function markBankAccountFavorite(account) {
+    router.patch(route('driver.bank-accounts.favorite', account.id), {}, { preserveScroll: true });
+}
+
+function deleteBankAccount(account) {
+    confirmDialog(`¿Eliminar la cuenta ${account.bank_name} · ${account.account_number}?`, {
+        danger: true,
+        confirmLabel: 'Eliminar',
+    }).then((confirmed) => {
+        if (confirmed) router.delete(route('driver.bank-accounts.destroy', account.id), { preserveScroll: true });
+    });
+}
+
+watch(
+    () => bankAccountForm.errors,
+    (errors) => {
+        if (Object.keys(errors ?? {}).length) activeProfileSection.value = 'bank';
+    },
+    { deep: true }
+);
 
 // Si el servidor rechaza algún dato, se abre automáticamente el bloque que
 // contiene ese campo. Así el error nunca queda escondido en un acordeón.
@@ -285,27 +371,38 @@ const statusItems = computed(() => {
     const p = props.driverProfile;
     if (!p) return [];
 
+    const registrationMissing = missingRequirementLabels();
+    const firstMissingSection = props.missingDriverRequirements[0]?.section ?? null;
+    const verificationMissing = missingRequirementLabels('verification');
+
     const items = [
         {
-            label: 'Habilitado para conectarse',
+            label: 'Requisitos para conectarse',
             ok: props.canConnect,
+            action: !props.canConnect && firstMissingSection ? 'section' : null,
+            section: firstMissingSection,
             detail: props.canConnect
-                ? 'Su perfil está completo y aprobado. Puede activarse desde Inicio.'
-                : props.connectionBlockReason || 'Complete el perfil y espere la aprobación administrativa.',
+                ? 'Información completa y aprobación administrativa listas.'
+                : registrationMissing.length
+                  ? missingSummary(registrationMissing)
+                  : props.connectionBlockReason || 'Su información aún no está habilitada para conectarse.',
         },
         {
-            label: 'Datos del vehículo completos',
+            label: 'Datos del vehículo',
             ok: vehicleInfoComplete.value,
+            action: vehicleInfoComplete.value ? null : 'section',
+            section: 'vehicle',
             detail: vehicleInfoComplete.value
-                ? 'Puede ponerse disponible desde Inicio.'
-                : 'Le faltan datos del vehículo (marca, modelo, color, placa, año o pasajeros) — complételos abajo y guarde.',
+                ? 'Marca, modelo, características y capacidad completos.'
+                : missingSummary(missingVehicleLabels.value),
         },
         {
             label: 'Disponible ahora',
-            ok: p.is_available,
-            detail: p.is_available
+            ok: profileAvailable.value,
+            action: 'availability',
+            detail: profileAvailable.value
                 ? 'Los clientes lo ven en "Mi flota" y en el directorio si es público.'
-                : 'Actívese desde el switch "Activarme" en Inicio (necesita los datos del vehículo completos).',
+                : 'Actívese aquí para empezar a recibir carreras.',
         },
     ];
 
@@ -315,6 +412,7 @@ const statusItems = computed(() => {
     items.push({
         label: 'Visible en el directorio público',
         ok: directoryVisible,
+        action: !props.planLimits.public_visibility ? 'plans' : (!p.is_public ? 'visibility' : null),
         detail: directoryVisible
             ? 'Cualquier cliente lo puede encontrar y agregarlo a su flota, no solo quien ya lo conoce.'
             : !props.planLimits.public_visibility
@@ -327,10 +425,16 @@ const statusItems = computed(() => {
     // el plan).
     const verifiedBadgeVisible = p.verification_status === 'approved' && props.planLimits.verified_badge;
     items.push({
-        label: 'Insignia de verificado',
+        label: 'Verificación administrativa',
         ok: verifiedBadgeVisible,
+        action: verificationMissing.length
+            ? 'section'
+            : (p.verification_status === 'approved' && !props.planLimits.verified_badge ? 'plans' : null),
+        section: verificationMissing.length ? 'verification' : null,
         detail: verifiedBadgeVisible
             ? 'Se ve en su perfil y en el directorio público.'
+            : verificationMissing.length
+              ? missingSummary(verificationMissing)
             : p.verification_status === 'rejected'
               ? `Su verificación fue rechazada${p.verification_rejection_reason ? `: "${p.verification_rejection_reason}"` : ''} — corrija eso y vuelva a subir sus fotos más abajo.`
               : p.verification_status == null
@@ -353,6 +457,16 @@ const submit = () => {
 // reactiva, ver DriverProfileController::update()).
 function reactivate() {
     router.post(route('driver.profile.reactivate'));
+}
+
+function openVisibilitySettings() {
+    activeProfileSection.value = 'visibility';
+    nextTick(() => document.getElementById('driver-visibility-settings')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+}
+
+function openProfileSection(section) {
+    activeProfileSection.value = section;
+    nextTick(() => document.getElementById(`driver-${section}-settings`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
 // Pedido explícito del usuario: "Instalar app" y "Pasarme a cliente" también
@@ -465,27 +579,51 @@ const VERIFICATION_LABELS = {
                             </div>
                         </div>
 
+                        <div class="space-y-3">
                         <div
                             role="status"
                             class="rounded-arka border p-4"
-                            :class="driverProfile && canConnect
+                            :class="driverProfile && canConnect && !driverProfile?.deactivated_at
                                 ? 'border-arka-primary/30 bg-arka-primary/10'
                                 : 'border-arka-warning/30 bg-arka-warning/10'"
                         >
                             <div class="flex items-start gap-3">
                                 <span
                                     class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg font-bold"
-                                    :class="driverProfile && canConnect ? 'bg-arka-primary/20 text-arka-primary-bright' : 'bg-arka-warning/20 text-arka-warning'"
-                                >{{ driverProfile && canConnect ? '✓' : '!' }}</span>
-                                <div>
-                                    <p class="font-semibold" :class="driverProfile && canConnect ? 'text-arka-primary-bright' : 'text-arka-warning'">
-                                        {{ driverProfile && canConnect ? 'Perfil aprobado y listo' : 'Perfil pendiente de completar' }}
+                                    :class="driverProfile && canConnect && !driverProfile?.deactivated_at ? 'bg-arka-primary/20 text-arka-primary-bright' : 'bg-arka-warning/20 text-arka-warning'"
+                                >{{ driverProfile && canConnect && !driverProfile?.deactivated_at ? '✓' : '!' }}</span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="font-semibold" :class="driverProfile && canConnect && !driverProfile?.deactivated_at ? 'text-arka-primary-bright' : 'text-arka-warning'">
+                                        {{ driverProfile?.deactivated_at ? 'Perfil de conductor pausado' : (driverProfile && canConnect ? 'Perfil aprobado y listo' : 'Perfil pendiente de completar') }}
                                     </p>
                                     <p class="mt-1 text-sm leading-relaxed text-arka-text-muted">
-                                        {{ driverProfile && canConnect ? 'Ya puede regresar a Inicio y ponerse disponible.' : (connectionBlockReason || 'Complete los datos para activar su perfil de conductor.') }}
+                                        {{ driverProfile?.deactivated_at ? 'Sus datos siguen guardados. Reactívelo y vuelva a trabajar sin completar todo otra vez.' : (driverProfile && canConnect ? 'Active su disponibilidad en los indicadores de abajo para recibir carreras.' : (connectionBlockReason || 'Complete los datos para activar su perfil de conductor.')) }}
                                     </p>
+                                    <PrimaryButton v-if="driverProfile?.deactivated_at" class="mt-3" @click="reactivate">Reactivar perfil</PrimaryButton>
                                 </div>
                             </div>
+                        </div>
+
+                        <div v-if="driverProfile && whatsappBusinessNumber" class="rounded-arka border p-4" :class="whatsappSession && whatsappSession.status !== 'expired' ? 'border-arka-primary/20 bg-arka-base/40' : 'border-arka-warning/25 bg-arka-warning/5'">
+                            <div class="flex items-start gap-3">
+                                <svg class="mt-0.5 h-5 w-5 shrink-0 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4A8 8 0 1 1 20 11.5Z"/><path d="M8.5 8.5c.7 3.1 2.2 4.6 5 5" stroke-linecap="round"/></svg>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-semibold text-arka-text">Avisos por WhatsApp</p>
+                                    <p class="mt-1 text-xs leading-relaxed text-arka-text-muted">
+                                        <template v-if="whatsappSession && whatsappSession.status !== 'expired'">Conectado · {{ whatsappTimeRemaining() }} restantes. Renueve antes de que venza.</template>
+                                        <template v-else>Conéctelo para recibir solicitudes aunque la app esté cerrada.</template>
+                                    </p>
+                                    <a :href="whatsappOptInUrl" target="_blank" rel="noopener" class="mt-2 inline-flex min-h-9 items-center rounded-lg border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright hover:bg-arka-primary/10">
+                                        {{ whatsappSession && whatsappSession.status !== 'expired' ? 'Renovar WhatsApp' : 'Conectar WhatsApp' }}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="driverProfile" class="flex flex-wrap gap-2">
+                            <SecondaryButton v-if="!driverProfile.deactivated_at" @click="switchToClient">Pasarme a cliente</SecondaryButton>
+                            <SecondaryButton v-if="canInstallApp" @click="installAppNow">Instalar app</SecondaryButton>
+                        </div>
                         </div>
                     </div>
                 </section>
@@ -497,15 +635,6 @@ const VERIFICATION_LABELS = {
                              pausado, un atajo de un solo toque para volver —
                              sin esto tendría que revisar/reguardar todo el
                              formulario de abajo para reactivarse. -->
-                        <div v-if="driverProfile?.deactivated_at" class="mb-4 p-4 rounded-arka bg-arka-warning/10 border border-arka-warning/30">
-                            <p class="text-sm font-medium text-arka-warning">Su perfil de conductor está pausado</p>
-                            <p class="mt-1 text-sm text-arka-text-muted">
-                                Ahora mismo su cuenta opera como cliente. Sus datos (vehículo, verificación, medallas)
-                                siguen guardados — reactive cuando quiera sin volver a completar nada.
-                            </p>
-                            <SecondaryButton class="mt-3" @click="reactivate">Reactivar mi perfil de conductor</SecondaryButton>
-                        </div>
-
                         <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-primary">Configuración</p>
@@ -519,11 +648,6 @@ const VERIFICATION_LABELS = {
 
                         <!-- Usuario y código de socio: ya se muestran arriba, en la
                              tarjeta de perfil — sin repetirlos acá. -->
-
-                        <div v-if="!driverProfile?.deactivated_at" class="mt-4 flex flex-wrap gap-2">
-                            <SecondaryButton v-if="canInstallApp" @click="installAppNow">Instalar app</SecondaryButton>
-                            <SecondaryButton v-if="driverProfile" @click="switchToClient">Pasarme a cliente</SecondaryButton>
-                        </div>
 
                         <!-- "Tu estado" (pedido explícito del usuario): de un vistazo,
                              qué está activo y qué falta para cada cosa (disponible,
@@ -549,54 +673,40 @@ const VERIFICATION_LABELS = {
                                     {{ item.label }}
                                 </p>
                                 <p v-if="!item.ok" class="mt-1 pl-6 text-xs leading-relaxed text-arka-text-muted">{{ item.detail }}</p>
-                            </div>
-                            </div>
-                        </div>
-
-                        <!-- Avisos de carrera nueva por WhatsApp (pedido explícito
-                             del usuario): estado de la ventana de 24h + link para
-                             abrirla o renovarla escribiéndole al número oficial.
-                             Mismo lenguaje de "pasos" que el widget de recuperar
-                             sesión del login, para que se sienta el mismo mecanismo
-                             en toda la app (escribir primero, el bot lo conecta solo). -->
-                        <div v-if="driverProfile && whatsappBusinessNumber" class="mt-4 rounded-xl border border-arka-text-muted/15 bg-arka-base/35 p-3">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <p class="text-sm font-medium text-arka-text">Solicitudes por WhatsApp</p>
-                                    <p class="mt-1 text-xs text-arka-text-muted">
-                                        <template v-if="whatsappSession && whatsappSession.status !== 'expired'">
-                                            Conectado · {{ whatsappTimeRemaining() }} restantes
-                                        </template>
-                                        <template v-else>Reciba avisos aunque la app esté cerrada.</template>
-                                    </p>
+                                <div v-if="item.action && (!item.ok || item.action === 'availability')" class="mt-3 pl-6">
+                                    <DriverAvailabilityToggle
+                                        v-if="item.action === 'availability'"
+                                        :initial-available="profileAvailable"
+                                        :can-connect="canConnect && !driverProfile?.deactivated_at"
+                                        :blocked-reason="driverProfile?.deactivated_at ? 'Reactive primero su perfil de conductor.' : connectionBlockReason"
+                                        @update:available="profileAvailable = $event"
+                                    />
+                                    <Link
+                                        v-else-if="item.action === 'plans'"
+                                        :href="route('driver.plan.edit')"
+                                        class="inline-flex min-h-9 items-center rounded-lg border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright hover:bg-arka-primary/10"
+                                    >
+                                        Ir a los planes
+                                    </Link>
+                                    <button
+                                        v-else-if="item.action === 'visibility'"
+                                        type="button"
+                                        class="inline-flex min-h-9 items-center rounded-lg border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright hover:bg-arka-primary/10"
+                                        @click="openVisibilitySettings"
+                                    >
+                                        Configurar visibilidad
+                                    </button>
+                                    <button
+                                        v-else-if="item.action === 'section'"
+                                        type="button"
+                                        class="inline-flex min-h-9 items-center rounded-lg border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright hover:bg-arka-primary/10"
+                                        @click="openProfileSection(item.section)"
+                                    >
+                                        Ir a completar
+                                    </button>
                                 </div>
-                                <span
-                                    class="shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold"
-                                    :class="whatsappSession && whatsappSession.status !== 'expired'
-                                        ? 'bg-arka-primary/15 text-arka-primary-bright'
-                                        : 'bg-arka-warning/15 text-arka-warning'"
-                                >
-                                    {{ whatsappSession && whatsappSession.status !== 'expired' ? WHATSAPP_STATUS_LABEL[whatsappSession.status] : 'Sin conectar' }}
-                                </span>
                             </div>
-                            <!-- Pedido explícito del usuario: "coloca por alli al
-                                 conductor que recibira solicitudes por whatsapp
-                                 siempre y cuando se conecte por alli" — el
-                                 beneficio concreto de conectar WhatsApp (seguir
-                                 disponible aunque la app esté cerrada/en segundo
-                                 plano), no solo el estado de la ventana. -->
-                            <a
-                                :href="whatsappOptInUrl"
-                                target="_blank"
-                                rel="noopener"
-                                class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
-                            >
-                                {{ whatsappSession && whatsappSession.status !== 'expired' ? 'Renovar conexión' : 'Conectar WhatsApp' }} &rarr;
-                            </a>
-                            <!-- Pedido explícito del usuario: que sepa que
-                                 también puede conectarse/desconectarse
-                                 directo desde WhatsApp (WhatsAppDriverConnectHandler),
-                                 sin necesidad de abrir la app. -->
+                            </div>
                         </div>
                     </header>
 
@@ -607,11 +717,11 @@ const VERIFICATION_LABELS = {
                              (WhatsAppWebhookController) y al que le llegan los
                              avisos de carrera nueva — tiene que poder
                              corregirlo si se equivocó o cambió de celular. -->
-                        <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-contact-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('contact')">
                                 <SectionIcon name="phone" />
                                 <span class="min-w-0 flex-1">
-                                    <span class="block font-semibold text-arka-text">Contacto y WhatsApp</span>
+                                    <span class="block font-semibold text-arka-text">1. Contacto y WhatsApp</span>
                                     <span class="mt-0.5 block truncate text-xs text-arka-text-muted">
                                         {{ currentPhone ?? 'Número pendiente' }} · {{ phoneVerified ? 'Verificado' : 'Sin verificar' }}
                                     </span>
@@ -663,11 +773,11 @@ const VERIFICATION_LABELS = {
                         </div>
                         </section>
 
-                        <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-vehicle-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('vehicle')">
                                 <SectionIcon name="vehicle" />
                                 <span class="min-w-0 flex-1">
-                                    <span class="block font-semibold text-arka-text">Vehículo y comodidades</span>
+                                    <span class="block font-semibold text-arka-text">2. Vehículo y comodidades</span>
                                     <span class="mt-0.5 block text-xs" :class="vehicleInfoComplete ? 'text-arka-primary' : 'text-arka-warning'">
                                         {{ vehicleInfoComplete ? 'Información obligatoria completa' : 'Faltan datos obligatorios' }}
                                     </span>
@@ -838,124 +948,13 @@ const VERIFICATION_LABELS = {
                             </div>
                         </section>
 
-                        <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
-                            <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('work')">
-                                <SectionIcon name="rates" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block font-semibold text-arka-text">Tarifas y forma de trabajo</span>
-                                    <span class="mt-0.5 block text-xs text-arka-text-muted">
-                                        {{ form.rate_per_km !== '' ? `$${Number(form.rate_per_km).toFixed(2)}/km` : 'Tarifa pendiente' }} · {{ form.max_request_distance_km ? `${form.max_request_distance_km} km de cobertura` : 'Sin límite de cobertura' }}
-                                    </span>
-                                </span>
-                                <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="activeProfileSection === 'work' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
-                                </svg>
-                            </button>
-                            <div v-show="activeProfileSection === 'work'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
-                        <!-- Tarifa y forma de pago: el conductor define su propio precio,
-                             la plataforma no lo impone (sección 5 del alcance) -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <InputLabel for="rate_per_km" value="Tarifa por km (USD)" />
-                                <TextInput
-                                    id="rate_per_km"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    class="mt-1 block w-full"
-                                    v-model="form.rate_per_km"
-                                    required
-                                />
-                                <InputError class="mt-2" :message="form.errors.rate_per_km" />
-                            </div>
-
-                            <div>
-                                <InputLabel for="minimum_fare" value="Tarifa mínima (USD, opcional)" />
-                                <TextInput
-                                    id="minimum_fare"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    :max="platformMinimumFare"
-                                    class="mt-1 block w-full"
-                                    v-model="form.minimum_fare"
-                                />
-                                <!-- Pedido explícito del usuario: que se le indique en su
-                                     configuración que la plataforma no permite superar el
-                                     tope general — puede poner una MENOR, esa sí se respeta
-                                     en el cálculo del precio (ver PriceCalculator). -->
-                                <p class="mt-1 text-xs text-arka-text-muted">
-                                    No puede superar ${{ platformMinimumFare.toFixed(2) }} (tope de la plataforma). Si la deja en blanco, se usa ese tope.
-                                </p>
-                                <InputError class="mt-2" :message="form.errors.minimum_fare" />
-                            </div>
-                        </div>
-
-                        <!-- Zona de cobertura (pedido explícito del usuario): evita que
-                             lleguen solicitudes que no convienen por los km, aunque el
-                             cliente sea de la propia flota (ej. vivir en Samborondón y que
-                             llegue una del Guasmo). -->
-                        <div>
-                            <InputLabel for="max_request_distance_km" value="Distancia máxima para recibir solicitudes (km, opcional)" />
-                            <TextInput
-                                id="max_request_distance_km"
-                                type="number"
-                                step="1"
-                                min="1"
-                                class="mt-1 block w-full sm:w-1/2"
-                                v-model="form.max_request_distance_km"
-                                placeholder="Sin límite"
-                            />
-                            <p class="mt-1 text-xs text-arka-text-muted">
-                                Si la deja en blanco, le siguen llegando solicitudes sin importar la distancia. Se
-                                mide desde su ubicación actual — incluso las de sus clientes de confianza quedan
-                                afuera si superan este límite.
-                            </p>
-                            <InputError class="mt-2" :message="form.errors.max_request_distance_km" />
-                        </div>
-
-                        <!-- Cargo por distancia de recogida (pedido explícito del
-                             usuario): interruptor general, igual jerarquía que la
-                             tarifa por km — con esto apagado, la función no existe
-                             para este conductor en ninguna solicitud. -->
-                        <div class="rounded-xl border border-arka-text-muted/15 p-3.5">
-                            <label class="flex items-start gap-3">
-                                <Checkbox v-model:checked="form.pickup_surcharge_enabled" class="mt-0.5" />
-                                <span>
-                                    <span class="block text-sm font-medium text-arka-text">Cobrar por distancia de recogida</span>
-                                    <span class="mt-0.5 block text-xs text-arka-text-muted">
-                                        Cuando el cliente esté a más de {{ pickupSurchargeThresholdKm }} km de usted, va a poder ver un
-                                        cargo adicional (hasta el {{ pickupSurchargePercent }}%) y decidir si lo cobra, solicitud por
-                                        solicitud. Apague esto si nunca quiere ver esa opción.
-                                    </span>
-                                </span>
-                            </label>
-                            <InputError class="mt-2" :message="form.errors.pickup_surcharge_enabled" />
-                        </div>
-
-                        <div>
-                            <InputLabel value="Métodos de pago que acepta" />
-                            <div class="mt-2 flex flex-wrap gap-3">
-                                <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
-                                    <Checkbox v-model:checked="form.accepts_cash" />
-                                    <span class="ms-2 text-sm text-arka-text">Efectivo</span>
-                                </label>
-                                <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
-                                    <Checkbox v-model:checked="form.accepts_transfer" />
-                                    <span class="ms-2 text-sm text-arka-text">Transferencia</span>
-                                </label>
-                            </div>
-                        </div>
-                            </div>
-                        </section>
-
                         <!-- Verificación de identidad: los documentos son privados y
                              solo pueden verlos el conductor y un administrador. -->
-                        <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-verification-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('verification')">
                                 <SectionIcon name="identity" />
                                 <span class="min-w-0 flex-1">
-                                    <span class="block font-semibold text-arka-text">Identidad y documentos</span>
+                                    <span class="block font-semibold text-arka-text">3. Identidad y documentos</span>
                                     <span class="mt-0.5 block text-xs"
                                         :class="driverProfile?.verification_status === 'approved' ? 'text-arka-primary' : driverProfile?.verification_status === 'rejected' ? 'text-arka-danger' : 'text-arka-warning'"
                                     >
@@ -1119,7 +1118,212 @@ const VERIFICATION_LABELS = {
                         </div>
                         </section>
 
-                        <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <!-- Cuentas bancarias (pedido explícito del usuario): el
+                             cliente las ve (la favorita primero) cuando la carrera
+                             es por transferencia y usted va en camino a
+                             recogerlo — ver Ride/Show.vue. -->
+                        <section id="driver-bank-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                            <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('bank')">
+                                <SectionIcon name="bank" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block font-semibold text-arka-text">4. Cuentas bancarias</span>
+                                    <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                        {{ bankAccounts.length ? `${bankAccounts.length} cuenta${bankAccounts.length === 1 ? '' : 's'} declarada${bankAccounts.length === 1 ? '' : 's'}` : 'Ninguna cuenta declarada' }}
+                                    </span>
+                                </span>
+                                <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="activeProfileSection === 'bank' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                                </svg>
+                            </button>
+                            <div v-show="activeProfileSection === 'bank'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                                <p class="text-xs text-arka-text-muted">
+                                    El cliente las ve cuando le toca pagar por transferencia y usted va en camino a recogerlo —
+                                    la favorita aparece primero.
+                                </p>
+
+                                <div v-if="bankAccounts.length" class="space-y-2">
+                                    <div
+                                        v-for="account in bankAccounts"
+                                        :key="account.id"
+                                        class="flex items-center justify-between gap-3 rounded-xl border p-3"
+                                        :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-text-muted/15'"
+                                    >
+                                        <div class="min-w-0">
+                                            <p class="flex items-center gap-1.5 text-sm font-medium text-arka-text">
+                                                <span v-if="account.is_favorite" class="text-arka-primary" aria-label="Favorita">★</span>
+                                                {{ account.bank_name }}
+                                            </p>
+                                            <p class="text-xs text-arka-text-muted">
+                                                {{ account.account_holder_name }} ·
+                                                {{ account.account_type === 'ahorros' ? 'Ahorros' : 'Corriente' }} · {{ account.account_number }}
+                                            </p>
+                                        </div>
+                                        <div class="flex shrink-0 items-center gap-2">
+                                            <button v-if="!account.is_favorite" type="button" class="text-xs font-medium text-arka-primary hover:underline" @click="markBankAccountFavorite(account)">Marcar favorita</button>
+                                            <button type="button" class="text-xs font-medium text-arka-danger hover:underline" @click="deleteBankAccount(account)">Eliminar</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <form @submit.prevent="submitBankAccount" class="space-y-4 border-t border-arka-text-muted/10 pt-4">
+                                    <p class="text-sm font-medium text-arka-text">Agregar una cuenta</p>
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="sm:col-span-2">
+                                            <InputLabel for="account_holder_name" value="Nombre del titular de la cuenta" />
+                                            <TextInput id="account_holder_name" class="mt-1 block w-full" v-model="bankAccountForm.account_holder_name" maxlength="120" />
+                                            <p class="mt-1 text-xs text-arka-text-muted">Use el nombre que está registrado en el banco. Puede cambiarlo si la cuenta pertenece a otra persona.</p>
+                                            <InputError class="mt-1" :message="bankAccountForm.errors.account_holder_name" />
+                                        </div>
+                                        <div>
+                                            <InputLabel for="identity_number" value="Cédula del titular" />
+                                            <TextInput id="identity_number" class="mt-1 block w-full" v-model="bankAccountForm.identity_number" maxlength="10" />
+                                            <InputError class="mt-1" :message="bankAccountForm.errors.identity_number" />
+                                        </div>
+                                        <div>
+                                            <InputLabel for="bank_name" value="Banco" />
+                                            <select id="bank_name" v-model="selectedBank" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                                <option value="" disabled>Seleccione un banco</option>
+                                                <option v-for="bank in banks" :key="bank" :value="bank">{{ bank }}</option>
+                                            </select>
+                                            <TextInput
+                                                v-if="selectedBank === 'Otro'"
+                                                class="mt-2 block w-full"
+                                                v-model="customBankName"
+                                                placeholder="Nombre del banco o cooperativa"
+                                            />
+                                            <InputError class="mt-1" :message="bankAccountForm.errors.bank_name" />
+                                        </div>
+                                        <div>
+                                            <InputLabel for="account_type" value="Tipo de cuenta" />
+                                            <select id="account_type" v-model="bankAccountForm.account_type" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                                <option value="ahorros">Ahorros</option>
+                                                <option value="corriente">Corriente</option>
+                                            </select>
+                                            <InputError class="mt-1" :message="bankAccountForm.errors.account_type" />
+                                        </div>
+                                        <div>
+                                            <InputLabel for="account_number" value="Número de cuenta" />
+                                            <TextInput id="account_number" class="mt-1 block w-full" v-model="bankAccountForm.account_number" />
+                                            <InputError class="mt-1" :message="bankAccountForm.errors.account_number" />
+                                        </div>
+                                    </div>
+                                    <SecondaryButton type="submit" :disabled="bankAccountForm.processing">Agregar cuenta</SecondaryButton>
+                                </form>
+                            </div>
+                        </section>
+
+                        <section id="driver-work-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                            <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('work')">
+                                <SectionIcon name="rates" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block font-semibold text-arka-text">5. Tarifas y forma de trabajo</span>
+                                    <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                        {{ form.rate_per_km !== '' ? `$${Number(form.rate_per_km).toFixed(2)}/km` : 'Tarifa pendiente' }} · {{ form.max_request_distance_km ? `${form.max_request_distance_km} km de cobertura` : 'Sin límite de cobertura' }}
+                                    </span>
+                                </span>
+                                <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="activeProfileSection === 'work' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                                </svg>
+                            </button>
+                            <div v-show="activeProfileSection === 'work'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                        <!-- Tarifa y forma de pago: el conductor define su propio precio,
+                             la plataforma no lo impone (sección 5 del alcance) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <InputLabel for="rate_per_km" value="Tarifa por km (USD)" />
+                                <TextInput
+                                    id="rate_per_km"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    class="mt-1 block w-full"
+                                    v-model="form.rate_per_km"
+                                    required
+                                />
+                                <InputError class="mt-2" :message="form.errors.rate_per_km" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="minimum_fare" value="Tarifa mínima (USD, opcional)" />
+                                <TextInput
+                                    id="minimum_fare"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    :max="platformMinimumFare"
+                                    class="mt-1 block w-full"
+                                    v-model="form.minimum_fare"
+                                />
+                                <!-- Pedido explícito del usuario: que se le indique en su
+                                     configuración que la plataforma no permite superar el
+                                     tope general — puede poner una MENOR, esa sí se respeta
+                                     en el cálculo del precio (ver PriceCalculator). -->
+                                <p class="mt-1 text-xs text-arka-text-muted">
+                                    No puede superar ${{ platformMinimumFare.toFixed(2) }} (tope de la plataforma). Si la deja en blanco, se usa ese tope.
+                                </p>
+                                <InputError class="mt-2" :message="form.errors.minimum_fare" />
+                            </div>
+                        </div>
+
+                        <!-- Zona de cobertura (pedido explícito del usuario): evita que
+                             lleguen solicitudes que no convienen por los km, aunque el
+                             cliente sea de la propia flota (ej. vivir en Samborondón y que
+                             llegue una del Guasmo). -->
+                        <div>
+                            <InputLabel for="max_request_distance_km" value="Distancia máxima para recibir solicitudes (km, opcional)" />
+                            <TextInput
+                                id="max_request_distance_km"
+                                type="number"
+                                step="1"
+                                min="1"
+                                class="mt-1 block w-full sm:w-1/2"
+                                v-model="form.max_request_distance_km"
+                                placeholder="Sin límite"
+                            />
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                Si la deja en blanco, le siguen llegando solicitudes sin importar la distancia. Se
+                                mide desde su ubicación actual — incluso las de sus clientes de confianza quedan
+                                afuera si superan este límite.
+                            </p>
+                            <InputError class="mt-2" :message="form.errors.max_request_distance_km" />
+                        </div>
+
+                        <!-- Cargo por distancia de recogida (pedido explícito del
+                             usuario): interruptor general, igual jerarquía que la
+                             tarifa por km — con esto apagado, la función no existe
+                             para este conductor en ninguna solicitud. -->
+                        <div class="rounded-xl border border-arka-text-muted/15 p-3.5">
+                            <label class="flex items-start gap-3">
+                                <Checkbox v-model:checked="form.pickup_surcharge_enabled" class="mt-0.5" />
+                                <span>
+                                    <span class="block text-sm font-medium text-arka-text">Cobrar por distancia de recogida</span>
+                                    <span class="mt-0.5 block text-xs text-arka-text-muted">
+                                        Cuando el cliente esté a más de {{ pickupSurchargeThresholdKm }} km de usted, va a poder ver un
+                                        cargo adicional (hasta el {{ pickupSurchargePercent }}%) y decidir si lo cobra, solicitud por
+                                        solicitud. Apague esto si nunca quiere ver esa opción.
+                                    </span>
+                                </span>
+                            </label>
+                            <InputError class="mt-2" :message="form.errors.pickup_surcharge_enabled" />
+                        </div>
+
+                        <div>
+                            <InputLabel value="Métodos de pago que acepta" />
+                            <div class="mt-2 flex flex-wrap gap-3">
+                                <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
+                                    <Checkbox v-model:checked="form.accepts_cash" />
+                                    <span class="ms-2 text-sm text-arka-text">Efectivo</span>
+                                </label>
+                                <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
+                                    <Checkbox v-model:checked="form.accepts_transfer" />
+                                    <span class="ms-2 text-sm text-arka-text">Transferencia</span>
+                                </label>
+                            </div>
+                        </div>
+                            </div>
+                        </section>
+
+                        <section id="driver-visibility-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('visibility')">
                                 <SectionIcon name="visibility" />
                                 <span class="min-w-0 flex-1">

@@ -739,4 +739,42 @@ class DashboardTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_an_admin_receives_the_current_ride_operation_summary(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-30 12:00:00'));
+
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        RideRequest::factory()->create(['status' => 'pending', 'created_at' => now()]);
+        RideRequest::factory()->create(['status' => 'negotiating', 'created_at' => now()]);
+        $cancelledRequest = RideRequest::factory()->create(['status' => 'cancelled']);
+        $cancelledRequest->forceFill(['updated_at' => now()])->save();
+
+        $rides = collect([
+            Ride::factory()->create(['status' => 'in_progress']),
+            Ride::factory()->create(['status' => 'scheduled', 'started_at' => null]),
+            Ride::factory()->create(['status' => 'completed', 'completed_at' => now()]),
+            Ride::factory()->create(['status' => 'completed', 'completed_at' => now()->subDays(5)]),
+            Ride::factory()->create(['status' => 'cancelled', 'cancelled_at' => now(), 'started_at' => null]),
+        ]);
+        // RideFactory crea su solicitud con el estado pendiente por defecto;
+        // en el flujo real ya está aceptada cuando existe una carrera.
+        $rides->each(fn (Ride $ride) => $ride->rideRequest()->update(['status' => 'accepted']));
+
+        $response = $this->actingAs($admin)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('adminStats.rides.requests.current', 2)
+            ->where('adminStats.rides.requests.today', 8)
+            ->where('adminStats.rides.active.current', 1)
+            ->where('adminStats.rides.active.scheduled', 1)
+            ->where('adminStats.rides.completed.today', 1)
+            ->where('adminStats.rides.completed.month', 2)
+            ->where('adminStats.rides.cancelled.today', 2)
+            ->where('adminStats.rides.cancelled.month', 2)
+        );
+
+        Carbon::setTestNow();
+    }
 }

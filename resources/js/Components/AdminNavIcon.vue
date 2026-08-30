@@ -1,6 +1,6 @@
 <script setup>
 // Ícono por grupo de la nav admin (ver Utils/adminNav.js) — un solo lugar
-// para los 6 trazos, reusado en el dropdown de escritorio, el bottom sheet
+// para los trazos, reusado en el menú de escritorio, el selector móvil
 // del FAB en móvil y las tarjetas del Inicio.
 defineProps({
     icon: { type: String, required: true },
@@ -30,6 +30,16 @@ defineProps({
         <template v-else-if="icon === 'doc'">
             <path stroke-linecap="round" stroke-linejoin="round" d="M7 3.5h7.5L18 7v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1Z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M14 3.5V7h4M8.5 12h7M8.5 15.5h7" />
+        </template>
+        <template v-else-if="icon === 'message'">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" />
+            <path stroke-linecap="round" d="M7.5 10h9M7.5 13.5h6" />
+        </template>
+        <template v-else-if="icon === 'building'">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 21V7l8-4 8 4v14M8 10h2m4 0h2M8 14h2m4 0h2M9 21v-3h6v3" />
+        </template>
+        <template v-else-if="icon === 'pulse'">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l2.2-5 4.1 10 2.2-5H21" />
         </template>
         <template v-else-if="icon === 'gear'">
             <circle cx="12" cy="12" r="3" stroke-linecap="round" />

@@ -178,4 +178,32 @@ class DriverClientListTest extends TestCase
                 ->missing('pendingInvitations.0.mutual_clients.0.phone')
             );
     }
+
+    public function test_an_active_client_shows_their_mutual_clients_without_private_data(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $activeClientMembership = $this->membershipFor($driver, now());
+        $activeClient = $activeClientMembership->fleet->owner;
+        $mutualClientMembership = $this->membershipFor($driver, now()->subDays(60));
+        $mutualClient = $mutualClientMembership->fleet->owner;
+
+        TrustCircleConnection::query()->create([
+            'requester_user_id' => $activeClient->id,
+            'addressee_user_id' => $mutualClient->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($driver)
+            ->get(route('driver.invitations.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('activeMemberships.data.0.mutual_clients_count', 1)
+                ->where('activeMemberships.data.0.mutual_clients.0.public_id', $mutualClient->public_id)
+                ->where('activeMemberships.data.0.mutual_clients.0.name', $mutualClient->full_name)
+                ->missing('activeMemberships.data.0.mutual_clients.0.email')
+                ->missing('activeMemberships.data.0.mutual_clients.0.phone')
+            );
+    }
 }

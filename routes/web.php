@@ -45,6 +45,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DriverDirectoryController;
 use App\Http\Controllers\DriverInvitationController;
 use App\Http\Controllers\DriverLocationController;
+use App\Http\Controllers\DriverBankAccountController;
 use App\Http\Controllers\DriverProfileController;
 use App\Http\Controllers\DriverStatsController;
 use App\Http\Controllers\ExpressApplicationController;
@@ -268,6 +269,13 @@ Route::middleware('auth')->group(function () {
     // ver DriverProfileController::deactivate()/reactivate().
     Route::post('/driver/profile/pasar-a-cliente', [DriverProfileController::class, 'deactivate'])->name('driver.profile.deactivate');
     Route::post('/driver/profile/reactivar', [DriverProfileController::class, 'reactivate'])->name('driver.profile.reactivate');
+
+    // Cuentas bancarias del conductor (pedido explícito del usuario) — ver
+    // App\Http\Controllers\DriverBankAccountController.
+    Route::post('/driver/cuentas-bancarias', [DriverBankAccountController::class, 'store'])->name('driver.bank-accounts.store');
+    Route::patch('/driver/cuentas-bancarias/{bankAccount}', [DriverBankAccountController::class, 'update'])->name('driver.bank-accounts.update');
+    Route::delete('/driver/cuentas-bancarias/{bankAccount}', [DriverBankAccountController::class, 'destroy'])->name('driver.bank-accounts.destroy');
+    Route::patch('/driver/cuentas-bancarias/{bankAccount}/favorita', [DriverBankAccountController::class, 'markFavorite'])->name('driver.bank-accounts.favorite');
 
     // Mi Flota (lado cliente, sección 3.2 y 9.5-A). Desde la Fase 5 un cliente
     // puede tener más de una flota si su plan lo permite (sección 7.3, plan

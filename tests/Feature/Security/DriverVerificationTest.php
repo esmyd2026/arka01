@@ -50,7 +50,9 @@ class DriverVerificationTest extends TestCase
                 ->has('pending', 1)
                 ->has('rejected', 1)
                 ->has('approved', 1)
-                ->where('publicDriverCategories.professional.label', 'Conductor Profesional'));
+                ->where('publicDriverCategories.professional.label', 'Conductor Profesional')
+                ->where('serviceCategories.comfort.label', 'Confort')
+                ->where('vehicleAmenities.air_conditioning.label', 'Aire acondicionado'));
     }
 
     public function test_uploading_documents_stores_them_and_resets_verification_to_pending(): void
@@ -201,12 +203,16 @@ class DriverVerificationTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->post(route('admin.driver-verifications.approve', $profile), ['public_category' => 'professional'])
+            ->post(route('admin.driver-verifications.approve', $profile), [
+                'public_category' => 'professional',
+                'service_category' => 'comfort',
+            ])
             ->assertRedirect();
 
         $this->assertSame('approved', $profile->fresh()->verification_status);
         $this->assertSame($admin->id, $profile->fresh()->verified_by);
         $this->assertSame('professional', $profile->fresh()->public_category);
+        $this->assertSame('comfort', $profile->fresh()->service_category);
         Notification::assertSentTo(
             $driver,
             DriverVerificationResultPushNotification::class,

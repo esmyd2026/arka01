@@ -5,16 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Fila única con la configuración de WhatsApp editable desde el admin
  * (mismo patrón singleton que PricingSetting::current()). Los campos
  * sensibles se guardan cifrados — ver App\Services\WhatsAppConfig para la
  * jerarquía "base de datos primero, .env como respaldo".
+ *
+ * Optimización de escala (mismo pedido explícito del usuario que
+ * PricingSetting::current()): se llama en cada mensaje entrante/saliente de
+ * WhatsApp — cachearla evita esa query repetida por una fila que casi nunca
+ * cambia.
  */
 class WhatsAppSetting extends Model
 {
     use HasFactory;
+
+    private const CACHE_KEY = 'whatsapp_settings.current';
 
     // Eloquent adivinaría "whats_app_settings" (separa "WhatsApp" en dos
     // palabras) — la migración usa el nombre real de la integración, sin el
@@ -93,7 +101,13 @@ class WhatsAppSetting extends Model
 
     public static function current(): self
     {
-        return self::query()->firstOrFail();
+        return Cache::remember(self::CACHE_KEY, now()->addHour(), fn () => self::query()->firstOrFail());
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => Cache::forget(self::CACHE_KEY));
+        static::deleted(fn () => Cache::forget(self::CACHE_KEY));
     }
 
     public function updatedBy(): BelongsTo

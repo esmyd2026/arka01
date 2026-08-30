@@ -193,8 +193,12 @@ class AdminSystemControllerTest extends TestCase
         $response = $this->actingAs($admin)->get(route('admin.system.index'));
 
         $response->assertInertia(fn ($page) => $page
-            ->has('quickLinks', 10)
+            ->has('quickLinks', 16)
             ->where('quickLinks.0.enabled', true)
+            ->where('quickLinks.0.route', 'driver.profile.edit')
+            ->where('quickLinks.11.route', 'trust-circle.index')
+            ->where('quickLinks.11.group', 'ambos')
+            ->where('quickLinks.15.route', 'survey.show')
         );
     }
 

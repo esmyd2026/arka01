@@ -309,6 +309,16 @@ class User extends Authenticatable
         return $this->hasOne(DriverProfile::class);
     }
 
+    /**
+     * Cuentas bancarias declaradas (pedido explícito del usuario) — la
+     * favorita primero, para que quien la muestre (perfil, o el cliente
+     * durante una carrera por transferencia) no tenga que reordenar.
+     */
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(DriverBankAccount::class)->orderByDesc('is_favorite')->orderByDesc('id');
+    }
+
     /** Perfil organizacional cuando la cuenta pertenece a una cooperativa. */
     public function cooperative(): HasOne
     {

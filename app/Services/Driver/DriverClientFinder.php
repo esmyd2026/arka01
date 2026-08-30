@@ -54,12 +54,22 @@ class DriverClientFinder
                 ],
             ));
 
-        $allMemberships = FleetMember::query()
+        $allMembershipModels = FleetMember::query()
             ->where('driver_user_id', $userId)
             ->whereNull('left_at')
             ->with(['fleet.owner'])
-            ->get()
-            ->map(function (FleetMember $member) use ($userId) {
+            ->get();
+
+        // La confianza no solo ayuda antes de aceptar una invitación. También
+        // explica la cartera ya activa: el conductor puede abrir cualquier
+        // cliente y reconocer qué otros clientes suyos lo conocen.
+        $mutualClientsByActiveClient = $this->mutualClientsForClientIds(
+            $driver,
+            $allMembershipModels->toBase()->pluck('fleet.owner_user_id')->filter()->unique()->values(),
+        );
+
+        $allMemberships = $allMembershipModels
+            ->map(function (FleetMember $member) use ($userId, $mutualClientsByActiveClient) {
                 $clientId = $member->fleet->owner_user_id;
 
                 $rideStats = Ride::query()
@@ -69,11 +79,19 @@ class DriverClientFinder
                     ->selectRaw('count(*) as rides_count, max(completed_at) as last_ride_at')
                     ->first();
 
-                return array_merge($member->toArray(), $this->clientReviewStats($clientId), [
-                    'rides_together_count' => (int) $rideStats->rides_count,
-                    'last_ride_at' => $rideStats->last_ride_at ? Carbon::parse($rideStats->last_ride_at) : null,
-                    'joined_at' => $member->joined_at,
-                ]);
+                return array_merge(
+                    $member->toArray(),
+                    $this->clientReviewStats($clientId),
+                    $mutualClientsByActiveClient[$clientId] ?? [
+                        'mutual_clients_count' => 0,
+                        'mutual_clients' => [],
+                    ],
+                    [
+                        'rides_together_count' => (int) $rideStats->rides_count,
+                        'last_ride_at' => $rideStats->last_ride_at ? Carbon::parse($rideStats->last_ride_at) : null,
+                        'joined_at' => $member->joined_at,
+                    ],
+                );
             });
 
         $newSince = now()->subDays(30);
@@ -233,6 +251,15 @@ class DriverClientFinder
             ->filter()
             ->unique()
             ->values();
+
+        return $this->mutualClientsForClientIds($driver, $invitingClientIds);
+    }
+
+    /**
+     * @return array<int, array{mutual_clients_count: int, mutual_clients: array<int, array<string, mixed>>}>
+     */
+    private function mutualClientsForClientIds(User $driver, Collection $invitingClientIds): array
+    {
 
         if ($invitingClientIds->isEmpty()) {
             return [];

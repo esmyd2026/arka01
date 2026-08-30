@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\CooperativeDriverMembership;
 use App\Models\CooperativeWalletEntry;
+use App\Models\DriverBankAccount;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\PricingSetting;
 use App\Models\User;
 use App\Services\Driver\DriverProfileUpdater;
+use App\Services\DriverVerificationRequirementRegistry;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
@@ -54,12 +56,24 @@ class DriverProfileController extends Controller
             ->orderBy('min_points')
             ->first();
 
+        $missingDriverRequirements = collect($user->driverProfile?->missingRegistrationInformation() ?? []);
+        if ($user->driverProfile?->admin_activated_at === null
+            && DriverVerificationRequirementRegistry::isRequired('profile_photo')
+            && ! $user->avatar_path) {
+            $missingDriverRequirements->push([
+                'key' => 'profile_photo',
+                'label' => 'foto de perfil',
+                'section' => 'verification',
+            ]);
+        }
+
         return Inertia::render('Driver/Profile', [
             'driverProfile' => $request->user()->driverProfile,
             // La pantalla de perfil debe explicar exactamente la misma causa
             // que bloquea el switch y el endpoint de ubicación.
             'canConnect' => (bool) $user->driverProfile?->canBecomeAvailable(),
             'connectionBlockReason' => $user->driverProfile?->availabilityBlockReason(),
+            'missingDriverRequirements' => $missingDriverRequirements->values()->all(),
             // Pedido explícito del usuario: tarjeta de perfil "profesional"
             // arriba de todo, mismo lenguaje visual que la tarjeta de "Te
             // recomendaron viajar con..." (Referral/Show.vue).
@@ -108,6 +122,12 @@ class DriverProfileController extends Controller
                 'cooperative_name' => $cooperative->name,
                 'balance' => CooperativeWalletEntry::balanceFor($cooperative->id, $user->id),
             ] : null,
+            // Cuentas bancarias (pedido explícito del usuario): el propio
+            // conductor siempre ve todo completo, a diferencia del cliente
+            // durante una carrera (ver RideController::show(), donde la
+            // cédula se enmascara).
+            'bankAccounts' => $user->bankAccounts()->get(),
+            'banks' => DriverBankAccount::banks(),
         ]);
     }
 

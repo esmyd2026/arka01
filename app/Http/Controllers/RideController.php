@@ -203,9 +203,29 @@ class RideController extends Controller
         // eligiendo entre los motivos "conductor → cliente" no tendría sentido.
         $direction = $userId === $ride->client_user_id ? 'client_to_driver' : 'driver_to_client';
 
+        // Cuentas bancarias del conductor (pedido explícito del usuario):
+        // solo tiene sentido mostrárselas al CLIENTE, y solo cuando la
+        // carrera es por transferencia — nunca al propio conductor viendo
+        // su carrera, ni en una carrera en efectivo. Confidencialidad
+        // (mismo criterio que DriverProfile::maskedPlate()): la cédula del
+        // titular llega enmascarada, el cliente no necesita verla completa
+        // para poder transferir.
+        $driverBankAccounts = ($ride->payment_method === 'transferencia' && $userId === $ride->client_user_id)
+            ? $ride->driver->bankAccounts()->get()->map(fn ($account) => [
+                'id' => $account->id,
+                'account_holder_name' => $account->account_holder_name ?: $ride->driver->full_name,
+                'bank_name' => $account->bank_name,
+                'account_type' => $account->account_type,
+                'account_number' => $account->account_number,
+                'masked_identity_number' => $account->maskedIdentityNumber(),
+                'is_favorite' => $account->is_favorite,
+            ])->all()
+            : [];
+
         return Inertia::render('Ride/Show', [
             'ride' => $ride,
             'isDriver' => $ride->driver_user_id === $userId,
+            'driverBankAccounts' => $driverBankAccounts,
             'myReview' => $reviews->get($userId),
             'theirReview' => $reviews->get($otherUserId),
             'ratingReasons' => RatingReason::query()

@@ -8,6 +8,7 @@ use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
 use App\Models\PricingSetting;
+use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
@@ -71,17 +72,13 @@ class RideRequestController extends Controller
         // la disponibilidad prendida — no puede tomar una segunda a la vez.
         $busyDriverIds = Ride::query()->where('status', 'in_progress')->pluck('driver_user_id');
 
-        $fleetDrivers = $fleet->activeMembers->map(function ($member) use ($busyDriverIds) {
-            return $this->driverCardData($member->driver, $busyDriverIds);
-        })->values();
-
         // Directorio público (sección 3.4: la red de respaldo cuando nadie de
         // la flota personal está disponible o el cliente prefiere ampliar la
         // búsqueda) — mismos datos que Directory/Index.vue, acotado a los
         // mejor calificados para no traer de más.
         $fleetDriverIds = $fleet->activeMembers->pluck('driver_user_id');
 
-        $publicDrivers = DriverProfile::query()
+        $publicDriverProfiles = DriverProfile::query()
             ->where('is_public', true)
             ->where('verification_status', '!=', 'rejected')
             // Pedido explícito del usuario ("pasarme a cliente"): con el
@@ -91,8 +88,25 @@ class RideRequestController extends Controller
             ->whereNotIn('user_id', $fleetDriverIds)
             ->where('user_id', '!=', $request->user()->id)
             ->with('user')
-            ->get()
-            ->map(fn (DriverProfile $profile) => $this->driverCardData($profile->user, $busyDriverIds))
+            ->get();
+
+        // Rendimiento en producción (evaluación previa a un despliegue con
+        // miles de usuarios, pedido explícito del usuario): driverCardData()
+        // necesita rating/cantidad de reseñas de CADA conductor — antes eso
+        // eran 2 queries por conductor dentro de cada map() de abajo (hasta
+        // 2×(flota + 20 del directorio) por carga de esta pantalla). Una sola
+        // consulta agregada resuelve todos los conductores mostrados de una.
+        $allDriverIds = $fleetDriverIds->merge($publicDriverProfiles->pluck('user_id'));
+        $reviewStats = Review::query()->whereIn('reviewee_user_id', $allDriverIds)
+            ->selectRaw('reviewee_user_id, avg(rating) as average_rating, count(*) as review_count')
+            ->groupBy('reviewee_user_id')->get()->keyBy('reviewee_user_id');
+
+        $fleetDrivers = $fleet->activeMembers->map(function ($member) use ($busyDriverIds, $reviewStats) {
+            return $this->driverCardData($member->driver, $busyDriverIds, $reviewStats);
+        })->values();
+
+        $publicDrivers = $publicDriverProfiles
+            ->map(fn (DriverProfile $profile) => $this->driverCardData($profile->user, $busyDriverIds, $reviewStats))
             ->sortByDesc(fn ($d) => [$d['average_rating'], $d['review_count']])
             ->take(20)
             ->values();
@@ -218,11 +232,12 @@ class RideRequestController extends Controller
      * carrera / desconectado) y categoría por reputación (diamante, oro,
      * plata, cobre), para priorizar visualmente sin tener que adivinar.
      */
-    private function driverCardData(User $driver, Collection $busyDriverIds): array
+    private function driverCardData(User $driver, Collection $busyDriverIds, Collection $reviewStats): array
     {
         $profile = $driver->driverProfile;
-        $rating = round((float) $driver->reviewsReceived()->avg('rating'), 1);
-        $reviewCount = $driver->reviewsReceived()->count();
+        $stats = $reviewStats->get($driver->id);
+        $rating = round((float) ($stats->average_rating ?? 0), 1);
+        $reviewCount = (int) ($stats->review_count ?? 0);
 
         return [
             'user_id' => $driver->id,

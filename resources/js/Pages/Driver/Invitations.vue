@@ -94,6 +94,7 @@ const requestClient = (client) => {
 // veían al refrescar la página) sin esperar una recarga completa.
 const invitations = ref([...props.pendingInvitations]);
 const openInvitation = ref(null);
+const openMembership = ref(null);
 
 watch(
     () => props.pendingInvitations,
@@ -254,7 +255,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         <li
                             v-for="client in searchResults"
                             :key="client.user_id"
-                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            class="flex flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="client" size-class="h-11 w-11 text-sm shrink-0" />
@@ -347,25 +348,37 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         "{{ invitation.message }}"
                                     </p>
                                     <button
-                                        v-if="invitation.mutual_clients_count > 0"
                                         type="button"
                                         class="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
                                         :aria-expanded="openInvitation === invitation.id"
                                         @click="openInvitation = openInvitation === invitation.id ? null : invitation.id"
                                     >
-                                        {{ openInvitation === invitation.id ? 'Ocultar personas en común' : 'Ver quién lo conoce' }}
+                                        {{ openInvitation === invitation.id ? 'Ocultar información' : 'Revisar perfil y confianza' }}
                                         <svg class="h-3.5 w-3.5 fill-none stroke-current transition-transform" :class="{ 'rotate-180': openInvitation === invitation.id }" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
                                     </button>
                                 </div>
                             </div>
 
                             <div
-                                v-if="openInvitation === invitation.id && invitation.mutual_clients_count > 0"
+                                v-if="openInvitation === invitation.id"
                                 class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:col-span-2"
                             >
-                                <p class="text-xs font-semibold text-arka-text">Clientes tuyos que conocen a esta persona</p>
-                                <p class="mt-1 text-[11px] leading-4 text-arka-text-muted">Son clientes activos tuyos y conexiones aceptadas de su círculo.</p>
-                                <div class="mt-3 flex flex-wrap gap-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <p class="text-xs font-semibold text-arka-text">Información para decidir</p>
+                                        <p class="mt-1 text-[11px] leading-4 text-arka-text-muted">Calificación, trayectoria y conexiones aceptadas; nunca datos de contacto.</p>
+                                    </div>
+                                    <Link
+                                        :href="route('profiles.show', invitation.fleet.owner.public_id)"
+                                        class="inline-flex min-h-9 items-center rounded-lg border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright hover:bg-arka-primary/10"
+                                    >
+                                        Ver perfil completo
+                                    </Link>
+                                </div>
+                                <p class="mt-3 text-xs font-semibold text-arka-text">
+                                    {{ invitation.mutual_clients_count > 0 ? 'Clientes tuyos que conocen a esta persona' : 'Sin clientes en común por ahora' }}
+                                </p>
+                                <div v-if="invitation.mutual_clients_count > 0" class="mt-2 flex flex-wrap gap-2">
                                     <Link
                                         v-for="person in invitation.mutual_clients"
                                         :key="person.public_id"
@@ -382,9 +395,14 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             </div>
 
                             <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
-                                <PrimaryButton :disabled="atLimit" @click="accept(invitation.id)">
-                                    Aceptar
+                                <PrimaryButton
+                                    v-if="openInvitation === invitation.id"
+                                    :disabled="atLimit"
+                                    @click="accept(invitation.id)"
+                                >
+                                    Aceptar cliente
                                 </PrimaryButton>
+                                <SecondaryButton v-else @click="openInvitation = invitation.id">Revisar solicitud</SecondaryButton>
                                 <SecondaryButton @click="reject(invitation.id)">Rechazar</SecondaryButton>
                             </div>
                         </li>
@@ -460,11 +478,25 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         </span>
                                         <span v-else class="text-xs text-arka-text-muted">Sin calificaciones</span>
                                         <span class="text-xs">{{ CATEGORY_LABELS[member.client_category] }}</span>
+                                        <span
+                                            v-if="member.mutual_clients_count > 0"
+                                            class="inline-flex items-center gap-1 rounded-full bg-arka-primary/10 px-2 py-0.5 text-xs font-semibold text-arka-primary"
+                                        >
+                                            {{ member.mutual_clients_count }} en común
+                                        </span>
                                     </p>
                                     <p class="text-sm text-arka-text-muted">
                                         {{ member.rides_together_count }} carrera(s) hecha(s)
                                     </p>
                                     <p class="text-xs text-arka-text-muted">{{ formatLastRide(member.last_ride_at) }}</p>
+                                    <button
+                                        type="button"
+                                        class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
+                                        :aria-expanded="openMembership === member.id"
+                                        @click="openMembership = openMembership === member.id ? null : member.id"
+                                    >
+                                        {{ openMembership === member.id ? 'Ocultar relaciones' : 'Ver perfil y relaciones' }}
+                                    </button>
                                     <button
                                         type="button"
                                         class="mt-1 text-xs"
@@ -475,7 +507,36 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                     </button>
                                 </div>
                             </div>
-                            <DangerButton class="sm:shrink-0" @click="leave(member.id)">No es mi cliente</DangerButton>
+                            <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
+                                <Link
+                                    :href="route('profiles.show', member.fleet.owner.public_id)"
+                                    class="inline-flex min-h-10 items-center rounded-xl border border-arka-primary/30 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-arka-primary-bright hover:bg-arka-primary/10"
+                                >
+                                    Ver perfil
+                                </Link>
+                                <DangerButton @click="leave(member.id)">No es mi cliente</DangerButton>
+                            </div>
+
+                            <div
+                                v-if="openMembership === member.id"
+                                class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:basis-full"
+                            >
+                                <p class="text-xs font-semibold text-arka-text">
+                                    {{ member.mutual_clients_count > 0 ? `${member.mutual_clients_count} cliente${member.mutual_clients_count === 1 ? '' : 's'} en común` : 'Todavía no tienen clientes en común' }}
+                                </p>
+                                <p class="mt-1 text-[11px] leading-4 text-arka-text-muted">Estas relaciones provienen del círculo de confianza aceptado.</p>
+                                <div v-if="member.mutual_clients_count > 0" class="mt-3 flex flex-wrap gap-2">
+                                    <Link
+                                        v-for="person in member.mutual_clients"
+                                        :key="person.public_id"
+                                        :href="route('profiles.show', person.public_id)"
+                                        class="inline-flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-arka-card px-2 py-1.5 transition hover:border-arka-primary/30"
+                                    >
+                                        <UserAvatar :user="person" size-class="h-7 w-7 shrink-0 text-[10px]" />
+                                        <span class="max-w-36 truncate text-xs font-medium text-arka-text">{{ person.name }}</span>
+                                    </Link>
+                                </div>
+                            </div>
                         </li>
                     </ul>
 

@@ -25,8 +25,12 @@ const props = defineProps({
     notificationVolume: { type: Number, required: true },
 });
 
-const QUICK_LINK_GROUP_LABEL = { conductor: 'Menú del conductor', cliente: 'Menú del cliente' };
-const quickLinkGroups = ['conductor', 'cliente'].map((group) => ({
+const QUICK_LINK_GROUP_LABEL = {
+    conductor: 'Módulos del conductor',
+    cliente: 'Módulos del cliente',
+    ambos: 'Módulos para cliente y conductor',
+};
+const quickLinkGroups = ['conductor', 'cliente', 'ambos'].map((group) => ({
     key: group,
     label: QUICK_LINK_GROUP_LABEL[group],
     items: props.quickLinks.filter((item) => item.group === group),
@@ -159,8 +163,8 @@ async function resetDemo() {
                     <div>
                         <h3 class="text-lg font-medium text-arka-text">Accesos rápidos del menú</h3>
                         <p class="mt-1 text-sm text-arka-text-muted">
-                            Prenda o apague cada acceso — si lo apaga, deja de verse en el menú de cuenta y en los
-                            accesos rápidos, tanto en escritorio como en móvil.
+                            Prenda o apague cada módulo. Al apagarlo, sus accesos dejan de verse tanto en escritorio
+                            como en móvil; no se eliminan datos y puede volver a mostrarlo cuando quiera.
                         </p>
                     </div>
 

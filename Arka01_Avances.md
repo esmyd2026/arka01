@@ -7,6 +7,95 @@ de usuario final.
 
 ---
 
+## 2026-08-30 — Optimización de escala (código, sin infraestructura)
+
+**Pedido:** "quiero anticiparme a que esto no suceda cuando comience a crecer
+la demanda de peticiones" — el usuario descartó explícitamente tocar Redis u
+otra infraestructura por ahora ("No te preocupes por Redis por ahora") y pidió
+enfocar el esfuerzo solo en código: consultas N+1, índices de base de datos,
+cacheo puntual.
+
+**Cambios:**
+- `PricingSetting::current()` y `WhatsAppSetting::current()` (filas únicas de
+  configuración, se leen decenas de veces por request) ahora usan
+  `Cache::remember()` con TTL de 1 hora, invalidado por un hook
+  `saved()`/`deleted()` en `booted()` — nunca queda una lectura vieja después
+  de guardar cambios en `/admin/tarifas` o la config de WhatsApp.
+  `tests/TestCase.php::setUp()` limpia ambas claves de cache antes de cada
+  test, porque el driver de test (`array`) persiste en memoria durante todo
+  el proceso PHP y el rollback de `RefreshDatabase` podía dejar un valor
+  cacheado desincronizado de un test a otro.
+- N+1 real en `RideRequestController::create()` (pantalla "Pedir carrera"):
+  `driverCardData()` hacía 2 queries de reseñas (`avg`/`count`) por cada
+  conductor mostrado, dentro de dos `map()` — hasta 2×(flota + 20 del
+  directorio público) queries por carga de pantalla. Se reemplazó por una
+  sola consulta agregada (`Review::whereIn(...)->selectRaw('avg, count')
+  ->groupBy(...)`), mismo patrón que ya usaba `CooperativeDashboardController`.
+- `Admin\OperationsController::demandByHour()`/`waitTimeStats()` traían TODA
+  la tabla `ride_requests` a memoria PHP sin límite (crece para siempre).
+  Se acotaron a los últimos 90 días (`HISTORY_WINDOW_DAYS`) y se agregó un
+  índice en `ride_requests.requested_at` para que ese filtro sea barato.
+- De paso, se encontró y corrigió un bug real en una migración de la sesión
+  paralela (`add_account_holder_name_to_driver_bank_accounts_table`): usaba
+  `UPDATE ... JOIN`, que no es portable a SQLite (motor de los tests) y
+  rompía las 1398 pruebas de la suite. Se resolvió por usuario en PHP en vez
+  de un solo UPDATE con join — funciona igual en MySQL (producción) y SQLite.
+- Revisado y descartado tocar: `SmartDispatchScorer` (ya usa 3 queries
+  agregadas `whereIn`+`groupBy`, sin N+1), índices de `rides`/`ride_requests`/
+  `driver_profiles` por status/disponibilidad (ya existían de una pasada
+  anterior), `CooperativeDashboardController`, `LiveOperationsController`,
+  `Admin/RideController` y `Admin/MetricsController` (ya usan eager loading y
+  agregados correctamente).
+
+**Deliberadamente fuera de alcance** (decisión explícita del usuario, no
+descuido): Redis para cache/cola/sesión/broadcasting, y Reverb como proceso
+único — quedan para cuando la demanda real lo justifique.
+
+**Verificación:** suite completa, 1398 tests / 6224 assertions, 0 fallos.
+
+---
+
+## 2026-08-30 — Cuentas bancarias del conductor
+
+**Pedido:** el conductor declara varias cuentas bancarias en su perfil
+(cédula del titular, banco, tipo de cuenta, número de cuenta) y marca una
+como favorita. Cuando la carrera es por transferencia y el conductor va en
+camino a recogerlo, el cliente ve un aviso que abre un bottom sheet con esas
+cuentas (la favorita primero).
+
+**Diseño:**
+- Tabla nueva `driver_bank_accounts` (modelo `DriverBankAccount`), no un
+  campo más de `DriverProfile` — es una lista de filas con su propio ciclo
+  de alta/baja, no un dato 1:1 del perfil.
+- Una sola favorita por conductor, forzado en el modelo (hook `saved()`
+  desmarca las demás) — el frontend no tiene que orquestarlo. Si se borra la
+  favorita y quedan otras, se promueve automáticamente la más reciente
+  (`deleted()`), para no quedar sin ninguna marcada.
+- Confidencialidad (mismo criterio que `DriverProfile::maskedPlate()`): el
+  cliente nunca recibe la cédula completa del titular, solo
+  `maskedIdentityNumber()` (últimos 3 dígitos).
+- `RideController::show()` solo manda `driverBankAccounts` cuando
+  `payment_method === 'transferencia'` Y quien mira es el cliente (nunca al
+  propio conductor viendo su carrera, nunca en una carrera en efectivo).
+- El campo "Banco" es un selector con el catálogo de bancos de Ecuador
+  (`DriverBankAccount::banks()`), principales primero (Pichincha, Guayaquil,
+  Pacífico, Produbanco, Bolivariano, Internacional, Austro, Machala,
+  Amazonas...) — `bank_name` en la base sigue siendo texto libre a
+  propósito, la opción "Otro" del selector revela un campo de texto para no
+  bloquear un banco o cooperativa que no esté en la lista.
+
+**Archivos clave:**
+- `database/migrations/2026_08_30_155055_create_driver_bank_accounts_table.php`
+- `app/Models/DriverBankAccount.php`, `app/Models/User.php` (relación `bankAccounts()`)
+- `app/Http/Controllers/DriverBankAccountController.php` (store/update/destroy/markFavorite)
+- `app/Http/Controllers/DriverProfileController.php`,
+  `app/Http/Controllers/RideController.php` (exposición con privacidad)
+- `resources/js/Pages/Driver/Profile.vue` (sección "Cuentas bancarias"),
+  `resources/js/Pages/Ride/Show.vue` (bottom sheet para el cliente)
+- Tests: `tests/Feature/Driver/DriverBankAccountTest.php`
+
+---
+
 ## 2026-08-30 — Bug: "Ver perfil público" no abría en pestaña nueva
 
 **Problema:** en `Ride/Request.vue`, el link a la cooperativa (dentro de la

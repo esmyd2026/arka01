@@ -13,6 +13,7 @@ import PermissionsPrompt from '@/Components/PermissionsPrompt.vue';
 import HelpTip from '@/Components/HelpTip.vue';
 import SessionDataUsage from '@/Components/SessionDataUsage.vue';
 import WalkieTalkie from '@/Components/WalkieTalkie.vue';
+import SectionIcon from '@/Components/SectionIcon.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush, syncGrantedPushSubscription } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
@@ -76,6 +77,8 @@ function openOnboardingAgain() {
 // route().has(...) evita que la navegación se rompa si algún módulo
 // (por ejemplo Flota) todavía no tiene sus rutas registradas.
 const hasRoute = (name) => route().has(name);
+const disabledQuickLinks = computed(() => usePage().props.disabledQuickLinks ?? []);
+const canShowQuickLink = (name) => hasRoute(name) && !disabledQuickLinks.value.includes(name);
 
 // Respetar el rol activo (sección 3.1: cada cuenta es cliente O conductor,
 // nunca las dos — ver App\Models\User::isClient()). El rol de cliente es el
@@ -141,6 +144,28 @@ async function switchToClient() {
 // El admin tiene su propio acceso directo y prominente (pastilla de escritorio,
 // tab de móvil) así que no repetimos "Panel admin" acá también.
 const canBecomeOrIsDriver = computed(() => !isAdmin.value);
+const QUICK_LINK_ICONS = {
+    'cooperative.dashboard': 'building',
+    'cooperative.drivers.index': 'drivers',
+    'cooperatives.index': 'building',
+    'ride-requests.create': 'car',
+    'driver.profile.edit': 'identity',
+    'driver.invitations.index': 'drivers',
+    'directory.index': 'directory',
+    'express-routes.index': 'calendar',
+    'express-routes.available': 'calendar',
+    'driver.plan.edit': 'plan',
+    'client.plan.edit': 'plan',
+    'cooperative.plan.edit': 'plan',
+    'trust-circle.index': 'circle',
+    'trusted-contacts.index': 'heart',
+    'support.index': 'help',
+    'coupons.index': 'coupon',
+    'van-trips.index': 'route',
+    'van-trips.browse': 'route',
+    'survey.show': 'survey',
+};
+const quickLinkIcon = (routeName) => QUICK_LINK_ICONS[routeName] ?? 'settings';
 // `help` (pedido explícito del usuario: ícono "?" contextual en cada módulo,
 // alternativa que él mismo ofreció al ver que la guía de bienvenida siempre
 // aparece en el mismo lugar) — qué hace cada uno y con qué otro se relaciona,
@@ -259,17 +284,12 @@ const quickLinks = computed(() =>
         },
     ].filter(
         (item) =>
-            hasRoute(item.route) &&
+            canShowQuickLink(item.route) &&
             (!item.clientOnly || showClientNav.value) &&
             (!item.driverOnly || showDriverNav.value) &&
             (!item.cooperativeOnly || showCooperativeNav.value) &&
             (!showCooperativeNav.value || item.cooperativeOnly) &&
-            (!item.hideIfCommittedClient || canBecomeOrIsDriver.value) &&
-            // Pedido explícito del usuario: "permiteme en el modulo de
-            // sistema de habilitar o no estas opciones del menu" — ver
-            // Admin\SystemController::updateQuickLinks(), compartido en
-            // cualquier pantalla vía HandleInertiaRequests::share().
-            !(usePage().props.disabledQuickLinks ?? []).includes(item.route)
+            (!item.hideIfCommittedClient || canBecomeOrIsDriver.value)
     )
 );
 
@@ -576,7 +596,7 @@ onBeforeUnmount(() => {
                                 Mis Flotas
                             </Link>
                             <Link
-                                v-if="hasRoute('driver.invitations.index') && showDriverNav"
+                                v-if="canShowQuickLink('driver.invitations.index') && showDriverNav"
                                 :href="route('driver.invitations.index')"
                                 class="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition"
                                 :class="route().current('driver.*') ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted hover:text-arka-text'"
@@ -649,7 +669,7 @@ onBeforeUnmount(() => {
                         <!-- Buscar: acceso directo al directorio de conductores (herramienta
                              de cliente — buscar a quién invitar a la flota). -->
                         <Link
-                            v-if="hasRoute('directory.index') && showClientNav"
+                            v-if="canShowQuickLink('directory.index') && showClientNav"
                             :href="route('directory.index')"
                             class="p-2 rounded-full text-arka-text-muted hover:text-arka-text hover:bg-arka-base transition"
                             title="Buscar conductores"
@@ -712,11 +732,7 @@ onBeforeUnmount(() => {
                                                     :href="route(item.route)"
                                                     class="flex flex-col items-center gap-1.5 p-2 rounded-arka hover:bg-arka-base text-center"
                                                 >
-                                                    <span
-                                                        class="h-9 w-9 rounded-full bg-arka-primary/15 text-arka-primary-bright flex items-center justify-center text-sm font-semibold"
-                                                    >
-                                                        {{ item.label[0] }}
-                                                    </span>
+                                                    <SectionIcon :name="quickLinkIcon(item.route)" compact />
                                                     <span class="text-[11px] leading-tight text-arka-text">{{ item.label }}</span>
                                                 </Link>
                                                 <!-- Ícono "?" contextual (pedido explícito del usuario) —
@@ -1066,7 +1082,7 @@ onBeforeUnmount(() => {
                      página dos veces) — ahora es "Clientes", mismo destino
                      que ya vivía en el botón "+" (driver.invitations.index). -->
                 <Link
-                    v-if="hasRoute('driver.invitations.index') && showDriverNav"
+                    v-if="canShowQuickLink('driver.invitations.index') && showDriverNav"
                     :href="route('driver.invitations.index')"
                     class="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[44px]"
                     :class="route().current('driver.invitations.*') ? 'text-arka-primary' : 'text-arka-text-muted'"
@@ -1179,7 +1195,7 @@ onBeforeUnmount(() => {
                 <h3 class="text-center text-arka-text font-medium mb-4">Accesos rápidos</h3>
 
                 <div class="space-y-1">
-                    <div v-if="hasRoute('ride-requests.create') && showClientNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('ride-requests.create') && showClientNav" class="flex items-center gap-1">
                         <Link
                             :href="route('ride-requests.create')"
                             @click="showingQuickActions = false"
@@ -1194,7 +1210,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Pida un viaje ahora o programado, a toda su flota o a un conductor puntual. Arme primero Mis Flotas para tener a quién pedirle." />
                     </div>
 
-                    <div v-if="canBecomeOrIsDriver" class="flex items-center gap-1">
+                    <div v-if="canBecomeOrIsDriver && canShowQuickLink('driver.profile.edit')" class="flex items-center gap-1">
                         <Link
                             :href="route('driver.profile.edit')"
                             @click="showingQuickActions = false"
@@ -1210,7 +1226,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Complete los datos de su vehículo para activar el perfil y empezar a recibir carreras." />
                     </div>
 
-                    <div v-if="hasRoute('driver.invitations.index') && showDriverNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('driver.invitations.index') && showDriverNav" class="flex items-center gap-1">
                         <Link
                             :href="route('driver.invitations.index')"
                             @click="showingQuickActions = false"
@@ -1227,7 +1243,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Acepte invitaciones de flota y administre a sus clientes. De ahí le llegan las solicitudes que ve en Carreras." />
                     </div>
 
-                    <div v-if="hasRoute('directory.index') && showClientNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('directory.index') && showClientNav" class="flex items-center gap-1">
                         <Link
                             :href="route('directory.index')"
                             @click="showingQuickActions = false"
@@ -1243,7 +1259,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- Expresos (sección 4): rutas fijas y recurrentes. -->
-                    <div v-if="hasRoute('express-routes.index') && showClientNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('express-routes.index') && showClientNav" class="flex items-center gap-1">
                         <Link
                             :href="route('express-routes.index')"
                             @click="showingQuickActions = false"
@@ -1258,7 +1274,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Ruta fija y recurrente (ej. su viaje diario al trabajo) en vez de pedir Pedir una carrera cada vez." />
                     </div>
 
-                    <div v-if="hasRoute('express-routes.available') && showDriverNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('express-routes.available') && showDriverNav" class="flex items-center gap-1">
                         <Link
                             :href="route('express-routes.available')"
                             @click="showingQuickActions = false"
@@ -1275,7 +1291,7 @@ onBeforeUnmount(() => {
 
                     <!-- Mi plan (secciones 7, 7.2 y 7.3): un usuario puede tener un plan
                          de conductor y otro de cliente al mismo tiempo (sección 3.1). -->
-                    <div v-if="hasRoute('driver.plan.edit') && showDriverNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('driver.plan.edit') && showDriverNav" class="flex items-center gap-1">
                         <Link
                             :href="route('driver.plan.edit')"
                             @click="showingQuickActions = false"
@@ -1290,7 +1306,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Su plan vigente y sus beneficios — algunos, como el directorio público, también dependen de su medalla por puntos." />
                     </div>
 
-                    <div v-if="hasRoute('client.plan.edit') && showClientNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('client.plan.edit') && showClientNav" class="flex items-center gap-1">
                         <Link
                             :href="route('client.plan.edit')"
                             @click="showingQuickActions = false"
@@ -1306,7 +1322,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <!-- Contactos de confianza (sección 8): a quién avisa el botón SOS. -->
-                    <div v-if="hasRoute('trusted-contacts.index')" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('trusted-contacts.index')" class="flex items-center gap-1">
                         <Link
                             :href="route('trusted-contacts.index')"
                             @click="showingQuickActions = false"
@@ -1324,7 +1340,7 @@ onBeforeUnmount(() => {
                          de escritorio (`quickLinks`) pero faltaban acá, en el cajón
                          móvil — quedaron descubiertos al mover contenido de Inicio
                          al menú. -->
-                    <div v-if="hasRoute('van-trips.browse') && showClientNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('van-trips.browse') && showClientNav" class="flex items-center gap-1">
                         <Link
                             :href="route('van-trips.browse')"
                             @click="showingQuickActions = false"
@@ -1339,7 +1355,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Explore y reserve un asiento en las salidas programadas que publican los conductores." />
                     </div>
 
-                    <div v-if="hasRoute('van-trips.index') && showDriverNav" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('van-trips.index') && showDriverNav" class="flex items-center gap-1">
                         <Link
                             :href="route('van-trips.index')"
                             @click="showingQuickActions = false"
@@ -1354,7 +1370,7 @@ onBeforeUnmount(() => {
                         <HelpTip text="Publique salidas programadas de ruta fija, que los clientes reservan por asiento." />
                     </div>
 
-                    <div v-if="hasRoute('coupons.index')" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('coupons.index')" class="flex items-center gap-1">
                         <Link
                             :href="route('coupons.index')"
                             @click="showingQuickActions = false"
@@ -1372,7 +1388,7 @@ onBeforeUnmount(() => {
                     <!-- Encuesta corta de conductor/pasajero (pedido explícito del
                          usuario: "un botón que me ayuda ir a una encuesta... bien
                          ubicada") — sin restricción de rol, sirve para los dos. -->
-                    <div v-if="hasRoute('survey.show')" class="flex items-center gap-1">
+                    <div v-if="canShowQuickLink('survey.show')" class="flex items-center gap-1">
                         <Link
                             :href="route('survey.show')"
                             @click="showingQuickActions = false"

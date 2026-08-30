@@ -30,6 +30,14 @@ class OperationsController extends Controller
 
     private const NEARBY_RADIUS_KM = 5;
 
+    // Rendimiento en producción (evaluación previa a un despliegue con miles
+    // de usuarios, pedido explícito del usuario): demandByHour() y
+    // waitTimeStats() traían TODA la tabla `ride_requests` a memoria PHP en
+    // cada carga de esta pantalla — sin límite, eso crece para siempre. El
+    // patrón de horario/espera solo interesa reciente, no desde el inicio de
+    // los tiempos.
+    private const HISTORY_WINDOW_DAYS = 90;
+
     public function index(): Response
     {
         // Dónde se concentran las solicitudes ACTIVAS ahora mismo (pedido
@@ -108,7 +116,10 @@ class OperationsController extends Controller
         // En PHP, no con HOUR()/TIMESTAMPDIFF() de SQL: son funciones de
         // MySQL que no existen en SQLite (motor de los tests) — portable así
         // para los dos, y el volumen de esta tabla no amerita más.
-        $counts = RideRequest::query()->get(['requested_at'])->countBy(fn (RideRequest $r) => $r->requested_at->hour);
+        $counts = RideRequest::query()
+            ->where('requested_at', '>=', now()->subDays(self::HISTORY_WINDOW_DAYS))
+            ->get(['requested_at'])
+            ->countBy(fn (RideRequest $r) => $r->requested_at->hour);
 
         return collect(range(0, 23))->map(fn ($hour) => (int) ($counts[$hour] ?? 0))->all();
     }
@@ -147,6 +158,7 @@ class OperationsController extends Controller
         // criterio que demandByHour().
         $responseSeconds = RideRequest::query()
             ->where('status', 'accepted')
+            ->where('requested_at', '>=', now()->subDays(self::HISTORY_WINDOW_DAYS))
             ->whereNotNull('responded_at')
             ->get(['requested_at', 'responded_at'])
             ->map(fn (RideRequest $r) => $r->requested_at->diffInSeconds($r->responded_at));

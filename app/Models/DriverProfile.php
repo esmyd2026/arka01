@@ -434,16 +434,90 @@ class DriverProfile extends Model
      */
     public function hasCompleteVehicleInfo(): bool
     {
-        return filled($this->vehicle_make)
-            && filled($this->vehicle_model)
-            && filled($this->vehicle_color)
-            && filled($this->vehicle_type)
-            && filled($this->vehicle_plate)
-            && filled($this->vehicle_year)
-            && filled($this->passenger_capacity)
-            // `false` significa que no tiene cajuela y también es una
-            // respuesta válida; por eso no usamos filled() aquí.
-            && $this->has_trunk !== null;
+        return $this->missingVehicleInformation() === [];
+    }
+
+    /**
+     * Campos concretos que aún faltan en la ficha del vehículo. Esta lista
+     * alimenta el perfil web y conserva la misma fuente de verdad que bloquea
+     * la disponibilidad; así nunca vuelve a decir "completo" mientras abajo
+     * pide datos genéricos.
+     *
+     * @return array<int, array{key: string, label: string, section: string}>
+     */
+    public function missingVehicleInformation(): array
+    {
+        $fields = [
+            'vehicle_make' => 'marca',
+            'vehicle_model' => 'modelo',
+            'vehicle_color' => 'color',
+            'vehicle_type' => 'tipo de vehículo',
+            'vehicle_plate' => 'placa',
+            'vehicle_year' => 'año',
+            'passenger_capacity' => 'cantidad de pasajeros',
+        ];
+
+        $missing = collect($fields)
+            ->filter(fn (string $label, string $field) => ! filled($this->{$field}))
+            ->map(fn (string $label, string $field) => [
+                'key' => $field,
+                'label' => $label,
+                'section' => 'vehicle',
+            ])
+            ->values();
+
+        // `false` es una respuesta válida: significa que el vehículo no
+        // tiene cajuela. Solo null representa que todavía no respondió.
+        if ($this->has_trunk === null) {
+            $missing->push(['key' => 'has_trunk', 'label' => 'disponibilidad de cajuela', 'section' => 'vehicle']);
+        }
+
+        return $missing->all();
+    }
+
+    /**
+     * Requisitos reales pendientes para solicitar aprobación y conectarse.
+     * Los requisitos deshabilitados por administración no aparecen.
+     *
+     * @return array<int, array{key: string, label: string, section: string}>
+     */
+    public function missingRegistrationInformation(): array
+    {
+        if ($this->admin_activated_at !== null) {
+            return [];
+        }
+
+        $missing = collect();
+
+        if (! filled($this->driver_type)) {
+            $missing->push(['key' => 'driver_type', 'label' => 'tipo de conductor', 'section' => 'verification']);
+        }
+
+        $missing->push(...$this->missingVehicleInformation());
+
+        if (! is_numeric($this->rate_per_km) || (float) $this->rate_per_km < 0) {
+            $missing->push(['key' => 'rate_per_km', 'label' => 'tarifa por kilómetro', 'section' => 'work']);
+        }
+
+        if (! $this->accepts_cash && ! $this->accepts_transfer) {
+            $missing->push(['key' => 'payment_method', 'label' => 'al menos una forma de pago', 'section' => 'work']);
+        }
+
+        foreach ([
+            'identity_document' => ['identity_document_path', 'foto de cédula'],
+            'license_photo' => ['license_photo_path', 'foto de licencia'],
+            'police_record' => ['police_record_path', 'antecedentes penales'],
+        ] as $requirement => [$field, $label]) {
+            if (DriverVerificationRequirementRegistry::isRequired($requirement) && ! filled($this->{$field})) {
+                $missing->push(['key' => $requirement, 'label' => $label, 'section' => 'verification']);
+            }
+        }
+
+        if (DriverVerificationRequirementRegistry::isRequired('has_insurance') && ! $this->has_insurance) {
+            $missing->push(['key' => 'has_insurance', 'label' => 'declaración de seguro vigente', 'section' => 'verification']);
+        }
+
+        return $missing->values()->all();
     }
 
     /**
@@ -473,18 +547,7 @@ class DriverProfile extends Model
         // /admin/sistema" (pedido explícito del usuario: "permiteme desde
         // el admin poder activar o no lo obligatorio para que el conductor
         // se le haga mas facil activarse" — ver DriverVerificationRequirementRegistry).
-        return filled($this->driver_type)
-            && $this->hasCompleteVehicleInfo()
-            && is_numeric($this->rate_per_km)
-            && (float) $this->rate_per_km >= 0
-            && ($this->accepts_cash || $this->accepts_transfer)
-            && (filled($this->identity_document_path) || ! DriverVerificationRequirementRegistry::isRequired('identity_document'))
-            && (filled($this->license_photo_path) || ! DriverVerificationRequirementRegistry::isRequired('license_photo'))
-            && (filled($this->police_record_path) || ! DriverVerificationRequirementRegistry::isRequired('police_record'))
-            // Pedido explícito del usuario: seguro que lo proteja a él, a
-            // los pasajeros y al vehículo — autodeclarado con un checkbox,
-            // sin documento adjunto (a diferencia de los 3 de arriba).
-            && ($this->has_insurance || ! DriverVerificationRequirementRegistry::isRequired('has_insurance'));
+        return $this->missingRegistrationInformation() === [];
     }
 
     /**

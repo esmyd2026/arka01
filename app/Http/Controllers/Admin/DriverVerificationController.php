@@ -54,6 +54,8 @@ class DriverVerificationController extends Controller
                 ->limit(20)
                 ->get(),
             'publicDriverCategories' => DriverProfile::publicCategories(),
+            'serviceCategories' => DriverProfile::serviceCategories(),
+            'vehicleAmenities' => DriverProfile::vehicleAmenities(),
         ]);
     }
 
@@ -67,6 +69,7 @@ class DriverVerificationController extends Controller
 
         $validated = $request->validate([
             'public_category' => ['required', 'string', Rule::in(array_keys(DriverProfile::publicCategories()))],
+            'service_category' => ['required', 'string', Rule::in(array_keys(DriverProfile::serviceCategories()))],
         ]);
 
         $driverProfile->update([
@@ -75,6 +78,7 @@ class DriverVerificationController extends Controller
             'verified_at' => now(),
             'verified_by' => $request->user()->id,
             'public_category' => $validated['public_category'],
+            'service_category' => $validated['service_category'],
         ]);
 
         $driverProfile->user->notify(new DriverVerificationResultPushNotification($driverProfile, true));

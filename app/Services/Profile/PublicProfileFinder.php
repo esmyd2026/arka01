@@ -20,7 +20,7 @@ class PublicProfileFinder
     public function __construct(private readonly TrustIndexCalculator $trustIndexCalculator) {}
 
     /**
-     * @return array{profileUser: array, profileUrl: string, averageRating: float, reviewCount: int, trustIndex: ?array, reviews: LengthAwarePaginator, profilePrivate: bool, isClient: bool, isDriver: bool}
+     * @return array{profileUser: array, profileUrl: string, averageRating: float, reviewCount: int, trustIndex: ?array, mutualPeople: array, reviews: LengthAwarePaginator, profilePrivate: bool, isClient: bool, isDriver: bool}
      */
     public function forUser(User $user, ?User $viewer): array
     {
@@ -37,7 +37,32 @@ class PublicProfileFinder
         // perfil y un admin siguen viendo todo.
         $isOwnerOrAdmin = $viewer?->is($user) || $viewer?->isAdmin();
         $isPrivateDriverProfile = $user->driverProfile && ! $user->driverProfile->profile_public && ! $isOwnerOrAdmin;
-        $trustIndex = $isPrivateDriverProfile ? null : $this->trustIndexCalculator->calculate($user);
+        $relationshipViewer = $viewer && ! $viewer->is($user) ? $viewer : null;
+        $trustIndex = $isPrivateDriverProfile
+            ? null
+            : $this->trustIndexCalculator->calculate($user, $relationshipViewer);
+
+        // El perfil sirve como pantalla de decisión antes de aceptar una
+        // solicitud. Solo se comparten conexiones aceptadas y campos públicos;
+        // nunca correo, teléfono ni una relación pendiente.
+        $mutualPeople = [];
+        if (! $isPrivateDriverProfile && $relationshipViewer) {
+            $mutualIds = $this->trustIndexCalculator->mutualUserIds($user, $relationshipViewer);
+            $peopleById = User::query()->whereIn('id', $mutualIds)->get()->keyBy('id');
+
+            $mutualPeople = $mutualIds
+                ->map(fn (int $id) => $peopleById->get($id))
+                ->filter()
+                ->take(12)
+                ->map(fn (User $person) => [
+                    'public_id' => $person->public_id,
+                    'name' => $person->full_name,
+                    'username' => $person->username,
+                    'avatar_url' => $person->avatar_url,
+                ])
+                ->values()
+                ->all();
+        }
 
         // Perfil privado: ni siquiera se consultan las opiniones — nada de
         // reputación se muestra a quien no sea el dueño ni un admin.
@@ -82,6 +107,7 @@ class PublicProfileFinder
             'averageRating' => $isPrivateDriverProfile ? 0 : round((float) $user->reviewsReceived()->avg('rating'), 1),
             'reviewCount' => $isPrivateDriverProfile ? 0 : $user->reviewsReceived()->count(),
             'trustIndex' => $trustIndex,
+            'mutualPeople' => $mutualPeople,
             'reviews' => $reviews,
             'profilePrivate' => $isPrivateDriverProfile,
             // Bug reportado por el usuario (perfil público mostraba las dos

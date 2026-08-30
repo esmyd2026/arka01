@@ -29,6 +29,10 @@ const props = defineProps({
     ratingReasons: { type: Array, default: () => [] },
     // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras).
     messages: { type: Array, default: () => [] },
+    // Cuentas bancarias del conductor (pedido explícito del usuario): solo
+    // llega con datos cuando la carrera es por transferencia y quien mira
+    // es el cliente — ver RideController::show().
+    driverBankAccounts: { type: Array, default: () => [] },
 });
 
 // Posición en vivo del conductor durante el viaje: reutiliza el mismo canal
@@ -1002,6 +1006,11 @@ function openDriverCancel() {
 const showClientOptions = ref(false);
 const clientOptionsView = ref('chat');
 
+// Cuentas bancarias del conductor (pedido explícito del usuario): el
+// cliente decide cuándo verlas, no se le impone un modal automático apenas
+// entra a la pantalla.
+const showBankAccounts = ref(false);
+
 function openClientChat() {
     clientOptionsView.value = 'chat';
     showClientOptions.value = true;
@@ -1473,6 +1482,33 @@ function submitReview() {
                 </div>
             </BottomSheet>
 
+            <!-- Cuentas bancarias del conductor (pedido explícito del usuario):
+                 la favorita primero (RideController::show() ya la ordena así). -->
+            <BottomSheet :show="showBankAccounts" @close="showBankAccounts = false">
+                <div class="p-4 space-y-4">
+                    <h3 class="text-lg font-semibold text-arka-text">Cuenta para transferir</h3>
+                    <p class="text-sm text-arka-text-muted">Declaradas por {{ ride.driver.name }}.</p>
+
+                    <div
+                        v-for="account in driverBankAccounts"
+                        :key="account.id"
+                        class="rounded-xl border p-4"
+                        :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-text-muted/15'"
+                    >
+                        <p class="flex items-center gap-1.5 font-semibold text-arka-text">
+                            <span v-if="account.is_favorite" class="text-arka-primary" aria-label="Favorita">★</span>
+                            {{ account.bank_name }}
+                        </p>
+                        <dl class="mt-2 space-y-1 text-sm">
+                            <div class="flex justify-between gap-3"><dt class="text-arka-text-muted">Titular</dt><dd class="text-right font-medium text-arka-text">{{ account.account_holder_name }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-arka-text-muted">Tipo</dt><dd class="text-arka-text">{{ account.account_type === 'ahorros' ? 'Ahorros' : 'Corriente' }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-arka-text-muted">Número</dt><dd class="font-medium text-arka-text">{{ account.account_number }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-arka-text-muted">Cédula</dt><dd class="text-arka-text">{{ account.masked_identity_number }}</dd></div>
+                        </dl>
+                    </div>
+                </div>
+            </BottomSheet>
+
             <!-- Cancelar viaje: mismo motivo/nota de siempre, en un panel en
                  vez de la tarjeta inline (acá no hay página debajo para
                  mostrarla). -->
@@ -1770,6 +1806,20 @@ function submitReview() {
                     <p v-if="!isDriver && ride.status === 'in_progress' && ride.picked_up_at" class="text-sm text-arka-text-muted">
                         🚙 Viaje en curso hacia el destino.
                     </p>
+
+                    <!-- Cuentas bancarias del conductor (pedido explícito del
+                         usuario): solo cuando la carrera es por transferencia y
+                         todavía no lo recoge — ver RideController::show(), que ya
+                         filtra esto y nunca manda la cédula completa. -->
+                    <button
+                        v-if="!isDriver && ride.status === 'in_progress' && !ride.picked_up_at && driverBankAccounts.length"
+                        type="button"
+                        class="flex w-full items-center justify-between gap-3 rounded-xl border border-arka-primary/25 bg-arka-primary/10 px-3 py-2.5 text-left"
+                        @click="showBankAccounts = true"
+                    >
+                        <span class="text-sm font-medium text-arka-primary">💳 Cuenta para transferir</span>
+                        <span class="text-xs text-arka-primary">Ver ›</span>
+                    </button>
                     <div
                         v-if="isDriver && pickupWaitCountdown"
                         class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/30 bg-arka-warning/10 px-3 py-2.5"

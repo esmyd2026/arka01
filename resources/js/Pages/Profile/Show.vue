@@ -22,6 +22,7 @@ const props = defineProps({
     // backend ya viene sin vehículo/tarifa/reseñas en ese caso.
     profilePrivate: { type: Boolean, default: false },
     trustIndex: { type: Object, default: null },
+    mutualPeople: { type: Array, default: () => [] },
 });
 
 // Vista previa profesional al compartir el enlace (pedido explícito del
@@ -128,6 +129,38 @@ const shareProfile = async () => {
                     :profile-private="profilePrivate"
                     :trust-index="trustIndex"
                 />
+
+                <section
+                    v-if="mutualPeople.length"
+                    class="mt-4 rounded-2xl border border-arka-primary/15 bg-arka-card p-4 shadow sm:p-5"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="font-semibold text-arka-text">Personas que tienen en común</h3>
+                            <p class="mt-1 text-xs leading-relaxed text-arka-text-muted">
+                                Conexiones aceptadas por ambos. No mostramos información de contacto.
+                            </p>
+                        </div>
+                        <span class="rounded-full bg-arka-primary/15 px-2.5 py-1 text-xs font-bold text-arka-primary-bright">
+                            {{ trustIndex?.mutual_people ?? mutualPeople.length }}
+                        </span>
+                    </div>
+
+                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                        <Link
+                            v-for="person in mutualPeople"
+                            :key="person.public_id"
+                            :href="route('profiles.show', person.public_id)"
+                            class="flex min-w-0 items-center gap-3 rounded-xl border border-white/5 bg-arka-base/45 p-2.5 transition hover:border-arka-primary/30"
+                        >
+                            <UserAvatar :user="person" size-class="h-10 w-10 shrink-0 text-xs" />
+                            <span class="min-w-0">
+                                <span class="block truncate text-sm font-semibold text-arka-text">{{ person.name }}</span>
+                                <span v-if="person.username" class="block truncate text-xs text-arka-text-muted">@{{ person.username }}</span>
+                            </span>
+                        </Link>
+                    </div>
+                </section>
             </div>
         </div>
     </AuthenticatedLayout>

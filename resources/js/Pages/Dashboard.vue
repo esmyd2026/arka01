@@ -15,18 +15,6 @@ import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { etaMinutes } from '@/Utils/eta';
 import { saveClientLocation } from '@/Utils/sessionLocation';
-import { ADMIN_NAV_GROUPS } from '@/Utils/adminNav';
-
-// Pedido explícito del usuario (con captura del Inicio del admin, casi
-// vacío): "coloca recuadro con las opciones que son agrupadas... y allí
-// dentro incluyes" — mismas 6 secciones que ya arma Utils/adminNav.js para
-// el dropdown de escritorio y el bottom sheet del FAB en móvil, acá como
-// tarjetas tipo acordeón (tocar una la abre y cierra las demás), sin modal
-// ni pantalla aparte.
-const expandedAdminGroup = ref(null);
-function toggleAdminGroup(key) {
-    expandedAdminGroup.value = expandedAdminGroup.value === key ? null : key;
-}
 
 const props = defineProps({
     driverStats: { type: Object, default: null },
@@ -72,22 +60,44 @@ const hasRoute = (name) => route().has(name);
 // puerta de entrada real es el panel admin.
 const isAdmin = usePage().props.auth.user.is_admin;
 
-// Indicadores del panel admin (pedido explícito del usuario: "personas
-// registradas, Pasajeros, conductores, cooperativas... esta semana. este
-// mes. hoy... y cuando le de click alguno me lleve al modulo
-// correspondiente con la lista"). "Personas registradas" no tiene un
-// listado propio (es la suma de los otros roles + admins) — queda como
-// indicador de solo lectura, sin link.
-const adminIndicators = computed(() => {
+// Estado operativo: estas cuatro cifras responden primero "qué está pasando
+// ahora". Los subtítulos distinguen el dato instantáneo del acumulado del
+// día/mes para evitar que una cifra grande parezca una emergencia activa.
+const adminRideIndicators = computed(() => {
     if (!props.adminStats) return [];
 
     return [
-        { key: 'people', label: 'Personas registradas', route: null, ...props.adminStats.people },
-        { key: 'clients', label: 'Pasajeros', route: 'admin.clients.index', ...props.adminStats.clients },
-        { key: 'drivers', label: 'Conductores', route: 'admin.drivers.index', ...props.adminStats.drivers },
-        { key: 'cooperatives', label: 'Cooperativas', route: 'admin.cooperatives.index', ...props.adminStats.cooperatives },
+        { key: 'requests', label: 'Solicitudes', value: props.adminStats.rides.requests.current, detail: `${props.adminStats.rides.requests.today} creadas hoy`, tone: 'primary' },
+        { key: 'active', label: 'Carreras activas', value: props.adminStats.rides.active.current, detail: `${props.adminStats.rides.active.scheduled} programadas`, tone: 'live' },
+        { key: 'completed', label: 'Completadas', value: props.adminStats.rides.completed.today, detail: `${props.adminStats.rides.completed.month} este mes`, tone: 'success' },
+        { key: 'cancelled', label: 'Canceladas', value: props.adminStats.rides.cancelled.today, detail: `${props.adminStats.rides.cancelled.month} este mes`, tone: 'danger' },
     ];
 });
+
+// El inicio administrativo prioriza trabajo pendiente, no el catálogo
+// completo de módulos. Estos avisos ya se calculan globalmente para el
+// indicador del perfil; se reutilizan para que un conductor recién
+// registrado o listo para revisión sea lo primero que vea el administrador.
+const adminAttentionItems = computed(() =>
+    (usePage().props.auth.notificationSummary?.items ?? []).filter(
+        (item) => item.key === 'admin-driver-registrations' || item.key === 'admin-driver-verifications'
+    )
+);
+const adminAttentionTotal = computed(() =>
+    adminAttentionItems.value.reduce((total, item) => total + Number(item.count || 0), 0)
+);
+
+// Módulos independientes: cada tarjeta lleva a un área completa, no abre
+// otra colección de accesos mezclados. Así Cooperativas no queda escondida
+// dentro de Conductores y Monitoreo no se confunde con Configuración.
+const adminModules = computed(() => props.adminStats ? [
+    { route: 'admin.driver-verifications.index', label: 'Conductores', description: 'Registro, expediente y verificación', icon: 'shield', value: props.adminStats.drivers.total, meta: `${adminAttentionTotal.value} requieren atención` },
+    { route: 'admin.cooperatives.index', label: 'Cooperativas', description: 'Organizaciones, documentos y flota', icon: 'building', value: props.adminStats.cooperatives.total, meta: `${props.adminStats.attention.cooperatives} por revisar` },
+    { route: 'admin.clients.index', label: 'Clientes', description: 'Perfiles, comunidad y crecimiento', icon: 'people', value: props.adminStats.clients.total, meta: `${props.adminStats.clients.month} nuevos este mes` },
+    { route: 'admin.live-operations.index', label: 'Operación', description: 'Solicitudes y carreras en tiempo real', icon: 'route', value: props.adminStats.rides.active.current, meta: `${props.adminStats.rides.requests.current} solicitudes abiertas` },
+    { route: 'admin.system.index', label: 'Sistema', description: 'Módulos, reglas e integraciones', icon: 'gear', value: null, meta: 'Configuración central' },
+    { route: 'admin.monitoring.index', label: 'Monitoreo', description: 'Errores y salud de la plataforma', icon: 'pulse', value: props.adminStats.attention.monitoring, meta: props.adminStats.attention.monitoring === 1 ? 'evento sin resolver' : 'eventos sin resolver' },
+] : []);
 
 // Saludo de la cabecera (pedido explícito del usuario: bajarlo de la barra
 // superior a acá, a la izquierda, en el lugar donde antes decía "Inicio").
@@ -581,90 +591,100 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <span class="text-arka-warning text-sm font-medium shrink-0">Continuar &rarr;</span>
                 </Link>
 
-                <div v-if="isAdmin" class="bg-arka-card overflow-hidden shadow-sm rounded-arka">
-                    <div class="p-6 text-arka-text space-y-2">
-                        <p>
-                            Esta cuenta administra la plataforma: suscripciones, planes, tarifas, indicadores,
-                            verificación de conductores y alertas SOS.
-                        </p>
-                        <Link
-                            v-if="hasRoute('admin.subscriptions.index')"
-                            :href="route('admin.subscriptions.index')"
-                            class="block text-arka-warning hover:opacity-80 font-medium"
-                        >
-                            Ir al panel admin &rarr;
-                        </Link>
-                    </div>
-                </div>
-
-                <!-- Indicadores (pedido explícito del usuario: "personas
-                     registradas, Pasajeros, conductores, cooperativas...
-                     esta semana. este mes. hoy... y cuando le de click
-                     alguno me lleve al modulo correspondiente con la
-                     lista") — cada tarjeta con link es la puerta directa al
-                     listado filtrado de ese módulo. -->
-                <div v-if="isAdmin && adminIndicators.length" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <component
-                        :is="stat.route && hasRoute(stat.route) ? Link : 'div'"
-                        v-for="stat in adminIndicators"
-                        :key="stat.key"
-                        :href="stat.route && hasRoute(stat.route) ? route(stat.route) : undefined"
-                        class="rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4"
-                        :class="stat.route ? 'transition hover:border-arka-warning/30' : ''"
-                    >
-                        <p class="text-sm font-semibold text-arka-text">{{ stat.label }}</p>
-                        <p class="text-xs text-arka-text-muted">{{ stat.total }} en total</p>
-                        <div class="mt-3 grid grid-cols-3 gap-1 text-center">
-                            <div>
-                                <p class="text-lg font-bold text-arka-text">{{ stat.today }}</p>
-                                <p class="text-[11px] text-arka-text-muted">Hoy</p>
+                <template v-if="isAdmin">
+                    <section class="relative overflow-hidden rounded-3xl border border-arka-primary/20 bg-arka-card p-5 shadow-sm sm:p-7">
+                        <span class="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-arka-primary/8" aria-hidden="true"></span>
+                        <div class="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                            <div class="max-w-2xl">
+                                <div class="flex items-center gap-2 text-arka-primary-bright">
+                                    <span class="h-2 w-2 animate-pulse rounded-full bg-arka-primary"></span>
+                                    <p class="text-xs font-bold uppercase tracking-[0.18em]">Resumen operativo</p>
+                                </div>
+                                <h3 class="mt-2 text-2xl font-bold text-arka-text sm:text-3xl">La plataforma, de un vistazo</h3>
+                                <p class="mt-2 text-sm leading-6 text-arka-text-muted">Revise primero lo que está ocurriendo y luego entre al módulo que necesita gestionar.</p>
                             </div>
-                            <div>
-                                <p class="text-lg font-bold text-arka-text">{{ stat.week }}</p>
-                                <p class="text-[11px] text-arka-text-muted">Semana</p>
-                            </div>
-                            <div>
-                                <p class="text-lg font-bold text-arka-text">{{ stat.month }}</p>
-                                <p class="text-[11px] text-arka-text-muted">Mes</p>
+                            <div class="flex flex-wrap gap-2">
+                                <Link :href="route('admin.live-operations.index')" class="inline-flex min-h-11 items-center gap-2 rounded-xl bg-arka-primary px-4 py-2 text-sm font-bold text-arka-base">
+                                    <span class="h-4 w-4"><AdminNavIcon icon="route" /></span>
+                                    Abrir operación en vivo
+                                </Link>
+                                <Link :href="route('admin.driver-verifications.index')" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-arka-text-muted/20 px-4 py-2 text-sm font-semibold text-arka-text hover:border-arka-primary/40">
+                                    Revisar pendientes
+                                    <span v-if="adminAttentionTotal" class="rounded-full bg-arka-primary/15 px-2 py-0.5 text-xs text-arka-primary-bright">{{ adminAttentionTotal }}</span>
+                                </Link>
                             </div>
                         </div>
-                    </component>
-                </div>
+                    </section>
 
-                <!-- Secciones agrupadas del panel admin (pedido explícito del
-                     usuario): tocar una tarjeta la expande mostrando sus
-                     enlaces debajo, y colapsa cualquier otra que estuviera
-                     abierta. -->
-                <div v-if="isAdmin" class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    <div
-                        v-for="group in ADMIN_NAV_GROUPS"
-                        :key="group.key"
-                        class="rounded-2xl border transition"
-                        :class="expandedAdminGroup === group.key ? 'border-arka-warning/40 bg-arka-warning/5 col-span-2 sm:col-span-3' : 'border-arka-text-muted/10 bg-arka-card hover:border-arka-warning/30'"
-                    >
-                        <button
-                            type="button"
-                            class="flex w-full flex-col items-center gap-2 p-4 text-center"
-                            @click="toggleAdminGroup(group.key)"
-                        >
-                            <span class="grid h-11 w-11 place-items-center rounded-full bg-arka-warning/15 text-arka-warning">
-                                <span class="h-5 w-5"><AdminNavIcon :icon="group.icon" /></span>
-                            </span>
-                            <span class="text-sm font-semibold text-arka-text">{{ group.label }}</span>
-                        </button>
-
-                        <div v-if="expandedAdminGroup === group.key" class="grid gap-1 border-t border-arka-text-muted/10 p-2 sm:grid-cols-2">
+                    <section>
+                        <div class="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-text-muted">Carreras</p>
+                                <h3 class="mt-1 text-lg font-semibold text-arka-text">Estado de la operación</h3>
+                            </div>
+                            <Link :href="route('admin.rides.index')" class="text-xs font-semibold text-arka-primary-bright hover:underline">Ver historial →</Link>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
                             <Link
-                                v-for="item in group.items"
-                                :key="item.route"
-                                :href="route(item.route)"
-                                class="rounded-arka px-3 py-2 text-sm text-arka-text-muted hover:bg-arka-base hover:text-arka-text"
+                                v-for="stat in adminRideIndicators"
+                                :key="stat.key"
+                                :href="route(stat.key === 'active' || stat.key === 'requests' ? 'admin.live-operations.index' : 'admin.rides.index')"
+                                class="group relative overflow-hidden rounded-2xl border bg-arka-card p-4 transition hover:-translate-y-0.5 hover:shadow-lg sm:p-5"
+                                :class="{
+                                    'border-arka-primary/25': stat.tone === 'primary',
+                                    'border-emerald-400/25': stat.tone === 'live' || stat.tone === 'success',
+                                    'border-red-400/20': stat.tone === 'danger',
+                                }"
                             >
-                                {{ item.label }}
+                                <div class="flex items-start justify-between gap-3">
+                                    <span class="grid h-10 w-10 place-items-center rounded-xl" :class="stat.tone === 'danger' ? 'bg-red-400/10 text-red-300' : 'bg-arka-primary/10 text-arka-primary-bright'">
+                                        <span v-if="stat.key === 'requests'" class="h-5 w-5"><AdminNavIcon icon="message" /></span>
+                                        <span v-else-if="stat.key === 'active'" class="h-5 w-5"><AdminNavIcon icon="route" /></span>
+                                        <svg v-else-if="stat.key === 'completed'" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m5 12 4 4L19 6" /></svg>
+                                        <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="m9 9 6 6m0-6-6 6"/></svg>
+                                    </span>
+                                    <span class="text-2xl font-bold text-arka-text sm:text-3xl">{{ stat.value }}</span>
+                                </div>
+                                <p class="mt-4 text-sm font-semibold text-arka-text">{{ stat.label }}</p>
+                                <p class="mt-0.5 text-xs text-arka-text-muted">{{ stat.detail }}</p>
                             </Link>
                         </div>
-                    </div>
-                </div>
+                    </section>
+
+                    <section v-if="adminAttentionItems.length" class="rounded-2xl border border-arka-warning/25 bg-arka-warning/5 p-4 sm:p-5">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-warning">Requiere atención</p>
+                                <h3 class="mt-1 text-lg font-semibold text-arka-text">{{ adminAttentionTotal }} pendiente{{ adminAttentionTotal === 1 ? '' : 's' }} de conductores</h3>
+                            </div>
+                            <span class="grid h-10 w-10 place-items-center rounded-xl bg-arka-warning/15 text-arka-warning"><span class="h-5 w-5"><AdminNavIcon icon="shield" /></span></span>
+                        </div>
+                        <div class="mt-4 grid gap-2 md:grid-cols-2">
+                            <Link v-for="item in adminAttentionItems" :key="item.key" :href="item.url" class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/15 bg-arka-card px-4 py-3 hover:border-arka-warning/40">
+                                <span class="min-w-0"><span class="block text-sm font-semibold text-arka-text">{{ item.label }}</span><span class="block truncate text-xs text-arka-text-muted">{{ item.detail }}</span></span>
+                                <span class="rounded-full bg-arka-warning px-2.5 py-1 text-xs font-bold text-arka-base">{{ item.count }}</span>
+                            </Link>
+                        </div>
+                    </section>
+
+                    <section>
+                        <div class="mb-3">
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-text-muted">Áreas de gestión</p>
+                            <h3 class="mt-1 text-lg font-semibold text-arka-text">Módulos independientes</h3>
+                            <p class="mt-1 text-xs text-arka-text-muted">Cada área concentra únicamente sus procesos y herramientas.</p>
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            <Link v-for="module in adminModules" :key="module.route" :href="route(module.route)" class="group flex min-h-32 items-start gap-4 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-5 transition hover:-translate-y-0.5 hover:border-arka-primary/35 hover:shadow-lg">
+                                <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-arka-primary/10 text-arka-primary-bright group-hover:bg-arka-primary/15"><span class="h-6 w-6"><AdminNavIcon :icon="module.icon" /></span></span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="flex items-start justify-between gap-3"><strong class="text-base text-arka-text">{{ module.label }}</strong><strong v-if="module.value !== null" class="text-2xl text-arka-text">{{ module.value }}</strong></span>
+                                    <span class="mt-1 block text-xs leading-5 text-arka-text-muted">{{ module.description }}</span>
+                                    <span class="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-arka-primary-bright">{{ module.meta }} <span aria-hidden="true">→</span></span>
+                                </span>
+                            </Link>
+                        </div>
+                    </section>
+                </template>
 
                 <!-- Como conductor (consideración agregada al alcance: mockup del
                      conductor provisto por el usuario). -->

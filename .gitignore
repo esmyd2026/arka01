@@ -35,6 +35,8 @@ Arka01_Costos_Operativos.md
 Arka01_Alcance_Proyectov2.md
 Manual_Bondades_Arka01.md
 Arka01_Identidad_Visual.md
+Arka01_Avances.md
+Arka01_Avances.md
 
 # --- App móvil (Capacitor) — pedido explícito del usuario: no subir todavía,
 # sin que esto afecte a la web. Son todos archivos/carpetas NUEVOS, propios
@@ -60,3 +62,4 @@ Arka01_Identidad_Visual.md
 # y el logout de la web con "class not found". Estos dos archivos van
 # siempre junto con sus controladores web.
 
+Arka01_Avances.md
