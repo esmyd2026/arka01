@@ -338,11 +338,18 @@ class RideRequestCreator
             ? round((float) $routeDistanceKm, 2)
             : $haversineKm;
 
+        // Tarifa de cooperativa (pedido explícito del usuario): si ya
+        // configuró su propia tarifa (App\Http\Controllers\CooperativeProfileController::update()),
+        // se usa esa — es la que después permite calcular cuánto le
+        // corresponde al conductor vs. a la cooperativa (ver
+        // App\Services\Ride\RideLifecycle::complete()). Mientras no la
+        // configure, se sigue promediando la tarifa de sus conductores
+        // miembros, igual que siempre.
         $ratePerKm = $cooperative
-            ? (float) DriverProfile::query()
+            ? (float) ($cooperative->rate_per_km ?? DriverProfile::query()
                 ->whereIn('user_id', $cooperative->activeDriverMemberships()->pluck('driver_user_id'))
                 ->whereNotNull('rate_per_km')
-                ->avg('rate_per_km')
+                ->avg('rate_per_km'))
             : $this->referenceRatePerKm($fleet, $driverUserId);
         $driverMinimumFareForStops = $this->referenceMinimumFare($driverUserId);
 

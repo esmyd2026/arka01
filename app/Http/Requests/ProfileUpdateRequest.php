@@ -2,11 +2,10 @@
 
 namespace App\Http\Requests;
 
-use App\Http\Controllers\Auth\RegisteredUserController;
-use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
+use App\Services\Profile\ProfileUpdater;
+use Illuminate\Contracts\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class ProfileUpdateRequest extends FormRequest
 {
@@ -28,29 +27,11 @@ class ProfileUpdateRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\Rule|array|string>
+     * @return array<string, Rule|array|string>
      */
     public function rules(): array
     {
-        return [
-            'name' => ['required', 'string', 'max:255'],
-            // Pedido explícito del usuario ("nombres, apellidos, fecha de
-            // nacimiento... ciudad") — apellido y fecha de nacimiento son
-            // opcionales. Si el usuario decide registrar la fecha, sí se
-            // valida la mayoría de edad con un límite exacto y estable.
-            'last_name' => ['nullable', 'string', 'max:100'],
-            'birth_date' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(18)->toDateString()],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($this->user()->id)],
-            'city_id' => ['nullable', 'integer', 'exists:cities,id'],
-            // Foto de perfil (consideración agregada al alcance): mismo límite
-            // de tamaño que las fotos de licencia/vehículo (DriverProfileController).
-            'avatar' => ['nullable', 'image', 'max:4096'],
-            // Teléfono (pedido explícito del usuario: "que tambien pueda
-            // actualizar su numero de telefono") — mismas reglas que ya usa
-            // DriverProfileController::update() para el conductor.
-            'country_code' => ['nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
-            'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
-        ];
+        return ProfileUpdater::rules($this->user()->id);
     }
 
     /**

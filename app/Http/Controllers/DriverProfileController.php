@@ -2,39 +2,27 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CooperativeDriverMembership;
+use App\Models\CooperativeWalletEntry;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\PricingSetting;
-use App\Models\Ride;
 use App\Models\User;
 use App\Services\Driver\DriverProfileUpdater;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Lógica real de actualizar el perfil en App\Services\Driver\DriverProfileUpdater
- * (roadmap app móvil, "full backend").
+ * Lógica real de actualizar/desactivar/reactivar el perfil en
+ * App\Services\Driver\DriverProfileUpdater (roadmap app móvil, "full backend").
  */
 class DriverProfileController extends Controller
 {
-    /**
-     * Pedido explícito del usuario ("pasarme a conductor... fácil"): activarse
-     * como conductor ya no lo bloquea tener una flota propia como cliente —
-     * cada cuenta sigue operando como cliente O conductor, nunca las dos a la
-     * vez (User::isClient()/isDriver() son mutuamente excluyentes), pero
-     * ahora sí se puede cambiar de uno a otro. Lo único que sigue bloqueando
-     * el cambio es tener un viaje en curso — cambiar de rol a mitad de una
-     * carrera sí sería un problema real.
-     */
-    private const ACTIVE_RIDE_MESSAGE = 'Tiene un viaje en curso — termínelo antes de cambiar de rol.';
-
     public function __construct(
         private readonly PlanLimits $planLimits,
         private readonly DriverProfileUpdater $driverProfileUpdater,
@@ -110,6 +98,16 @@ class DriverProfileController extends Controller
             // significa el interruptor de acá abajo (ver PriceCalculator).
             'pickupSurchargeThresholdKm' => (float) PricingSetting::current()->pickup_surcharge_threshold_km,
             'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
+            // Billetera cooperativa-conductor (pedido explícito del
+            // usuario): el conductor también tiene que poder ver si debe
+            // pagarle a la cooperativa o si le deben a él, no solo la
+            // cooperativa desde su propio panel (ver
+            // Cooperative/DriverShow.vue). El signo es el mismo que
+            // CooperativeWalletEntry::balanceFor() — positivo = él debe.
+            'cooperativeWallet' => ($cooperative = CooperativeDriverMembership::activeCooperativeFor($user->id)) ? [
+                'cooperative_name' => $cooperative->name,
+                'balance' => CooperativeWalletEntry::balanceFor($cooperative->id, $user->id),
+            ] : null,
         ]);
     }
 
@@ -136,23 +134,7 @@ class DriverProfileController extends Controller
      */
     public function deactivate(Request $request): RedirectResponse
     {
-        $user = $request->user();
-
-        abort_unless($user->isDriver(), 404);
-
-        if (Ride::where('driver_user_id', $user->id)->where('status', 'in_progress')->exists()) {
-            throw ValidationException::withMessages(['driver' => self::ACTIVE_RIDE_MESSAGE]);
-        }
-
-        // Se apaga la disponibilidad de una — mismo motivo que al cerrar
-        // sesión (AuthenticatedSessionController): un conductor "pausado" no
-        // puede seguir mostrándose disponible para sus clientes.
-        $user->driverProfile->forceFill([
-            'deactivated_at' => now(),
-            'is_available' => false,
-        ])->save();
-
-        Log::info('Conductor pasó a cliente (perfil de conductor pausado por su propia cuenta).', ['user_id' => $user->id]);
+        $this->driverProfileUpdater->deactivate($request->user());
 
         return redirect()->route('dashboard')->with('status', 'Listo — ahora es cliente. Su perfil de conductor quedó guardado, puede volver a activarlo cuando quiera.');
     }
@@ -164,16 +146,7 @@ class DriverProfileController extends Controller
      */
     public function reactivate(Request $request): RedirectResponse
     {
-        $user = $request->user();
-        $profile = $user->driverProfile;
-
-        abort_if($profile === null, 404);
-
-        if (! $user->isDriver() && Ride::where('client_user_id', $user->id)->where('status', 'in_progress')->exists()) {
-            throw ValidationException::withMessages(['driver' => self::ACTIVE_RIDE_MESSAGE]);
-        }
-
-        $profile->forceFill(['deactivated_at' => null])->save();
+        $this->driverProfileUpdater->reactivate($request->user());
 
         return redirect()->route('driver.profile.edit')->with('status', 'Listo — ya volvió a ser conductor.');
     }

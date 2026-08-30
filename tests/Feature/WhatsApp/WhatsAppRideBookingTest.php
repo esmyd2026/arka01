@@ -36,6 +36,42 @@ class WhatsAppRideBookingTest extends TestCase
         Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
     }
 
+    public function test_origin_and_destination_use_the_native_whatsapp_map_button(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200),
+        ]);
+
+        $client = User::factory()->create([
+            'phone' => '+593991111100',
+            'whatsapp_privacy_accepted_at' => now(),
+        ]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, '[ubicacion]', [
+            'type' => 'location',
+            'location' => ['lat' => -2.137, 'lng' => -79.894, 'address' => 'Alborada', 'name' => null],
+        ]);
+
+        $locationRequests = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->filter(fn ($request) => ($request['interactive']['type'] ?? null) === 'location_request_message')
+            ->values();
+
+        $this->assertCount(2, $locationRequests);
+        $this->assertSame('send_location', $locationRequests[0]['interactive']['action']['name']);
+        $this->assertStringContainsString('¿Desde dónde le recogemos?', $locationRequests[0]['interactive']['body']['text']);
+        $this->assertStringContainsString('¿A dónde vamos?', $locationRequests[1]['interactive']['body']['text']);
+        $this->assertStringNotContainsString('http', $locationRequests[0]['interactive']['body']['text']);
+        $this->assertStringNotContainsString('http', $locationRequests[1]['interactive']['body']['text']);
+        $this->assertSame('WA_BOOKING_DESTINATION', ChatbotConversation::forPhone($client->phone)->pending_intent);
+    }
+
     public function test_a_client_can_create_an_immediate_fleet_request_from_whatsapp(): void
     {
         WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);

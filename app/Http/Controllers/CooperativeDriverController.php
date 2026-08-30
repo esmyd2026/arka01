@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CooperativeDriverMembership;
+use App\Models\CooperativeWalletEntry;
 use App\Models\DriverActivitySession;
 use App\Models\Ride;
 use App\Models\RideRequest;
@@ -112,6 +113,11 @@ class CooperativeDriverController extends Controller
                 'active_minutes_month' => $activeMinutes($now->copy()->startOfMonth()),
                 'active_minutes_total' => $activeMinutes(),
                 'activity_tracking_since' => $activitySessions->first()?->started_at?->toIso8601String(),
+                // Billetera (pedido explícito del usuario): positivo = el
+                // conductor le debe a la cooperativa, negativo = la
+                // cooperativa le debe al conductor. Ver
+                // App\Models\CooperativeWalletEntry::balanceFor().
+                'wallet_balance' => CooperativeWalletEntry::balanceFor($cooperativeId, $driver->id),
             ],
             'rides' => $history,
         ]);

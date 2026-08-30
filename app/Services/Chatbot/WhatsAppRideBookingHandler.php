@@ -212,7 +212,10 @@ class WhatsAppRideBookingHandler
             // sin volver a geocodificar ni pedir confirmación (ya se
             // confirmó la primera vez que se usó).
             if ($text === 'wa_recent_new') {
-                WhatsAppFreeformSender::sendText($phone, 'Escriba la dirección o comparta la ubicación desde WhatsApp.');
+                $message = $state === 'WA_BOOKING_ORIGIN'
+                    ? '¿Desde dónde le recogemos?'
+                    : '¿A dónde vamos?';
+                $this->sendNativeLocationRequest($phone, $message);
 
                 return true;
             }
@@ -366,42 +369,38 @@ class WhatsAppRideBookingHandler
      * Pedido explícito del usuario ("cuando pida nuevamente mostrarle las
      * ubicaciones que ha solicitado para volverlas a repetir") — si el
      * cliente ya tiene carreras anteriores, ofrece sus últimas direcciones
-     * (distintas entre sí) como lista real de WhatsApp antes de pedirle que
-     * escriba o comparta una nueva. Sin historial (número nuevo, o
-     * ninguna coincidencia), el prompt queda igual que siempre — texto
-     * plano, nada que elegir.
+     * (distintas entre sí) como lista real de WhatsApp. En todos los casos
+     * se manda después el botón nativo de ubicación: abre el mapa dentro de
+     * WhatsApp y devuelve las coordenadas sin sacar al cliente del chat.
      */
     private function askLocation(string $phone, ChatbotConversation $conversation, string $state, array $context, string $message, ?User $user): bool
     {
         $field = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
 
-        // Pedido explícito del usuario: además de la dirección escrita (o
-        // ubicación compartida), un enlace para abrir un mapa, buscar el
-        // lugar ahí y mandar coordenadas exactas — más confiable que confiar
-        // solo en que el texto libre geocodifique bien. Mismo patrón de link
-        // firmado que offerFullRegistrationIfFirstGuestRide() más abajo,
-        // atado a esta conversación (nunca a un usuario: en WA_BOOKING_NAME
-        // el cliente todavía puede no tener cuenta creada).
-        $message .= "\n\nO abra el mapa para buscar el lugar y mandarnos la ubicación exacta:\n".$this->locationPickerLink($conversation, $field);
-
         $recent = $this->recentAddressOptions($user, $field);
+        $this->setState($conversation, $state, $context);
 
         if ($recent) {
             $context['recent_'.$field.'_options'] = $recent;
             $this->setState($conversation, $state, $context);
             $rows = collect($recent)
                 ->map(fn (array $point, int $i) => ['id' => "wa_recent_{$field}:{$i}", 'title' => $point['address']])
-                ->push(['id' => 'wa_recent_new', 'title' => 'Otra ubicación'])
                 ->all();
-            WhatsAppFreeformSender::sendList($phone, $message, 'Elegir', $rows);
-
-            return true;
+            WhatsAppFreeformSender::sendList($phone, 'Puede repetir una ubicación reciente o enviar un punto nuevo con el botón del siguiente mensaje.', 'Ver recientes', $rows);
         }
 
-        $this->setState($conversation, $state, $context);
-        WhatsAppFreeformSender::sendText($phone, $message);
+        $this->sendNativeLocationRequest($phone, $message);
 
         return true;
+    }
+
+    private function sendNativeLocationRequest(string $phone, string $message): void
+    {
+        $prompt = $message."\n\nToque “Enviar ubicación”, seleccione el punto exacto en el mapa y envíelo. También puede escribir una dirección completa.";
+
+        if (! WhatsAppFreeformSender::sendLocationRequest($phone, $prompt)) {
+            WhatsAppFreeformSender::sendText($phone, $message.' Abra el clip de WhatsApp, elija Ubicación y envíe el punto exacto. También puede escribir una dirección completa.');
+        }
     }
 
     /**
@@ -448,14 +447,6 @@ class WhatsAppRideBookingHandler
         WhatsAppFreeformSender::sendText($phone, '¿Cuántas personas son?');
 
         return true;
-    }
-
-    private function locationPickerLink(ChatbotConversation $conversation, string $field): string
-    {
-        return URL::temporarySignedRoute('whatsapp.location-picker.show', now()->addMinutes(30), [
-            'conversation' => $conversation->id,
-            'step' => $field,
-        ]);
     }
 
     /**

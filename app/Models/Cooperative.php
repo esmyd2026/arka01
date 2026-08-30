@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Services\Haversine;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -31,6 +32,18 @@ class Cooperative extends Model
         'declared_unit_count',
         'has_insurance',
         'geographic_coverage',
+        // Tarifa y reparto con conductores (pedido explícito del usuario):
+        // 'rate_per_km' es lo que la cooperativa cobra al cliente,
+        // 'driver_pay_rate_per_km' lo que le paga a sus conductores — la
+        // diferencia es su margen. Ambas nullable: mientras no se
+        // configuren, el precio sigue siendo el promedio de tarifas de los
+        // conductores miembros, igual que hoy (ver RideRequestCreator::create()).
+        'rate_per_km',
+        'driver_pay_rate_per_km',
+        // Rango de cobertura (pedido explícito del usuario): mismo concepto
+        // que DriverProfile.max_request_distance_km, medido desde el
+        // "stand" de la cooperativa — ver RideRequestController::create().
+        'max_request_distance_km',
         'operating_hours',
         'response_timeout_seconds',
         'automatic_assignment_enabled',
@@ -42,6 +55,9 @@ class Cooperative extends Model
     protected $casts = [
         'stand_lat' => 'decimal:7',
         'stand_lng' => 'decimal:7',
+        'rate_per_km' => 'decimal:2',
+        'driver_pay_rate_per_km' => 'decimal:2',
+        'max_request_distance_km' => 'integer',
         'automatic_assignment_enabled' => 'boolean',
         'has_insurance' => 'boolean',
         'show_fleet_publicly' => 'boolean',
@@ -111,6 +127,29 @@ class Cooperative extends Model
     public function rideRequests(): HasMany
     {
         return $this->hasMany(RideRequest::class);
+    }
+
+    public function walletEntries(): HasMany
+    {
+        return $this->hasMany(CooperativeWalletEntry::class);
+    }
+
+    /**
+     * Zona de cobertura (pedido explícito del usuario): true si un punto
+     * (origen de una carrera) cae dentro de la distancia máxima que esta
+     * cooperativa configuró desde su "stand" — mismo criterio que
+     * DriverProfile::isWithinRangeOf(). Sin límite configurado, o sin
+     * ubicación de base conocida todavía, no hay nada que descartar.
+     */
+    public function isWithinRangeOf(float $originLat, float $originLng): bool
+    {
+        if ($this->max_request_distance_km === null || $this->stand_lat === null || $this->stand_lng === null) {
+            return true;
+        }
+
+        $distanceKm = Haversine::distanceKm($originLat, $originLng, (float) $this->stand_lat, (float) $this->stand_lng);
+
+        return $distanceKm <= $this->max_request_distance_km;
     }
 
     public function isApproved(): bool

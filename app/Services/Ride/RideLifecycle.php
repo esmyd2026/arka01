@@ -8,6 +8,7 @@ use App\Events\RideCancelled;
 use App\Events\RideCompleted;
 use App\Events\RidePickedUp;
 use App\Events\RideStarted;
+use App\Models\CooperativeWalletEntry;
 use App\Models\DriverProfile;
 use App\Models\Ride;
 use App\Models\User;
@@ -212,6 +213,7 @@ class RideLifecycle
         }
 
         $pointsEarned = $ride->distance_km >= 5 ? 2 : 1;
+        $settledPrice = (float) ($ride->stops()->where('status', 'completed')->sum('leg_price') + $ride->price);
 
         $ride->update([
             'status' => 'completed',
@@ -219,10 +221,34 @@ class RideLifecycle
             'points_earned' => $pointsEarned,
             'completion_reason' => $isNearDestination ? null : $completionReason,
             'completion_note' => $isNearDestination ? null : $completionNote,
-            'settled_price' => $ride->stops()->where('status', 'completed')->sum('leg_price') + $ride->price,
+            'settled_price' => $settledPrice,
         ]);
 
         DriverProfile::where('user_id', $ride->driver_user_id)->increment('total_points', $pointsEarned);
+
+        // Billetera cooperativa-conductor (pedido explícito del usuario):
+        // solo si la cooperativa configuró sus dos tarifas — mientras no lo
+        // haga, no hay margen que repartir, así que no se genera nada. El
+        // conductor gana una proporción fija del precio final (pedido
+        // explícito del usuario: "proporcional al precio final cobrado" —
+        // si hubo recargo nocturno/pico o se aplicó la tarifa mínima, esa
+        // proporción se mantiene, no un monto fijo por km).
+        $cooperative = $ride->rideRequest?->cooperative;
+        if ($cooperative && $cooperative->rate_per_km && $cooperative->driver_pay_rate_per_km) {
+            $driverShareRatio = min(1.0, (float) $cooperative->driver_pay_rate_per_km / (float) $cooperative->rate_per_km);
+            $driverPay = round($settledPrice * $driverShareRatio, 2);
+            // El conductor cobró TODO en efectivo, pero solo le
+            // correspondía $driverPay — le debe a la cooperativa el resto.
+            // Por transferencia es al revés: la cooperativa se quedó con
+            // todo, le debe al conductor su parte ($driverPay).
+            CooperativeWalletEntry::create([
+                'cooperative_id' => $cooperative->id,
+                'driver_user_id' => $ride->driver_user_id,
+                'ride_id' => $ride->id,
+                'direction' => $ride->payment_method === 'efectivo' ? 'driver_owes_cooperative' : 'cooperative_owes_driver',
+                'amount' => $ride->payment_method === 'efectivo' ? round($settledPrice - $driverPay, 2) : $driverPay,
+            ]);
+        }
 
         broadcast(new RideCompleted($ride))->toOthers();
 

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -93,15 +93,24 @@ const requestClient = (client) => {
 // Copia local para poder sumar invitaciones nuevas en vivo (antes solo se
 // veían al refrescar la página) sin esperar una recarga completa.
 const invitations = ref([...props.pendingInvitations]);
+const openInvitation = ref(null);
+
+watch(
+    () => props.pendingInvitations,
+    (value) => { invitations.value = [...value]; },
+    { deep: true },
+);
 
 const userId = usePage().props.auth.user.id;
 let personalChannel = null;
 
 function handleFleetInvitationCreated(e) {
-    invitations.value.unshift({
-        id: e.id,
-        fleet: { owner: { name: e.owner_name } },
-        message: e.message,
+    // El evento en vivo solo trae un resumen. Recargamos exclusivamente esta
+    // prop para obtener también reputación y clientes en común, sin refrescar
+    // toda la pantalla ni perder filtros.
+    router.reload({
+        only: ['pendingInvitations'],
+        preserveScroll: true,
     });
 }
 
@@ -304,7 +313,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         <li
                             v-for="invitation in invitations"
                             :key="invitation.id"
-                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            class="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <UserAvatar :user="invitation.fleet.owner" size-class="h-12 w-12 text-base shrink-0" />
@@ -326,10 +335,49 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         </span>
                                         <span v-else class="text-xs text-arka-text-muted">Sin calificaciones</span>
                                         <span class="text-xs">{{ CATEGORY_LABELS[invitation.client_category] }}</span>
+                                        <span
+                                            v-if="invitation.mutual_clients_count > 0"
+                                            class="inline-flex items-center gap-1 rounded-full bg-arka-primary/10 px-2 py-0.5 text-xs font-semibold text-arka-primary"
+                                        >
+                                            <svg class="h-3.5 w-3.5 fill-none stroke-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8-1a3.5 3.5 0 1 0 0-7M2 21a6 6 0 0 1 12 0m1-7a5 5 0 0 1 7 4.6" stroke-width="1.7" stroke-linecap="round" /></svg>
+                                            {{ invitation.mutual_clients_count }} cliente{{ invitation.mutual_clients_count === 1 ? '' : 's' }} en común
+                                        </span>
                                     </p>
                                     <p v-if="invitation.message" class="text-sm text-arka-text-muted">
                                         "{{ invitation.message }}"
                                     </p>
+                                    <button
+                                        v-if="invitation.mutual_clients_count > 0"
+                                        type="button"
+                                        class="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
+                                        :aria-expanded="openInvitation === invitation.id"
+                                        @click="openInvitation = openInvitation === invitation.id ? null : invitation.id"
+                                    >
+                                        {{ openInvitation === invitation.id ? 'Ocultar personas en común' : 'Ver quién lo conoce' }}
+                                        <svg class="h-3.5 w-3.5 fill-none stroke-current transition-transform" :class="{ 'rotate-180': openInvitation === invitation.id }" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div
+                                v-if="openInvitation === invitation.id && invitation.mutual_clients_count > 0"
+                                class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:col-span-2"
+                            >
+                                <p class="text-xs font-semibold text-arka-text">Clientes tuyos que conocen a esta persona</p>
+                                <p class="mt-1 text-[11px] leading-4 text-arka-text-muted">Son clientes activos tuyos y conexiones aceptadas de su círculo.</p>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <Link
+                                        v-for="person in invitation.mutual_clients"
+                                        :key="person.public_id"
+                                        :href="route('profiles.show', person.public_id)"
+                                        class="inline-flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-arka-card px-2 py-1.5 transition hover:border-arka-primary/30"
+                                    >
+                                        <UserAvatar :user="person" size-class="h-7 w-7 text-[10px] shrink-0" />
+                                        <span class="max-w-36 truncate text-xs font-medium text-arka-text">{{ person.name }}</span>
+                                    </Link>
+                                    <span v-if="invitation.mutual_clients_count > invitation.mutual_clients.length" class="self-center text-xs text-arka-text-muted">
+                                        +{{ invitation.mutual_clients_count - invitation.mutual_clients.length }} más
+                                    </span>
                                 </div>
                             </div>
 

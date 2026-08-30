@@ -8,6 +8,7 @@ import DriverAvailabilityToggle from '@/Components/DriverAvailabilityToggle.vue'
 import AdBannerSlider from '@/Components/AdBannerSlider.vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import HomeSearchSheet from '@/Components/HomeSearchSheet.vue';
+import ArkaRouteLoader from '@/Components/ArkaRouteLoader.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
@@ -122,6 +123,14 @@ const homeLng = ref(null);
 // indicio de qué había pasado.
 const homeMapCenter = ref(props.homeInitialCenter);
 const homeSearchQuery = ref('');
+const destinationSelectionLoading = ref(false);
+const destinationNavigationLoading = ref(false);
+const destinationLoading = computed(() => destinationSelectionLoading.value || destinationNavigationLoading.value);
+const destinationLoadingTitle = computed(() =>
+    destinationSelectionLoading.value && !destinationNavigationLoading.value
+        ? 'Ubicando tu destino'
+        : 'Preparando tu recorrido'
+);
 
 // Móvil vs escritorio, DECIDIDO EN JAVASCRIPT (pedido explícito del usuario,
 // tras dos rondas de bugs reales seguidas: "en tipo web dañaste, no se ve el
@@ -284,17 +293,29 @@ async function resolveCurrentAddress(lat, lng) {
 }
 
 async function goToDestination({ lat, lng, address }) {
-    const originAddress = homeLat.value != null && homeLng.value != null
-        ? await resolveCurrentAddress(homeLat.value, homeLng.value)
-        : null;
-    router.get(route('ride-requests.create'), {
-        ...(homeLat.value != null && homeLng.value != null
-            ? { origin_lat: homeLat.value, origin_lng: homeLng.value, origin_address: originAddress ?? '' }
-            : {}),
-        destination_lat: lat,
-        destination_lng: lng,
-        destination_address: address ?? '',
-    });
+    destinationNavigationLoading.value = true;
+
+    try {
+        const originAddress = homeLat.value != null && homeLng.value != null
+            ? await resolveCurrentAddress(homeLat.value, homeLng.value)
+            : null;
+        router.get(
+            route('ride-requests.create'),
+            {
+                ...(homeLat.value != null && homeLng.value != null
+                    ? { origin_lat: homeLat.value, origin_lng: homeLng.value, origin_address: originAddress ?? '' }
+                    : {}),
+                destination_lat: lat,
+                destination_lng: lng,
+                destination_address: address ?? '',
+            },
+            {
+                onFinish: () => { destinationNavigationLoading.value = false; },
+            },
+        );
+    } catch {
+        destinationNavigationLoading.value = false;
+    }
 }
 
 // Rediseño UX (pedido explícito del usuario): "Tu flota" y "Conductores que
@@ -500,6 +521,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
     <Head title="Inicio" />
 
     <AuthenticatedLayout :transparent-nav="!!fleetDrivers">
+        <ArkaRouteLoader :show="destinationLoading" :title="destinationLoadingTitle" />
         <!-- Pedido explícito del usuario (documento formal de ajuste UX):
              en Inicio del pasajero la nav flota FIJA sobre el mapa (ver
              `transparent-nav` en AuthenticatedLayout.vue, ahora con
@@ -1161,6 +1183,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             :schedule-href="hasRoute('ride-requests.create') ? route('ride-requests.create', { programar: 1 }) : null"
                             @place-selected="({ lat, lng, address }) => goToDestination({ lat, lng, address })"
                             @select-recent="(place) => goToDestination({ lat: place.lat, lng: place.lng, address: place.address })"
+                            @destination-loading="destinationSelectionLoading = $event"
                         />
                     </div>
                 </div>
@@ -1255,6 +1278,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 :schedule-href="hasRoute('ride-requests.create') ? route('ride-requests.create', { programar: 1 }) : null"
                                 @place-selected="({ lat, lng, address }) => goToDestination({ lat, lng, address })"
                                 @select-recent="(place) => goToDestination({ lat: place.lat, lng: place.lng, address: place.address })"
+                                @destination-loading="destinationSelectionLoading = $event"
                             />
                         </div>
                     </div>

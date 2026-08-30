@@ -8,18 +8,15 @@ use App\Models\City;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\PlanLimits;
+use App\Services\Profile\ProfileUpdater;
 use App\Services\Trust\TrustIndexCalculator;
 use App\Services\WhatsAppConfig;
-use App\Services\WhatsAppVerificationSender;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,6 +25,7 @@ class ProfileController extends Controller
     public function __construct(
         private readonly PlanLimits $planLimits,
         private readonly TrustIndexCalculator $trustIndexCalculator,
+        private readonly ProfileUpdater $profileUpdater,
     ) {}
 
     /**
@@ -109,23 +107,8 @@ class ProfileController extends Controller
     public function searchReferrer(Request $request): JsonResponse
     {
         $validated = $request->validate(['q' => ['required', 'string', 'min:2', 'max:100']]);
-        $term = ltrim($validated['q'], '@');
-        $userId = $request->user()->id;
 
-        $users = User::query()
-            ->where('id', '!=', $userId)
-            ->where(function ($query) use ($term) {
-                $query->where('name', 'like', "%{$term}%")
-                    ->orWhere('username', 'like', "%{$term}%");
-
-                if (ctype_digit($term)) {
-                    $query->orWhere('member_code', (int) $term);
-                }
-            })
-            ->limit(10)
-            ->get(['id', 'name', 'username', 'member_code']);
-
-        return response()->json(['users' => $users]);
+        return response()->json(['users' => $this->profileUpdater->searchReferrer($request->user(), $validated['q'])]);
     }
 
     /**
@@ -136,23 +119,9 @@ class ProfileController extends Controller
      */
     public function setReferrer(Request $request): RedirectResponse
     {
-        $user = $request->user();
-
-        if ($user->referred_by_user_id) {
-            throw ValidationException::withMessages([
-                'referrer_user_id' => 'Ya tiene un referido asignado — no se puede cambiar.',
-            ]);
-        }
-
         $validated = $request->validate(['referrer_user_id' => ['required', 'integer', 'exists:users,id']]);
 
-        if ((int) $validated['referrer_user_id'] === $user->id) {
-            throw ValidationException::withMessages([
-                'referrer_user_id' => 'No puede marcarse a sí mismo como referido.',
-            ]);
-        }
-
-        $user->forceFill(['referred_by_user_id' => $validated['referrer_user_id']])->save();
+        $this->profileUpdater->setReferrer($request->user(), (int) $validated['referrer_user_id']);
 
         return back()->with('status', 'Guardado — ya quedó marcado quién lo recomendó.');
     }
@@ -270,78 +239,7 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $user = $request->user();
-        $validated = $request->validated();
-
-        // Foto de perfil (consideración agregada al alcance): si suben una
-        // nueva, se borra la anterior del disco 'public' — pero solo si era
-        // un archivo propio, nunca si venía de Google (URL externa completa,
-        // ver User::getAvatarUrlAttribute()), porque ahí no hay nada que borrar.
-        if ($request->hasFile('avatar')) {
-            if ($user->avatar_path && ! str_starts_with($user->avatar_path, 'http')) {
-                Storage::disk('public')->delete($user->avatar_path);
-            }
-            $validated['avatar_path'] = $request->file('avatar')->store('avatars', 'public');
-        }
-        unset($validated['avatar']);
-
-        // Cambio de número de teléfono (pedido explícito del usuario: "que
-        // tambien pueda actualizar su numero de telefono... y que cuando
-        // ingrese el numero le invite a escribirle al asistente de
-        // whatsapp para confirmar su numero") — mismo mecanismo, casi
-        // literal, que ya usa DriverProfileController::update() para el
-        // conductor: un código de 6 dígitos por WhatsApp (el mismo que ya
-        // usa toda la app para "teléfono verificado", ver
-        // EnsurePhoneIsVerified), no un mecanismo nuevo en paralelo.
-        // 'country_code'/'phone_local' no son columnas de User — se
-        // procesan acá y se sacan de $validated antes del fill() de abajo.
-        if (filled($validated['phone_local'] ?? null)) {
-            $newPhone = $validated['country_code'].$validated['phone_local'];
-
-            if ($newPhone !== $user->phone) {
-                if (User::query()->where('phone', $newPhone)->where('id', '!=', $user->id)->exists()) {
-                    throw ValidationException::withMessages([
-                        'phone_local' => 'Ese número ya está registrado por otra cuenta de Arka01.',
-                    ]);
-                }
-
-                $user->forceFill(['phone' => $newPhone, 'phone_verified_at' => null])->save();
-
-                // Mismo criterio que el registro y que el conductor: si la
-                // verificación por WhatsApp está configurada, hay que
-                // volver a confirmar el número nuevo (EnsurePhoneIsVerified
-                // lo va a exigir en la próxima pantalla); si no está
-                // configurada o el envío falla de verdad, queda
-                // auto-verificado para no bloquear a nadie esperando un
-                // código que nunca va a llegar.
-                if (WhatsAppVerificationSender::enabled()) {
-                    $code = $user->issuePhoneVerificationCode();
-                    $sent = WhatsAppVerificationSender::sendCode($user->phone, $code);
-                    Log::info('Código de verificación enviado tras cambiar el número desde el perfil de cliente.', [
-                        'user_id' => $user->id, 'enviado_por_whatsapp' => $sent,
-                    ]);
-
-                    if (! $sent) {
-                        $user->forceFill([
-                            'phone_verified_at' => now(),
-                            'phone_verification_code' => null,
-                            'phone_verification_expires_at' => null,
-                        ])->save();
-                    }
-                } else {
-                    $user->forceFill(['phone_verified_at' => now()])->save();
-                }
-            }
-        }
-        unset($validated['country_code'], $validated['phone_local']);
-
-        $user->fill($validated);
-
-        if ($user->isDirty('email')) {
-            $user->email_verified_at = null;
-        }
-
-        $user->save();
+        $this->profileUpdater->update($request);
 
         return Redirect::route('profile.edit');
     }

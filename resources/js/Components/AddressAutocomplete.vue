@@ -29,7 +29,7 @@ const props = defineProps({
     light: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:modelValue', 'place-selected', 'clear']);
+const emit = defineEmits(['update:modelValue', 'place-selected', 'clear', 'selection-loading']);
 
 let placesLib = null;
 let placesLoading = null;
@@ -167,6 +167,10 @@ async function selectSuggestion(suggestion) {
     // Cierra ya mismo, no al final: evita poder tocar una segunda sugerencia
     // mientras la primera todavía está resolviendo sus coordenadas.
     open.value = false;
+    // La ficha detallada (coordenadas + dirección formal) puede tardar unos
+    // segundos aunque la sugerencia ya se haya mostrado. El padre necesita
+    // conocer este estado para no dejar la pantalla aparentemente congelada.
+    emit('selection-loading', true);
 
     try {
         const place = suggestion.placePrediction.toPlace();
@@ -184,6 +188,10 @@ async function selectSuggestion(suggestion) {
         // deja el texto nomás, el cliente puede marcar el punto en el mapa.
         if (myToken !== selectionToken) return;
         emit('update:modelValue', suggestion.placePrediction.text.text);
+    } finally {
+        // Una selección anterior nunca debe apagar el loading de una más
+        // reciente que todavía se esté resolviendo.
+        if (myToken === selectionToken) emit('selection-loading', false);
     }
 
     if (myToken !== selectionToken) return;

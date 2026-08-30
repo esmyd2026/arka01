@@ -37,7 +37,7 @@ const props = defineProps({
     compact: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:modelValue', 'place-selected', 'select-recent']);
+const emit = defineEmits(['update:modelValue', 'place-selected', 'select-recent', 'destination-loading']);
 
 // Bug real reportado por el usuario ("no se ve nada bien", con captura): la
 // lista de "Recientes" mostraba la dirección completa pegada en una sola
@@ -159,6 +159,7 @@ function saveAddress() {
                 light
                 @update:model-value="$emit('update:modelValue', $event)"
                 @place-selected="$emit('place-selected', $event)"
+                @selection-loading="$emit('destination-loading', $event)"
             />
         </div>
     </div>

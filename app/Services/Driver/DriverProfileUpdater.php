@@ -440,4 +440,47 @@ class DriverProfileUpdater
 
         return $profile;
     }
+
+    /**
+     * "Pasarme a cliente": pausa el perfil de conductor sin borrar nada —
+     * vehículo, verificación, medallas y suscripción quedan tal cual,
+     * listos para retomar. La cuenta pasa a operar como cliente de
+     * inmediato (User::isDriver() da false en cuanto se guarda esto).
+     */
+    public function deactivate(User $user): void
+    {
+        abort_unless($user->isDriver(), 404);
+
+        if (Ride::where('driver_user_id', $user->id)->where('status', 'in_progress')->exists()) {
+            throw ValidationException::withMessages(['driver' => self::ACTIVE_RIDE_MESSAGE]);
+        }
+
+        // Se apaga la disponibilidad de una — mismo motivo que al cerrar
+        // sesión: un conductor "pausado" no puede seguir mostrándose
+        // disponible para sus clientes.
+        $user->driverProfile->forceFill([
+            'deactivated_at' => now(),
+            'is_available' => false,
+        ])->save();
+
+        Log::info('Conductor pasó a cliente (perfil de conductor pausado por su propia cuenta).', ['user_id' => $user->id]);
+    }
+
+    /**
+     * "Reactivar mi perfil de conductor": atajo de un solo toque para quien
+     * pausó antes y quiere volver — no hace falta llenar el formulario de
+     * nuevo, los datos siguen ahí.
+     */
+    public function reactivate(User $user): void
+    {
+        $profile = $user->driverProfile;
+
+        abort_if($profile === null, 404);
+
+        if (! $user->isDriver() && Ride::where('client_user_id', $user->id)->where('status', 'in_progress')->exists()) {
+            throw ValidationException::withMessages(['driver' => self::ACTIVE_RIDE_MESSAGE]);
+        }
+
+        $profile->forceFill(['deactivated_at' => null])->save();
+    }
 }

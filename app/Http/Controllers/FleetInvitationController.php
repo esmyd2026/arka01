@@ -4,15 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Fleet;
 use App\Models\FleetInvitation;
-use App\Models\User;
 use App\Services\Fleet\FleetInvitationCreator;
+use App\Services\Fleet\FleetInvitationManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class FleetInvitationController extends Controller
 {
-    public function __construct(private readonly FleetInvitationCreator $invitationCreator) {}
+    public function __construct(
+        private readonly FleetInvitationCreator $invitationCreator,
+        private readonly FleetInvitationManager $invitationManager,
+    ) {}
 
     /**
      * El cliente invita a un conductor a una de sus flotas (sección 3.2). Queda
@@ -52,13 +54,7 @@ class FleetInvitationController extends Controller
             'message' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $client = User::findOrFail($validated['client_user_id']);
-        abort_unless($client->isClient(), 404);
-
-        $fleet = Fleet::query()->where('owner_user_id', $client->id)->orderBy('id')->first()
-            ?? Fleet::query()->create(['owner_user_id' => $client->id, 'name' => 'Mi flota']);
-
-        $this->invitationCreator->create($fleet, $request->user()->id, $request->user()->id, 'driver', $validated['message'] ?? null);
+        $this->invitationManager->createFromDriver($request->user(), (int) $validated['client_user_id'], $validated['message'] ?? null);
 
         return back()->with('status', 'Listo — le mandamos la solicitud. Le llega apenas entre.');
     }
@@ -80,34 +76,7 @@ class FleetInvitationController extends Controller
             'q' => ['required', 'string', 'min:2', 'max:100'],
         ]);
 
-        // Acepta "@usuario" o "usuario" por igual (pedido explícito del
-        // usuario: buscar "por su usuario o código de socio").
-        $term = ltrim($validated['q'], '@');
-        $memberCode = ctype_digit($term) ? (int) $term : null;
-        $userId = $request->user()->id;
-
-        $friends = User::query()
-            ->where('id', '!=', $userId)
-            ->where('role', 'cliente')
-            ->with('city')
-            ->when(
-                $memberCode,
-                fn ($query) => $query->where('member_code', $memberCode),
-                fn ($query) => $query->whereRaw('LOWER(username) = ?', [mb_strtolower($term)])
-            )
-            ->limit(10)
-            ->get();
-
-        return response()->json([
-            'friends' => $friends->map(fn (User $friend) => [
-                'user_id' => $friend->id,
-                'name' => $friend->name,
-                'avatar_url' => $friend->avatar_url,
-                'city' => $friend->city?->name,
-                'username' => $friend->username,
-                'member_code' => $friend->member_code,
-            ])->values(),
-        ]);
+        return response()->json(['friends' => $this->invitationManager->searchFriends($request->user(), $validated['q'])]);
     }
 
     /**
@@ -130,45 +99,20 @@ class FleetInvitationController extends Controller
             'message' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $friend = User::findOrFail($validated['friend_user_id']);
-        abort_unless($friend->isClient() && $friend->id !== $request->user()->id, 422);
+        $result = $this->invitationManager->sendReferral(
+            $fleet,
+            $request->user(),
+            (int) $validated['friend_user_id'],
+            $validated['driver_user_ids'],
+            $validated['message'] ?? null,
+        );
 
-        // Solo puedo recomendar conductores que YA son parte de mi propia
-        // flota — no cualquier usuario que exista en la plataforma.
-        $eligibleDriverIds = $fleet->activeMembers()
-            ->whereIn('driver_user_id', $validated['driver_user_ids'])
-            ->pluck('driver_user_id');
-
-        if ($eligibleDriverIds->isEmpty()) {
-            throw ValidationException::withMessages([
-                'driver_user_ids' => 'Ninguno de los conductores elegidos es parte de esta flota.',
-            ]);
-        }
-
-        $friendFleet = Fleet::query()->where('owner_user_id', $friend->id)->orderBy('id')->first()
-            ?? Fleet::query()->create(['owner_user_id' => $friend->id, 'name' => 'Mi flota']);
-
-        $sent = 0;
-        $skipped = 0;
-
-        foreach ($eligibleDriverIds as $driverId) {
-            try {
-                $this->invitationCreator->create($friendFleet, (int) $driverId, $request->user()->id, 'referral', $validated['message'] ?? null);
-                $sent++;
-            } catch (ValidationException) {
-                // Ya es miembro de la flota del amigo o ya tiene una
-                // invitación pendiente ahí — se informa en el resumen, sin
-                // frenar el resto del lote.
-                $skipped++;
-            }
-        }
-
-        $status = $sent > 0
-            ? "Se enviaron {$sent} invitación(es) a nombre de {$friend->name}."
+        $status = $result['sent'] > 0
+            ? "Se enviaron {$result['sent']} invitación(es) a nombre de {$result['friend']->name}."
             : 'No se envió ninguna invitación nueva.';
 
-        if ($skipped > 0) {
-            $status .= " {$skipped} ya eran parte de esa flota o ya tenían una invitación pendiente.";
+        if ($result['skipped'] > 0) {
+            $status .= " {$result['skipped']} ya eran parte de esa flota o ya tenían una invitación pendiente.";
         }
 
         return back()->with('status', $status);
@@ -181,16 +125,7 @@ class FleetInvitationController extends Controller
     {
         $this->authorize('cancel', $invitation);
 
-        if ($invitation->status !== 'pending') {
-            throw ValidationException::withMessages([
-                'invitation' => 'Esa invitación ya fue respondida, no se puede cancelar.',
-            ]);
-        }
-
-        $invitation->update([
-            'status' => 'cancelled',
-            'responded_at' => now(),
-        ]);
+        $this->invitationManager->cancel($invitation);
 
         return back();
     }

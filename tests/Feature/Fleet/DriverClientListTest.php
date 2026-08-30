@@ -4,8 +4,10 @@ namespace Tests\Feature\Fleet;
 
 use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\Ride;
+use App\Models\TrustCircleConnection;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -127,5 +129,53 @@ class DriverClientListTest extends TestCase
             ->where('activeMemberships.total', 15)
             ->where('activeMembershipStats.total', 15)
         );
+    }
+
+    public function test_a_pending_invitation_shows_accepted_circle_people_who_are_already_driver_clients(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $invitingClient = User::factory()->create();
+        $invitingFleet = Fleet::factory()->for($invitingClient, 'owner')->create();
+        FleetInvitation::query()->create([
+            'fleet_id' => $invitingFleet->id,
+            'driver_user_id' => $driver->id,
+            'invited_by' => $invitingClient->id,
+            'initiated_by' => 'client',
+            'status' => 'pending',
+        ]);
+
+        $knownClient = User::factory()->create();
+        $knownFleet = Fleet::factory()->for($knownClient, 'owner')->create();
+        FleetMember::factory()->for($knownFleet)->for($driver, 'driver')->create([
+            'added_by' => $knownClient->id,
+            'left_at' => null,
+        ]);
+
+        TrustCircleConnection::query()->create([
+            'requester_user_id' => $invitingClient->id,
+            'addressee_user_id' => $knownClient->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $unrelatedPerson = User::factory()->create();
+        TrustCircleConnection::query()->create([
+            'requester_user_id' => $invitingClient->id,
+            'addressee_user_id' => $unrelatedPerson->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($driver)
+            ->get(route('driver.invitations.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('pendingInvitations.0.mutual_clients_count', 1)
+                ->where('pendingInvitations.0.mutual_clients.0.public_id', $knownClient->public_id)
+                ->where('pendingInvitations.0.mutual_clients.0.name', $knownClient->full_name)
+                ->missing('pendingInvitations.0.mutual_clients.0.email')
+                ->missing('pendingInvitations.0.mutual_clients.0.phone')
+            );
     }
 }

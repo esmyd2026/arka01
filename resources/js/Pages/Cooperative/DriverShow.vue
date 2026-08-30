@@ -65,6 +65,28 @@ const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progre
                 </article>
             </section>
 
+            <!-- Billetera (pedido explícito del usuario): saldo neto entre
+                 la cooperativa y este conductor — carreras en efectivo donde
+                 se quedó con el margen de la cooperativa, compensadas con
+                 las de transferencia donde fue la cooperativa quien se
+                 quedó con la parte del conductor. Solo tiene datos si la
+                 cooperativa configuró sus dos tarifas (Cooperative/Profile.vue). -->
+            <section v-if="summary.wallet_balance !== 0" class="rounded-2xl p-5" :class="summary.wallet_balance > 0 ? 'bg-amber-400/10' : 'bg-emerald-400/10'">
+                <p class="text-xs uppercase tracking-widest" :class="summary.wallet_balance > 0 ? 'text-amber-300' : 'text-emerald-300'">Billetera</p>
+                <p class="mt-2 text-2xl font-bold" :class="summary.wallet_balance > 0 ? 'text-amber-200' : 'text-emerald-200'">
+                    {{ summary.wallet_balance > 0 ? `El conductor le debe ${money(summary.wallet_balance)}` : `Ustedes le deben ${money(Math.abs(summary.wallet_balance))}` }}
+                </p>
+                <p class="mt-1 text-xs text-arka-text-muted">
+                    {{ summary.wallet_balance > 0
+                        ? 'Cobró de más en efectivo carreras cuyo margen era de la cooperativa.'
+                        : 'La cooperativa recibió transferencias que en parte le correspondían a él.' }}
+                </p>
+            </section>
+            <section v-else class="rounded-2xl bg-arka-card p-5">
+                <p class="text-xs uppercase tracking-widest text-arka-primary">Billetera</p>
+                <p class="mt-2 text-sm text-arka-text-muted">Sin saldo pendiente con este conductor.</p>
+            </section>
+
             <section class="rounded-2xl bg-arka-card">
                 <div class="border-b border-arka-text-muted/10 p-5"><p class="text-xs uppercase tracking-widest text-arka-primary">Historial</p><h2 class="mt-1 font-semibold text-arka-text">Carreras e ingresos individuales</h2></div>
                 <p v-if="!rides.data.length" class="p-6 text-sm text-arka-text-muted">Este conductor todavía no registra carreras con la cooperativa.</p>

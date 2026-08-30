@@ -3,17 +3,26 @@
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ConfigController;
+use App\Http\Controllers\Api\V1\CouponController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\DriverController;
+use App\Http\Controllers\Api\V1\DriverDirectoryController;
+use App\Http\Controllers\Api\V1\DriverInvitationController;
+use App\Http\Controllers\Api\V1\DriverStatsController;
 use App\Http\Controllers\Api\V1\ExpressApplicationController;
 use App\Http\Controllers\Api\V1\ExpressIncidentController;
 use App\Http\Controllers\Api\V1\ExpressRouteCompanionController;
 use App\Http\Controllers\Api\V1\ExpressRouteController;
 use App\Http\Controllers\Api\V1\FleetController;
+use App\Http\Controllers\Api\V1\FleetInvitationController;
 use App\Http\Controllers\Api\V1\PlanController;
+use App\Http\Controllers\Api\V1\ProfileController;
+use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\RideController;
 use App\Http\Controllers\Api\V1\RideRequestController;
+use App\Http\Controllers\Api\V1\SavedRouteController;
 use App\Http\Controllers\Api\V1\SupportController;
+use App\Http\Controllers\DriverProfileController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -51,6 +60,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
         Route::delete('/account', [AccountController::class, 'destroy'])->name('account.destroy');
         Route::put('/device/push-token', [DeviceController::class, 'updatePushToken'])->name('device.push-token');
+        Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        Route::get('/profile/search-referrer', [ProfileController::class, 'searchReferrer'])->name('profile.search-referrer');
+        Route::post('/profile/referrer', [ProfileController::class, 'setReferrer'])->name('profile.set-referrer');
         Route::get('/my-plan', [PlanController::class, 'mine'])->name('my-plan');
 
         Route::get('/support', [SupportController::class, 'index'])->name('support.index');
@@ -58,11 +70,28 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->middleware('throttle:20,1,api.support.messages.store')
             ->name('support.messages.store');
         Route::get('/fleet', [FleetController::class, 'index'])->name('fleet.index');
+        Route::post('/fleet', [FleetController::class, 'store'])->name('fleet.store');
         Route::get('/fleet/{fleet}/search-drivers', [FleetController::class, 'searchDrivers'])
             ->middleware('throttle:30,1,api.fleet.search-drivers')
             ->name('fleet.search-drivers');
+        Route::get('/fleet/{fleet}/search-friends', [FleetInvitationController::class, 'searchFriends'])
+            ->middleware('throttle:30,1,api.fleet.search-friends')
+            ->name('fleet.referral.search-friends');
         Route::post('/fleet/{fleet}/invitations', [FleetController::class, 'invite'])->name('fleet.invite');
+        Route::post('/fleet/{fleet}/referral', [FleetInvitationController::class, 'storeReferral'])->name('fleet.referral.store');
         Route::delete('/fleet/members/{member}', [FleetController::class, 'removeMember'])->name('fleet.members.destroy');
+        Route::delete('/fleet/invitations/{invitation}', [FleetInvitationController::class, 'destroy'])->name('fleet.invitations.destroy');
+        Route::get('/fleet/{fleet}', [FleetController::class, 'show'])->name('fleet.show');
+
+        Route::get('/driver/invitations', [DriverInvitationController::class, 'index'])->name('driver.invitations.index');
+        Route::get('/driver/clients/search', [DriverInvitationController::class, 'searchClients'])
+            ->middleware('throttle:30,1,api.driver.clients.search')
+            ->name('driver.clients.search');
+        Route::post('/driver/invitations', [FleetInvitationController::class, 'storeFromDriver'])->name('fleet-invitations.request');
+        Route::post('/driver/invitations/{invitation}/accept', [DriverInvitationController::class, 'accept'])->name('driver.invitations.accept');
+        Route::post('/driver/invitations/{invitation}/reject', [DriverInvitationController::class, 'reject'])->name('driver.invitations.reject');
+        Route::post('/driver/fleets/{member}/leave', [DriverInvitationController::class, 'leave'])->name('driver.fleets.leave');
+        Route::post('/driver/fleets/{member}/toggle-requests', [DriverInvitationController::class, 'toggleRequests'])->name('driver.fleets.toggle-requests');
 
         // /ride-requests/incoming va ANTES de /ride-requests/{rideRequest}
         // (mismo cuidado que la web con /carreras/indicadores vs.
@@ -87,6 +116,24 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/driver/profile', [DriverController::class, 'updateProfile'])
             ->middleware('throttle:10,1,api.driver.profile.update')
             ->name('driver.profile.update');
+        Route::post('/driver/profile/deactivate', [DriverController::class, 'deactivate'])->name('driver.profile.deactivate');
+        Route::post('/driver/profile/reactivate', [DriverController::class, 'reactivate'])->name('driver.profile.reactivate');
+        // Mismo controlador que la web (App\Http\Controllers\DriverProfileController):
+        // solo depende de $request->user(), sin nada de sesión/Inertia, así
+        // que sirve tal cual también bajo Sanctum sin duplicar una línea.
+        Route::get('/driver/{user}/license-photo', [DriverProfileController::class, 'licensePhoto'])->name('driver-profile.mobile.license-photo');
+        Route::get('/driver/{user}/documents/{type}', [DriverProfileController::class, 'document'])->name('driver-profile.mobile.document');
+
+        // Directorio de conductores (sección 3.4) — a diferencia del perfil
+        // público puntual, este sí se deja atrás de un token (listar a
+        // TODOS los conductores públicos de un saque es una superficie de
+        // scraping mucho mayor que compartir un perfil concreto).
+        Route::get('/directory', [DriverDirectoryController::class, 'index'])->name('directory.index');
+        Route::get('/driver/stats', [DriverStatsController::class, 'index'])->name('driver.stats');
+        Route::get('/coupons', [CouponController::class, 'index'])->name('coupons.index');
+        Route::get('/saved-routes', [SavedRouteController::class, 'index'])->name('saved-routes.index');
+        Route::post('/saved-routes', [SavedRouteController::class, 'store'])->name('saved-routes.store');
+        Route::delete('/saved-routes/{savedRoute}', [SavedRouteController::class, 'destroy'])->name('saved-routes.destroy');
 
         // /rides/active y /rides/history van ANTES de /rides/{ride}, mismo
         // cuidado de orden que el resto de la API.
@@ -109,6 +156,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('/rides/{ride}/messages', [RideController::class, 'messages'])->name('rides.messages.index');
         Route::post('/rides/{ride}/messages', [RideController::class, 'sendMessage'])->name('rides.messages.store');
         Route::post('/rides/{ride}/review', [RideController::class, 'review'])->name('rides.review');
+        Route::get('/rides/{ride}/tracking-link', [RideController::class, 'trackingLink'])->name('rides.tracking-link');
 
         // /express-routes/mine, /available y /discover van ANTES de
         // /express-routes/{route}, mismo cuidado de orden que el resto de la API.
@@ -141,6 +189,12 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/express-companions/{companion}/driver-reject', [ExpressRouteCompanionController::class, 'driverReject'])->name('express-route-companions.driver-reject');
         Route::post('/express-routes/{route}/incidents', [ExpressIncidentController::class, 'store'])->name('express-incidents.store');
     });
+
+    // Perfil público (sección 3.6): a diferencia del resto de /api/v1, esta
+    // ruta es pública a propósito — mismo criterio que la web
+    // (routes/web.php: profiles.show vive fuera de cualquier grupo `auth`),
+    // cualquiera con el enlace puede verlo, incluso sin cuenta.
+    Route::get('/profiles/{user:public_id}', [PublicProfileController::class, 'show'])->name('profiles.show');
 });
 
 // Webhook entrante de WhatsApp Cloud API (pedido explícito del usuario): sin

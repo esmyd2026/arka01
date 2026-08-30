@@ -38,6 +38,12 @@ const form = useForm({
     // apagarlo, no algo que arranque oculto.
     show_fleet_publicly: props.cooperative.show_fleet_publicly ?? true,
     geographic_coverage: props.cooperative.geographic_coverage ?? '',
+    // Tarifa y reparto con conductores (pedido explícito del usuario): en
+    // blanco = todavía usa el promedio de tarifas de sus conductores, mismo
+    // criterio que ya sigue el resto de esta pantalla con campos opcionales.
+    rate_per_km: props.cooperative.rate_per_km ?? '',
+    driver_pay_rate_per_km: props.cooperative.driver_pay_rate_per_km ?? '',
+    max_request_distance_km: props.cooperative.max_request_distance_km ?? '',
     operating_hours: props.cooperative.operating_hours ?? '',
     response_timeout_seconds: props.cooperative.response_timeout_seconds ?? 30,
     automatic_assignment_enabled: props.cooperative.automatic_assignment_enabled ?? true,
@@ -245,6 +251,47 @@ function uploadLogo(event) {
                             </select>
                         </div>
                     </div>
+                </section>
+
+                <!-- Tarifa y reparto con conductores (pedido explícito del
+                     usuario): la cooperativa cobra su propia tarifa al
+                     cliente y define cuánto le paga a sus conductores — la
+                     diferencia es su margen. Mientras no configure esto, el
+                     precio sigue siendo el promedio de tarifas de sus
+                     conductores, como siempre. -->
+                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                    <h3 class="text-lg font-semibold text-arka-text">Tarifa y reparto con conductores</h3>
+                    <p class="mt-1 text-sm text-arka-text-muted">
+                        En blanco, el precio sigue siendo el promedio de la tarifa de sus conductores, sin
+                        billetera de por medio.
+                    </p>
+
+                    <div class="mt-5 grid gap-5 sm:grid-cols-3">
+                        <div>
+                            <InputLabel value="Tarifa que cobra al cliente (USD/km)" />
+                            <TextInput v-model="form.rate_per_km" type="number" step="0.01" min="0" class="mt-1 block w-full" />
+                            <InputError class="mt-1" :message="form.errors.rate_per_km" />
+                        </div>
+                        <div>
+                            <InputLabel value="Cuánto le paga a cada conductor (USD/km)" />
+                            <TextInput v-model="form.driver_pay_rate_per_km" type="number" step="0.01" min="0" class="mt-1 block w-full" />
+                            <p class="mt-1 text-xs text-arka-text-muted">No puede superar la tarifa de arriba.</p>
+                            <InputError class="mt-1" :message="form.errors.driver_pay_rate_per_km" />
+                        </div>
+                        <div>
+                            <InputLabel value="Distancia máxima para recibir solicitudes (km)" />
+                            <TextInput v-model="form.max_request_distance_km" type="number" step="1" min="1" class="mt-1 block w-full" placeholder="Sin límite" />
+                            <p class="mt-1 text-xs text-arka-text-muted">Medida desde su base. En blanco, sin límite.</p>
+                            <InputError class="mt-1" :message="form.errors.max_request_distance_km" />
+                        </div>
+                    </div>
+
+                    <p v-if="form.rate_per_km && form.driver_pay_rate_per_km" class="mt-4 rounded-arka bg-arka-base/50 p-3 text-xs text-arka-text-muted">
+                        Ejemplo: una carrera de $10 en efectivo — el conductor se queda los $10, pero le
+                        corresponden ${{ (10 * (Number(form.driver_pay_rate_per_km) / Number(form.rate_per_km))).toFixed(2) }},
+                        así que le queda debiendo el resto a la cooperativa. Si esa misma carrera fuera por
+                        transferencia, es la cooperativa quien le debe esa parte al conductor.
+                    </p>
                 </section>
 
                 <!-- Pedido explícito del usuario ("mejoremos la privacidad de

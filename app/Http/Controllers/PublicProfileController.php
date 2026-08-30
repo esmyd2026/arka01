@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\FleetMember;
 use App\Models\User;
-use App\Services\Trust\TrustIndexCalculator;
+use App\Services\Profile\PublicProfileFinder;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Lógica real en App\Services\Profile\PublicProfileFinder (roadmap app
+ * móvil, "full backend").
+ */
 class PublicProfileController extends Controller
 {
-    public function __construct(private readonly TrustIndexCalculator $trustIndexCalculator) {}
+    public function __construct(private readonly PublicProfileFinder $profileFinder) {}
 
     /**
      * User-agents conocidos de rastreadores que arman una tarjeta de vista
@@ -33,36 +35,13 @@ class PublicProfileController extends Controller
      */
     public function show(Request $request, User $user): Response|View
     {
-        $user->load(['driverProfile', 'cooperativeDriverMemberships.cooperative']);
-        $activeCooperative = $user->cooperativeDriverMemberships
-            ->first(fn ($membership) => $membership->status === 'accepted' && $membership->ended_at === null)?->cooperative;
-        $fleetClientsCount = $user->driverProfile
-            ? FleetMember::query()->where('driver_user_id', $user->id)->whereNull('left_at')->count()
-            : 0;
-
-        $profileUrl = route('profiles.show', $user->public_id);
-
-        // Pedido explícito del usuario ("mejoremos la privacidad de los
-        // conductores"): esta pantalla es visible para CUALQUIERA con el
-        // enlace, incluso sin sesión (arriba) — un conductor puede preferir
-        // que quien no sea él ni un admin no vea vehículo, tarifa ni
-        // comentarios. El dueño del perfil y un admin siguen viendo todo.
-        $isOwnerOrAdmin = $request->user()?->is($user) || $request->user()?->isAdmin();
-        $isPrivateDriverProfile = $user->driverProfile && ! $user->driverProfile->profile_public && ! $isOwnerOrAdmin;
-        $trustIndex = $isPrivateDriverProfile ? null : $this->trustIndexCalculator->calculate($user);
+        $data = $this->profileFinder->forUser($user, $request->user());
 
         // Para el puñado de rastreadores de vista previa, se sirve una
         // página mínima aparte con las etiquetas correctas (sin pasar por
         // Inertia, que no las mostraría a tiempo) — cualquier persona real
         // sigue viendo la app normal de siempre, esto nunca la reemplaza.
         if (preg_match(self::LINK_PREVIEW_BOTS, $request->userAgent() ?? '')) {
-            $isDriver = $user->driverProfile !== null;
-            // La vista previa pública debe respetar exactamente la misma
-            // privacidad que la pantalla real; de lo contrario WhatsApp
-            // revelaría reputación aunque el conductor haya cerrado el perfil.
-            $reviewCount = $isPrivateDriverProfile ? 0 : $user->reviewsReceived()->count();
-            $averageRating = $isPrivateDriverProfile ? 0 : round((float) $user->reviewsReceived()->avg('rating'), 1);
-
             return view('profile-preview', [
                 'title' => "{$user->full_name} — Arka01",
                 // Copia de llamada a la acción (pedido explícito del usuario:
@@ -71,84 +50,17 @@ class PublicProfileController extends Controller
                 // Profile/Show.vue para la sesión con Inertia; esta vista
                 // aparte solo existe para el rastreador de WhatsApp, que
                 // nunca manda cookies de sesión.
-                'description' => ($isDriver ? 'Conductor' : 'Cliente').' en Arka01'
-                    .($reviewCount > 0 ? " · ★ {$averageRating}" : '')
-                    .($trustIndex ? " · Índice de confianza {$trustIndex['score']}/100" : '')
+                'description' => ($data['isDriver'] ? 'Conductor' : 'Cliente').' en Arka01'
+                    .($data['reviewCount'] > 0 ? " · ★ {$data['averageRating']}" : '')
+                    .($data['trustIndex'] ? " · Índice de confianza {$data['trustIndex']['score']}/100" : '')
                     .' — únase y hagamos que la movilidad sea más segura en Ecuador.',
                 'image' => $user->avatar_url && ! str_starts_with($user->avatar_url, 'http')
                     ? url($user->avatar_url)
                     : ($user->avatar_url ?? asset('icons/icon.svg')),
-                'url' => $profileUrl,
+                'url' => $data['profileUrl'],
             ]);
         }
 
-        // Perfil privado: ni siquiera se consultan las opiniones — nada de
-        // reputación se muestra a quien no sea el dueño ni un admin.
-        $reviews = $isPrivateDriverProfile
-            ? new LengthAwarePaginator([], 0, 10)
-            : $user->reviewsReceived()->with('reviewer')->latest()->paginate(10);
-
-        return Inertia::render('Profile/Show', [
-            // Auditoría de seguridad (pedido explícito del usuario): esta
-            // pantalla es visible para CUALQUIER usuario logueado con
-            // cualquier ID en la URL (a propósito, sección 3.6 — no hace
-            // falta compartir flota para ver un perfil público). Mandar el
-            // modelo completo permitía enumerar a toda la base de usuarios:
-            // email, teléfono, is_admin, y hasta los códigos de verificación
-            // hasheados. Acá solo va lo que Profile/Show.vue de verdad
-            // muestra — mismo criterio que ya usa
-            // PublicRideTrackingController::publicPayload().
-            'profileUser' => [
-                'public_id' => $user->public_id,
-                'name' => $user->full_name,
-                'username' => $user->username,
-                'member_code' => $user->member_code,
-                'avatar_url' => $user->avatar_url,
-                'driver_profile' => ($user->driverProfile && ! $isPrivateDriverProfile) ? [
-                    // Confidencialidad (pedido explícito del usuario): la foto
-                    // del vehículo ya no viaja a ninguna pantalla de cliente —
-                    // solo el propio conductor y un admin la ven. La placa va
-                    // tapada (ver DriverProfile::maskedPlate()); el tipo de
-                    // vehículo (SUV, sedán, etc.) es el dato que la reemplaza.
-                    'vehicle_make' => $user->driverProfile->vehicle_make,
-                    'vehicle_model' => $user->driverProfile->vehicle_model,
-                    'vehicle_type' => $user->driverProfile->vehicleTypeLabel(),
-                    'vehicle_plate' => $user->driverProfile->maskedPlate(),
-                    'rate_per_km' => $user->driverProfile->rate_per_km,
-                    'accepts_cash' => $user->driverProfile->accepts_cash,
-                    'accepts_transfer' => $user->driverProfile->accepts_transfer,
-                    'verification_status' => $user->driverProfile->verification_status,
-                    'public_category' => $user->driverProfile->public_category,
-                    'public_category_label' => $user->driverProfile->visiblePublicCategoryLabel(),
-                    'cooperative' => $activeCooperative ? [
-                        'public_id' => $activeCooperative->public_id,
-                        'name' => $activeCooperative->name,
-                    ] : null,
-                    'clients_count' => $fleetClientsCount,
-                ] : null,
-            ],
-            // Pedido explícito del usuario: para el código QR/enlace de
-            // "compartir mi perfil" (Profile/Edit.vue) — absoluto, con
-            // dominio, porque va a WhatsApp y a un lector de QR ajeno a la app.
-            'profileUrl' => $profileUrl,
-            'averageRating' => $isPrivateDriverProfile ? 0 : round((float) $user->reviewsReceived()->avg('rating'), 1),
-            'reviewCount' => $isPrivateDriverProfile ? 0 : $user->reviewsReceived()->count(),
-            // Estable para compartir: resume la actividad y red aceptada del
-            // titular, sin revelar nombres ni relaciones de su círculo.
-            'trustIndex' => $trustIndex,
-            'reviews' => $reviews,
-            // Frontend (PublicProfileContent.vue): muestra un aviso de
-            // "perfil privado" en vez del bloque de vehículo/tarifa/reseñas.
-            'profilePrivate' => $isPrivateDriverProfile,
-            // Bug reportado por el usuario (perfil público mostraba las dos
-            // insignias "Cliente" y "Conductor" a la vez): `fleets()->exists()`
-            // podía dar true para un conductor con una flota fantasma vieja
-            // (ver el guard nuevo en DriverDirectoryController::index()) —
-            // acá usamos el mismo criterio canónico que el resto de la app
-            // (User::isClient(), sección 3.1: cada cuenta es una sola cosa,
-            // nunca las dos) en vez de reinventar la pregunta.
-            'isClient' => $user->isClient(),
-            'isDriver' => $user->driverProfile !== null,
-        ]);
+        return Inertia::render('Profile/Show', $data);
     }
 }

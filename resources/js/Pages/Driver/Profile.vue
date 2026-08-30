@@ -70,6 +70,10 @@ const props = defineProps({
     // Tarjeta de perfil "profesional" (pedido explícito del usuario, mismo
     // lenguaje visual que Referral/Show.vue).
     averageRating: { type: Number, required: true },
+    // Billetera cooperativa-conductor (pedido explícito del usuario): null
+    // si no pertenece a ninguna cooperativa, o si esa cooperativa todavía no
+    // configuró sus tarifas (nunca hay saldo que mostrar en ese caso).
+    cooperativeWallet: { type: Object, default: null },
     reviewCount: { type: Number, required: true },
 });
 
@@ -1181,6 +1185,24 @@ const VERIFICATION_LABELS = {
                                 para
                                 <span class="px-1 rounded" :class="tierColorClass(nextPublicTier.color_key)">{{ tierLabel(nextPublicTier) }}</span>
                                 y poder aparecer en el directorio público.
+                            </p>
+                        </div>
+
+                        <!-- Billetera cooperativa-conductor (pedido explícito
+                             del usuario): saldo neto con su cooperativa —
+                             carreras en efectivo donde se quedó con el margen
+                             de la cooperativa, compensadas con las de
+                             transferencia donde fue al revés. -->
+                        <div v-if="cooperativeWallet && cooperativeWallet.balance !== 0" class="p-3 rounded-arka" :class="cooperativeWallet.balance > 0 ? 'bg-arka-warning/10' : 'bg-arka-primary/10'">
+                            <p class="text-sm font-medium" :class="cooperativeWallet.balance > 0 ? 'text-arka-warning' : 'text-arka-primary'">
+                                {{ cooperativeWallet.balance > 0
+                                    ? `Le debe $${cooperativeWallet.balance.toFixed(2)} a ${cooperativeWallet.cooperative_name}`
+                                    : `${cooperativeWallet.cooperative_name} le debe $${Math.abs(cooperativeWallet.balance).toFixed(2)}` }}
+                            </p>
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                {{ cooperativeWallet.balance > 0
+                                    ? 'Por carreras en efectivo cuyo margen le correspondía a la cooperativa.'
+                                    : 'Por carreras por transferencia cuya parte le correspondía a usted.' }}
                             </p>
                         </div>
 

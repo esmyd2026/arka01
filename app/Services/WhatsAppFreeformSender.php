@@ -177,6 +177,45 @@ class WhatsAppFreeformSender
         return $response->successful();
     }
 
+    /**
+     * Solicita una ubicacion con el selector nativo de WhatsApp.
+     *
+     * Al tocar el boton que renderiza WhatsApp, el usuario abre el mapa de
+     * ubicaciones y responde con un mensaje `location`. Ese mensaje ya es
+     * interpretado por WhatsAppWebhookController, por lo que no necesita
+     * salir del chat ni abrir una pagina intermedia de Arka01.
+     */
+    public static function sendLocationRequest(string $phoneE164, string $message): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        $response = Http::withToken(WhatsAppConfig::token())
+            ->timeout(10)
+            ->post('https://graph.facebook.com/v20.0/'.WhatsAppConfig::phoneNumberId().'/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => ltrim($phoneE164, '+'),
+                'type' => 'interactive',
+                'interactive' => [
+                    'type' => 'location_request_message',
+                    'body' => ['text' => $message],
+                    'action' => ['name' => 'send_location'],
+                ],
+            ]);
+
+        if ($response->failed()) {
+            Log::warning('No se pudo solicitar la ubicacion por WhatsApp.', [
+                'status' => $response->status(),
+                'body' => $response->json(),
+            ]);
+        }
+
+        self::logOutbound($phoneE164, $message, $response->successful(), ['location_request' => true]);
+
+        return $response->successful();
+    }
+
     public static function sendLocation(string $phoneE164, float $lat, float $lng, string $name, ?string $address = null): bool
     {
         if (! self::enabled()) {

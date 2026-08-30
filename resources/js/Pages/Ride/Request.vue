@@ -10,6 +10,7 @@ import FleetMap from '@/Components/FleetMap.vue';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
+import ArkaRouteLoader from '@/Components/ArkaRouteLoader.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -309,6 +310,8 @@ const mapCenter = ref(props.initialOrigin ? { lat: props.initialOrigin.lat, lng:
 
 // El cliente elige qué punto desea ajustar antes de tocar el mapa.
 const mapEditingPoint = ref('destination');
+const resolvingDestinationSelection = ref(false);
+const resolvingMapPoint = ref(false);
 
 // Geocodificación inversa gratis, sin API key (OpenStreetMap Nominatim —
 // mismo criterio que OSRM para el trazado del recorrido, sección 9.3): para
@@ -648,32 +651,38 @@ const mapMarkers = computed(() => {
 });
 
 async function pickRoutePoint({ lat, lng }) {
-    const address = await reverseGeocode(lat, lng);
+    resolvingMapPoint.value = true;
 
-    if (mapEditingPoint.value === 'origin') {
-        originLat.value = lat;
-        originLng.value = lng;
-        originSectorId.value = null;
-        mapCenter.value = { lat, lng };
-        if (address) originAddress.value = address;
-        return;
+    try {
+        const address = await reverseGeocode(lat, lng);
+
+        if (mapEditingPoint.value === 'origin') {
+            originLat.value = lat;
+            originLng.value = lng;
+            originSectorId.value = null;
+            mapCenter.value = { lat, lng };
+            if (address) originAddress.value = address;
+            return;
+        }
+
+        if (mapEditingPoint.value.startsWith('stop-')) {
+            const index = Number(mapEditingPoint.value.slice('stop-'.length));
+            const stop = stops.value[index];
+            if (!stop) return;
+            stop.lat = lat;
+            stop.lng = lng;
+            stop.sectorId = null;
+            if (address) stop.address = address;
+            return;
+        }
+
+        destinationLat.value = lat;
+        destinationLng.value = lng;
+        destinationSectorId.value = null;
+        if (address) destinationAddress.value = address;
+    } finally {
+        resolvingMapPoint.value = false;
     }
-
-    if (mapEditingPoint.value.startsWith('stop-')) {
-        const index = Number(mapEditingPoint.value.slice('stop-'.length));
-        const stop = stops.value[index];
-        if (!stop) return;
-        stop.lat = lat;
-        stop.lng = lng;
-        stop.sectorId = null;
-        if (address) stop.address = address;
-        return;
-    }
-
-    destinationLat.value = lat;
-    destinationLng.value = lng;
-    destinationSectorId.value = null;
-    if (address) destinationAddress.value = address;
 }
 
 // El cliente eligió una sugerencia de Google Places para el origen (decisión
@@ -694,6 +703,9 @@ function pickOriginFromAddress({ lat, lng, sectorId }) {
 // Mismo criterio que pickDestination() (tocar el mapa), solo que el punto
 // viene resuelto por Google (o por un favorito) en vez de un clic.
 function pickDestinationFromAddress({ lat, lng, sectorId }) {
+    // Mantiene el loader continuo entre la resolución de Google Places y el
+    // inicio del cálculo de ruta que dispara el watch de coordenadas.
+    if (destinationLat.value !== lat || destinationLng.value !== lng) routeLoading.value = true;
     destinationLat.value = lat;
     destinationLng.value = lng;
     if (sectorId) destinationSectorId.value = sectorId;
@@ -750,6 +762,18 @@ const routeDistanceKm = ref(null);
 // del usuario: "indicar los km y minutos de ese recorrido" en la tarjeta
 // fija de origen/destino).
 const routeDurationMin = ref(null);
+const routeLoading = ref(false);
+let routeRequestId = 0;
+
+const destinationLoading = computed(() =>
+    step.value === 'destination'
+    && (resolvingDestinationSelection.value || resolvingMapPoint.value || routeLoading.value)
+);
+const destinationLoadingTitle = computed(() => {
+    if (resolvingDestinationSelection.value) return 'Ubicando tu destino';
+    if (resolvingMapPoint.value) return 'Confirmando el punto';
+    return 'Preparando tu recorrido';
+});
 
 // Bug real reportado por el usuario ("no traza el recorrido"): al llegar
 // directo al paso 'driver' desde el buscador de Inicio, origen Y destino ya
@@ -771,7 +795,10 @@ const stopLegs = ref([]);
 watch(
     [originLat, originLng, destinationLat, destinationLng, stops],
     async () => {
+        const requestId = ++routeRequestId;
+
         if (originLat.value == null || destinationLat.value == null) {
+            routeLoading.value = false;
             routeCoords.value = [];
             routeDistanceKm.value = null;
             routeDurationMin.value = null;
@@ -779,31 +806,39 @@ watch(
             return;
         }
 
-        const resolvedStops = stops.value.filter((stop) => stop.lat != null);
+        routeLoading.value = true;
 
-        if (!resolvedStops.length) {
-            const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
-            routeCoords.value = route.coords;
-            routeDistanceKm.value = route.distanceKm;
-            routeDurationMin.value = route.durationMin;
-            stopLegs.value = [];
-            return;
+        try {
+            const resolvedStops = stops.value.filter((stop) => stop.lat != null);
+
+            if (!resolvedStops.length) {
+                const route = await fetchOsrmRoute(originLat.value, originLng.value, destinationLat.value, destinationLng.value);
+                if (requestId !== routeRequestId) return;
+                routeCoords.value = route.coords;
+                routeDistanceKm.value = route.distanceKm;
+                routeDurationMin.value = route.durationMin;
+                stopLegs.value = [];
+                return;
+            }
+
+            const points = [
+                { lat: originLat.value, lng: originLng.value },
+                ...resolvedStops.map((stop) => ({ lat: stop.lat, lng: stop.lng })),
+                { lat: destinationLat.value, lng: destinationLng.value },
+            ];
+            const multiRoute = await fetchOsrmMultiRoute(points);
+            if (requestId !== routeRequestId) return;
+            routeCoords.value = multiRoute.coords;
+
+            // El último tramo (últimaParada→destino) es el que sigue siendo
+            // "el" precio principal — los anteriores son los de las paradas.
+            const finalLeg = multiRoute.legs[multiRoute.legs.length - 1] ?? {};
+            routeDistanceKm.value = finalLeg.distanceKm ?? null;
+            routeDurationMin.value = finalLeg.durationMin ?? null;
+            stopLegs.value = multiRoute.legs.slice(0, -1);
+        } finally {
+            if (requestId === routeRequestId) routeLoading.value = false;
         }
-
-        const points = [
-            { lat: originLat.value, lng: originLng.value },
-            ...resolvedStops.map((stop) => ({ lat: stop.lat, lng: stop.lng })),
-            { lat: destinationLat.value, lng: destinationLng.value },
-        ];
-        const multiRoute = await fetchOsrmMultiRoute(points);
-        routeCoords.value = multiRoute.coords;
-
-        // El último tramo (últimaParada→destino) es el que sigue siendo
-        // "el" precio principal — los anteriores son los de las paradas.
-        const finalLeg = multiRoute.legs[multiRoute.legs.length - 1] ?? {};
-        routeDistanceKm.value = finalLeg.distanceKm ?? null;
-        routeDurationMin.value = finalLeg.durationMin ?? null;
-        stopLegs.value = multiRoute.legs.slice(0, -1);
     },
     { immediate: true, deep: true }
 );
@@ -1340,6 +1375,7 @@ function submit() {
                      destino, tal cual estaba, ahora envuelto en su propio
                      paso en vez de ser el arranque de un scroll largo. -->
                 <template v-if="step === 'destination'">
+                <ArkaRouteLoader :show="destinationLoading" :title="destinationLoadingTitle" />
                 <div class="flex flex-col gap-4 rounded-[28px] border border-white/70 bg-[#f4f7f5] p-4 shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06] sm:p-6">
                 <div class="order-1 flex items-start justify-between gap-4 px-1">
                     <div>
@@ -1575,6 +1611,7 @@ function submit() {
                             placeholder="¿A dónde vas?"
                             light
                             @place-selected="pickDestinationFromAddress"
+                            @selection-loading="resolvingDestinationSelection = $event"
                             @clear="clearDestination"
                         />
                     </div>
@@ -1700,8 +1737,8 @@ function submit() {
                         </div>
                         <span class="text-[11px] text-arka-base/45">Siguiente: conductor</span>
                     </div>
-                    <PrimaryButton class="min-h-12 w-full justify-between text-sm" :disabled="!canProceedToDriver" @click="goToDriverStep">
-                        <span class="flex-1 text-center">Continuar</span>
+                    <PrimaryButton class="min-h-12 w-full justify-between text-sm" :disabled="!canProceedToDriver || destinationLoading" @click="goToDriverStep">
+                        <span class="flex-1 text-center">{{ destinationLoading ? 'Preparando recorrido…' : 'Continuar' }}</span>
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-base/10" aria-hidden="true">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" />
@@ -1955,16 +1992,23 @@ function submit() {
                                 </span>
                                 <span class="min-w-0">
                                     <span class="block truncate font-medium text-arka-base">{{ cooperative.name }}</span>
-                                    <Link
+                                    <!-- Bug reportado por el usuario ("ese enlace no funciona"):
+                                         el componente <Link> de Inertia ignora `target` y siempre
+                                         intercepta el click con su propio router SPA — con eso,
+                                         en vez de abrir una pestaña nueva, sacaba al cliente del
+                                         formulario de pedir carrera en la misma pestaña. Un <a>
+                                         nativo sí respeta target="_blank" de verdad. -->
+                                    <a
                                         :href="route('cooperatives.show', cooperative.public_id)"
                                         target="_blank"
+                                        rel="noopener noreferrer"
                                         class="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-arka-primary hover:underline"
                                         aria-label="Ver el perfil público de la cooperativa en otra pestaña"
                                         @click.stop
                                         @keydown.stop
                                     >
                                         Ver perfil público <span aria-hidden="true">↗</span>
-                                    </Link>
+                                    </a>
                                 </span>
                             </span>
                             <span class="shrink-0 text-right text-sm text-arka-base/50">{{ cooperative.active_driver_memberships_count }} unidades<br><small v-if="cooperative.distance_km != null">{{ cooperative.distance_km }} km · ~{{ Math.max(1, Math.ceil(cooperative.distance_km / 0.45)) }} min desde el origen</small></span>

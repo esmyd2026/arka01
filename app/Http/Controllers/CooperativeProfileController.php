@@ -80,6 +80,24 @@ class CooperativeProfileController extends Controller
             'geographic_coverage' => ['nullable', 'string', 'max:2000'],
             'operating_hours' => ['nullable', 'string', 'max:1000'],
             'response_timeout_seconds' => ['required', 'integer', Rule::in([15, 30, 60])],
+            // Tarifa y reparto con conductores (pedido explícito del
+            // usuario): 'rate_per_km' es lo que la cooperativa cobra al
+            // cliente, 'driver_pay_rate_per_km' lo que le paga a sus
+            // conductores — nunca puede superar lo que cobra, si no el
+            // margen de la cooperativa sería negativo. Ver
+            // App\Services\Ride\RideLifecycle::complete() para dónde se usa
+            // esto en el reparto real.
+            'rate_per_km' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'driver_pay_rate_per_km' => ['nullable', 'numeric', 'min:0', 'max:100', function ($attribute, $value, $fail) use ($request) {
+                $rate = $request->input('rate_per_km');
+                if ($rate !== null && $rate !== '' && (float) $value > (float) $rate) {
+                    $fail('No puede pagarle a sus conductores más de lo que cobra por km.');
+                }
+            }],
+            // Rango de cobertura (pedido explícito del usuario): igual
+            // concepto que DriverProfile.max_request_distance_km, medido
+            // desde el "stand" (stand_lat/stand_lng, ya validado más abajo).
+            'max_request_distance_km' => ['nullable', 'integer', 'min:1', 'max:500'],
             'automatic_assignment_enabled' => ['required', 'boolean'],
             'manual_assignment_timeout_seconds' => ['required', 'integer', Rule::in([30])],
             'logo' => ['nullable', 'image', 'max:4096'],

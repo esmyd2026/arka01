@@ -184,7 +184,7 @@ class RideRequestController extends Controller
                 ->with('activeDriverMemberships.driver.driverProfile')
                 ->withCount('activeDriverMemberships')
                 ->orderBy('name')
-                ->get(['id', 'public_id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng'])
+                ->get(['id', 'public_id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng', 'max_request_distance_km'])
                 ->map(function ($cooperative) use ($request) {
                     $lat = $request->query('origin_lat');
                     $lng = $request->query('origin_lng');
@@ -195,7 +195,17 @@ class RideRequestController extends Controller
                         ->pluck('driver.driverProfile.rate_per_km')->filter()->avg(), 2);
 
                     return $cooperative;
-                })->sortBy(fn ($cooperative) => $cooperative->distance_km ?? PHP_FLOAT_MAX)->values(),
+                })
+                // Rango de cobertura (pedido explícito del usuario): la
+                // cooperativa configura hasta qué distancia de su "stand"
+                // acepta solicitudes — mismo criterio que
+                // DriverProfile::isWithinRangeOf(), sin límite configurado
+                // o sin distancia conocida todavía (origen no elegido aún)
+                // no hay nada que descartar.
+                ->filter(fn ($cooperative) => $cooperative->max_request_distance_km === null
+                    || $cooperative->distance_km === null
+                    || $cooperative->distance_km <= $cooperative->max_request_distance_km)
+                ->sortBy(fn ($cooperative) => $cooperative->distance_km ?? PHP_FLOAT_MAX)->values(),
             'preselectedCooperativeId' => $request->filled('cooperativa')
                 ? (int) $request->query('cooperativa')
                 : null,
