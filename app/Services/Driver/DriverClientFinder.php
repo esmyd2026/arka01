@@ -221,7 +221,14 @@ class DriverClientFinder
      */
     private function mutualClientsForInvitations(User $driver, Collection $invitations): array
     {
+        // Una Eloquent Collection presupone que todos sus elementos son
+        // modelos. En algunas versiones de Laravel, encadenar pluck/map y
+        // luego unique() conserva esa clase aunque ya contenga enteros; al
+        // deduplicarlos intenta ejecutar getKey() sobre cada id y provoca el
+        // error 500 visto en produccion. Desde este punto solo manejamos ids,
+        // por eso se convierte expresamente a la coleccion base.
         $invitingClientIds = $invitations
+            ->toBase()
             ->pluck('fleet.owner_user_id')
             ->filter()
             ->unique()
@@ -236,6 +243,7 @@ class DriverClientFinder
             ->whereNull('left_at')
             ->with('fleet:id,owner_user_id')
             ->get()
+            ->toBase()
             ->pluck('fleet.owner_user_id')
             ->filter()
             ->unique()
@@ -252,8 +260,10 @@ class DriverClientFinder
                 ->orWhereIn('addressee_user_id', $invitingClientIds))
             ->get(['requester_user_id', 'addressee_user_id']);
 
-        $mutualIdsByClient = $invitingClientIds->mapWithKeys(function (int $clientId) use ($connections, $driverClientIds) {
-            $connectedIds = $connections
+        $baseConnections = $connections->toBase();
+
+        $mutualIdsByClient = $invitingClientIds->mapWithKeys(function (int $clientId) use ($baseConnections, $driverClientIds) {
+            $connectedIds = $baseConnections
                 ->filter(fn (TrustCircleConnection $connection) => $connection->requester_user_id === $clientId
                     || $connection->addressee_user_id === $clientId)
                 ->map(fn (TrustCircleConnection $connection) => $connection->requester_user_id === $clientId
