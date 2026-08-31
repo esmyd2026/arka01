@@ -1824,6 +1824,18 @@ function submitReview() {
                         <span class="text-sm font-medium text-arka-primary">💳 Cuenta para transferir</span>
                         <span class="text-xs text-arka-primary">Ver ›</span>
                     </button>
+                    <!-- Bug reportado por el usuario ("al cliente no le aparece los
+                         números de cuenta"): cuando la carrera es por transferencia
+                         pero el conductor todavía no declaró ninguna cuenta en su
+                         perfil, antes no aparecía nada — ni el botón ni ningún
+                         aviso, como si la función no existiera. Con esto al menos
+                         queda claro que hay que coordinar el pago aparte. -->
+                    <p
+                        v-else-if="!isDriver && ride.status === 'in_progress' && !ride.picked_up_at && ride.payment_method === 'transferencia'"
+                        class="rounded-xl border border-arka-warning/25 bg-arka-warning/10 px-3 py-2.5 text-xs text-arka-warning"
+                    >
+                        El conductor todavía no declaró una cuenta bancaria — coordine la transferencia directamente con él al llegar.
+                    </p>
                     <div
                         v-if="isDriver && pickupWaitCountdown"
                         class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/30 bg-arka-warning/10 px-3 py-2.5"

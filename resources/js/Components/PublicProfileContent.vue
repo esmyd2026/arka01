@@ -76,11 +76,13 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
                 <div
                     class="trust-score-ring shrink-0"
                     :style="{ '--trust-score': `${trustIndex.score * 3.6}deg` }"
-                    :aria-label="`Índice de confianza ${trustIndex.score} de 100`"
+                    :aria-label="`Índice de confianza ${trustIndex.score}%`"
                 >
                     <div class="trust-score-ring__inner">
-                        <strong class="text-xl leading-none text-arka-text">{{ trustIndex.score }}</strong>
-                        <span class="text-[10px] text-arka-text-muted">/100</span>
+                        <!-- Pedido explícito del usuario: "no coloques
+                             50/100 solo deja el 50%" — un solo número
+                             porcentual, no una fracción. -->
+                        <strong class="text-xl leading-none text-arka-text">{{ trustIndex.score }}%</strong>
                     </div>
                 </div>
 

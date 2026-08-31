@@ -153,6 +153,26 @@ class RideRequestController extends Controller
             // PriceCalculator::pickupSurcharge() con estos dos valores.
             'pickupSurchargeThresholdKm' => (float) PricingSetting::current()->pickup_surcharge_threshold_km,
             'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
+            // Bug real reportado por el usuario ("sale que un conductor
+            // cobra 2.00 y cuando pide la carrera sale luego que es 2.30... el
+            // tema de costo debe ser transparente"): el estimado del frontend
+            // ya replicaba el colchón de 0.8km y el cargo de recogida, pero
+            // NUNCA el recargo nocturno/pico que PriceCalculator::
+            // suggestedPrice() sí aplica al crear la solicitud de verdad —
+            // esa era la diferencia real entre lo mostrado y lo cobrado, no
+            // el colchón como sospechaba el usuario. Con esto el frontend
+            // puede replicar exactamente la misma regla horaria (ver
+            // Ride/Request.vue, estimatedPrice/estimatedPriceForDriver).
+            'timeSurcharge' => [
+                'night_percent' => (int) PricingSetting::current()->night_surcharge_percent,
+                'night_starts_at' => (int) PricingSetting::current()->night_starts_at,
+                'night_ends_at' => (int) PricingSetting::current()->night_ends_at,
+                'peak_percent' => (int) PricingSetting::current()->peak_surcharge_percent,
+                'peak_morning_starts_at' => (int) PricingSetting::current()->peak_morning_starts_at,
+                'peak_morning_ends_at' => (int) PricingSetting::current()->peak_morning_ends_at,
+                'peak_evening_starts_at' => (int) PricingSetting::current()->peak_evening_starts_at,
+                'peak_evening_ends_at' => (int) PricingSetting::current()->peak_evening_ends_at,
+            ],
             // Pedido explícito del usuario ("guardá las que ya ha realizado
             // para que aparezcan como favoritas"): direcciones que este
             // cliente ya usó antes (de origen o de destino, da igual — "casa"

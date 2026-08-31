@@ -9,7 +9,11 @@ const props = defineProps({
 const title = computed(() => {
     if (!props.trust) return '';
     const mutual = props.trust.mutual_people > 0 ? ` · ${props.trust.mutual_people} en común` : '';
-    return `Índice de confianza: ${props.trust.score}/100 · ${props.trust.level}${mutual}`;
+    // Pedido explícito del usuario: "no coloques 50/100 solo deja el 50%" —
+    // el score ya viene 0-100 desde TrustIndexCalculator, se muestra directo
+    // como porcentaje en vez de fracción, acá y en cualquier otra pantalla
+    // que use este mismo componente.
+    return `Índice de confianza: ${props.trust.score}% · ${props.trust.level}${mutual}`;
 });
 </script>
 
@@ -25,7 +29,7 @@ const title = computed(() => {
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 3 5 6v5c0 4.6 2.9 8 7 10 4.1-2 7-5.4 7-10V6l-7-3Z" />
             <path stroke-linecap="round" d="m9.3 12 1.8 1.8 3.8-4" />
         </svg>
-        Confianza {{ trust.score }}/100
+        Confianza {{ trust.score }}%
         <span v-if="!compact && trust.mutual_people > 0" class="text-arka-text-muted">· {{ trust.mutual_people }} en común</span>
     </span>
 </template>

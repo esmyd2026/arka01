@@ -85,7 +85,7 @@ const props = defineProps({
 // Profile/Show.vue, botones "Crear cuenta"/"creá una cuenta").
 const whatsappProfileShareUrl = computed(() => {
     const name = usePage().props.auth.user.full_name;
-    const text = `¡Hola! Soy ${name}. Mi índice de confianza en Arka01 es ${props.trustIndex.score}/100. Este es mi perfil público para que pueda conocerme y verificar mi información:\n${props.profileUrl}`;
+    const text = `¡Hola! Soy ${name}. Mi índice de confianza en Arka01 es ${props.trustIndex.score}%. Este es mi perfil público para que pueda conocerme y verificar mi información:\n${props.profileUrl}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
 });
 
@@ -245,10 +245,12 @@ async function switchToClient() {
                                 <Link
                                     :href="route('trust-circle.index')"
                                     class="group shrink-0 text-center"
-                                    :aria-label="`Ver índice de confianza: ${trustIndex.score} de 100, nivel ${trustIndex.level}`"
+                                    :aria-label="`Ver índice de confianza: ${trustIndex.score}%, nivel ${trustIndex.level}`"
                                 >
                                     <div class="profile-trust-ring" :style="trustScoreStyle(trustIndex.score)">
-                                        <div><strong>{{ trustIndex.score }}</strong><small>/100</small></div>
+                                        <!-- Pedido explícito del usuario: "no coloques 50/100 solo deja
+                                             el 50%". -->
+                                        <div><strong>{{ trustIndex.score }}%</strong></div>
                                     </div>
                                     <span class="mt-1.5 block text-[10px] font-semibold text-arka-text-muted transition group-hover:text-arka-primary">
                                         Índice de confianza

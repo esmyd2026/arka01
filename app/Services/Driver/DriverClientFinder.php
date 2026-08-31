@@ -11,6 +11,7 @@ use App\Models\TrustCircleConnection;
 use App\Models\User;
 use App\Services\DriverCategory;
 use App\Services\PlanLimits;
+use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -23,7 +24,10 @@ use Illuminate\Support\Collection;
  */
 class DriverClientFinder
 {
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly TrustIndexCalculator $trustCalculator,
+    ) {}
 
     /**
      * @return array{pendingInvitations: Collection, activeMemberships: LengthAwarePaginator, activeMembershipStats: array, maxClients: int|null, planCode: string, planName: string, inviteCode: ?string}
@@ -43,6 +47,8 @@ class DriverClientFinder
             ->get();
 
         $mutualClients = $this->mutualClientsForInvitations($driver, $pendingInvitations);
+        $invitingClientIds = $pendingInvitations->toBase()->pluck('fleet.owner_user_id')->filter()->unique()->values();
+        $driverCountsForInvitations = $this->driverCountsForClientIds($invitingClientIds);
 
         $pendingInvitations = $pendingInvitations
             ->map(fn (FleetInvitation $invitation) => array_merge(
@@ -51,6 +57,15 @@ class DriverClientFinder
                 $mutualClients[$invitation->fleet->owner_user_id] ?? [
                     'mutual_clients_count' => 0,
                     'mutual_clients' => [],
+                ],
+                [
+                    // Pedido explícito del usuario: reemplazar el texto
+                    // genérico "Información para decidir" por datos reales
+                    // — cuántos conductores tiene ya (fleets propias) y su
+                    // índice de confianza completo (score, círculo, en
+                    // común), no solo el conteo de clientes en común.
+                    'driver_count' => $driverCountsForInvitations[$invitation->fleet->owner_user_id] ?? 0,
+                    'trust' => $this->trustCalculator->calculate($invitation->fleet->owner, $driver),
                 ],
             ));
 
@@ -111,6 +126,38 @@ class DriverClientFinder
             $activeMemberships->count(),
             $perPage,
             $page,
+            // Bug real reportado por el usuario ("me lleva a Inicio pero en
+            // la URL marca page=2"): un LengthAwarePaginator armado a mano
+            // (no ->paginate()) no adivina la ruta actual — sin 'path', usa
+            // '/' por defecto, así que next_page_url quedaba como "/?page=2"
+            // y el <Link> de "Siguiente" navegaba literalmente al Inicio en
+            // vez de a esta pantalla. Se le suman los filtros actuales
+            // (filter/sort) para que "Siguiente" no los pierda de paso.
+            [
+                'path' => \Illuminate\Pagination\Paginator::resolveCurrentPath(),
+                'query' => array_filter(['filter' => $filter, 'sort' => $sort]),
+            ],
+        );
+
+        // Confianza y "cuántos conductores tiene" (pedido explícito del
+        // usuario) solo se calculan para la PÁGINA visible (10 como mucho),
+        // no para las 30 flotas de golpe — TrustIndexCalculator hace varias
+        // consultas por persona, y esta pantalla ya se cuidó antes de traer
+        // de más (ver la optimización de escala del mismo día).
+        $pageOwnerIds = $paginatedMemberships->getCollection()->pluck('fleet.owner_user_id')->filter()->unique()->values();
+        $pageOwners = User::query()->whereIn('id', $pageOwnerIds)->get()->keyBy('id');
+        $driverCountsForPage = $this->driverCountsForClientIds($pageOwnerIds);
+
+        $paginatedMemberships->setCollection(
+            $paginatedMemberships->getCollection()->map(function (array $item) use ($pageOwners, $driverCountsForPage, $driver) {
+                $ownerId = $item['fleet']['owner_user_id'] ?? null;
+                $owner = $ownerId ? $pageOwners->get($ownerId) : null;
+
+                $item['driver_count'] = $driverCountsForPage[$ownerId] ?? 0;
+                $item['trust'] = $owner ? $this->trustCalculator->calculate($owner, $driver) : null;
+
+                return $item;
+            })
         );
 
         $limits = $this->planLimits->forDriver($driver);
@@ -191,6 +238,28 @@ class DriverClientFinder
                 },
             ];
         })->values();
+    }
+
+    /**
+     * "Cuántos conductores tiene" cada cliente (pedido explícito del
+     * usuario) — cuenta miembros activos de TODAS las flotas que esa persona
+     * es dueña (multi-flota, sección 7.3), no solo una.
+     *
+     * @return array<int, int>
+     */
+    private function driverCountsForClientIds(Collection $clientIds): array
+    {
+        if ($clientIds->isEmpty()) {
+            return [];
+        }
+
+        return Fleet::query()
+            ->whereIn('owner_user_id', $clientIds)
+            ->withCount('activeMembers')
+            ->get(['id', 'owner_user_id'])
+            ->groupBy('owner_user_id')
+            ->map(fn (Collection $fleets) => $fleets->sum('active_members_count'))
+            ->all();
     }
 
     private function filterAndSortMemberships(Collection $memberships, ?string $filter, ?string $sort, \DateTimeInterface $newSince): Collection

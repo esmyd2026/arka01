@@ -52,7 +52,7 @@ class PublicProfileController extends Controller
                 // nunca manda cookies de sesión.
                 'description' => ($data['isDriver'] ? 'Conductor' : 'Cliente').' en Arka01'
                     .($data['reviewCount'] > 0 ? " · ★ {$data['averageRating']}" : '')
-                    .($data['trustIndex'] ? " · Índice de confianza {$data['trustIndex']['score']}/100" : '')
+                    .($data['trustIndex'] ? " · Índice de confianza {$data['trustIndex']['score']}%" : '')
                     .' — únase y hagamos que la movilidad sea más segura en Ecuador.',
                 'image' => $user->avatar_url && ! str_starts_with($user->avatar_url, 'http')
                     ? url($user->avatar_url)

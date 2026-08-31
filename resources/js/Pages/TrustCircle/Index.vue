@@ -140,7 +140,7 @@ function scoreStyle(score) {
                                 <h1 class="truncate text-lg font-bold text-arka-text">{{ currentUser.full_name || currentUser.name }}</h1>
                                 <p class="truncate text-xs text-arka-text-muted">@{{ currentUser.username }} · Mi red de confianza</p>
                             </div>
-                            <button class="score-mini" :style="scoreStyle(summary.own_trust.score)" type="button" aria-label="Ver mi índice" @click="openPerson = openPerson === 'own' ? null : 'own'"><span>{{ summary.own_trust.score }}</span></button>
+                            <button class="score-mini" :style="scoreStyle(summary.own_trust.score)" type="button" aria-label="Ver mi índice" @click="openPerson = openPerson === 'own' ? null : 'own'"><span>{{ summary.own_trust.score }}%</span></button>
                         </div>
                         <div class="profile-stats mt-4 grid grid-cols-3 divide-x divide-white/5 text-center">
                             <button type="button" @click="activeTab = 'people'"><strong>{{ summary.people }}</strong><span>Personas</span></button>

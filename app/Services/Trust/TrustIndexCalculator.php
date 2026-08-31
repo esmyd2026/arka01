@@ -52,10 +52,15 @@ class TrustIndexCalculator
         // En el perfil compartible la señal de red debe ser estable: usa las
         // conexiones aceptadas del titular. Dentro del círculo sí es
         // bidimensional y usa las personas que tiene en común con quien mira.
-        $networkPeople = $viewer
-            ? $this->mutualUserIds($subject, $viewer)->count()
-            : $this->acceptedUserIds($subject)->count();
-        $networkPoints = round(min($networkPeople / 5, 1) * 15);
+        // El puntaje sigue exactamente el mismo criterio de antes — lo único
+        // nuevo es que 'network_connections' (tamaño real del círculo del
+        // titular) queda disponible SIEMPRE, no solo cuando no hay $viewer,
+        // porque el usuario pidió mostrar "cuántos tiene en su círculo" junto
+        // con "amigos en común" al mismo tiempo (ver Driver/Invitations.vue).
+        $circleSize = $this->acceptedUserIds($subject)->count();
+        $mutualPeople = $viewer ? $this->mutualUserIds($subject, $viewer)->count() : 0;
+        $networkPeopleForScore = $viewer ? $mutualPeople : $circleSize;
+        $networkPoints = round(min($networkPeopleForScore / 5, 1) * 15);
         $score = max(0, min(100, $reputationPoints + $experiencePoints + $reliabilityPoints + $networkPoints));
 
         return [
@@ -70,8 +75,8 @@ class TrustIndexCalculator
             'rating' => $average,
             'reviews_count' => $reviews,
             'completed_rides' => $completed,
-            'mutual_people' => $viewer ? $networkPeople : 0,
-            'network_connections' => $viewer ? null : $networkPeople,
+            'mutual_people' => $mutualPeople,
+            'network_connections' => $circleSize,
             'components' => [
                 ['key' => 'reputation', 'label' => 'Reputación', 'points' => $reputationPoints, 'maximum' => 40],
                 ['key' => 'experience', 'label' => 'Experiencia', 'points' => $experiencePoints, 'maximum' => 25],

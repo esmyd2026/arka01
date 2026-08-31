@@ -34,7 +34,7 @@ const props = defineProps({
 // sesión) esto no alcanza igual — ver la vista aparte
 // `profile-preview.blade.php` que sirve PublicProfileController::show(),
 // con la misma copia.
-const ogDescription = `${props.isDriver ? 'Conductor' : 'Cliente'} en Arka01${props.reviewCount > 0 ? ` · ★ ${props.averageRating.toFixed(1)}` : ''}${props.trustIndex ? ` · Índice de confianza ${props.trustIndex.score}/100` : ''} — únase y hagamos que la movilidad sea más segura en Ecuador.`;
+const ogDescription = `${props.isDriver ? 'Conductor' : 'Cliente'} en Arka01${props.reviewCount > 0 ? ` · ★ ${props.averageRating.toFixed(1)}` : ''}${props.trustIndex ? ` · Índice de confianza ${props.trustIndex.score}%` : ''} — únase y hagamos que la movilidad sea más segura en Ecuador.`;
 const ogImage = props.profileUser.avatar_url && !props.profileUser.avatar_url.startsWith('http')
     ? window.location.origin + props.profileUser.avatar_url
     : (props.profileUser.avatar_url ?? `${window.location.origin}/icons/icon.svg`);
@@ -49,7 +49,7 @@ const canRequestRide = computed(() => Boolean(usePage().props.auth?.isClient));
 const shareStatus = ref('');
 
 const shareProfile = async () => {
-    const text = `${props.profileUser.name} en Arka01${props.trustIndex ? ` · Índice de confianza ${props.trustIndex.score}/100` : ''}`;
+    const text = `${props.profileUser.name} en Arka01${props.trustIndex ? ` · Índice de confianza ${props.trustIndex.score}%` : ''}`;
 
     try {
         if (navigator.share) {

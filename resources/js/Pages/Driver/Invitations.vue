@@ -8,6 +8,7 @@ import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { openWhatsAppChooser } from '@/Utils/whatsapp';
 
@@ -363,17 +364,37 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                 v-if="openInvitation === invitation.id"
                                 class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:col-span-2"
                             >
+                                <!-- Pedido explícito del usuario: el texto genérico
+                                     "Información para decidir" no aportaba nada — en su
+                                     lugar, los datos concretos que sí sirven para decidir:
+                                     carreras, conductores que ya tiene, en común y círculo,
+                                     más el índice de confianza (como % simple, sin fracción). -->
                                 <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <div>
-                                        <p class="text-xs font-semibold text-arka-text">Información para decidir</p>
-                                        <p class="mt-1 text-[11px] leading-4 text-arka-text-muted">Calificación, trayectoria y conexiones aceptadas; nunca datos de contacto.</p>
-                                    </div>
+                                    <TrustScoreBadge :trust="invitation.trust" />
                                     <Link
                                         :href="route('profiles.show', invitation.fleet.owner.public_id)"
                                         class="inline-flex min-h-9 items-center rounded-lg border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary-bright hover:bg-arka-primary/10"
                                     >
                                         Ver perfil completo
                                     </Link>
+                                </div>
+                                <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">Carreras</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ invitation.trust?.completed_rides ?? 0 }}</p>
+                                    </div>
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">Conductores</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ invitation.driver_count }}</p>
+                                    </div>
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">En común</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ invitation.mutual_clients_count }}</p>
+                                    </div>
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">Círculo</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ invitation.trust?.network_connections ?? 0 }}</p>
+                                    </div>
                                 </div>
                                 <p class="mt-3 text-xs font-semibold text-arka-text">
                                     {{ invitation.mutual_clients_count > 0 ? 'Clientes tuyos que conocen a esta persona' : 'Sin clientes en común por ahora' }}
@@ -457,7 +478,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         <li
                             v-for="member in activeMemberships.data"
                             :key="member.id"
-                            class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            class="py-3 flex flex-col flex-wrap sm:flex-row sm:items-center justify-between gap-3"
                         >
                             <div class="flex items-center gap-3 min-w-0">
                                 <!-- Pedido explícito del usuario: "quiero ver
@@ -521,10 +542,31 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                 v-if="openMembership === member.id"
                                 class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:basis-full"
                             >
-                                <p class="text-xs font-semibold text-arka-text">
+                                <!-- Pedido explícito del usuario: mismos datos concretos que
+                                     en "Invitaciones recibidas" — carreras, conductores,
+                                     en común, círculo y el índice de confianza como %. -->
+                                <TrustScoreBadge :trust="member.trust" />
+                                <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">Carreras</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ member.trust?.completed_rides ?? 0 }}</p>
+                                    </div>
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">Conductores</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ member.driver_count }}</p>
+                                    </div>
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">En común</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ member.mutual_clients_count }}</p>
+                                    </div>
+                                    <div class="rounded-lg bg-arka-card p-2.5">
+                                        <p class="text-[10px] text-arka-text-muted">Círculo</p>
+                                        <p class="text-sm font-semibold text-arka-text">{{ member.trust?.network_connections ?? 0 }}</p>
+                                    </div>
+                                </div>
+                                <p class="mt-3 text-xs font-semibold text-arka-text">
                                     {{ member.mutual_clients_count > 0 ? `${member.mutual_clients_count} cliente${member.mutual_clients_count === 1 ? '' : 's'} en común` : 'Todavía no tienen clientes en común' }}
                                 </p>
-                                <p class="mt-1 text-[11px] leading-4 text-arka-text-muted">Estas relaciones provienen del círculo de confianza aceptado.</p>
                                 <div v-if="member.mutual_clients_count > 0" class="mt-3 flex flex-wrap gap-2">
                                     <Link
                                         v-for="person in member.mutual_clients"

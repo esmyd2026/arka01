@@ -54,6 +54,12 @@ const props = defineProps({
     // estimado, replicando App\Services\PriceCalculator::pickupSurcharge().
     pickupSurchargeThresholdKm: { type: Number, required: true },
     pickupSurchargePercent: { type: Number, required: true },
+    // Bug real reportado por el usuario ("sale que un conductor cobra 2.00
+    // y cuando pide la carrera sale que es 2.30"): faltaba replicar acá el
+    // recargo nocturno/pico que App\Services\PriceCalculator::
+    // suggestedPrice() sí aplica al crear la solicitud — ver
+    // isTimeSurchargeApplicable()/timeSurchargePercent() más abajo.
+    timeSurcharge: { type: Object, required: true },
     // Pedido explícito del usuario ("guardá las que ya ha realizado para que
     // aparezcan como favoritas"): direcciones que este cliente ya usó antes.
     frequentPlaces: { type: Array, default: () => [] },
@@ -863,6 +869,37 @@ watch(
 // cobrar, en vez de quedar corto.
 const DISTANCE_PADDING_KM = 0.8;
 
+// Bug real reportado por el usuario ("sale que un conductor cobra 2.00 y
+// cuando pide la carrera sale que es 2.30... el tema de costo debe ser
+// transparente"): faltaba replicar acá el recargo nocturno/pico que
+// App\Services\PriceCalculator::suggestedPrice() sí aplica al crear la
+// solicitud de verdad — mismo criterio de cruce de medianoche que
+// isWithinHourRange() en PHP, y nocturno/pico nunca se suman entre sí (gana
+// el nocturno). Se evalúa con la hora local del navegador — la app opera en
+// una sola zona horaria (Ecuador), igual criterio que el resto de esta
+// pantalla.
+function isWithinHourRange(hour, start, end) {
+    if (start > end) return hour >= start || hour < end;
+    return hour >= start && hour < end;
+}
+
+function currentTimeSurchargePercent() {
+    const t = props.timeSurcharge;
+    const hour = new Date().getHours();
+    if (isWithinHourRange(hour, t.night_starts_at, t.night_ends_at)) return t.night_percent;
+    if (isWithinHourRange(hour, t.peak_morning_starts_at, t.peak_morning_ends_at)) return t.peak_percent;
+    if (isWithinHourRange(hour, t.peak_evening_starts_at, t.peak_evening_ends_at)) return t.peak_percent;
+    return 0;
+}
+
+// Aplica el recargo sobre una base YA decidida (post tarifa mínima) — mismo
+// orden que PriceCalculator::suggestedPrice(): primero el máximo con el
+// piso, el recargo horario es un % de ESE valor, recién al final se suma
+// todo y se redondea hacia arriba a la décima.
+function applyTimeSurcharge(base) {
+    return Math.round(base * (currentTimeSurchargePercent() / 100) * 100) / 100;
+}
+
 // Bug reportado por el usuario ("el km que colocas arriba en el mapa y el
 // que colocas abajo... procura que sean iguales"): la tarjeta fija de
 // origen/destino (arriba) siempre mostró la distancia real de la ruta —
@@ -961,7 +998,8 @@ const estimatedPickupFareForSelected = computed(() => {
 // ese mismo número, sin sorpresas al confirmar.
 const estimatedPrice = computed(() => {
     if (rawPriceByDistance.value == null) return null;
-    return roundUpToDime(Math.max(rawPriceByDistance.value, referenceMinimumFare.value) + estimatedPickupFareForSelected.value);
+    const base = Math.max(rawPriceByDistance.value, referenceMinimumFare.value);
+    return roundUpToDime(base + applyTimeSurcharge(base) + estimatedPickupFareForSelected.value);
 });
 
 // Paradas adicionales (pedido explícito del usuario: "esto recalcule las
@@ -975,7 +1013,8 @@ const stopsWithPrices = computed(() =>
             const legKm = stopLegs.value[index]?.distanceKm;
             if (legKm == null) return { ...stop, price: null };
             const raw = roundUpToDime(legKm * referenceRatePerKm.value);
-            return { ...stop, distanceKm: legKm, price: Math.max(raw, referenceMinimumFare.value) };
+            const base = Math.max(raw, referenceMinimumFare.value);
+            return { ...stop, distanceKm: legKm, price: roundUpToDime(base + applyTimeSurcharge(base)) };
         })
 );
 
@@ -1026,10 +1065,12 @@ function estimatedPriceForDriver(driver) {
     if (estimatedDistanceKm.value == null) return null;
     const raw = roundUpToDime(estimatedDistanceKm.value * Number(driver.rate_per_km ?? 0));
     const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
+    const base = Math.max(raw, floor);
     // Mismo fix que estimatedPrice de acá arriba: redondear hacia arriba el
-    // TOTAL (viaje + recogida), no solo el viaje, para que este número ya
-    // sea el mismo que el cliente va a ver después al elegir a este conductor.
-    return roundUpToDime(Math.max(raw, floor) + pickupFareEstimateFor(driver));
+    // TOTAL (viaje + recargo horario + recogida), no solo el viaje, para que
+    // este número ya sea el mismo que el cliente va a ver después al elegir
+    // a este conductor.
+    return roundUpToDime(base + applyTimeSurcharge(base) + pickupFareEstimateFor(driver));
 }
 
 // Valor orientativo de cada grupo para la ruta actual. Se muestra como
@@ -1050,7 +1091,8 @@ const categoryStartingPrices = computed(() => {
             if (estimatedDistanceKm.value == null) return null;
             const rate = Number(cooperative.average_rate_per_km ?? 0);
             if (!rate) return null;
-            return Math.max(roundUpToDime(estimatedDistanceKm.value * rate), props.minimumFare);
+            const base = Math.max(roundUpToDime(estimatedDistanceKm.value * rate), props.minimumFare);
+            return roundUpToDime(base + applyTimeSurcharge(base));
         })
         .filter((price) => Number.isFinite(price) && price > 0);
 

@@ -479,6 +479,19 @@ function clientPlanOf(user) {
                                         <span class="px-2 py-1 rounded-arka text-xs" :class="ROLE_BADGE_CLASS[user.role]">
                                             {{ ROLE_LABELS[user.role] }}
                                         </span>
+                                        <!-- Bug real reportado por el usuario ("me dice que tengo esos
+                                             registros como conductor, pero en suscripciones aparece como
+                                             cliente"): el registro es de dos fases — elegir "conductor" solo
+                                             marca `intends_to_drive`, el rol efectivo (`role`) recién cambia a
+                                             'conductor' cuando se crea su DriverProfile (ver
+                                             DriverProfile::booted()). Hasta que complete ese perfil, esta
+                                             pantalla lo sigue mostrando bien como "Cliente" (es su rol
+                                             efectivo hoy) pero sin este aviso no había forma de distinguirlo
+                                             de alguien que nunca quiso ser conductor — confirmado con
+                                             Admin\DriverVerificationController, que sí lee esa intención. -->
+                                        <p v-if="user.role !== 'conductor' && user.intends_to_drive" class="mt-1 text-[11px] text-arka-warning">
+                                            Conductor pendiente de completar perfil
+                                        </p>
                                     </td>
                                     <td class="px-4 py-3 whitespace-nowrap">
                                         <span v-if="user.role === 'admin'" class="text-xs text-arka-text-muted">Sin plan</span>
