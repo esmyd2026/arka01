@@ -15,7 +15,7 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { playAttentionAlert, playCabinChime, playUpdateChime } from '@/Utils/liveAlert';
-import { fetchOsrmRoute } from '@/Utils/osrmRoute';
+import { fetchOsrmMultiRoute, fetchOsrmRoute } from '@/Utils/osrmRoute';
 import { distanceKm } from '@/Utils/haversine';
 
 const props = defineProps({
@@ -494,7 +494,12 @@ const mapMarkers = computed(() => {
 // únicamente el tramo que importa en cada momento.
 const trackingMapMarkers = computed(() => {
     const car = mapMarkers.value.find((marker) => marker.id === 'car');
-    const targetId = props.ride.picked_up_at ? 'destination' : 'origin';
+    const nextPendingStop = (props.ride.stops ?? []).find((stop) => stop.status === 'pending');
+    const targetId = !props.ride.picked_up_at
+        ? 'origin'
+        : nextPendingStop
+            ? `stop-${nextPendingStop.sequence}`
+            : 'destination';
     const target = mapMarkers.value.find((marker) => marker.id === targetId);
 
     return [target, car].filter(Boolean);
@@ -753,22 +758,54 @@ watch(fleetMapRef, (mapInstance) => {
     nextTick(() => recenterOnDriver(true));
 });
 watch(
-    [() => props.ride.status, () => props.ride.arrived_at, () => props.ride.picked_up_at],
-    () => refreshLiveRoute(true),
+    [
+        () => props.ride.status,
+        () => props.ride.arrived_at,
+        () => props.ride.picked_up_at,
+        () => currentNavigationTarget.value.lat,
+        () => currentNavigationTarget.value.lng,
+        () => (props.ride.stops ?? []).map((stop) => `${stop.id}:${stop.status}`).join('|'),
+    ],
+    () => {
+        // Un cambio de parada define un tramo nuevo. Se invalidan los
+        // umbrales del tramo anterior para que no conserven su línea ni
+        // retrasen el recálculo hacia el próximo punto.
+        liveRouteRequestSerial += 1;
+        liveRouteCoords.value = [];
+        lastLiveRouteOrigin = null;
+        lastLiveRouteRequestedAt = 0;
+        refreshLiveRoute(true);
+        loadTripRoute();
+    },
 );
 
 // Ruta principal de la carrera. Se mantiene separada de la aproximación al
 // cliente para que, una vez marcado "Llegué", el mapa cambie naturalmente
 // de conductor→origen a origen→destino sin reutilizar una línea incorrecta.
 const tripRouteCoords = ref([]);
+let tripRouteRequestSerial = 0;
 const loadTripRoute = async () => {
-    const route = await fetchOsrmRoute(
-        Number(props.ride.origin_lat),
-        Number(props.ride.origin_lng),
-        Number(props.ride.destination_lat),
-        Number(props.ride.destination_lng)
-    );
-    tripRouteCoords.value = route.coords;
+    const serial = ++tripRouteRequestSerial;
+    const allStops = [...(props.ride.stops ?? [])].sort((a, b) => Number(a.sequence) - Number(b.sequence));
+    const routeStops = props.ride.status === 'completed'
+        ? allStops.filter((stop) => stop.status === 'completed')
+        : allStops.filter((stop) => stop.status !== 'cancelled');
+    const endedAtStop = props.ride.status === 'completed' && allStops.some((stop) => stop.status === 'cancelled');
+    const points = [
+        { lat: Number(props.ride.origin_lat), lng: Number(props.ride.origin_lng) },
+        ...routeStops.map((stop) => ({ lat: Number(stop.lat), lng: Number(stop.lng) })),
+        ...(!endedAtStop ? [{ lat: Number(props.ride.destination_lat), lng: Number(props.ride.destination_lng) }] : []),
+    ];
+
+    if (points.length < 2) {
+        tripRouteCoords.value = [];
+        return;
+    }
+
+    const route = points.length === 2
+        ? await fetchOsrmRoute(points[0].lat, points[0].lng, points[1].lat, points[1].lng)
+        : await fetchOsrmMultiRoute(points);
+    if (serial === tripRouteRequestSerial) tripRouteCoords.value = route.coords;
 };
 
 onMounted(loadTripRoute);
@@ -938,7 +975,15 @@ async function confirmArrived() {
 
 const markingPickedUp = ref(false);
 async function startToDestination() {
-    window.open(googleNavigateUrl(props.ride.destination_lat, props.ride.destination_lng), '_blank', 'noopener');
+    const firstPendingStop = (props.ride.stops ?? []).find((stop) => stop.status === 'pending');
+    const firstTarget = firstPendingStop
+        ? { lat: firstPendingStop.lat, lng: firstPendingStop.lng }
+        : { lat: props.ride.destination_lat, lng: props.ride.destination_lng };
+    window.open(googleNavigateUrl(firstTarget.lat, firstTarget.lng), '_blank', 'noopener');
+
+    // Si hay parada, este primer toque ya equivale a "Ir a la parada 1".
+    // Al volver a la app debe ofrecer "Llegué", no pedir iniciar dos veces.
+    if (firstPendingStop) headingToStop.value = true;
 
     markingPickedUp.value = true;
     const coords = await currentCoords();
@@ -998,6 +1043,13 @@ async function confirmStop(cancelRest) {
     if (!currentStop.value) return;
     completingStop.value = true;
     const coords = await currentCoords();
+    // Esta lectura fresca es también el origen del tramo siguiente. Sin
+    // copiarla al estado del mapa, podía reutilizarse la última posición
+    // recibida antes de llegar a la parada.
+    if (coords.lat != null && coords.lng != null) {
+        driverLat.value = coords.lat;
+        driverLng.value = coords.lng;
+    }
     submitStopCompletion(coords, cancelRest);
 }
 
@@ -1391,7 +1443,7 @@ function submitReview() {
                     origin-marker-style="dot"
                     destination-marker-style="dot"
                     :fit-padding-top="150"
-                    :fit-padding-bottom="145"
+                    :fit-padding-bottom="220"
                     :zoom="16"
                     height="100%"
                     controls-top-offset="8.5rem"
@@ -1418,21 +1470,33 @@ function submitReview() {
                         {{ ride.driver.driver_profile.vehicle_make }} {{ ride.driver.driver_profile.vehicle_model }}
                         <span v-if="ride.driver.driver_profile.vehicle_color"> · {{ ride.driver.driver_profile.vehicle_color }}</span>
                     </p>
+                    <p v-if="pickupEta" class="mt-1 text-[11px] font-medium text-arka-primary">
+                        Llega aproximadamente en {{ pickupEta.minutes }} min
+                    </p>
+                    <p v-else-if="pickupWaitCountdown" class="mt-1 text-[11px] font-medium text-arka-warning">
+                        Esperando al pasajero · {{ pickupWaitCountdown.label }}
+                    </p>
                 </div>
-                <span
-                    v-if="pickupEta"
-                    class="shrink-0 px-3 py-1.5 rounded-arka bg-arka-primary/15 text-center"
-                >
-                    <span class="block text-[10px] text-arka-primary-bright/80 leading-none">Llegando en</span>
-                    <span class="block text-sm font-semibold text-arka-primary-bright leading-tight">{{ pickupEta.minutes }} min</span>
-                </span>
-                <span
-                    v-else-if="pickupWaitCountdown"
-                    class="shrink-0 rounded-arka border border-arka-warning/30 bg-arka-warning/10 px-3 py-1.5 text-center"
-                >
-                    <span class="block text-[10px] leading-none text-arka-warning/80">Tiempo de espera</span>
-                    <span class="block text-sm font-bold leading-tight text-arka-warning">{{ pickupWaitCountdown.label }}</span>
-                </span>
+                <div class="flex shrink-0 items-center gap-2">
+                    <button
+                        type="button"
+                        class="grid h-10 w-10 place-items-center rounded-full border border-arka-primary/20 bg-arka-primary/10 text-arka-primary transition active:scale-95"
+                        aria-label="Enviar mensaje al conductor"
+                        title="Mensaje"
+                        @click="openClientMessage"
+                    >
+                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 3.75A2.75 2.75 0 0 0 1.75 6.5v8A2.75 2.75 0 0 0 4.5 17.25h2v3a.75.75 0 0 0 1.2.6l4.8-3.6h7A2.75 2.75 0 0 0 22.25 14.5v-8a2.75 2.75 0 0 0-2.75-2.75h-15Z" /></svg>
+                    </button>
+                    <a
+                        v-if="counterpart.phone"
+                        :href="`tel:${counterpart.phone}`"
+                        class="grid h-10 w-10 place-items-center rounded-full border border-arka-primary/20 bg-arka-primary/10 text-arka-primary transition active:scale-95"
+                        aria-label="Llamar al conductor"
+                        title="Llamar"
+                    >
+                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.62 2.25c.55 0 1.04.34 1.24.85l1.3 3.42a1.34 1.34 0 0 1-.33 1.45L7.2 9.5a14.1 14.1 0 0 0 7.3 7.3l1.53-1.63a1.34 1.34 0 0 1 1.45-.33l3.42 1.3c.51.2.85.69.85 1.24v2.37a2 2 0 0 1-2 2C10.09 21.75 2.25 13.91 2.25 4.25a2 2 0 0 1 2-2h2.37Z" /></svg>
+                    </a>
+                </div>
             </div>
 
             <!-- Acceso chico a mensaje/seguridad (pedido explícito del
@@ -1451,8 +1515,8 @@ function submitReview() {
 
             <!-- Progreso y acciones esenciales, siempre visibles sin cubrir
                  innecesariamente el mapa. -->
-            <div class="fixed inset-x-3 bottom-3 z-10 space-y-2">
-                <div class="rounded-arka border border-arka-text-muted/10 bg-arka-card/95 px-3 py-3 shadow-lg backdrop-blur-sm">
+            <div class="fixed inset-x-3 bottom-3 z-10">
+                <div class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card/95 px-3 py-3 shadow-2xl backdrop-blur-md">
                     <div class="mb-3 flex items-center justify-between gap-3">
                         <div class="min-w-0">
                             <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-arka-text-muted">Progreso del viaje</p>
@@ -1502,57 +1566,49 @@ function submitReview() {
                             </span>
                         </div>
                     </div>
-                </div>
 
-                <!-- Bug real reportado por el usuario ("sigue sin aparecer el
-                     tema de las cuentas y mira que es con transferencia"): esta
-                     ES la pantalla que de verdad ve el cliente durante el
-                     viaje (clientFullscreenTrip) — el botón se había agregado
-                     antes en otra tarjeta que nunca llega a mostrarse en este
-                     mismo momento. Mismo criterio de siempre: solo cuando ya
-                     lo recogió (pedido explícito del usuario, desde el
-                     principio: "aparecerán cuando el conductor recoja al
-                     cliente y esté en camino"), y con aviso si el conductor
-                     todavía no declaró ninguna cuenta. -->
-                <p class="rounded-arka border border-arka-text-muted/10 bg-arka-card/95 px-3 py-2 text-xs text-arka-text-muted shadow-lg backdrop-blur-sm">
-                    Forma de pago: <span class="font-medium capitalize text-arka-text">{{ ride.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo' }}</span>
-                </p>
-                <button
-                    v-if="ride.picked_up_at && driverBankAccounts.length"
-                    type="button"
-                    class="flex w-full items-center justify-between gap-3 rounded-arka border border-arka-primary/25 bg-arka-primary/10 px-3 py-2.5 text-left shadow-lg backdrop-blur-sm"
-                    @click="showBankAccounts = true"
-                >
-                    <span class="text-sm font-medium text-arka-primary">💳 Cuenta para transferir</span>
-                    <span class="text-xs text-arka-primary">Ver ›</span>
-                </button>
-                <p
-                    v-else-if="ride.picked_up_at && ride.payment_method === 'transferencia'"
-                    class="rounded-arka border border-arka-warning/25 bg-arka-warning/10 px-3 py-2.5 text-xs text-arka-warning shadow-lg backdrop-blur-sm"
-                >
-                    El conductor todavía no declaró una cuenta bancaria — coordine la transferencia directamente con él al llegar.
-                </p>
+                    <!-- La información económica queda agrupada debajo del
+                         progreso, donde se entiende como parte del viaje y
+                         no como tarjetas sueltas sin jerarquía. -->
+                    <div class="mt-3 grid grid-cols-2 divide-x divide-arka-text-muted/10 border-t border-arka-text-muted/10 pt-3">
+                        <div class="pe-3">
+                            <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-arka-text-muted">Forma de pago</p>
+                            <p class="mt-0.5 text-xs font-semibold text-arka-text">{{ ride.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo' }}</p>
+                        </div>
+                        <div class="ps-3 text-right">
+                            <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-arka-text-muted">Total del viaje</p>
+                            <p class="mt-0.5 text-base font-bold text-arka-primary">${{ tripTotalCost.toFixed(2) }}</p>
+                        </div>
+                    </div>
 
-                <div class="flex items-center gap-2">
+                    <button
+                        v-if="ride.payment_method === 'transferencia' && ride.picked_up_at && driverBankAccounts.length"
+                        type="button"
+                        class="mt-3 flex w-full items-center justify-between gap-3 rounded-xl border border-arka-primary/25 bg-arka-primary/10 px-3 py-2.5 text-left transition active:scale-[0.99]"
+                        @click="showBankAccounts = true"
+                    >
+                        <span class="flex min-w-0 items-center gap-2 text-xs font-semibold text-arka-primary">
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 15h4"/></svg>
+                            Datos bancarios para transferir
+                        </span>
+                        <span class="shrink-0 text-[11px] font-semibold text-arka-primary">Ver datos →</span>
+                    </button>
+                    <p
+                        v-else-if="ride.payment_method === 'transferencia' && ride.picked_up_at"
+                        class="mt-3 rounded-xl border border-arka-warning/25 bg-arka-warning/10 px-3 py-2 text-[11px] leading-snug text-arka-warning"
+                    >
+                        El conductor no tiene una cuenta bancaria declarada. Coordine el pago directamente con él.
+                    </p>
+
                     <button
                         type="button"
-                        class="flex-1 px-3 py-2.5 rounded-arka bg-arka-card/95 backdrop-blur-sm shadow-lg border border-arka-text-muted/10 text-arka-text text-sm font-medium"
-                        @click="openClientMessage"
+                        class="mx-auto mt-2 flex min-h-9 items-center justify-center gap-1.5 px-3 text-[11px] font-semibold text-arka-danger"
+                        @click="quickCancelRide"
                     >
-                        <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 3.75A2.75 2.75 0 0 0 1.75 6.5v8A2.75 2.75 0 0 0 4.5 17.25h2v3a.75.75 0 0 0 1.2.6l4.8-3.6h7A2.75 2.75 0 0 0 22.25 14.5v-8a2.75 2.75 0 0 0-2.75-2.75h-15Z" /></svg>
-                        Mensaje
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>
+                        Cancelar viaje
                     </button>
-                    <a
-                        v-if="counterpart.phone"
-                        :href="`tel:${counterpart.phone}`"
-                        class="flex-1 text-center px-3 py-2.5 rounded-arka bg-arka-card/95 backdrop-blur-sm shadow-lg border border-arka-text-muted/10 text-arka-text text-sm font-medium"
-                    >
-                        <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.62 2.25c.55 0 1.04.34 1.24.85l1.3 3.42a1.34 1.34 0 0 1-.33 1.45L7.2 9.5a14.1 14.1 0 0 0 7.3 7.3l1.53-1.63a1.34 1.34 0 0 1 1.45-.33l3.42 1.3c.51.2.85.69.85 1.24v2.37a2 2 0 0 1-2 2C10.09 21.75 2.25 13.91 2.25 4.25a2 2 0 0 1 2-2h2.37Z" /></svg>
-                        Llamar
-                    </a>
                 </div>
-
-                <DangerButton class="w-full justify-center" @click="quickCancelRide">Cancelar viaje</DangerButton>
             </div>
 
             <!-- El resumen fijo conserva una sola línea compacta. El detalle
@@ -2233,7 +2289,8 @@ function submitReview() {
                                 :disabled="markingPickedUp"
                                 @click="startToDestination"
                             >
-                                🏁 {{ markingPickedUp ? 'Ubicando…' : 'Iniciar destino' }}
+                                {{ currentStop ? '🚩' : '🏁' }}
+                                {{ markingPickedUp ? 'Ubicando…' : currentStop ? `Iniciar hacia parada ${currentStop.sequence}` : 'Iniciar destino' }}
                             </SecondaryButton>
 
                             <!-- Paradas adicionales (pedido explícito del usuario):

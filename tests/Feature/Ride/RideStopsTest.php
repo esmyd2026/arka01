@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ride;
 
+use App\Models\DriverBankAccount;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetMember;
@@ -144,6 +145,20 @@ class RideStopsTest extends TestCase
             );
     }
 
+    public function test_a_transfer_ride_with_stops_exposes_the_driver_bank_account_to_the_client(): void
+    {
+        [$client, $driver, $ride] = $this->acceptedRideWithStops();
+        $ride->update(['payment_method' => 'transferencia', 'picked_up_at' => now()]);
+        DriverBankAccount::factory()->for($driver, 'driver')->create(['is_favorite' => true]);
+
+        $this->actingAs($client)
+            ->get(route('rides.show', $ride))
+            ->assertInertia(fn ($page) => $page
+                ->has('ride.stops', 2)
+                ->has('driverBankAccounts', 1)
+            );
+    }
+
     private function markPickedUp(User $driver, Ride $ride): void
     {
         $this->actingAs($driver)->post(route('rides.arrived', $ride->id));
@@ -164,6 +179,25 @@ class RideStopsTest extends TestCase
         $this->assertSame('in_progress', $ride->status);
         $this->assertSame('completed', $firstStop->fresh()->status);
         $this->assertSame('pending', $ride->stops[1]->status);
+    }
+
+    public function test_completing_a_stop_publishes_that_position_as_the_origin_of_the_next_leg(): void
+    {
+        [, $driver, $ride] = $this->acceptedRideWithStops();
+        $this->markPickedUp($driver, $ride);
+        $firstStop = $ride->stops[0];
+
+        $this->actingAs($driver)
+            ->post(route('rides.stops.complete', [$ride->id, $firstStop->id]), [
+                'lat' => (float) $firstStop->lat,
+                'lng' => (float) $firstStop->lng,
+                'cancel_rest' => false,
+            ])
+            ->assertRedirect();
+
+        $profile = $driver->driverProfile->fresh();
+        $this->assertSame((float) $firstStop->lat, (float) $profile->current_lat);
+        $this->assertSame((float) $firstStop->lng, (float) $profile->current_lng);
     }
 
     public function test_completing_a_stop_out_of_order_is_rejected(): void

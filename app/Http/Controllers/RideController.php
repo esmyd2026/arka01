@@ -429,6 +429,19 @@ class RideController extends Controller
             'completion_note' => ['nullable', 'string', 'max:500'],
         ]);
 
+        // La posición usada para validar la llegada también debe convertirse
+        // en el origen compartido del tramo siguiente. Esto actualiza el
+        // perfil y emite DriverLocationUpdated al cliente antes de cambiar
+        // la parada, evitando que su mapa reutilice el origen anterior.
+        if (isset($validated['lat'], $validated['lng'])) {
+            $this->rideLifecycle->updateLocation(
+                $ride,
+                $request->user(),
+                (float) $validated['lat'],
+                (float) $validated['lng'],
+            );
+        }
+
         $this->rideStopCompleter->complete(
             $ride,
             $stop,
