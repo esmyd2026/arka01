@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\City;
 use App\Models\Cooperative;
 use App\Models\CooperativeDocument;
+use App\Models\DriverBankAccount;
 use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,13 +31,14 @@ class CooperativeProfileController extends Controller
 
     public function edit(Request $request): Response
     {
-        $cooperative = $request->user()->cooperative()->with(['city', 'documents'])->firstOrFail();
+        $cooperative = $request->user()->cooperative()->with(['city', 'documents', 'bankAccounts'])->firstOrFail();
 
         return Inertia::render('Cooperative/Profile', [
             'cooperative' => $cooperative,
             'cities' => City::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'requiredDocuments' => self::REQUIRED_DOCUMENTS,
             'planLimits' => $this->planLimits->forCooperative($request->user()),
+            'banks' => DriverBankAccount::banks(),
         ]);
     }
 

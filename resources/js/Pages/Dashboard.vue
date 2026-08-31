@@ -452,7 +452,13 @@ function handleNewRequest(e, { alert = true } = {}) {
     // aviso más fuerte — sonarían las dos a la vez si no se evitara.
     if (alert) playAttentionAlert();
     pendingRequestsCount.value++;
-    newRequestAlert.value = { clientName: e.client_name, price: e.current_offered_price, isScheduled: e.is_scheduled };
+    newRequestAlert.value = {
+        clientName: e.client_name,
+        cooperativeName: e.cooperative_name,
+        isCooperative: Boolean(e.is_cooperative_request),
+        price: e.driver_total_offered_price ?? e.total_offered_price ?? e.current_offered_price,
+        isScheduled: e.is_scheduled,
+    };
 }
 
 function handleRequestGoneWhileWaiting() {
@@ -717,7 +723,8 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-arka-primary">Acción prioritaria</p>
                                 <p class="mt-0.5 text-lg font-bold text-arka-text">{{ newRequestAlert?.isScheduled ? 'Nueva carrera programada' : 'Tiene una solicitud de carrera' }}</p>
                                 <p v-if="newRequestAlert" class="mt-1 text-sm text-arka-text-muted">
-                                    {{ newRequestAlert.clientName }} le {{ newRequestAlert.isScheduled ? 'programó una carrera' : 'ofrece' }}
+                                    {{ newRequestAlert.isCooperative ? newRequestAlert.cooperativeName : newRequestAlert.clientName }}
+                                    {{ newRequestAlert.isCooperative ? 'le pagará' : (newRequestAlert.isScheduled ? 'le programó una carrera por' : 'le ofrece') }}
                                     <strong class="text-arka-primary-bright">${{ Number(newRequestAlert.price).toFixed(2) }}</strong>
                                 </p>
                                 <p v-else class="mt-1 text-sm text-arka-text-muted">Tiene {{ pendingRequestsCount }} solicitud{{ pendingRequestsCount === 1 ? '' : 'es' }} esperando respuesta.</p>

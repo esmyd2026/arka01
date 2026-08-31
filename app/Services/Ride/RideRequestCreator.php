@@ -6,7 +6,6 @@ use App\Events\CooperativeRideUpdated;
 use App\Events\RideRequested;
 use App\Jobs\ExpireRideOffer;
 use App\Jobs\ExpireWaitingRideRequest;
-use App\Jobs\FallbackCooperativeAssignment;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
 use App\Models\DriverProfile;
@@ -57,6 +56,7 @@ class RideRequestCreator
     {
         return [
             'fleet_id' => ['nullable', 'integer', 'exists:fleets,id'],
+            'provider_type' => ['nullable', 'in:driver,cooperative'],
             'cooperative_id' => ['nullable', 'integer', 'exists:cooperatives,id'],
             'driver_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'origin_lat' => ['required', 'numeric', 'between:-90,90'],
@@ -129,6 +129,17 @@ class RideRequestCreator
 
         $fleet = $this->resolveFleet($client, $validated['fleet_id'] ?? null);
         $cooperative = null;
+
+        // Contrato explícito entre la interfaz y el servidor. Antes, abrir la
+        // categoría "Cooperativas" sin marcar una fila enviaba cooperative_id
+        // vacío y el backend lo interpretaba silenciosamente como una carrera
+        // para la flota. La web preselecciona la recomendada; esta defensa evita
+        // que cualquier cliente web/móvil desactualizado cambie de modalidad.
+        if (($validated['provider_type'] ?? 'driver') === 'cooperative' && empty($validated['cooperative_id'])) {
+            throw ValidationException::withMessages([
+                'cooperative_id' => 'Seleccione una cooperativa disponible para solicitar esta carrera.',
+            ]);
+        }
 
         if (! empty($validated['cooperative_id'])) {
             $cooperative = Cooperative::query()->findOrFail($validated['cooperative_id']);
@@ -318,7 +329,28 @@ class RideRequestCreator
                 $currentOfferExpiresAt = now()->addSeconds(30);
             }
         } elseif ($driverUserId && ! $isScheduled) {
-            $currentOfferExpiresAt = now()->addSeconds(self::DIRECTED_REQUEST_TIMEOUT_SECONDS);
+            $dispatchPool = $validated['dispatch_pool'] ?? null;
+
+            if ($dispatchPool) {
+                // El conductor elegido va primero. Los demás candidatos de la
+                // categoría quedan como respaldo y reciben exactamente el
+                // mismo total si el primero no responde.
+                $offerCandidateIds = array_values(array_filter(
+                    RideDispatchCandidates::forPool(
+                        $fleet,
+                        $client,
+                        $dispatchPool,
+                        (float) $validated['origin_lat'],
+                        (float) $validated['origin_lng'],
+                        $passengerCount,
+                        $needsTrunk,
+                    ),
+                    fn (int $candidateId) => $candidateId !== (int) $driverUserId,
+                ));
+                $currentOfferExpiresAt = now()->addSeconds(30);
+            } else {
+                $currentOfferExpiresAt = now()->addSeconds(self::DIRECTED_REQUEST_TIMEOUT_SECONDS);
+            }
         }
 
         $stopsInput = $validated['stops'] ?? [];
@@ -452,7 +484,7 @@ class RideRequestCreator
             $validated, $fleet, $client, $distanceKm, $offeredPrice, $isScheduled, $scheduledAt,
             $driverUserId, $dispatchPool, $offerCandidateIds, $currentOfferExpiresAt, $needsTrunk, $passengerCount, $requestStatus,
             $cooperative, $cooperativeCandidateIds, $cooperativeOfferExpiresAt, $cooperativeAssignmentStatus,
-            $smartDispatchVersion, $smartDispatchSnapshot, $stopsPrice, $stopsData, $pickupSurcharge,
+            $smartDispatchVersion, $smartDispatchSnapshot, $stopsPrice, $stopsData, $pickupSurcharge, $driverWasChosenByClient,
         ) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
@@ -462,6 +494,10 @@ class RideRequestCreator
                 'cooperative_offer_expires_at' => $cooperativeOfferExpiresAt,
                 'client_user_id' => $client->id,
                 'driver_user_id' => $driverUserId,
+                // Solo se atribuye la tarifa a un conductor cuando el cliente
+                // lo eligió expresamente. En bolsas/cooperativas el precio es
+                // una referencia de la plataforma, no de la primera unidad.
+                'price_reference_driver_user_id' => $driverWasChosenByClient ? $driverUserId : null,
                 'origin_lat' => $validated['origin_lat'],
                 'origin_lng' => $validated['origin_lng'],
                 'origin_address' => $validated['origin_address'] ?? null,
@@ -532,11 +568,12 @@ class RideRequestCreator
         }
 
         if ($rideRequest->cooperative_id && ! $rideRequest->driver_user_id) {
-            if (! $rideRequest->is_scheduled) {
-                FallbackCooperativeAssignment::dispatch($rideRequest->id)
-                    ->delay(now()->addSeconds((int) ($cooperative->manual_assignment_timeout_seconds ?? 30)));
-            }
-
+            // Modo manual significa manual de verdad: la solicitud se queda
+            // exclusivamente en la central de la cooperativa hasta que un
+            // operador elija una unidad. Antes se programaba un fallback a
+            // los 30 segundos; con QUEUE_CONNECTION=sync el delay se ejecuta
+            // inmediatamente y el conductor recibía la carrera antes que el
+            // operador, contradiciendo el switch configurado.
             return $rideRequest;
         }
 

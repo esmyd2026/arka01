@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\Haversine;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Services\Haversine;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -132,6 +132,13 @@ class Cooperative extends Model
     public function walletEntries(): HasMany
     {
         return $this->hasMany(CooperativeWalletEntry::class);
+    }
+
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(CooperativeBankAccount::class)
+            ->orderByDesc('is_favorite')
+            ->orderByDesc('id');
     }
 
     /**

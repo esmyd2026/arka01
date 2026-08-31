@@ -531,6 +531,15 @@ watch(activeCategory, (category) => {
     if (category === 'fleet') sourceMode.value = 'fleet';
     else if (category === 'public') sourceMode.value = 'public';
     else if (category === 'all') sourceMode.value = 'both';
+
+    if (category === 'cooperative') {
+        selectedDriverId.value = WHOLE_FLEET;
+        selectedCooperativeId.value ??= recommendedCooperative.value?.id ?? null;
+    } else {
+        // Una cooperativa elegida previamente no debe seguir dominando un
+        // pedido cuando el cliente cambia de vuelta a Flota/Públicos/Todos.
+        selectedCooperativeId.value = null;
+    }
 });
 
 function nextNonEmptyCategory(from) {
@@ -573,8 +582,8 @@ watch(step, (value) => {
         selectedDriverId.value = publicCandidates.value[0].user_id;
     } else if (activeCategory.value === 'all' && allCandidates.value.length) {
         selectedDriverId.value = allCandidates.value[0].user_id;
-    } else if (activeCategory.value === 'cooperative' && props.cooperatives.length === 1) {
-        selectedCooperativeId.value = props.cooperatives[0].id;
+    } else if (activeCategory.value === 'cooperative') {
+        selectedCooperativeId.value = recommendedCooperative.value?.id ?? null;
     }
 });
 
@@ -973,7 +982,7 @@ const estimatedDistanceKm = computed(() => {
 // cambiado después en el cajón de opciones.
 const referenceRatePerKm = computed(() => {
     if (selectedCooperativeId.value) {
-        return Number(selectedCooperativeInfo.value?.average_rate_per_km ?? 0);
+        return Number(selectedCooperativeInfo.value?.effective_rate_per_km ?? selectedCooperativeInfo.value?.average_rate_per_km ?? 0);
     }
 
     if (selectedDriverId.value !== WHOLE_FLEET) {
@@ -1056,7 +1065,7 @@ const stopsWithPrices = computed(() =>
         .map((stop, index) => {
             const legKm = stopLegs.value[index]?.distanceKm;
             if (legKm == null) return { ...stop, price: null };
-            const raw = roundUpToDime(legKm * referenceRatePerKm.value);
+            const raw = Math.round((legKm + DISTANCE_PADDING_KM) * referenceRatePerKm.value * 100) / 100;
             const base = Math.max(raw, referenceMinimumFare.value);
             return { ...stop, distanceKm: legKm, price: roundUpToDime(base + applyTimeSurcharge(base)) };
         })
@@ -1117,27 +1126,80 @@ function estimatedPriceForDriver(driver) {
     return roundUpToDime(base + applyTimeSurcharge(base) + pickupFareEstimateFor(driver));
 }
 
+function estimatedStopsPriceForDriver(driver) {
+    const rate = Number(driver.rate_per_km ?? 0);
+    const floor = driver.minimum_fare != null ? Math.min(Number(driver.minimum_fare), props.minimumFare) : props.minimumFare;
+    const prices = stopLegs.value
+        .map((leg) => leg?.distanceKm)
+        .filter((distance) => distance != null)
+        .map((distance) => {
+            const base = Math.max(Math.round((distance + DISTANCE_PADDING_KM) * rate * 100) / 100, floor);
+            return roundUpToDime(base + applyTimeSurcharge(base));
+        });
+
+    return prices.length ? roundUpToDime(prices.reduce((total, price) => total + price, 0)) : 0;
+}
+
+function estimatedTotalPriceForDriver(driver) {
+    const finalLegPrice = estimatedPriceForDriver(driver);
+    if (finalLegPrice == null) return null;
+
+    return roundUpToDime(finalLegPrice + estimatedStopsPriceForDriver(driver));
+}
+
 // Valor orientativo de cada grupo para la ruta actual. Se muestra como
 // "Desde" porque representa la alternativa disponible más económica, no una
 // promesa de precio final. En cooperativas todavía no se conoce la unidad que
 // será asignada, por eso se usa la tarifa promedio declarada por cada una.
+function estimatedTotalPriceForCooperative(cooperative) {
+    if (estimatedDistanceKm.value == null) return null;
+    const rate = Number(cooperative.effective_rate_per_km ?? cooperative.average_rate_per_km ?? 0);
+    if (!rate) return null;
+
+    const base = Math.max(roundUpToDime(estimatedDistanceKm.value * rate), props.minimumFare);
+    const stopPrices = stopLegs.value
+        .map((leg) => leg?.distanceKm)
+        .filter((distance) => distance != null)
+        .map((distance) => {
+            const stopBase = Math.max(Math.round((distance + DISTANCE_PADDING_KM) * rate * 100) / 100, props.minimumFare);
+            return roundUpToDime(stopBase + applyTimeSurcharge(stopBase));
+        });
+
+    return roundUpToDime(base + applyTimeSurcharge(base) + stopPrices.reduce((total, price) => total + price, 0));
+}
+
+// Recomendación automática: primero el menor total estimado para la ruta y,
+// cuando dos opciones cuestan lo mismo, la más cercana al punto de recogida.
+// Si todavía no hay ruta/tarifa suficiente, la cercanía decide por sí sola.
+const recommendedCooperative = computed(() => {
+    return [...props.cooperatives].sort((left, right) => {
+        const leftPrice = estimatedTotalPriceForCooperative(left) ?? Number.POSITIVE_INFINITY;
+        const rightPrice = estimatedTotalPriceForCooperative(right) ?? Number.POSITIVE_INFINITY;
+        if (leftPrice !== rightPrice) return leftPrice - rightPrice;
+
+        const leftDistance = Number(left.distance_km ?? Number.POSITIVE_INFINITY);
+        const rightDistance = Number(right.distance_km ?? Number.POSITIVE_INFINITY);
+        return leftDistance - rightDistance;
+    })[0] ?? null;
+});
+
+watch(recommendedCooperative, (cooperative) => {
+    if (activeCategory.value === 'cooperative' && !selectedCooperativeId.value) {
+        selectedCooperativeId.value = cooperative?.id ?? null;
+    }
+}, { immediate: true });
+
 const categoryStartingPrices = computed(() => {
     const lowestDriverPrice = (drivers) => {
         const prices = drivers
-            .map(estimatedPriceForDriver)
+            .map(estimatedTotalPriceForDriver)
             .filter((price) => Number.isFinite(price) && price > 0);
 
         return prices.length ? Math.min(...prices) : null;
     };
 
     const cooperativePrices = props.cooperatives
-        .map((cooperative) => {
-            if (estimatedDistanceKm.value == null) return null;
-            const rate = Number(cooperative.average_rate_per_km ?? 0);
-            if (!rate) return null;
-            const base = Math.max(roundUpToDime(estimatedDistanceKm.value * rate), props.minimumFare);
-            return roundUpToDime(base + applyTimeSurcharge(base));
-        })
+        .map(estimatedTotalPriceForCooperative)
         .filter((price) => Number.isFinite(price) && price > 0);
 
     return {
@@ -1161,6 +1223,7 @@ const customPrice = ref(null);
 
 const form = useForm({
     fleet_id: props.fleet.id,
+    provider_type: 'driver',
     cooperative_id: null,
     driver_user_id: WHOLE_FLEET,
     dispatch_pool: null,
@@ -1227,7 +1290,7 @@ watch(
 function selectCategory(category) {
     activeCategory.value = activeCategory.value === category ? null : category;
     driverErrorFallbackLabel.value = '';
-    form.clearErrors('driver_user_id');
+    form.clearErrors('driver_user_id', 'cooperative_id');
 }
 
 // "Ahora mismo" (default) o "programada" para una fecha/hora futura, con la
@@ -1407,14 +1470,24 @@ function changeFleet(fleetId) {
 }
 
 function submit() {
+    const cooperativeId = activeCategory.value === 'cooperative'
+        ? (selectedCooperativeId.value ?? recommendedCooperative.value?.id ?? null)
+        : null;
+
+    if (activeCategory.value === 'cooperative' && !cooperativeId) {
+        form.setError('cooperative_id', 'No hay una cooperativa disponible para esta ruta.');
+        step.value = 'driver';
+        return;
+    }
+
     form.fleet_id = props.fleet.id;
-    form.cooperative_id = selectedCooperativeId.value;
-    form.driver_user_id = selectedCooperativeId.value ? null : selectedDriverId.value;
-    // Despacho secuencial estilo Uber (pedido explícito del usuario): solo
-    // aplica cuando no se dirige a un conductor puntual — el backend arma la
-    // bolsa de candidatos (mi flota / público / ambos) y va ofreciéndoles la
-    // carrera de a uno, empezando por el más cercano.
-    form.dispatch_pool = selectedCooperativeId.value ? null : (selectedDriverId.value === WHOLE_FLEET ? sourceMode.value : null);
+    form.provider_type = cooperativeId ? 'cooperative' : 'driver';
+    form.cooperative_id = cooperativeId;
+    form.driver_user_id = cooperativeId ? null : selectedDriverId.value;
+    // También cuando el cliente elige a alguien puntual conservamos la bolsa
+    // elegida como respaldo: ese conductor recibe la primera oportunidad y,
+    // si no responde, el mismo precio pasa al siguiente candidato elegible.
+    form.dispatch_pool = cooperativeId || whenMode.value === 'scheduled' ? null : sourceMode.value;
     form.origin_lat = originLat.value;
     form.origin_lng = originLng.value;
     form.origin_address = originAddress.value;
@@ -2159,7 +2232,15 @@ function submit() {
                                     </span>
                                 </span>
                                 <span class="min-w-0">
-                                    <span class="block truncate font-medium text-arka-base">{{ cooperative.name }}</span>
+                                    <span class="flex min-w-0 items-center gap-2">
+                                        <span class="truncate font-medium text-arka-base">{{ cooperative.name }}</span>
+                                        <span
+                                            v-if="recommendedCooperative?.id === cooperative.id"
+                                            class="shrink-0 rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-arka-primary"
+                                        >
+                                            Recomendada
+                                        </span>
+                                    </span>
                                     <!-- Bug reportado por el usuario ("ese enlace no funciona"):
                                          el componente <Link> de Inertia ignora `target` y siempre
                                          intercepta el click con su propio router SPA — con eso,
@@ -2182,7 +2263,7 @@ function submit() {
                             <span class="shrink-0 text-right text-sm text-arka-base/50">{{ cooperative.active_driver_memberships_count }} unidades<br><small v-if="cooperative.distance_km != null">{{ cooperative.distance_km }} km · ~{{ Math.max(1, Math.ceil(cooperative.distance_km / 0.45)) }} min desde el origen</small></span>
                         </div>
                         <p v-if="cooperatives.length" class="text-xs text-arka-base/50">
-                            La cooperativa asigna una unidad verificada. Si no responde a tiempo, la oferta pasa a la siguiente.
+                            Dejamos seleccionada la opción recomendada por precio estimado y cercanía. Puede cambiarla antes de pedir.
                         </p>
                     </div>
 
@@ -2302,8 +2383,8 @@ function submit() {
                                      privacidad... los km cercano manejemos minutos mejor para la
                                      distancia"): nunca km exacto hasta un conductor puntual. -->
                                 <span class="text-right shrink-0">
-                                    <span v-if="estimatedPriceForDriver(driver) != null" class="block text-sm font-semibold text-arka-base">
-                                        ${{ estimatedPriceForDriver(driver).toFixed(2) }}
+                                    <span v-if="estimatedTotalPriceForDriver(driver) != null" class="block text-sm font-semibold text-arka-base">
+                                        ${{ estimatedTotalPriceForDriver(driver).toFixed(2) }}
                                     </span>
                                     <span v-if="driver.etaMinutes != null" class="block text-xs text-arka-base/50">{{ driver.etaMinutes }} min</span>
                                 </span>

@@ -14,6 +14,12 @@ const props = defineProps({
     statusBreakdown: { type: Object, required: true },
     dailyEarnings: { type: Array, required: true },
     gamification: { type: Object, required: true },
+    // Billetera cooperativa-conductor (pedido explícito del usuario: "el
+    // conductor dónde ve cuánto le debe a la cooperativa o cuánto la
+    // cooperativa le debe a él... debería estar en los indicadores del
+    // conductor") — null si no pertenece a ninguna cooperativa, mismo campo
+    // y mismo signo que ya usa Driver/Profile.vue.
+    cooperativeWallet: { type: Object, default: null },
     history: { type: Object, required: true },
 });
 
@@ -101,6 +107,26 @@ const statusSegments = computed(() => [
                     <p v-else class="mt-2 text-xs text-arka-primary-bright">
                         🏆 Ya tiene la medalla más alta — ¡siga así!
                     </p>
+                </div>
+
+                <!-- Billetera cooperativa-conductor (pedido explícito del usuario), mismo
+                     criterio que Driver/Profile.vue: con saldo 0 igual se avisa que existe
+                     la billetera, en vez de desaparecer sin ningún mensaje. -->
+                <div v-if="cooperativeWallet && cooperativeWallet.balance !== 0" class="p-4 sm:p-6 rounded-arka" :class="cooperativeWallet.balance > 0 ? 'bg-arka-warning/10' : 'bg-arka-primary/10'">
+                    <p class="text-sm font-medium" :class="cooperativeWallet.balance > 0 ? 'text-arka-warning' : 'text-arka-primary'">
+                        {{ cooperativeWallet.balance > 0
+                            ? `Le debe $${cooperativeWallet.balance.toFixed(2)} a ${cooperativeWallet.cooperative_name}`
+                            : `${cooperativeWallet.cooperative_name} le debe $${Math.abs(cooperativeWallet.balance).toFixed(2)}` }}
+                    </p>
+                    <p class="mt-1 text-xs text-arka-text-muted">
+                        {{ cooperativeWallet.balance > 0
+                            ? 'Por carreras en efectivo cuyo margen le correspondía a la cooperativa.'
+                            : 'Por carreras por transferencia cuya parte le correspondía a usted.' }}
+                    </p>
+                </div>
+                <div v-else-if="cooperativeWallet" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <p class="text-sm font-medium text-arka-text">Billetera con {{ cooperativeWallet.cooperative_name }}</p>
+                    <p class="mt-1 text-xs text-arka-text-muted">Sin saldo pendiente por ahora.</p>
                 </div>
 
                 <!-- Filtros (pedido explícito del usuario). -->

@@ -506,6 +506,8 @@ class DashboardTest extends TestCase
             'status' => 'completed',
             'completed_at' => now(),
             'price' => 15,
+            'stops_price' => 5,
+            'settled_price' => 20,
         ]);
         Ride::factory()->create([
             'driver_user_id' => $driver->id,
@@ -517,8 +519,8 @@ class DashboardTest extends TestCase
         $response = $this->actingAs($driver)->get(route('dashboard'));
 
         $response->assertInertia(fn ($page) => $page
-            ->where('driverStats.earnings_today', 15)
-            ->where('driverStats.earnings_this_month', 35)
+            ->where('driverStats.earnings_today', 20)
+            ->where('driverStats.earnings_this_month', 40)
             ->where('driverStats.completed_rides_today', 1)
             ->where('driverStats.completed_rides_this_month', 2)
             ->where('driverStats.completed_rides', 2)

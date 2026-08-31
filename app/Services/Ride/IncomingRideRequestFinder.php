@@ -85,7 +85,9 @@ class IncomingRideRequestFinder
         $ratePerKm = (float) ($driver->driverProfile?->rate_per_km ?? 0);
         $routePaddingFare = round(PriceCalculator::DISTANCE_PADDING_KM * $ratePerKm, 2);
 
-        $incoming->each(function (RideRequest $rideRequest) use ($ratings, $driver, $routePaddingFare) {
+        $comparisonService = app(RideOfferComparison::class);
+
+        $incoming->each(function (RideRequest $rideRequest) use ($ratings, $driver, $routePaddingFare, $comparisonService) {
             $rating = $ratings->get($rideRequest->client_user_id);
 
             $rideRequest->client_name = $rideRequest->client->name;
@@ -100,10 +102,11 @@ class IncomingRideRequestFinder
             // RideRequestCreator::create()) — sin esto, el conductor veía un
             // precio menor al que en realidad le corresponde por todo el
             // recorrido con paradas.
-            $rideRequest->total_offered_price = round(
-                (float) $rideRequest->current_offered_price + (float) ($rideRequest->stops_price ?? 0),
-                2
-            );
+            $rideRequest->total_offered_price = $rideRequest->clientTotalPrice();
+            $rideRequest->driver_total_offered_price = $rideRequest->driverPayEstimate();
+            $rideRequest->is_cooperative_request = $rideRequest->cooperative_id !== null;
+            $rideRequest->cooperative_driver_rate_per_km = $rideRequest->cooperative?->driver_pay_rate_per_km;
+            $rideRequest->offer_comparison = $comparisonService->forDriver($rideRequest, $driver);
         });
 
         return $incoming;

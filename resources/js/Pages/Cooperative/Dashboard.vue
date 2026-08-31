@@ -169,6 +169,11 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex flex-wrap gap-3">
                     <Link :href="route('cooperative.drivers.index')" class="rounded-full bg-arka-primary px-4 py-2 text-sm font-semibold text-arka-base">Administrar conductores</Link>
+                    <!-- Pedido explícito del usuario: "donde la cooperativa
+                         ve la trazabilidad de las carreras, cuánto hizo su
+                         equipo y cuánto le deben o cuánto ella le debe a su
+                         equipo" — antes solo se veía conductor por conductor. -->
+                    <Link :href="route('cooperative.wallet')" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Billetera y trazabilidad</Link>
                     <!-- Pedido explícito del usuario: "quiero ver mis clientes
                          vinculados... la lista, cantidad de carreras,
                          puntuaccion y desvincular". -->
@@ -201,7 +206,7 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div v-if="dispatchHelpOpen" class="absolute right-4 top-[5.5rem] z-20 w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-arka-primary/25 bg-arka-base p-4 text-xs leading-relaxed text-arka-text-muted shadow-2xl sm:right-5 sm:top-[4.75rem]">
-                                <div class="flex items-start justify-between gap-3"><div><p class="font-semibold text-arka-text">Modo de despacho</p><p class="mt-1"><strong class="text-arka-primary">Automático inteligente:</strong> compara cercanía, respuesta, calificación, cumplimiento y tiempo sin carrera dentro de esta cooperativa.</p><p class="mt-2"><strong class="text-arka-text">Manual:</strong> el operador elige una unidad; si no responde en 30 segundos, se activa el respaldo automático.</p></div><button type="button" class="text-arka-text-muted hover:text-arka-text" aria-label="Cerrar ayuda" @click="dispatchHelpOpen = false">✕</button></div>
+                                <div class="flex items-start justify-between gap-3"><div><p class="font-semibold text-arka-text">Modo de despacho</p><p class="mt-1"><strong class="text-arka-primary">Automático inteligente:</strong> compara cercanía, respuesta, calificación, cumplimiento y tiempo sin carrera dentro de esta cooperativa.</p><p class="mt-2"><strong class="text-arka-text">Manual:</strong> la solicitud llega únicamente a esta central y espera hasta que un operador elija la unidad. Ningún conductor la recibe antes.</p></div><button type="button" class="text-arka-text-muted hover:text-arka-text" aria-label="Cerrar ayuda" @click="dispatchHelpOpen = false">✕</button></div>
                             </div>
                         </div>
                         <div v-if="cooperative.stand_lat == null || cooperative.stand_lng == null" class="mx-5 mb-3 rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">Falta ubicar la base. <Link :href="route('cooperative.profile.edit')" class="font-semibold underline">Marcar ahora</Link></div>

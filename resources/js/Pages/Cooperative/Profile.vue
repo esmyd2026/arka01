@@ -15,6 +15,7 @@ const props = defineProps({
     cities: { type: Array, required: true },
     requiredDocuments: { type: Object, required: true },
     planLimits: { type: Object, required: true },
+    banks: { type: Array, default: () => [] },
 });
 
 const form = useForm({
@@ -57,6 +58,14 @@ const form = useForm({
 });
 const logoUploading = ref(false);
 const logoError = ref('');
+const bankForm = useForm({
+    account_holder_name: props.cooperative.legal_name || props.cooperative.name || '',
+    identity_number: props.cooperative.ruc || '',
+    bank_name: '',
+    account_type: 'ahorros',
+    account_number: '',
+    is_favorite: false,
+});
 const baseMarkers = computed(() => form.stand_lat !== '' && form.stand_lng !== '' ? [{
     id: 'cooperative-base', type: 'base', lat: Number(form.stand_lat), lng: Number(form.stand_lng), label: `Base · ${form.name || 'Cooperativa'}`, color: '#f59e0b',
 }] : []);
@@ -84,6 +93,21 @@ function submit(sendForReview = false) {
             });
         },
     });
+}
+
+function submitBankAccount() {
+    bankForm.post(route('cooperative.bank-accounts.store'), {
+        preserveScroll: true,
+        onSuccess: () => bankForm.reset('bank_name', 'account_type', 'account_number', 'is_favorite'),
+    });
+}
+
+function markBankAccountFavorite(account) {
+    router.patch(route('cooperative.bank-accounts.favorite', account.id), {}, { preserveScroll: true });
+}
+
+function deleteBankAccount(account) {
+    router.delete(route('cooperative.bank-accounts.destroy', account.id), { preserveScroll: true });
 }
 
 function selectStand(place) {
@@ -292,6 +316,84 @@ function uploadLogo(event) {
                         así que le queda debiendo el resto a la cooperativa. Si esa misma carrera fuera por
                         transferencia, es la cooperativa quien le debe esa parte al conductor.
                     </p>
+                </section>
+
+                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-lg font-semibold text-arka-text">Cuentas para recibir transferencias</h3>
+                            <p class="mt-1 text-sm text-arka-text-muted">
+                                En carreras de cooperativa, el cliente verá estas cuentas y podrá avisar cuando haya realizado el pago.
+                            </p>
+                        </div>
+                        <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary">
+                            {{ cooperative.bank_accounts?.length ?? 0 }} registrada(s)
+                        </span>
+                    </div>
+
+                    <div v-if="cooperative.bank_accounts?.length" class="mt-5 grid gap-3 md:grid-cols-2">
+                        <article
+                            v-for="account in cooperative.bank_accounts"
+                            :key="account.id"
+                            class="rounded-xl border p-4"
+                            :class="account.is_favorite ? 'border-arka-primary/50 bg-arka-primary/5' : 'border-arka-text-muted/15 bg-arka-base/35'"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="font-semibold text-arka-text">{{ account.bank_name }}</p>
+                                    <p class="text-xs text-arka-text-muted">{{ account.account_type === 'ahorros' ? 'Ahorros' : 'Corriente' }} · {{ account.account_number }}</p>
+                                    <p class="mt-1 text-xs text-arka-text-muted">{{ account.account_holder_name }} · {{ account.identity_number }}</p>
+                                </div>
+                                <span v-if="account.is_favorite" class="rounded-full bg-arka-primary/15 px-2 py-1 text-[10px] font-bold uppercase text-arka-primary">Principal</span>
+                            </div>
+                            <div class="mt-3 flex gap-4 border-t border-arka-text-muted/10 pt-3">
+                                <button v-if="!account.is_favorite" type="button" class="text-xs font-semibold text-arka-primary" @click="markBankAccountFavorite(account)">Usar como principal</button>
+                                <button type="button" class="text-xs font-semibold text-arka-danger" @click="deleteBankAccount(account)">Eliminar</button>
+                            </div>
+                        </article>
+                    </div>
+
+                    <form class="mt-5 border-t border-arka-text-muted/10 pt-5" @submit.prevent="submitBankAccount">
+                        <h4 class="font-semibold text-arka-text">Agregar cuenta</h4>
+                        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <InputLabel value="Titular de la cuenta" />
+                                <TextInput v-model="bankForm.account_holder_name" class="mt-1 block w-full" />
+                                <InputError class="mt-1" :message="bankForm.errors.account_holder_name" />
+                            </div>
+                            <div>
+                                <InputLabel value="RUC o identificación del titular" />
+                                <TextInput v-model="bankForm.identity_number" class="mt-1 block w-full" maxlength="20" />
+                                <InputError class="mt-1" :message="bankForm.errors.identity_number" />
+                            </div>
+                            <div>
+                                <InputLabel value="Banco o cooperativa" />
+                                <select v-model="bankForm.bank_name" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                    <option value="" disabled>Seleccione una entidad</option>
+                                    <option v-for="bank in banks" :key="bank" :value="bank">{{ bank }}</option>
+                                </select>
+                                <InputError class="mt-1" :message="bankForm.errors.bank_name" />
+                            </div>
+                            <div>
+                                <InputLabel value="Tipo de cuenta" />
+                                <select v-model="bankForm.account_type" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                    <option value="ahorros">Ahorros</option>
+                                    <option value="corriente">Corriente</option>
+                                </select>
+                                <InputError class="mt-1" :message="bankForm.errors.account_type" />
+                            </div>
+                            <div>
+                                <InputLabel value="Número de cuenta" />
+                                <TextInput v-model="bankForm.account_number" class="mt-1 block w-full" maxlength="30" />
+                                <InputError class="mt-1" :message="bankForm.errors.account_number" />
+                            </div>
+                            <label class="flex items-center gap-2 self-end pb-3 text-sm text-arka-text">
+                                <Checkbox v-model:checked="bankForm.is_favorite" />
+                                Usar como cuenta principal
+                            </label>
+                        </div>
+                        <PrimaryButton class="mt-4" :disabled="bankForm.processing">Agregar cuenta</PrimaryButton>
+                    </form>
                 </section>
 
                 <!-- Pedido explícito del usuario ("mejoremos la privacidad de

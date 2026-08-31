@@ -13,6 +13,7 @@ use App\Services\DriverCategory;
 use App\Services\PlanLimits;
 use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -134,7 +135,7 @@ class DriverClientFinder
             // vez de a esta pantalla. Se le suman los filtros actuales
             // (filter/sort) para que "Siguiente" no los pierda de paso.
             [
-                'path' => \Illuminate\Pagination\Paginator::resolveCurrentPath(),
+                'path' => Paginator::resolveCurrentPath(),
                 'query' => array_filter(['filter' => $filter, 'sort' => $sort]),
             ],
         );

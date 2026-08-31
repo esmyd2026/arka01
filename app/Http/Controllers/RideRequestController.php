@@ -218,7 +218,7 @@ class RideRequestController extends Controller
                 ->with('activeDriverMemberships.driver.driverProfile')
                 ->withCount('activeDriverMemberships')
                 ->orderBy('name')
-                ->get(['id', 'public_id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng', 'max_request_distance_km'])
+                ->get(['id', 'public_id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng', 'max_request_distance_km', 'rate_per_km', 'driver_pay_rate_per_km'])
                 ->map(function ($cooperative) use ($request) {
                     $lat = $request->query('origin_lat');
                     $lng = $request->query('origin_lng');
@@ -227,6 +227,13 @@ class RideRequestController extends Controller
                         : null;
                     $cooperative->average_rate_per_km = round((float) $cooperative->activeDriverMemberships
                         ->pluck('driver.driverProfile.rate_per_km')->filter()->avg(), 2);
+                    // Una sola tarifa para la vista y el backend. Antes la
+                    // pantalla siempre mostraba el promedio de conductores,
+                    // aunque la cooperativa ya hubiera configurado cuánto
+                    // cobra al cliente; al confirmar, el total cambiaba.
+                    $cooperative->effective_rate_per_km = $cooperative->rate_per_km !== null
+                        ? (float) $cooperative->rate_per_km
+                        : $cooperative->average_rate_per_km;
 
                     return $cooperative;
                 })

@@ -334,7 +334,7 @@ class WhatsAppFreeformSender
         // sumar stops_price el conductor aceptaba por WhatsApp creyendo que
         // era un viaje directo más barato, sin saber que había paradas.
         $stops = $rideRequest->stops()->orderBy('sequence')->get();
-        $totalPrice = round((float) $rideRequest->current_offered_price + (float) ($rideRequest->stops_price ?? 0), 2);
+        $totalPrice = $rideRequest->driverPayEstimate();
         $stopsLine = $stops->isEmpty() ? '' : 'Paradas: '.$stops->count()."\n".$stops->map(
             fn ($stop, $i) => '  '.($i + 1).'. '.($stop->address ?? 'ver en la app')
         )->implode("\n")."\n";
@@ -347,7 +347,7 @@ class WhatsAppFreeformSender
             .'Destino: '.($rideRequest->destination_address ?? 'ver en la app')."\n"
             .($tripDistanceKm !== null ? "Distancia del viaje: {$tripDistanceKm} km\n" : '')
             .($distanceKm !== null ? "Km hasta el pasajero: {$distanceKm} km\n" : '')
-            ."Valor aproximado: \${$totalPrice}\n"
+            .($rideRequest->cooperative_id ? "Pago de la cooperativa: \${$totalPrice}\n" : "Valor aproximado: \${$totalPrice}\n")
             .($secondsLeft !== null ? "⏱ Tiene {$secondsLeft} segundos para aceptar antes de que pase al siguiente conductor.\n" : '')
             ."\nAbra Arka01 para aceptarla:\n".route('rides.index')
             // Pedido explícito del usuario: un conductor puede seguir

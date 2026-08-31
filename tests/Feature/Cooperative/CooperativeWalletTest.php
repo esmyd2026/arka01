@@ -123,6 +123,44 @@ class CooperativeWalletTest extends TestCase
         $this->assertEquals(-2.0, CooperativeWalletEntry::balanceFor($cooperative->id, $driver->id));
     }
 
+    /**
+     * Bug real reportado por el usuario ("la billetera no está
+     * funcionando"): cerrar una carrera de cooperativa por "cobrar y
+     * cancelar el resto" en una parada (App\Services\Ride\RideStopCompleter)
+     * nunca pasaba por RideLifecycle::complete() — la carrera quedaba
+     * cobrada pero sin ningún movimiento de billetera.
+     */
+    public function test_completing_a_stop_with_cancel_rest_still_records_the_wallet_entry(): void
+    {
+        $cooperative = $this->cooperativeWithRates(0.50, 0.30);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $ride = $this->rideFor($cooperative, $driver, 'efectivo', 6.0);
+        $ride->update(['picked_up_at' => now()]);
+        $stop = $ride->stops()->create([
+            'sequence' => 1,
+            'lat' => 0,
+            'lng' => 0,
+            'leg_distance_km' => 1.0,
+            'leg_price' => 4.0,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($driver)
+            ->post(route('rides.stops.complete', [$ride->id, $stop->id]), ['cancel_rest' => true])
+            ->assertRedirect();
+
+        // settled_price = solo el tramo completado ($4) — el margen de la
+        // cooperativa sobre ESE monto: 4 × (1 - 0.30/0.50) = $1.60 debidos.
+        $this->assertDatabaseHas('cooperative_wallet_entries', [
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'ride_id' => $ride->id,
+            'direction' => 'driver_owes_cooperative',
+            'amount' => '1.60',
+        ]);
+    }
+
     public function test_no_wallet_entry_is_created_when_the_cooperative_has_not_configured_its_rates(): void
     {
         $cooperative = $this->cooperativeWithRates(null, null);
@@ -179,6 +217,11 @@ class CooperativeWalletTest extends TestCase
         // nunca la del conductor (0.10) — comparado contra la distancia real
         // guardada, con margen de tolerancia por el margen fijo del cálculo.
         $this->assertGreaterThan((float) $rideRequest->distance_km * 0.5, (float) $rideRequest->current_offered_price);
+        $this->assertEquals(
+            round($rideRequest->clientTotalPrice() * (0.40 / 0.75), 2),
+            $rideRequest->driverPayEstimate(),
+            'El conductor debe ver únicamente el valor que la cooperativa configuró para pagarle.'
+        );
     }
 
     /**
@@ -218,6 +261,8 @@ class CooperativeWalletTest extends TestCase
             'stand_lat' => -2.1700,
             'stand_lng' => -79.9000,
             'max_request_distance_km' => 50,
+            'rate_per_km' => 0.50,
+            'driver_pay_rate_per_km' => 0.30,
         ]);
         $cooperative->forceFill(['status' => 'approved'])->save();
 
@@ -229,7 +274,9 @@ class CooperativeWalletTest extends TestCase
             'origin_lng' => -79.9001,
         ]));
 
-        $response->assertInertia(fn ($page) => $page->has('cooperatives', 1));
+        $response->assertInertia(fn ($page) => $page
+            ->has('cooperatives', 1)
+            ->where('cooperatives.0.effective_rate_per_km', 0.5));
     }
 
     public function test_the_driver_pay_rate_cannot_exceed_the_charged_rate(): void

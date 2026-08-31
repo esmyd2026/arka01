@@ -118,13 +118,15 @@ class DashboardController extends Controller
                     ->where('driver_user_id', $userId)
                     ->where('status', 'completed')
                     ->whereDate('completed_at', today())
-                    ->sum('price'),
+                    ->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')
+                    ->value('total'),
                 'earnings_this_month' => (float) Ride::query()
                     ->where('driver_user_id', $userId)
                     ->where('status', 'completed')
                     ->whereMonth('completed_at', now()->month)
                     ->whereYear('completed_at', now()->year)
-                    ->sum('price'),
+                    ->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')
+                    ->value('total'),
                 'rating' => round((float) $user->reviewsReceived()->avg('rating'), 1),
                 'review_count' => $user->reviewsReceived()->count(),
                 // La UI recibe la misma decisión que aplica el endpoint de
@@ -424,7 +426,7 @@ class DashboardController extends Controller
                 'status' => 'pending',
                 'origin_label' => $rideRequest->originSector->name ?? $rideRequest->origin_address ?? 'Origen',
                 'destination_label' => $rideRequest->destinationSector->name ?? $rideRequest->destination_address ?? 'Destino',
-                'price' => (float) $rideRequest->current_offered_price,
+                'price' => round((float) $rideRequest->current_offered_price + (float) ($rideRequest->stops_price ?? 0), 2),
                 'counterpart_name' => $asDriver ? $rideRequest->client->name : ($rideRequest->driver->name ?? 'Toda la flota'),
                 'at' => $rideRequest->requested_at,
             ]);
@@ -441,7 +443,7 @@ class DashboardController extends Controller
                 'ride_id' => $ride->id,
                 'origin_label' => $ride->originSector->name ?? $ride->origin_address ?? 'Origen',
                 'destination_label' => $ride->destinationSector->name ?? $ride->destination_address ?? 'Destino',
-                'price' => (float) $ride->price,
+                'price' => $ride->quotedTotal(),
                 'counterpart_name' => $asDriver ? $ride->client->name : $ride->driver->name,
                 'at' => $ride->started_at,
             ]);
@@ -460,7 +462,7 @@ class DashboardController extends Controller
                 'ride_id' => $ride->id,
                 'origin_label' => $ride->originSector->name ?? $ride->origin_address ?? 'Origen',
                 'destination_label' => $ride->destinationSector->name ?? $ride->destination_address ?? 'Destino',
-                'price' => (float) $ride->price,
+                'price' => $ride->quotedTotal(),
                 'counterpart_name' => $asDriver ? $ride->client->name : $ride->driver->name,
                 'scheduled_at' => $ride->rideRequest?->scheduled_at,
                 'round_trip' => (bool) $ride->round_trip,
@@ -493,7 +495,7 @@ class DashboardController extends Controller
             ->where('driver_user_id', $userId)
             ->where('status', 'completed')
             ->where('completed_at', '>=', $since)
-            ->selectRaw('DATE(completed_at) as day, SUM(price) as total')
+            ->selectRaw('DATE(completed_at) as day, SUM('.Ride::chargedTotalSql().') as total')
             ->groupBy('day')
             ->pluck('total', 'day');
 

@@ -52,6 +52,7 @@ const dragOffset = { x: 0, y: 0 };
 // cancelar/completar carrera.
 const BUBBLE_POSITION_KEY = 'arka-radio-bubble-position-v2';
 const CHANNEL_SELECTION_KEY = `arka-radio-selected-channel-${userPublicId.value}`;
+const LAST_AUTOMATIC_RIDE_CHANNEL_KEY = `arka-radio-last-automatic-ride-channel-${userPublicId.value}`;
 
 function rememberedChannelPublicId() {
     try {
@@ -68,6 +69,19 @@ function rememberChannel(publicId) {
     } catch {
         // La selección continúa en memoria aunque el modo privado no permita
         // conservarla al navegar o recargar.
+    }
+}
+
+function shouldOpenNewRideChannel(channel) {
+    if (!channel) return false;
+
+    try {
+        const previous = window.localStorage.getItem(LAST_AUTOMATIC_RIDE_CHANNEL_KEY);
+        if (previous === channel.public_id) return false;
+        window.localStorage.setItem(LAST_AUTOMATIC_RIDE_CHANNEL_KEY, channel.public_id);
+        return true;
+    } catch {
+        return !config.value;
     }
 }
 
@@ -409,9 +423,12 @@ async function syncRadioAvailability() {
         // hacía que el selector regresara solo al canal del cliente.
         const currentChannel = activeChannels.value.find((channel) => channel.public_id === config.value?.publicId);
         const rememberedChannel = activeChannels.value.find((channel) => channel.public_id === rememberedChannelPublicId());
+        const rideChannel = activeChannels.value.find((channel) => channel.kind === 'ride');
         const ownChannel = activeChannels.value.find((channel) => channel.is_owner);
-        const selected = currentChannel
+        const selected = (shouldOpenNewRideChannel(rideChannel) ? rideChannel : null)
+            || currentChannel
             || rememberedChannel
+            || rideChannel
             || ownChannel
             || activeChannels.value[0];
 
@@ -423,6 +440,7 @@ async function syncRadioAvailability() {
             publicId: selected.public_id,
             roomId: selected.room_id,
             channelName: selected.label || 'Canal de seguridad',
+            kind: selected.kind || 'circle',
             owner: selected.owner,
             isOwner: selected.is_owner,
             inviteUrl: selected.invite_url,
@@ -772,6 +790,7 @@ async function selectChannel(channel) {
         publicId: channel.public_id,
         roomId: channel.room_id,
         channelName: channel.label || 'Canal de seguridad',
+        kind: channel.kind || 'circle',
         owner: channel.owner,
         isOwner: channel.is_owner,
         inviteUrl: channel.invite_url,
@@ -976,7 +995,9 @@ onBeforeUnmount(() => {
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <p class="truncate font-semibold text-arka-text">{{ config.channelName }}</p>
-                                    <p class="mt-1 text-xs text-arka-text-muted">{{ config.isOwner ? 'Tu círculo de seguridad' : `Canal de ${config.owner.name}` }}</p>
+                                    <p class="mt-1 text-xs text-arka-text-muted">
+                                        {{ config.kind === 'ride' ? 'Canal privado entre cliente y conductor' : (config.isOwner ? 'Tu círculo de seguridad' : `Canal de ${config.owner.name}`) }}
+                                    </p>
                                 </div>
                                 <span class="shrink-0 rounded-full bg-arka-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-arka-primary">{{ ridePhase === 'searching' ? 'Solicitando' : 'En carrera' }}</span>
                             </div>

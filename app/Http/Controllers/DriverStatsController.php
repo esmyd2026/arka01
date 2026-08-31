@@ -44,6 +44,7 @@ class DriverStatsController extends Controller
             'statusBreakdown' => $data['statusBreakdown'],
             'dailyEarnings' => $data['dailyEarnings'],
             'gamification' => $data['gamification'],
+            'cooperativeWallet' => $data['cooperativeWallet'],
             'history' => $data['history']->withQueryString(),
         ]);
     }

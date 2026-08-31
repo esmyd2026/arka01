@@ -229,29 +229,7 @@ class RideLifecycle
 
         DriverProfile::where('user_id', $ride->driver_user_id)->increment('total_points', $pointsEarned);
 
-        // Billetera cooperativa-conductor (pedido explícito del usuario):
-        // solo si la cooperativa configuró sus dos tarifas — mientras no lo
-        // haga, no hay margen que repartir, así que no se genera nada. El
-        // conductor gana una proporción fija del precio final (pedido
-        // explícito del usuario: "proporcional al precio final cobrado" —
-        // si hubo recargo nocturno/pico o se aplicó la tarifa mínima, esa
-        // proporción se mantiene, no un monto fijo por km).
-        $cooperative = $ride->rideRequest?->cooperative;
-        if ($cooperative && $cooperative->rate_per_km && $cooperative->driver_pay_rate_per_km) {
-            $driverShareRatio = min(1.0, (float) $cooperative->driver_pay_rate_per_km / (float) $cooperative->rate_per_km);
-            $driverPay = round($settledPrice * $driverShareRatio, 2);
-            // El conductor cobró TODO en efectivo, pero solo le
-            // correspondía $driverPay — le debe a la cooperativa el resto.
-            // Por transferencia es al revés: la cooperativa se quedó con
-            // todo, le debe al conductor su parte ($driverPay).
-            CooperativeWalletEntry::create([
-                'cooperative_id' => $cooperative->id,
-                'driver_user_id' => $ride->driver_user_id,
-                'ride_id' => $ride->id,
-                'direction' => $ride->payment_method === 'efectivo' ? 'driver_owes_cooperative' : 'cooperative_owes_driver',
-                'amount' => $ride->payment_method === 'efectivo' ? round($settledPrice - $driverPay, 2) : $driverPay,
-            ]);
-        }
+        $this->recordCooperativeWalletEntry($ride, $settledPrice);
 
         broadcast(new RideCompleted($ride))->toOthers();
 
@@ -259,6 +237,41 @@ class RideLifecycle
 
         $ride->client->notify(new RideCompletedPushNotification($ride));
         WhatsAppFreeformSender::sendRideCompletedToClient($ride);
+    }
+
+    /**
+     * Billetera cooperativa-conductor (pedido explícito del usuario): solo
+     * si la cooperativa configuró sus dos tarifas — mientras no lo haga, no
+     * hay margen que repartir, así que no se genera nada. El conductor gana
+     * una proporción fija del precio final (pedido explícito del usuario:
+     * "proporcional al precio final cobrado" — si hubo recargo nocturno/pico
+     * o se aplicó la tarifa mínima, esa proporción se mantiene, no un monto
+     * fijo por km). Público y extraído acá (antes vivía inline en
+     * complete()) para que RideStopCompleter::complete() también lo llame —
+     * bug real reportado por el usuario: cerrar la carrera por "cobrar y
+     * cancelar el resto" en una parada NUNCA pasaba por complete(), así que
+     * esas carreras se quedaban sin ningún movimiento de billetera.
+     */
+    public function recordCooperativeWalletEntry(Ride $ride, float $settledPrice): void
+    {
+        $cooperative = $ride->rideRequest?->cooperative;
+        if (! $cooperative || ! $cooperative->rate_per_km || ! $cooperative->driver_pay_rate_per_km) {
+            return;
+        }
+
+        $driverShareRatio = min(1.0, (float) $cooperative->driver_pay_rate_per_km / (float) $cooperative->rate_per_km);
+        $driverPay = round($settledPrice * $driverShareRatio, 2);
+        // El conductor cobró TODO en efectivo, pero solo le correspondía
+        // $driverPay — le debe a la cooperativa el resto. Por transferencia
+        // es al revés: la cooperativa se quedó con todo, le debe al
+        // conductor su parte ($driverPay).
+        CooperativeWalletEntry::create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $ride->driver_user_id,
+            'ride_id' => $ride->id,
+            'direction' => $ride->payment_method === 'efectivo' ? 'driver_owes_cooperative' : 'cooperative_owes_driver',
+            'amount' => $ride->payment_method === 'efectivo' ? round($settledPrice - $driverPay, 2) : $driverPay,
+        ]);
     }
 
     public function cancel(Ride $ride, User $actingUser, string $reason, ?string $note): void

@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
-import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -148,15 +147,20 @@ const toggleRequests = (memberId) => {
 };
 
 const CATEGORY_LABELS = {
-    diamante: '💎 Diamante',
-    oro: '🥇 Oro',
-    plata: '🥈 Plata',
-    cobre: '🥉 Cobre',
+    diamante: 'Diamante',
+    oro: 'Oro',
+    plata: 'Plata',
+    cobre: 'Cobre',
 };
 
 function formatLastRide(iso) {
     if (!iso) return 'Todavía no le hice ninguna carrera';
     return `Última carrera: ${new Date(iso).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+function formatJoinedAt(iso) {
+    if (!iso) return 'Cliente de confianza';
+    return `En su cartera desde ${new Date(iso).toLocaleDateString('es-EC', { month: 'short', year: 'numeric' })}`;
 }
 
 // Filtros + orden de "Flotas a las que pertenecés" (pedido explícito del
@@ -430,22 +434,31 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                     </ul>
                 </div>
 
-                <!-- Flotas a las que ya pertenezco -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
-                    <h3 class="text-lg font-medium text-arka-text mb-4">
-                        Flotas a las que pertenecés ({{ activeMembershipStats.total }})
-                    </h3>
+                <!-- Cartera activa. Sigue el mismo patrón visual de las
+                     tarjetas de conductores que ve el cliente: identidad,
+                     indicadores comparables y acciones claras. -->
+                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow sm:p-6">
+                    <div class="mb-4 flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-arka-primary">Su cartera</p>
+                            <h3 class="mt-1 text-lg font-semibold text-arka-text">Clientes de confianza</h3>
+                            <p class="mt-1 text-xs text-arka-text-muted">Revise su historial y las conexiones que respaldan cada relación.</p>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-arka-primary/10 px-2.5 py-1 text-xs font-semibold text-arka-primary-bright">
+                            {{ activeMembershipStats.total }} cliente{{ activeMembershipStats.total === 1 ? '' : 's' }}
+                        </span>
+                    </div>
 
                     <!-- Contadores + filtro (pedido explícito del usuario:
                          "indicale cuántos tiene, nuevos, con carreras, sin
                          carrera") — cada chip filtra al tocarlo, sobre el
                          total sin filtrar así los números no se mueven solos. -->
-                    <div class="flex flex-wrap items-center gap-2 mb-4">
+                    <div class="mb-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <button
                             v-for="chip in FILTER_CHIPS"
                             :key="chip.value"
                             type="button"
-                            class="px-3 py-1.5 rounded-full text-xs font-medium transition"
+                            class="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition"
                             :class="
                                 membershipQuery.filter === chip.value
                                     ? 'bg-arka-primary/15 text-arka-primary-bright'
@@ -456,17 +469,17 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             {{ chip.label }} ({{ activeMembershipStats[chip.value === 'todos' ? 'total' : chip.value] }})
                         </button>
 
-                        <!-- Orden (pedido explícito del usuario: "ordénala de
-                             manera descendente") — ambas opciones ya son
-                             descendentes de por sí (más reciente primero,
-                             más carreras primero), solo cambia el criterio. -->
+                    </div>
+
+                    <div class="mb-4 flex items-center justify-between gap-3 rounded-xl border border-arka-text-muted/10 bg-arka-base/45 px-3 py-2">
+                        <span class="text-xs text-arka-text-muted">Ordenar clientes</span>
                         <select
                             v-model="membershipQuery.sort"
-                            class="ms-auto rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text text-xs py-1.5"
+                            class="rounded-lg border-arka-text-muted/20 bg-arka-card py-1.5 pe-8 ps-3 text-xs text-arka-text"
                             @change="applyMembershipQuery"
                         >
-                            <option value="recientes">Más recientes</option>
-                            <option value="carreras">Más carreras</option>
+                            <option value="recientes">Actividad reciente</option>
+                            <option value="carreras">Más carreras juntos</option>
                         </select>
                     </div>
 
@@ -474,78 +487,92 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         {{ activeMembershipStats.total === 0 ? 'Todavía no formás parte de ninguna flota.' : 'Ningún cliente coincide con este filtro.' }}
                     </p>
 
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="grid gap-3 sm:grid-cols-2">
                         <li
                             v-for="member in activeMemberships.data"
                             :key="member.id"
-                            class="py-3 flex flex-col flex-wrap sm:flex-row sm:items-center justify-between gap-3"
+                            class="group relative overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base p-4 shadow-sm transition duration-200 hover:border-arka-primary/35 hover:shadow-lg hover:shadow-black/10"
                         >
-                            <div class="flex items-center gap-3 min-w-0">
-                                <!-- Pedido explícito del usuario: "quiero ver
-                                     el detalle de mi cliente" — mismo perfil
-                                     público que ya existe para cualquier
-                                     usuario logueado (Profile/Show.vue, sección
-                                     3.6), sin tener que ser admin para verlo. -->
+                            <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-arka-primary/50 to-transparent opacity-0 transition group-hover:opacity-100"></div>
+
+                            <div class="flex min-w-0 items-start gap-3">
                                 <Link :href="route('profiles.show', member.fleet.owner.public_id)" class="shrink-0">
-                                    <UserAvatar :user="member.fleet.owner" size-class="h-12 w-12 text-base" />
+                                    <UserAvatar :user="member.fleet.owner" size-class="h-14 w-14 text-base ring-2 ring-arka-primary/15" />
                                 </Link>
-                                <div class="min-w-0">
-                                    <p class="text-arka-text font-medium flex items-center gap-2 flex-wrap">
-                                        <Link :href="route('profiles.show', member.fleet.owner.public_id)" class="hover:text-arka-primary-bright">
-                                            {{ member.fleet.owner.name }}
-                                        </Link>
-                                        <span v-if="member.client_review_count > 0" class="text-xs text-arka-lime">
-                                            ★ {{ member.client_rating.toFixed(1) }}
-                                        </span>
-                                        <span v-else class="text-xs text-arka-text-muted">Sin calificaciones</span>
-                                        <span class="text-xs">{{ CATEGORY_LABELS[member.client_category] }}</span>
-                                        <span
-                                            v-if="member.mutual_clients_count > 0"
-                                            class="inline-flex items-center gap-1 rounded-full bg-arka-primary/10 px-2 py-0.5 text-xs font-semibold text-arka-primary"
-                                        >
-                                            {{ member.mutual_clients_count }} en común
-                                        </span>
+                                <div class="min-w-0 flex-1">
+                                    <Link :href="route('profiles.show', member.fleet.owner.public_id)" class="block truncate font-semibold text-arka-text hover:text-arka-primary-bright">
+                                        {{ member.fleet.owner.name }}
+                                    </Link>
+                                    <p class="mt-0.5 truncate text-xs text-arka-text-muted">
+                                        <span v-if="member.fleet.owner.username">@{{ member.fleet.owner.username }}</span>
+                                        <span v-if="member.fleet.owner.username && member.fleet.owner.member_code"> · </span>
+                                        <span v-if="member.fleet.owner.member_code">Socio #{{ member.fleet.owner.member_code }}</span>
                                     </p>
-                                    <p class="text-sm text-arka-text-muted">
-                                        {{ member.rides_together_count }} carrera(s) hecha(s)
-                                    </p>
-                                    <p class="text-xs text-arka-text-muted">{{ formatLastRide(member.last_ride_at) }}</p>
-                                    <button
-                                        type="button"
-                                        class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
-                                        :aria-expanded="openMembership === member.id"
-                                        @click="openMembership = openMembership === member.id ? null : member.id"
-                                    >
-                                        {{ openMembership === member.id ? 'Ocultar relaciones' : 'Ver perfil y relaciones' }}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="mt-1 text-xs"
-                                        :class="member.requests_disabled ? 'text-arka-warning' : 'text-arka-primary hover:text-arka-primary-bright'"
-                                        @click="toggleRequests(member.id)"
-                                    >
-                                        {{ member.requests_disabled ? 'Solicitudes deshabilitadas — toque para habilitar' : 'Deshabilitar solicitudes' }}
-                                    </button>
+                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                        <span class="rounded-full bg-arka-primary/10 px-2 py-0.5 text-[10px] font-semibold text-arka-primary-bright">Cliente</span>
+                                        <span class="rounded-full border border-arka-text-muted/15 px-2 py-0.5 text-[10px] font-medium text-arka-text-muted">
+                                            {{ CATEGORY_LABELS[member.client_category] }}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
+
+                            <TrustScoreBadge :trust="member.trust" class="mt-3 max-w-full" />
+
+                            <div class="mt-3 grid grid-cols-3 divide-x divide-arka-text-muted/10 rounded-xl border border-arka-text-muted/10 bg-arka-card/70 py-3 text-center">
+                                <div class="px-1">
+                                    <p class="text-sm font-semibold text-arka-text">{{ member.client_review_count > 0 ? member.client_rating.toFixed(1) : '—' }}</p>
+                                    <p class="mt-0.5 text-[9px] uppercase tracking-wide text-arka-text-muted">Calificación</p>
+                                </div>
+                                <div class="px-1">
+                                    <p class="text-sm font-semibold text-arka-text">{{ member.rides_together_count }}</p>
+                                    <p class="mt-0.5 text-[9px] uppercase tracking-wide text-arka-text-muted">Carreras</p>
+                                </div>
+                                <div class="px-1">
+                                    <p class="text-sm font-semibold text-arka-text">{{ member.mutual_clients_count }}</p>
+                                    <p class="mt-0.5 text-[9px] uppercase tracking-wide text-arka-text-muted">En común</p>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 flex items-center justify-between gap-2 text-[11px]">
+                                <span class="truncate text-arka-text-muted">{{ formatLastRide(member.last_ride_at) }}</span>
+                                <span
+                                    class="shrink-0 rounded-full px-2 py-1 font-medium"
+                                    :class="member.requests_disabled ? 'bg-arka-warning/10 text-arka-warning' : 'bg-arka-primary/10 text-arka-primary-bright'"
+                                >
+                                    {{ member.requests_disabled ? 'Pausado' : 'Solicitudes activas' }}
+                                </span>
+                            </div>
+
+                            <div class="mt-4 grid grid-cols-2 gap-2">
                                 <Link
                                     :href="route('profiles.show', member.fleet.owner.public_id)"
-                                    class="inline-flex min-h-10 items-center rounded-xl border border-arka-primary/30 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-arka-primary-bright hover:bg-arka-primary/10"
+                                    class="inline-flex min-h-10 items-center justify-center rounded-xl bg-arka-primary px-3 py-2 text-center text-xs font-semibold text-arka-base transition hover:bg-arka-primary-bright"
                                 >
                                     Ver perfil
                                 </Link>
-                                <DangerButton @click="leave(member.id)">No es mi cliente</DangerButton>
+                                <button
+                                    type="button"
+                                    class="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-arka-primary/30 px-3 py-2 text-xs font-semibold text-arka-primary-bright transition hover:bg-arka-primary/10"
+                                    :aria-expanded="openMembership === member.id"
+                                    @click="openMembership = openMembership === member.id ? null : member.id"
+                                >
+                                    {{ openMembership === member.id ? 'Cerrar detalle' : 'Ver relaciones' }}
+                                    <svg class="h-3.5 w-3.5 fill-none stroke-current transition-transform" :class="{ 'rotate-180': openMembership === member.id }" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                                </button>
                             </div>
 
                             <div
                                 v-if="openMembership === member.id"
-                                class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:basis-full"
+                                class="mt-4 rounded-xl border border-arka-primary/15 bg-arka-card/75 p-3"
                             >
-                                <!-- Pedido explícito del usuario: mismos datos concretos que
-                                     en "Invitaciones recibidas" — carreras, conductores,
-                                     en común, círculo y el índice de confianza como %. -->
-                                <TrustScoreBadge :trust="member.trust" />
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-semibold text-arka-text">Detalle de confianza</p>
+                                        <p class="mt-0.5 text-[11px] text-arka-text-muted">{{ formatJoinedAt(member.joined_at) }}</p>
+                                    </div>
+                                    <span class="text-xs font-semibold text-arka-primary-bright">{{ member.trust?.score ?? 0 }}%</span>
+                                </div>
                                 <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                     <div class="rounded-lg bg-arka-card p-2.5">
                                         <p class="text-[10px] text-arka-text-muted">Carreras</p>
@@ -565,7 +592,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                     </div>
                                 </div>
                                 <p class="mt-3 text-xs font-semibold text-arka-text">
-                                    {{ member.mutual_clients_count > 0 ? `${member.mutual_clients_count} cliente${member.mutual_clients_count === 1 ? '' : 's'} en común` : 'Todavía no tienen clientes en común' }}
+                                    {{ member.mutual_clients_count > 0 ? 'Personas de su cartera que también lo conocen' : 'Aún no tienen personas de confianza en común' }}
                                 </p>
                                 <div v-if="member.mutual_clients_count > 0" class="mt-3 flex flex-wrap gap-2">
                                     <Link
@@ -577,6 +604,30 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         <UserAvatar :user="person" size-class="h-7 w-7 shrink-0 text-[10px]" />
                                         <span class="max-w-36 truncate text-xs font-medium text-arka-text">{{ person.name }}</span>
                                     </Link>
+                                </div>
+
+                                <!-- Las acciones administrativas quedan en el
+                                     detalle, lejos del CTA principal, para
+                                     evitar que el conductor quite a alguien
+                                     por error al recorrer la lista. -->
+                                <div class="mt-4 border-t border-arka-text-muted/10 pt-3">
+                                    <button
+                                        type="button"
+                                        class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-medium transition hover:bg-arka-base/60"
+                                        :class="member.requests_disabled ? 'text-arka-primary-bright' : 'text-arka-text-muted'"
+                                        @click="toggleRequests(member.id)"
+                                    >
+                                        <span>{{ member.requests_disabled ? 'Volver a recibir sus solicitudes' : 'Pausar solicitudes de este cliente' }}</span>
+                                        <span aria-hidden="true">→</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-medium text-red-400 transition hover:bg-red-500/10"
+                                        @click="leave(member.id)"
+                                    >
+                                        <span>Quitar de mis clientes</span>
+                                        <span aria-hidden="true">→</span>
+                                    </button>
                                 </div>
                             </div>
                         </li>
@@ -603,7 +654,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             Siguiente &rarr;
                         </Link>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </AuthenticatedLayout>

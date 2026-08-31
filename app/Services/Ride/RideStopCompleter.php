@@ -21,6 +21,8 @@ use Illuminate\Validation\ValidationException;
  */
 class RideStopCompleter
 {
+    public function __construct(private readonly RideLifecycle $rideLifecycle) {}
+
     public function complete(
         Ride $ride,
         RideStop $stop,
@@ -82,14 +84,21 @@ class RideStopCompleter
                 ->whereNotIn('status', ['completed', 'cancelled'])
                 ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
 
+            $settledPrice = (float) $ride->stops()->where('status', 'completed')->sum('leg_price');
             $ride->update([
                 'status' => 'completed',
                 'completed_at' => now(),
-                'settled_price' => $ride->stops()->where('status', 'completed')->sum('leg_price'),
+                'settled_price' => $settledPrice,
                 'points_earned' => $ride->distance_km >= 5 ? 2 : 1,
             ]);
 
             DriverProfile::where('user_id', $ride->driver_user_id)->increment('total_points', $ride->points_earned);
+            // Bug real reportado por el usuario ("la billetera no está
+            // funcionando"): este cierre anticipado (cobrar y cancelar el
+            // resto) nunca pasaba por RideLifecycle::complete(), así que
+            // esas carreras de cooperativa se quedaban sin ningún
+            // movimiento de billetera aunque sí quedaran cobradas.
+            $this->rideLifecycle->recordCooperativeWalletEntry($ride, $settledPrice);
             broadcast(new RideCompleted($ride))->toOthers();
             RideDispatchAdvancer::activateNextWaitingRequest();
             $ride->client->notify(new RideCompletedPushNotification($ride));

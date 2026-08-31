@@ -15,6 +15,7 @@ use App\Models\RideRequest;
 use App\Models\User;
 use App\Notifications\RideRequestedPushNotification;
 use App\Notifications\RideRequestExpiredPushNotification;
+use App\Services\Ride\RideOfferComparison;
 use App\Services\RideDispatchAdvancer;
 use App\Services\RideDispatchCandidates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -141,6 +142,54 @@ class SequentialDispatchTest extends TestCase
 
         Queue::assertPushed(ExpireRideOffer::class, fn (ExpireRideOffer $job) => $job->rideRequestId === $rideRequest->id
             && $job->expectedCurrentDriverId === $near->id);
+    }
+
+    public function test_a_chosen_driver_falls_back_without_changing_the_clients_total(): void
+    {
+        Queue::fake();
+        Notification::fake();
+
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $chosen = $this->driverAt($fleet, $client, -0.1810, -78.4680, ['rate_per_km' => 0.55]);
+        $fallback = $this->driverAt($fleet, $client, -0.1820, -78.4690, ['rate_per_km' => 0.35]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'driver_user_id' => $chosen->id,
+            'dispatch_pool' => 'fleet',
+            'origin_lat' => -0.1807,
+            'origin_lng' => -78.4678,
+            'destination_lat' => -0.2000,
+            'destination_lng' => -78.5000,
+            'route_distance_km' => 5,
+            'stops' => [[
+                'lat' => -0.1900,
+                'lng' => -78.4800,
+                'address' => 'Parada 1',
+                'route_distance_km' => 3,
+            ]],
+        ])->assertRedirect();
+
+        $rideRequest = RideRequest::query()->where('client_user_id', $client->id)->firstOrFail();
+        $initialFinalPrice = (float) $rideRequest->current_offered_price;
+        $initialStopsPrice = (float) $rideRequest->stops_price;
+
+        $this->assertSame($chosen->id, $rideRequest->price_reference_driver_user_id);
+        $this->assertContains($fallback->id, $rideRequest->offer_candidate_ids);
+
+        RideDispatchAdvancer::advanceOrExpire($rideRequest->id, $chosen->id);
+
+        $advanced = $rideRequest->fresh('stops');
+        $this->assertSame($fallback->id, $advanced->driver_user_id);
+        $this->assertSame($initialFinalPrice, (float) $advanced->current_offered_price);
+        $this->assertSame($initialStopsPrice, (float) $advanced->stops_price);
+
+        $comparison = app(RideOfferComparison::class)->forDriver($advanced, $fallback);
+        $this->assertTrue($comparison['uses_another_driver_price']);
+        $this->assertSame(
+            round($initialFinalPrice + $initialStopsPrice, 2),
+            $comparison['locked_total'],
+        );
     }
 
     public function test_smart_dispatch_only_reorders_eligible_drivers_inside_the_selected_pool(): void
@@ -479,6 +528,7 @@ class SequentialDispatchTest extends TestCase
 
         $this->actingAs($client)->post(route('ride-requests.store'), $payload)->assertRedirect();
         $older = RideRequest::query()->where('client_user_id', $client->id)->firstOrFail();
+        $olderInitialPrice = (float) $older->current_offered_price;
         $older->update(['requested_at' => now()->subMinutes(5)]);
 
         // La plataforma prohíbe dos solicitudes inmediatas del mismo
@@ -494,6 +544,7 @@ class SequentialDispatchTest extends TestCase
 
         $this->assertSame('pending', $older->fresh()->status);
         $this->assertSame($driver->id, $older->fresh()->driver_user_id);
+        $this->assertSame($olderInitialPrice, (float) $older->fresh()->current_offered_price);
         $this->assertNotNull($older->fresh()->current_offer_expires_at);
         $this->assertSame('waiting', $newer->fresh()->status);
 

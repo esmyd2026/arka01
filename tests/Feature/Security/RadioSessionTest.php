@@ -113,7 +113,7 @@ class RadioSessionTest extends TestCase
         $this->actingAs($relative)->getJson(route('radio.status'))->assertExactJson(['enabled' => false]);
     }
 
-    public function test_driver_uses_their_own_circle_after_accepting_not_the_clients_channel(): void
+    public function test_client_and_driver_receive_the_same_private_ride_channel_plus_their_own_circles(): void
     {
         $client = User::factory()->create();
         $driver = User::factory()->create();
@@ -130,9 +130,18 @@ class RadioSessionTest extends TestCase
             'status' => 'in_progress',
         ]);
 
-        $clientRoom = $this->actingAs($client)->getJson(route('radio.status'))->assertJson(['is_owner' => true])->json('room_id');
-        $driverRoom = $this->actingAs($driver)->getJson(route('radio.status'))->assertJson(['is_owner' => true])->json('room_id');
-        $this->assertNotSame($clientRoom, $driverRoom);
+        $clientStatus = $this->actingAs($client)->getJson(route('radio.status'))
+            ->assertJson(['enabled' => true, 'kind' => 'ride']);
+        $driverStatus = $this->actingAs($driver)->getJson(route('radio.status'))
+            ->assertJson(['enabled' => true, 'kind' => 'ride']);
+
+        $this->assertSame($clientStatus->json('room_id'), $driverStatus->json('room_id'));
+        $this->assertSame('Hablar con '.$driver->full_name, $clientStatus->json('label'));
+        $this->assertSame('Hablar con '.$client->full_name, $driverStatus->json('label'));
+        $this->assertCount(2, $clientStatus->json('channels'));
+        $this->assertCount(2, $driverStatus->json('channels'));
+        $this->assertTrue(collect($clientStatus->json('channels'))->contains(fn ($channel) => $channel['kind'] === 'circle' && $channel['is_owner']));
+        $this->assertTrue(collect($driverStatus->json('channels'))->contains(fn ($channel) => $channel['kind'] === 'circle' && $channel['is_owner']));
     }
 
     public function test_user_cannot_request_a_channel_they_have_not_joined(): void

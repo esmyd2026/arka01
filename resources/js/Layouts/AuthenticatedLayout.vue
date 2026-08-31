@@ -18,7 +18,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush, syncGrantedPushSubscription } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
 import { armAudioUnlockOnFirstInteraction, configureNotificationSounds, playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime, unlockAudioContext } from '@/Utils/liveAlert';
-import { dismissIncomingRideRequest, pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
+import { dismissIncomingRideRequest, pushIncomingRideRequest, reconcileIncomingRideRequests } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { resetStartupSplash } from '@/Utils/startupSplash';
@@ -333,6 +333,7 @@ async function syncIncomingRidesGlobally() {
         const nextIds = new Set(pending.map((request) => request.id));
         const missed = pending.find((request) => !knownIncomingRideIds.has(request.id));
 
+        reconcileIncomingRideRequests(nextIds);
         knownIncomingRideIds = nextIds;
 
         if (missed && pushIncomingRideRequest(missed)) {

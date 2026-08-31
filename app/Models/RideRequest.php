@@ -28,6 +28,7 @@ class RideRequest extends Model
         'express_route_id',
         'client_user_id',
         'driver_user_id',
+        'price_reference_driver_user_id',
         'origin_lat',
         'origin_lng',
         'origin_address',
@@ -101,6 +102,11 @@ class RideRequest extends Model
     public function cooperative(): BelongsTo
     {
         return $this->belongsTo(Cooperative::class);
+    }
+
+    public function priceReferenceDriver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'price_reference_driver_user_id');
     }
 
     /**
@@ -207,6 +213,29 @@ class RideRequest extends Model
     public function isSequentialDispatch(): bool
     {
         return ! is_null($this->dispatch_pool);
+    }
+
+    /** Total confirmado por el cliente, incluyendo todas las paradas. */
+    public function clientTotalPrice(): float
+    {
+        return round((float) $this->current_offered_price + (float) ($this->stops_price ?? 0), 2);
+    }
+
+    /**
+     * Valor que la cooperativa pagará al conductor. La tarifa al cliente y
+     * la tarifa del conductor son contratos distintos; el conductor nunca
+     * debe ver como ganancia el margen que pertenece a la cooperativa.
+     */
+    public function driverPayEstimate(): float
+    {
+        $cooperative = $this->cooperative;
+        if (! $cooperative?->rate_per_km || ! $cooperative?->driver_pay_rate_per_km) {
+            return $this->clientTotalPrice();
+        }
+
+        $ratio = min(1.0, (float) $cooperative->driver_pay_rate_per_km / (float) $cooperative->rate_per_km);
+
+        return round($this->clientTotalPrice() * $ratio, 2);
     }
 
     /**

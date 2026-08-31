@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
+import axios from 'axios';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
@@ -14,6 +15,7 @@ import { dismissIncomingRideRequest, incomingRideRequestState } from '@/Utils/in
 const current = computed(() => incomingRideRequestState.queue[0] ?? null);
 const show = computed(() => current.value !== null);
 const processing = ref(false);
+const actionError = ref('');
 
 // Bug real reportado por el usuario (con captura): decía "📅 Programada"
 // pero nunca la hora — mismo formato que ya usa Ride/Index.vue.
@@ -26,8 +28,20 @@ const nowFast = ref(Date.now());
 let clock = null;
 onMounted(() => {
     clock = setInterval(() => (nowFast.value = Date.now()), 1000);
+    window.addEventListener('arka:ride-request-answered', handleAnsweredLocally);
 });
-onBeforeUnmount(() => clearInterval(clock));
+onBeforeUnmount(() => {
+    clearInterval(clock);
+    window.removeEventListener('arka:ride-request-answered', handleAnsweredLocally);
+});
+
+function handleAnsweredLocally(event) {
+    const id = Number(event.detail?.id);
+    if (!id) return;
+
+    dismissIncomingRideRequest(id);
+    processing.value = false;
+}
 
 const secondsLeft = computed(() => {
     if (!current.value?.current_offer_expires_at) return null;
@@ -59,35 +73,50 @@ function accept() {
 
     router.post(route('ride-requests.accept', id), {}, {
         preserveScroll: true,
-        onFinish: () => {
-            processing.value = false;
-            dismissIncomingRideRequest(id);
-        },
-    });
-}
-
-function discard() {
-    if (!current.value || processing.value) return;
-    processing.value = true;
-    const id = current.value.id;
-
-    // Rechazar solo tiene sentido si la solicitud viene dirigida a mí (sección
-    // 3.5) — acá SIEMPRE es así: este modal solo escucha el canal personal
-    // (App.Models.User.{id}), y tanto una dirigida a propósito como el turno
-    // actual del despacho secuencial dejan driver_user_id en mí.
-    router.post(route('ride-requests.reject', id), {}, {
-        preserveScroll: true,
         onSuccess: () => {
             dismissIncomingRideRequest(id);
-            // `broadcast(...)->toOthers()` no vuelve a la misma pestaña que
-            // hizo el POST. Avisamos al Dashboard local para que quite su
-            // tarjeta y contador sin esperar una recarga.
             window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
         },
         onFinish: () => {
             processing.value = false;
         },
     });
+}
+
+async function discard() {
+    if (!current.value || processing.value) return;
+    processing.value = true;
+    actionError.value = '';
+    const id = current.value.id;
+
+    // Rechazar solo tiene sentido si la solicitud viene dirigida a mí (sección
+    // 3.5) — acá SIEMPRE es así: este modal solo escucha el canal personal
+    // (App.Models.User.{id}), y tanto una dirigida a propósito como el turno
+    // actual del despacho secuencial dejan driver_user_id en mí.
+    try {
+        // Se usa una petición AJAX deliberadamente: si el turno de esta oferta
+        // venció justo antes del toque, el backend responde 403/409 porque ya
+        // pertenece al siguiente conductor. Inertia interpretaba esa respuesta
+        // como una navegación y reemplazaba toda la app por la pantalla 403.
+        await axios.post(route('ride-requests.reject', id));
+
+        dismissIncomingRideRequest(id);
+        window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
+    } catch (error) {
+        const status = Number(error.response?.status ?? 0);
+
+        if ([403, 404, 409, 422].includes(status)) {
+            // Oferta vencida, reasignada o ya respondida: quitar solamente la
+            // tarjeta local. No debilitamos la autorización del servidor ni
+            // alteramos la solicitud que ahora puede pertenecer a otra persona.
+            dismissIncomingRideRequest(id);
+            window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
+        } else {
+            actionError.value = 'No pudimos descartar la solicitud. Revise su conexión e inténtelo nuevamente.';
+        }
+    } finally {
+        processing.value = false;
+    }
 }
 </script>
 
@@ -130,7 +159,10 @@ function discard() {
                          conductor veía menos de lo que en realidad le
                          corresponde por todo el recorrido con paradas. -->
                     <p class="text-3xl font-bold leading-none text-arka-primary-bright">
-                        ${{ Number(current.total_offered_price ?? current.current_offered_price).toFixed(2) }}
+                        ${{ Number(current.driver_total_offered_price ?? current.total_offered_price ?? current.current_offered_price).toFixed(2) }}
+                    </p>
+                    <p v-if="current.is_cooperative_request" class="mt-1 text-xs font-medium text-arka-primary-bright">
+                        Pago de la cooperativa por esta carrera
                     </p>
                     <p class="mt-1 text-xs text-arka-text-muted">
                         {{ Number(current.distance_km).toFixed(1) }} km<span v-if="current.stops?.length"> + {{ current.stops.length }} parada{{ current.stops.length === 1 ? '' : 's' }}</span> · <span class="capitalize">{{ current.payment_method ?? 'efectivo' }}</span>
@@ -140,6 +172,28 @@ function discard() {
                     :class="secondsLeft <= 10 ? 'border-arka-danger/40 text-arka-danger' : 'border-arka-warning/40 text-arka-warning'">
                     {{ secondsLeft }}s
                 </div>
+            </div>
+
+            <div
+                v-if="current.offer_comparison?.uses_another_driver_price"
+                class="mt-3 rounded-xl border border-arka-primary/20 bg-arka-base/45 px-3 py-2.5"
+            >
+                <p class="text-xs font-semibold text-arka-text">Oferta inicial conservada</p>
+                <p class="mt-0.5 text-xs text-arka-text-muted">
+                    El cliente confirmó este total con otro conductor. Usted decide si le conviene.
+                </p>
+                <p
+                    class="mt-1 text-sm font-semibold"
+                    :class="Number(current.offer_comparison.difference) >= 0 ? 'text-arka-primary-bright' : 'text-arka-warning'"
+                >
+                    <template v-if="Number(current.offer_comparison.difference) > 0">
+                        +${{ Number(current.offer_comparison.difference).toFixed(2) }} sobre su tarifa estimada
+                    </template>
+                    <template v-else-if="Number(current.offer_comparison.difference) < 0">
+                        -${{ Math.abs(Number(current.offer_comparison.difference)).toFixed(2) }} por debajo de su tarifa estimada
+                    </template>
+                    <template v-else>Coincide con su tarifa estimada</template>
+                </p>
             </div>
 
             <div class="mt-4 space-y-4">
@@ -174,7 +228,7 @@ function discard() {
                     <div class="flex flex-col items-center pt-1.5 shrink-0">
                         <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
                         <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
-                        <template v-for="stop in current.stops" :key="stop.sequence">
+                        <template v-for="stop in (current.stops ?? [])" :key="stop.sequence">
                             <span class="h-2 w-2 rounded-full bg-amber-500"></span>
                             <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
                         </template>
@@ -192,9 +246,9 @@ function discard() {
                              no salían acá — el conductor aceptaba sin saber
                              que el recorrido pasaba por otro lado antes del
                              destino, ni cuánto le tocaba por cada tramo. -->
-                        <div v-for="stop in current.stops" :key="stop.sequence">
+                        <div v-for="stop in (current.stops ?? [])" :key="stop.sequence">
                             <p class="text-arka-text font-medium truncate">
-                                Parada {{ stop.sequence }}{{ stop.leg_distance_km != null ? ` · ${stop.leg_distance_km.toFixed(1)} km` : '' }}
+                                Parada {{ stop.sequence }}{{ stop.leg_distance_km != null ? ` · ${Number(stop.leg_distance_km).toFixed(1)} km` : '' }}
                                 <span class="font-semibold text-amber-600">· ${{ Number(stop.leg_price).toFixed(2) }}</span>
                             </p>
                             <p class="text-xs text-arka-text-muted">{{ stop.address ?? 'Sin referencia' }}</p>
@@ -223,6 +277,9 @@ function discard() {
             <!-- Acciones pegadas al borde inferior: siempre quedan al alcance
                  del pulgar aunque una dirección o nota sea extensa. -->
             <div class="shrink-0 border-t border-arka-text-muted/10 bg-arka-card px-4 pb-4 pt-3 sm:px-6">
+                <p v-if="actionError" class="mb-3 rounded-xl border border-arka-danger/30 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">
+                    {{ actionError }}
+                </p>
                 <PrimaryButton class="min-h-12 w-full justify-center text-sm" :disabled="processing || secondsLeft === 0" @click="accept">
                     {{ processing ? 'Procesando…' : 'Aceptar carrera' }}
                 </PrimaryButton>

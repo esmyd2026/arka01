@@ -21,3 +21,11 @@ export function pushIncomingRideRequest(request) {
 export function dismissIncomingRideRequest(id) {
     incomingRideRequestState.queue = incomingRideRequestState.queue.filter((r) => r.id !== id);
 }
+
+// El polling global es la fuente de verdad de las solicitudes todavía
+// respondibles. Limpia tarjetas viejas si el POST lo hizo esta misma pestaña
+// (los eventos `toOthers()` no regresan al navegador que respondió).
+export function reconcileIncomingRideRequests(validIds) {
+    const valid = validIds instanceof Set ? validIds : new Set(validIds);
+    incomingRideRequestState.queue = incomingRideRequestState.queue.filter((request) => valid.has(request.id));
+}

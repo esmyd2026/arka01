@@ -24,7 +24,7 @@ class CooperativeDashboardController extends Controller
 
         return back()->with('status', $validated['automatic_assignment_enabled']
             ? 'Asignación automática activada.'
-            : 'Asignación manual activada; a los 30 segundos se aplicará el respaldo automático.');
+            : 'Asignación manual activada. Las solicitudes esperarán a que un operador elija la unidad.');
     }
 
     public function index(Request $request): Response

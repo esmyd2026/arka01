@@ -34,18 +34,20 @@ use App\Http\Controllers\Admin\UserLocationsController;
 use App\Http\Controllers\Admin\UserProfileController as AdminUserProfileController;
 use App\Http\Controllers\Admin\WhatsAppInboxController;
 use App\Http\Controllers\Admin\WhatsAppSettingController;
+use App\Http\Controllers\CooperativeBankAccountController;
 use App\Http\Controllers\CooperativeClientController;
 use App\Http\Controllers\CooperativeDashboardController;
 use App\Http\Controllers\CooperativeDirectoryController;
 use App\Http\Controllers\CooperativeDriverController;
 use App\Http\Controllers\CooperativeProfileController;
 use App\Http\Controllers\CooperativeRideAssignmentController;
+use App\Http\Controllers\CooperativeWalletController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DriverBankAccountController;
 use App\Http\Controllers\DriverDirectoryController;
 use App\Http\Controllers\DriverInvitationController;
 use App\Http\Controllers\DriverLocationController;
-use App\Http\Controllers\DriverBankAccountController;
 use App\Http\Controllers\DriverProfileController;
 use App\Http\Controllers\DriverStatsController;
 use App\Http\Controllers\ExpressApplicationController;
@@ -238,6 +240,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/cooperativa/conductores/{membership}/reactivar', [CooperativeDriverController::class, 'reactivate'])->name('cooperative.drivers.reactivate');
         Route::delete('/cooperativa/conductores/{membership}', [CooperativeDriverController::class, 'remove'])->name('cooperative.drivers.remove');
         Route::post('/cooperativa/solicitudes/{rideRequest}/asignar', [CooperativeRideAssignmentController::class, 'assign'])->name('cooperative.rides.assign');
+        // Pedido explícito del usuario: trazabilidad de todo el equipo,
+        // cuánto facturó y el saldo de billetera agregado — antes solo se
+        // podía ver conductor por conductor (cooperative.drivers.show).
+        Route::get('/cooperativa/billetera', [CooperativeWalletController::class, 'index'])->name('cooperative.wallet');
+        Route::post('/cooperativa/cuentas-bancarias', [CooperativeBankAccountController::class, 'store'])->name('cooperative.bank-accounts.store');
+        Route::delete('/cooperativa/cuentas-bancarias/{bankAccount}', [CooperativeBankAccountController::class, 'destroy'])->name('cooperative.bank-accounts.destroy');
+        Route::patch('/cooperativa/cuentas-bancarias/{bankAccount}/principal', [CooperativeBankAccountController::class, 'markFavorite'])->name('cooperative.bank-accounts.favorite');
         // Pedido explícito del usuario: "quiero ver mis clientes vinculados
         // la lista, cantidad de carreras, puntuacion y desvincular" — ver
         // CooperativeClientController.
@@ -381,6 +390,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/carreras/{ride}/voy-por-el-pasajero', [RideController::class, 'headingToPassenger'])->name('rides.heading-to-passenger');
     Route::post('/carreras/{ride}/llegue', [RideController::class, 'arrived'])->name('rides.arrived');
     Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');
+    Route::post('/carreras/{ride}/transferencia-notificada', [RideController::class, 'notifyTransferPayment'])->name('rides.transfer-payment.notify');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');
     // Editar una carrera programada (pedido explícito del usuario: "si es
     // que se equivocaron") — el cliente propone, el conductor confirma o

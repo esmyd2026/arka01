@@ -3,6 +3,8 @@
 namespace App\Events;
 
 use App\Models\RideRequest;
+use App\Models\User;
+use App\Services\Ride\RideOfferComparison;
 use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -71,6 +73,12 @@ class RideRequested implements ShouldBroadcast
     public function broadcastWith(): array
     {
         $client = $this->rideRequest->client;
+        $comparison = null;
+
+        if ($this->rideRequest->driver_user_id) {
+            $driver = User::find($this->rideRequest->driver_user_id);
+            $comparison = $driver ? app(RideOfferComparison::class)->forDriver($this->rideRequest, $driver) : null;
+        }
 
         return [
             'id' => $this->rideRequest->id,
@@ -122,6 +130,10 @@ class RideRequested implements ShouldBroadcast
                 (float) $this->rideRequest->current_offered_price + (float) ($this->rideRequest->stops_price ?? 0),
                 2
             ),
+            'driver_total_offered_price' => $this->rideRequest->driverPayEstimate(),
+            'is_cooperative_request' => $this->rideRequest->cooperative_id !== null,
+            'cooperative_driver_rate_per_km' => $this->rideRequest->cooperative?->driver_pay_rate_per_km,
+            'offer_comparison' => $comparison,
             'stops' => $this->rideRequest->stops->map(fn ($stop) => [
                 'sequence' => $stop->sequence,
                 'address' => $stop->address,

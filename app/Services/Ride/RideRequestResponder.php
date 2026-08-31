@@ -155,6 +155,12 @@ class RideRequestResponder
     {
         $userId = $actingUser->id;
 
+        if ($rideRequest->cooperative_id) {
+            throw ValidationException::withMessages([
+                'offered_amount' => 'La cooperativa ya definió el pago de esta carrera. Puede aceptarla o rechazarla, pero no cambiar la tarifa al cliente.',
+            ]);
+        }
+
         if ($rideRequest->isDirected() && $rideRequest->driver_user_id !== $userId) {
             abort(403);
         }

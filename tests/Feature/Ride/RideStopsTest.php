@@ -317,6 +317,8 @@ class RideStopsTest extends TestCase
         $this->assertSame('completed', $ride->status);
         $expected = (float) $ride->stops()->sum('leg_price') + (float) $ride->price;
         $this->assertSame($expected, (float) $ride->settled_price);
+        $this->assertSame($expected, $ride->quotedTotal());
+        $this->assertSame($expected, $ride->chargedTotal());
     }
 
     public function test_a_ride_without_stops_is_unaffected(): void
@@ -346,5 +348,7 @@ class RideStopsTest extends TestCase
         $ride->refresh();
         $this->assertSame('completed', $ride->status);
         $this->assertSame((float) $ride->price, (float) $ride->settled_price);
+        $this->assertSame((float) $ride->price, $ride->quotedTotal());
+        $this->assertSame((float) $ride->price, $ride->chargedTotal());
     }
 }

@@ -29,10 +29,12 @@ const props = defineProps({
     ratingReasons: { type: Array, default: () => [] },
     // Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras).
     messages: { type: Array, default: () => [] },
-    // Cuentas bancarias del conductor (pedido explícito del usuario): solo
-    // llega con datos cuando la carrera es por transferencia y quien mira
-    // es el cliente — ver RideController::show().
-    driverBankAccounts: { type: Array, default: () => [] },
+    // En una carrera común pertenecen al conductor; en una carrera de
+    // cooperativa pertenecen a la cooperativa, que es quien recibe la
+    // transferencia y luego liquida la parte del conductor.
+    transferAccounts: { type: Array, default: () => [] },
+    transferRecipient: { type: String, default: '' },
+    transferGoesToCooperative: { type: Boolean, default: false },
 });
 
 // Posición en vivo del conductor durante el viaje: reutiliza el mismo canal
@@ -1178,6 +1180,23 @@ const clientOptionsView = ref('chat');
 // cliente decide cuándo verlas, no se le impone un modal automático apenas
 // entra a la pantalla.
 const showBankAccounts = ref(false);
+const notifyingTransfer = ref(false);
+const transferNotificationError = ref('');
+
+function notifyTransferPayment() {
+    if (notifyingTransfer.value || props.ride.transfer_payment_notified_at) return;
+    notifyingTransfer.value = true;
+    transferNotificationError.value = '';
+    router.post(route('rides.transfer-payment.notify', props.ride.public_id), {}, {
+        preserveScroll: true,
+        onError: (errors) => {
+            transferNotificationError.value = errors.payment ?? 'No pudimos informar el pago. Inténtelo nuevamente.';
+        },
+        onFinish: () => {
+            notifyingTransfer.value = false;
+        },
+    });
+}
 
 function openClientChat() {
     clientOptionsView.value = 'chat';
@@ -1480,21 +1499,21 @@ function submitReview() {
                 <div class="flex shrink-0 items-center gap-2">
                     <button
                         type="button"
-                        class="grid h-10 w-10 place-items-center rounded-full border border-arka-primary/20 bg-arka-primary/10 text-arka-primary transition active:scale-95"
+                        class="grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/20 bg-arka-base/80 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary active:scale-95"
                         aria-label="Enviar mensaje al conductor"
                         title="Mensaje"
                         @click="openClientMessage"
                     >
-                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 3.75A2.75 2.75 0 0 0 1.75 6.5v8A2.75 2.75 0 0 0 4.5 17.25h2v3a.75.75 0 0 0 1.2.6l4.8-3.6h7A2.75 2.75 0 0 0 22.25 14.5v-8a2.75 2.75 0 0 0-2.75-2.75h-15Z" /></svg>
+                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     </button>
                     <a
                         v-if="counterpart.phone"
                         :href="`tel:${counterpart.phone}`"
-                        class="grid h-10 w-10 place-items-center rounded-full border border-arka-primary/20 bg-arka-primary/10 text-arka-primary transition active:scale-95"
+                        class="grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/20 bg-arka-base/80 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary active:scale-95"
                         aria-label="Llamar al conductor"
                         title="Llamar"
                     >
-                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.62 2.25c.55 0 1.04.34 1.24.85l1.3 3.42a1.34 1.34 0 0 1-.33 1.45L7.2 9.5a14.1 14.1 0 0 0 7.3 7.3l1.53-1.63a1.34 1.34 0 0 1 1.45-.33l3.42 1.3c.51.2.85.69.85 1.24v2.37a2 2 0 0 1-2 2C10.09 21.75 2.25 13.91 2.25 4.25a2 2 0 0 1 2-2h2.37Z" /></svg>
+                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5.2 4h3l1.4 4-1.9 1.5a13 13 0 0 0 6.8 6.8l1.5-1.9 4 1.4v3A1.2 1.2 0 0 1 18.8 20C10.6 20 4 13.4 4 5.2A1.2 1.2 0 0 1 5.2 4Z" stroke-linecap="round" stroke-linejoin="round" /></svg>
                     </a>
                 </div>
             </div>
@@ -1582,7 +1601,7 @@ function submitReview() {
                     </div>
 
                     <button
-                        v-if="ride.payment_method === 'transferencia' && ride.picked_up_at && driverBankAccounts.length"
+                        v-if="ride.payment_method === 'transferencia' && ride.picked_up_at && transferAccounts.length"
                         type="button"
                         class="mt-3 flex w-full items-center justify-between gap-3 rounded-xl border border-arka-primary/25 bg-arka-primary/10 px-3 py-2.5 text-left transition active:scale-[0.99]"
                         @click="showBankAccounts = true"
@@ -1597,7 +1616,7 @@ function submitReview() {
                         v-else-if="ride.payment_method === 'transferencia' && ride.picked_up_at"
                         class="mt-3 rounded-xl border border-arka-warning/25 bg-arka-warning/10 px-3 py-2 text-[11px] leading-snug text-arka-warning"
                     >
-                        El conductor no tiene una cuenta bancaria declarada. Coordine el pago directamente con él.
+                        {{ transferGoesToCooperative ? 'La cooperativa todavía no tiene una cuenta bancaria declarada.' : 'El conductor no tiene una cuenta bancaria declarada. Coordine el pago directamente con él.' }}
                     </p>
 
                     <button
@@ -1783,15 +1802,18 @@ function submitReview() {
                 </div>
             </BottomSheet>
 
-            <!-- Cuentas bancarias del conductor (pedido explícito del usuario):
-                 la favorita primero (RideController::show() ya la ordena así). -->
+            <!-- La cuenta principal aparece primero. En cooperativas el pago
+                 va a la organización, no directamente al conductor. -->
             <BottomSheet :show="showBankAccounts" @close="showBankAccounts = false">
                 <div class="p-4 space-y-4">
                     <h3 class="text-lg font-semibold text-arka-text">Cuenta para transferir</h3>
-                    <p class="text-sm text-arka-text-muted">Declaradas por {{ ride.driver.name }}.</p>
+                    <p class="text-sm text-arka-text-muted">Pago a {{ transferRecipient }}.</p>
+                    <p v-if="transferGoesToCooperative" class="rounded-xl border border-arka-primary/20 bg-arka-primary/10 px-3 py-2 text-xs text-arka-text-muted">
+                        La cooperativa recibe el total y liquida internamente el valor correspondiente al conductor.
+                    </p>
 
                     <div
-                        v-for="account in driverBankAccounts"
+                        v-for="account in transferAccounts"
                         :key="account.id"
                         class="rounded-xl border p-4"
                         :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-text-muted/15'"
@@ -1807,6 +1829,18 @@ function submitReview() {
                             <div class="flex justify-between"><dt class="text-arka-text-muted">Cédula</dt><dd class="text-arka-text">{{ account.identity_number }}</dd></div>
                         </dl>
                     </div>
+
+                    <template v-if="transferGoesToCooperative && !isDriver">
+                        <p v-if="transferNotificationError" class="rounded-xl border border-arka-danger/30 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">
+                            {{ transferNotificationError }}
+                        </p>
+                        <div v-if="ride.transfer_payment_notified_at" class="rounded-xl border border-arka-primary/30 bg-arka-primary/10 px-4 py-3 text-sm font-medium text-arka-primary-bright">
+                            ✓ Pago informado a la cooperativa. Ellos revisarán el ingreso en su cuenta.
+                        </div>
+                        <PrimaryButton v-else class="w-full justify-center" :disabled="notifyingTransfer" @click="notifyTransferPayment">
+                            {{ notifyingTransfer ? 'Informando…' : 'Ya transferí · Notificar a la cooperativa' }}
+                        </PrimaryButton>
+                    </template>
                 </div>
             </BottomSheet>
 
@@ -2156,7 +2190,7 @@ function submitReview() {
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Distancia</span>
-                            <span class="text-arka-text">{{ Number(ride.distance_km).toFixed(1) }} km</span>
+                            <span class="text-arka-text">{{ tripTotalDistanceKm.toFixed(1) }} km</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Pago</span>
@@ -2168,7 +2202,7 @@ function submitReview() {
                         </div>
                         <div class="flex items-center justify-between col-span-2 pt-1.5 border-t border-arka-text-muted/10 text-base">
                             <span class="text-arka-text-muted">Total</span>
-                            <span class="text-arka-primary-bright font-semibold">${{ ride.price }}</span>
+                            <span class="text-arka-primary-bright font-semibold">${{ tripTotalCost.toFixed(2) }}</span>
                         </div>
                     </div>
 
@@ -2188,7 +2222,7 @@ function submitReview() {
                             class="flex-1 px-3 py-2 rounded-arka bg-arka-base text-arka-text text-sm font-medium hover:bg-arka-base/70 transition"
                             @click="openClientMessage"
                         >
-                            <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 3.75A2.75 2.75 0 0 0 1.75 6.5v8A2.75 2.75 0 0 0 4.5 17.25h2v3a.75.75 0 0 0 1.2.6l4.8-3.6h7A2.75 2.75 0 0 0 22.25 14.5v-8a2.75 2.75 0 0 0-2.75-2.75h-15Z" /></svg>
+                            <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke-linecap="round" stroke-linejoin="round" /></svg>
                             Mensaje
                         </button>
                         <a
@@ -2196,7 +2230,8 @@ function submitReview() {
                             :href="`tel:${counterpart.phone}`"
                             class="flex-1 text-center px-3 py-2 rounded-arka bg-arka-base text-arka-text text-sm font-medium hover:bg-arka-base/70 transition"
                         >
-                            📞 Llamar
+                            <svg class="mr-2 inline h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5.2 4h3l1.4 4-1.9 1.5a13 13 0 0 0 6.8 6.8l1.5-1.9 4 1.4v3A1.2 1.2 0 0 1 18.8 20C10.6 20 4 13.4 4 5.2A1.2 1.2 0 0 1 5.2 4Z" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                            Llamar
                         </a>
                     </div>
 
@@ -2420,19 +2455,21 @@ function submitReview() {
                         <div class="rounded-arka bg-arka-base/45 p-3">
                             <p class="text-xs text-arka-text-muted">Costo total de la carrera</p>
                             <p class="text-lg font-bold text-arka-primary">
-                                ${{ (Number(ride.price) + Number(ride.stops_price ?? 0)).toFixed(2) }}
+                                ${{ tripTotalCost.toFixed(2) }}
                             </p>
                             <details class="mt-2">
                                 <summary class="cursor-pointer text-xs font-medium text-arka-primary">Ver detalle por parada</summary>
                                 <div class="mt-2 space-y-1 text-xs text-arka-text-muted">
                                     <div v-for="stop in ride.stops" :key="stop.id" class="flex items-center justify-between gap-2">
                                         <span class="truncate">
-                                            Parada {{ stop.sequence }}{{ stop.status !== 'pending' ? ` (${stop.status === 'completed' ? 'completada' : 'cancelada'})` : '' }}
+                                            Parada {{ stop.sequence }}
+                                            <span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span>
+                                            {{ stop.status !== 'pending' ? ` (${stop.status === 'completed' ? 'completada' : 'cancelada'})` : '' }}
                                         </span>
                                         <span class="shrink-0 text-arka-text">${{ Number(stop.leg_price).toFixed(2) }}</span>
                                     </div>
                                     <div class="flex items-center justify-between gap-2 font-medium text-arka-text">
-                                        <span>Tramo final</span>
+                                        <span>Tramo final · {{ Number(ride.distance_km).toFixed(1) }} km</span>
                                         <span>${{ Number(ride.price).toFixed(2) }}</span>
                                     </div>
                                 </div>
@@ -2689,18 +2726,21 @@ function submitReview() {
                     </div>
                     <!-- Desglose por parada, solo si hubo alguna. -->
                     <div v-if="ride.stops?.length" class="pt-3 border-t border-arka-text-muted/10 space-y-2">
-                        <div v-for="stop in ride.stops" :key="stop.id" class="flex items-center justify-between text-sm">
+                        <div v-for="stop in ride.stops" :key="stop.id" class="flex items-center justify-between gap-3 text-sm">
                             <span class="text-arka-text-muted">
                                 Parada {{ stop.sequence }}
+                                <span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span>
                                 <span v-if="stop.status === 'cancelled'" class="text-arka-danger">(cancelada)</span>
                             </span>
                             <span :class="stop.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-text'">
                                 ${{ stop.leg_price }}
                             </span>
                         </div>
-                        <div v-if="ride.stops.some((stop) => stop.status !== 'cancelled') && !ride.stops.every((stop) => stop.status === 'completed')" class="flex items-center justify-between text-sm">
-                            <span class="text-arka-text-muted">Tramo final</span>
-                            <span class="text-arka-text-muted line-through">${{ ride.price }}</span>
+                        <div class="flex items-center justify-between gap-3 text-sm">
+                            <span class="text-arka-text-muted">Tramo final · {{ Number(ride.distance_km).toFixed(1) }} km</span>
+                            <span :class="ride.stops.some((stop) => stop.status === 'cancelled') ? 'text-arka-text-muted line-through' : 'text-arka-text'">
+                                ${{ Number(ride.price).toFixed(2) }}
+                            </span>
                         </div>
                     </div>
                     <div class="pt-3 border-t border-arka-text-muted/10 space-y-2">
@@ -2716,13 +2756,16 @@ function submitReview() {
                             <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · ${{ ride.pickup_fare }}</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="text-arka-text-muted">Trayecto origen-destino</span>
-                            <span class="text-arka-text">{{ Number(ride.distance_km).toFixed(1) }} km</span>
+                            <span class="text-arka-text-muted">Distancia total del recorrido</span>
+                            <span class="text-arka-text">{{ tripTotalDistanceKm.toFixed(1) }} km</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Tarifa por km</span>
                             <span class="text-arka-text">${{ ride.rate_per_km_snapshot }}</span>
                         </div>
+                        <p class="pt-1 text-[11px] leading-relaxed text-arka-text-muted/80">
+                            El total suma los tramos mostrados arriba. Cada tramo conserva el margen operativo, la tarifa mínima y el recargo horario que correspondían al solicitar.
+                        </p>
                         <div v-if="durationLabel" class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Duración</span>
                             <span class="text-arka-text">{{ durationLabel }}</span>
@@ -2749,13 +2792,16 @@ function submitReview() {
                         <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · ${{ ride.pickup_fare }}</span>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-arka-text-muted">Trayecto origen-destino</span>
-                        <span class="text-arka-text">{{ Number(ride.distance_km).toFixed(1) }} km</span>
+                        <span class="text-arka-text-muted">Distancia total del recorrido</span>
+                        <span class="text-arka-text">{{ tripTotalDistanceKm.toFixed(1) }} km</span>
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-arka-text-muted">Tarifa por km</span>
                         <span class="text-arka-text">${{ ride.rate_per_km_snapshot }}</span>
                     </div>
+                    <p class="pt-1 text-[11px] leading-relaxed text-arka-text-muted/80">
+                        El total incluye todos los tramos y las condiciones de tarifa aplicadas al confirmar la solicitud.
+                    </p>
                     <div v-if="durationLabel" class="flex items-center justify-between">
                         <span class="text-arka-text-muted">Duración</span>
                         <span class="text-arka-text">{{ durationLabel }}</span>
@@ -2772,7 +2818,7 @@ function submitReview() {
                     </div>
                     <div class="flex items-center justify-between text-lg">
                         <span class="text-arka-text-muted">Total</span>
-                        <span class="text-arka-primary-bright font-semibold">${{ ride.price }}</span>
+                        <span class="text-arka-primary-bright font-semibold">${{ tripTotalCost.toFixed(2) }}</span>
                     </div>
                 </div>
 

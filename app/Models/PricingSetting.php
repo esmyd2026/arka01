@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Cache;
 class PricingSetting extends Model
 {
     private const CACHE_KEY = 'pricing_settings.current';
+
     protected $fillable = [
         'night_surcharge_percent',
         'night_starts_at',

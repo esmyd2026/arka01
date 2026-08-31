@@ -365,6 +365,10 @@ function acceptRequest(id) {
     processingRequestId.value = id;
     router.post(route('ride-requests.accept', id), {}, {
         preserveScroll: true,
+        onSuccess: () => {
+            incoming.value = incoming.value.filter((r) => r.id !== id);
+            window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
+        },
         onFinish: () => (processingRequestId.value = null),
     });
 }
@@ -374,7 +378,10 @@ function rejectRequest(id) {
     processingRequestId.value = id;
     router.post(route('ride-requests.reject', id), {}, {
         preserveScroll: true,
-        onSuccess: () => (incoming.value = incoming.value.filter((r) => r.id !== id)),
+        onSuccess: () => {
+            incoming.value = incoming.value.filter((r) => r.id !== id);
+            window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
+        },
         onFinish: () => (processingRequestId.value = null),
     });
 }
@@ -394,6 +401,7 @@ function counterRequest(id) {
                 // Ya usé mi única ronda de contraoferta (sección 5): ahora
                 // espero la respuesta del cliente, no me queda más por hacer acá.
                 incoming.value = incoming.value.filter((r) => r.id !== id);
+                window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
             },
             onFinish: () => (processingRequestId.value = null),
         }
@@ -724,7 +732,8 @@ function confirmRaiseOffer(id) {
                                          conductor igual"): current_offered_price es solo el tramo
                                          final — sin sumar stops_price, el conductor veía menos de
                                          lo que en realidad le corresponde por todo el recorrido. -->
-                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.total_offered_price ?? r.current_offered_price).toFixed(2) }}</p>
+                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.driver_total_offered_price ?? r.total_offered_price ?? r.current_offered_price).toFixed(2) }}</p>
+                                    <p v-if="r.is_cooperative_request" class="mt-1 text-[11px] font-medium text-arka-primary">Pago de la cooperativa</p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-sm font-semibold text-arka-text">{{ Number(r.distance_km).toFixed(1) }} km</p>
@@ -734,6 +743,27 @@ function confirmRaiseOffer(id) {
                             </div>
 
                             <div class="space-y-4 p-4">
+                            <div
+                                v-if="r.offer_comparison?.uses_another_driver_price"
+                                class="rounded-xl border border-arka-primary/20 bg-arka-primary/5 px-3 py-2.5"
+                            >
+                                <p class="text-xs font-semibold text-arka-text">Oferta inicial conservada</p>
+                                <p class="mt-0.5 text-xs text-arka-text-muted">
+                                    El cliente confirmó este total con otro conductor. Usted decide si le conviene.
+                                </p>
+                                <p
+                                    class="mt-1 text-sm font-semibold"
+                                    :class="Number(r.offer_comparison.difference) >= 0 ? 'text-arka-primary-bright' : 'text-arka-warning'"
+                                >
+                                    <template v-if="Number(r.offer_comparison.difference) > 0">
+                                        +${{ Number(r.offer_comparison.difference).toFixed(2) }} sobre su tarifa estimada
+                                    </template>
+                                    <template v-else-if="Number(r.offer_comparison.difference) < 0">
+                                        -${{ Math.abs(Number(r.offer_comparison.difference)).toFixed(2) }} por debajo de su tarifa estimada
+                                    </template>
+                                    <template v-else>Coincide con su tarifa estimada</template>
+                                </p>
+                            </div>
                             <!-- Quién es (sección 3.6 y 8: "app segura"), antes de decidir
                                  aceptar — nombre, calificación y código de socio. -->
                             <div class="flex items-center gap-3">
@@ -798,7 +828,18 @@ function confirmRaiseOffer(id) {
                                      precio ofertado ya incluye la recogida" — sin checkbox,
                                      ya no es una decisión del conductor al aceptar), así que
                                      acá se resta para mostrar el viaje puro sin duplicarlo. -->
-                                <div class="space-y-2 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
+                                <div v-if="r.is_cooperative_request" class="rounded-arka border border-arka-primary/20 bg-arka-primary/10 p-3">
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">Pago acordado por la cooperativa</p>
+                                    <div class="mt-2 flex items-end justify-between gap-3">
+                                        <p class="text-sm text-arka-text-muted">
+                                            <span v-if="r.cooperative_driver_rate_per_km">Tarifa conductor: ${{ Number(r.cooperative_driver_rate_per_km).toFixed(2) }}/km</span>
+                                            <span v-else>Valor calculado según el reparto configurado</span>
+                                        </p>
+                                        <p class="text-xl font-bold text-arka-primary-bright">${{ Number(r.driver_total_offered_price).toFixed(2) }}</p>
+                                    </div>
+                                    <p class="mt-2 text-xs text-arka-text-muted">El margen de la cooperativa no se presenta como parte de su ganancia.</p>
+                                </div>
+                                <div v-else class="space-y-2 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-text-muted">Desglose de tu ganancia</p>
                                     <div class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Origen → destino · {{ Number(r.distance_km).toFixed(1) }} km</span>
@@ -817,7 +858,7 @@ function confirmRaiseOffer(id) {
                                          recorrido pasaba por otro lado antes del destino. -->
                                     <template v-if="r.stops?.length">
                                         <div v-for="stop in r.stops" :key="stop.sequence" class="flex items-center justify-between text-sm">
-                                            <span class="text-arka-text-muted truncate pr-2">Parada {{ stop.sequence }} · {{ stop.address ?? 'sin referencia' }}{{ stop.leg_distance_km != null ? ` · ${stop.leg_distance_km.toFixed(1)} km` : '' }}</span>
+                                            <span class="text-arka-text-muted truncate pr-2">Parada {{ stop.sequence }} · {{ stop.address ?? 'sin referencia' }}{{ stop.leg_distance_km != null ? ` · ${Number(stop.leg_distance_km).toFixed(1)} km` : '' }}</span>
                                             <span class="shrink-0 text-arka-text font-medium">${{ Number(stop.leg_price).toFixed(2) }}</span>
                                         </div>
                                     </template>
@@ -827,7 +868,7 @@ function confirmRaiseOffer(id) {
                                     {{ processingRequestId === r.id ? 'Procesando…' : 'Aceptar carrera' }}
                                 </PrimaryButton>
 
-                                <div class="grid grid-cols-[1fr_auto] gap-2 items-center">
+                                <div v-if="!r.is_cooperative_request" class="grid grid-cols-[1fr_auto] gap-2 items-center">
                                     <TextInput
                                         type="number"
                                         step="0.01"

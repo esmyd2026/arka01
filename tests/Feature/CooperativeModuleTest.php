@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\FallbackCooperativeAssignment;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
@@ -288,6 +289,55 @@ class CooperativeModuleTest extends TestCase
         $this->assertSame('cooperative', $rideRequest->dispatch_pool);
         $this->assertSame('awaiting_driver', $rideRequest->cooperative_assignment_status);
         $this->assertNotNull($rideRequest->cooperative_offer_expires_at);
+    }
+
+    public function test_cooperative_mode_never_falls_back_to_the_clients_fleet_without_a_cooperative(): void
+    {
+        $client = User::factory()->create();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'provider_type' => 'cooperative',
+            'cooperative_id' => null,
+            'origin_lat' => -2.17,
+            'origin_lng' => -79.90,
+            'destination_lat' => -2.18,
+            'destination_lng' => -79.91,
+        ])->assertSessionHasErrors('cooperative_id');
+
+        $this->assertDatabaseCount('ride_requests', 0);
+    }
+
+    public function test_manual_cooperative_dispatch_waits_for_the_operator_and_never_notifies_a_driver_first(): void
+    {
+        Bus::fake();
+        Notification::fake();
+
+        $client = User::factory()->create();
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeUser->id,
+            'name' => 'Coop Manual',
+            'automatic_assignment_enabled' => false,
+            'rate_per_km' => 0.50,
+            'driver_pay_rate_per_km' => 0.30,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+        ClientCooperative::query()->create(['client_user_id' => $client->id, 'cooperative_id' => $cooperative->id]);
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'provider_type' => 'cooperative',
+            'cooperative_id' => $cooperative->id,
+            'origin_lat' => -2.1701,
+            'origin_lng' => -79.9001,
+            'destination_lat' => -2.1800,
+            'destination_lng' => -79.9100,
+        ])->assertSessionHasNoErrors()->assertRedirect(route('rides.index'));
+
+        $rideRequest = RideRequest::query()->latest('id')->firstOrFail();
+        $this->assertNull($rideRequest->driver_user_id);
+        $this->assertNull($rideRequest->dispatch_pool);
+        $this->assertSame('awaiting_operator', $rideRequest->cooperative_assignment_status);
+        Bus::assertNotDispatched(FallbackCooperativeAssignment::class);
     }
 
     public function test_a_client_cannot_request_from_an_unattached_cooperative(): void

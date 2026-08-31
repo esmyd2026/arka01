@@ -9,20 +9,28 @@ use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
 use App\Notifications\CooperativeDriverInvitationPushNotification;
-use App\Notifications\CooperativeDriverResponsePushNotification;
+use App\Services\Cooperative\CooperativeDriverResponder;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppFreeformSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * invitations()/respond() delegan a
+ * App\Services\Cooperative\CooperativeDriverResponder (roadmap app móvil,
+ * "full backend"). El resto (panel propio de la cuenta Cooperativa) sigue
+ * acá tal cual: fuera de alcance del móvil.
+ */
 class CooperativeDriverController extends Controller
 {
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly CooperativeDriverResponder $driverResponder,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -90,7 +98,7 @@ class CooperativeDriverController extends Controller
                 'origin' => $ride->origin_address,
                 'destination' => $ride->destination_address,
                 'distance_km' => (float) $ride->distance_km,
-                'price' => (float) $ride->price,
+                'price' => $ride->chargedTotal(),
                 'status' => $ride->status,
                 'payment_method' => $ride->payment_method,
                 'date' => ($ride->completed_at ?? $ride->cancelled_at ?? $ride->created_at)?->toIso8601String(),
@@ -104,10 +112,10 @@ class CooperativeDriverController extends Controller
                 'assigned_total' => RideRequest::query()->where('cooperative_id', $cooperativeId)->where('driver_user_id', $driver->id)->count(),
                 'completed_total' => (clone $completed)->count(),
                 'cancelled_total' => (clone $rides)->where('status', 'cancelled')->count(),
-                'earnings_today' => (float) $period($completed, $now->copy()->startOfDay())->sum('price'),
-                'earnings_week' => (float) $period($completed, $now->copy()->startOfWeek())->sum('price'),
-                'earnings_month' => (float) $period($completed, $now->copy()->startOfMonth())->sum('price'),
-                'earnings_total' => (float) (clone $completed)->sum('price'),
+                'earnings_today' => (float) $period($completed, $now->copy()->startOfDay())->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')->value('total'),
+                'earnings_week' => (float) $period($completed, $now->copy()->startOfWeek())->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')->value('total'),
+                'earnings_month' => (float) $period($completed, $now->copy()->startOfMonth())->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')->value('total'),
+                'earnings_total' => (float) (clone $completed)->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')->value('total'),
                 'active_minutes_today' => $activeMinutes($now->copy()->startOfDay()),
                 'active_minutes_week' => $activeMinutes($now->copy()->startOfWeek()),
                 'active_minutes_month' => $activeMinutes($now->copy()->startOfMonth()),
@@ -199,50 +207,17 @@ class CooperativeDriverController extends Controller
         abort_unless($request->user()->isDriver(), 403);
 
         return Inertia::render('Cooperative/DriverInvitations', [
-            'memberships' => $request->user()->cooperativeDriverMemberships()
-                ->whereIn('status', ['pending', 'accepted', 'suspended'])
-                ->with('cooperative.city')
-                ->latest()
-                ->get(),
+            'memberships' => $this->driverResponder->pendingInvitations($request->user()),
         ]);
     }
 
     public function respond(Request $request, CooperativeDriverMembership $membership): RedirectResponse
     {
-        abort_unless($membership->driver_user_id === $request->user()->id, 403);
-        abort_unless($membership->status === 'pending', 422);
+        $validated = $request->validate(['decision' => ['required', 'string', 'in:accept,reject']]);
 
-        $validated = $request->validate(['decision' => ['required', 'string', Rule::in(['accept', 'reject'])]]);
-        $accepted = $validated['decision'] === 'accept';
+        $this->driverResponder->respond($membership, $request->user(), $validated['decision']);
 
-        if ($accepted) {
-            $alreadyActive = CooperativeDriverMembership::query()
-                ->where('driver_user_id', $request->user()->id)
-                ->where('status', 'accepted')
-                ->whereNull('ended_at')
-                ->where('id', '!=', $membership->id)
-                ->exists();
-
-            if ($alreadyActive) {
-                throw ValidationException::withMessages(['membership' => 'Ya pertenece a otra cooperativa activa. Primero debe finalizar ese vínculo.']);
-            }
-        }
-
-        $membership->forceFill([
-            'status' => $accepted ? 'accepted' : 'rejected',
-            'responded_at' => now(),
-            'suspended_at' => null,
-            'ended_at' => $accepted ? null : now(),
-        ])->save();
-
-        if ($accepted) {
-            $request->user()->driverProfile->forceFill(['driver_type' => 'public_transport'])->save();
-        }
-
-        $membership->load(['driver', 'cooperative.user']);
-        $membership->cooperative->user->notify(new CooperativeDriverResponsePushNotification($membership, $accepted));
-
-        return back()->with('status', $accepted ? 'Vínculo con la cooperativa aceptado.' : 'Invitación rechazada.');
+        return back()->with('status', $validated['decision'] === 'accept' ? 'Vínculo con la cooperativa aceptado.' : 'Invitación rechazada.');
     }
 
     public function suspend(Request $request, CooperativeDriverMembership $membership): RedirectResponse

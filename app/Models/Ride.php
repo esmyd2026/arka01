@@ -35,6 +35,7 @@ class Ride extends Model
         'pickup_fare',
         'pickup_fare_charged',
         'payment_method',
+        'transfer_payment_notified_at',
         'notes',
         'round_trip',
         'rate_per_km_snapshot',
@@ -69,6 +70,7 @@ class Ride extends Model
         'pickup_fare' => 'decimal:2',
         'pickup_fare_charged' => 'boolean',
         'round_trip' => 'boolean',
+        'transfer_payment_notified_at' => 'datetime',
         'rate_per_km_snapshot' => 'decimal:2',
         'price' => 'decimal:2',
         'stops_price' => 'decimal:2',
@@ -155,6 +157,33 @@ class Ride extends Model
     public function stops(): HasMany
     {
         return $this->hasMany(RideStop::class)->orderBy('sequence');
+    }
+
+    /**
+     * Importe completo acordado para la carrera. `price` conserva el precio
+     * del tramo final por compatibilidad con las carreras sin paradas;
+     * `stops_price` contiene los tramos que terminan en cada parada.
+     */
+    public function quotedTotal(): float
+    {
+        return round((float) $this->price + (float) ($this->stops_price ?? 0), 2);
+    }
+
+    /**
+     * Importe efectivamente cobrado. Una carrera cerrada antes de completar
+     * todas sus paradas puede tener un `settled_price` menor al cotizado.
+     */
+    public function chargedTotal(): float
+    {
+        return $this->status === 'completed' && $this->settled_price !== null
+            ? round((float) $this->settled_price, 2)
+            : $this->quotedTotal();
+    }
+
+    /** Expresión SQL equivalente para indicadores y sumatorias. */
+    public static function chargedTotalSql(): string
+    {
+        return 'COALESCE(settled_price, price + COALESCE(stops_price, 0))';
     }
 
     /**

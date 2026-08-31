@@ -154,7 +154,9 @@ class LiveOperationsController extends Controller
             'destination_lat' => $request->destination_lat !== null ? (float) $request->destination_lat : null,
             'destination_lng' => $request->destination_lng !== null ? (float) $request->destination_lng : null,
             'distance_km' => $request->distance_km !== null ? (float) $request->distance_km : null,
-            'price' => $request->current_offered_price !== null ? (float) $request->current_offered_price : null,
+            'price' => $request->current_offered_price !== null
+                ? round((float) $request->current_offered_price + (float) ($request->stops_price ?? 0), 2)
+                : null,
             'is_scheduled' => (bool) $request->is_scheduled,
             'scheduled_at' => $request->scheduled_at?->toIso8601String(),
             'requested_at' => $request->requested_at?->toIso8601String(),

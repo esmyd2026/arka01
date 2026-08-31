@@ -304,32 +304,23 @@ class RideDispatchAdvancer
                     return null;
                 }
 
-                // Cargo por trayecto de recogida (pedido explícito del
-                // usuario): a diferencia de advanceOrExpire() (donde el
-                // precio ya quedó fijo desde la creación), acá es la PRIMERA
-                // vez que se conoce un candidato real — cuando se creó la
-                // solicitud no había nadie disponible, así que no se pudo
-                // calcular. El cliente nunca pudo anticipar este cargo (fue
-                // "a toda la flota"), así que se suma de forma transparente
-                // sobre la oferta ya aceptada, mismo criterio que
-                // RideRequestCreator::create() para ese mismo caso.
+                // Se calcula la distancia de recogida para informar al nuevo
+                // conductor, pero NO se cambia el precio que el cliente vio y
+                // confirmó al crear la solicitud. Si al conductor no le sirve,
+                // puede rechazar o contraofertar de forma explícita.
                 $pickupSurcharge = PriceCalculator::pickupSurchargeForDriver(
                     $candidateIds[0],
                     (float) $rideRequest->origin_lat,
                     (float) $rideRequest->origin_lng,
                 );
-                $pickupFare = (float) ($pickupSurcharge['fare'] ?? 0);
-
                 $rideRequest->update([
                     'status' => 'pending',
                     'driver_user_id' => $candidateIds[0],
                     'pickup_distance_km' => $pickupSurcharge['distance_km'],
-                    'pickup_fare' => $pickupSurcharge['fare'],
-                    // Redondeo hacia arriba a la década (pedido explícito del
-                    // usuario, mismo criterio que RideRequestCreator::create()
-                    // para este mismo caso): el precio final siempre termina
-                    // en una década, nunca con centavos sueltos.
-                    'current_offered_price' => PriceCalculator::roundUpToDime((float) $rideRequest->current_offered_price + $pickupFare),
+                    // El cliente no confirmó un recargo nuevo mientras la
+                    // solicitud estaba en espera. La distancia se informa,
+                    // pero el monto no se cobra silenciosamente.
+                    'pickup_fare' => null,
                     'smart_dispatch_version' => config('smart_dispatch.enabled', true) ? SmartDispatchScorer::VERSION : null,
                     'smart_dispatch_snapshot' => SmartDispatchScorer::safeSnapshot(
                         $candidateIds,

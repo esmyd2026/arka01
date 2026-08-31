@@ -2,9 +2,13 @@
 
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CityController;
 use App\Http\Controllers\Api\V1\ConfigController;
+use App\Http\Controllers\Api\V1\CooperativeController;
+use App\Http\Controllers\Api\V1\CooperativeDriverInvitationController;
 use App\Http\Controllers\Api\V1\CouponController;
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\DriverBankAccountController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\DriverDirectoryController;
 use App\Http\Controllers\Api\V1\DriverInvitationController;
@@ -15,14 +19,23 @@ use App\Http\Controllers\Api\V1\ExpressRouteCompanionController;
 use App\Http\Controllers\Api\V1\ExpressRouteController;
 use App\Http\Controllers\Api\V1\FleetController;
 use App\Http\Controllers\Api\V1\FleetInvitationController;
+use App\Http\Controllers\Api\V1\OnboardingController;
 use App\Http\Controllers\Api\V1\PlanController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
+use App\Http\Controllers\Api\V1\RadioChannelController;
 use App\Http\Controllers\Api\V1\RideController;
 use App\Http\Controllers\Api\V1\RideRequestController;
 use App\Http\Controllers\Api\V1\SavedRouteController;
+use App\Http\Controllers\Api\V1\SosAlertController;
 use App\Http\Controllers\Api\V1\SupportController;
+use App\Http\Controllers\Api\V1\TrustCircleController;
+use App\Http\Controllers\Api\V1\TrustedContactController;
+use App\Http\Controllers\Api\V1\VanTripController;
+use App\Http\Controllers\Api\V1\VanTripReservationController;
 use App\Http\Controllers\DriverProfileController;
+use App\Http\Controllers\MapRouteController;
+use App\Http\Controllers\RadioSessionController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -63,7 +76,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::get('/profile/search-referrer', [ProfileController::class, 'searchReferrer'])->name('profile.search-referrer');
         Route::post('/profile/referrer', [ProfileController::class, 'setReferrer'])->name('profile.set-referrer');
+        Route::get('/cities', [CityController::class, 'index'])->name('cities.index');
         Route::get('/my-plan', [PlanController::class, 'mine'])->name('my-plan');
+        Route::post('/onboarding/complete', [OnboardingController::class, 'complete'])->name('onboarding.complete');
 
         Route::get('/support', [SupportController::class, 'index'])->name('support.index');
         Route::post('/support/messages', [SupportController::class, 'storeMessage'])
@@ -134,6 +149,78 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::get('/saved-routes', [SavedRouteController::class, 'index'])->name('saved-routes.index');
         Route::post('/saved-routes', [SavedRouteController::class, 'store'])->name('saved-routes.store');
         Route::delete('/saved-routes/{savedRoute}', [SavedRouteController::class, 'destroy'])->name('saved-routes.destroy');
+
+        Route::get('/trusted-contacts', [TrustedContactController::class, 'index'])->name('trusted-contacts.index');
+        Route::post('/trusted-contacts', [TrustedContactController::class, 'store'])->name('trusted-contacts.store');
+        Route::delete('/trusted-contacts/{contact}', [TrustedContactController::class, 'destroy'])->name('trusted-contacts.destroy');
+        Route::post('/rides/{ride}/sos', [SosAlertController::class, 'store'])->name('sos.store');
+
+        Route::get('/driver/bank-accounts', [DriverBankAccountController::class, 'index'])->name('driver.bank-accounts.index');
+        Route::post('/driver/bank-accounts', [DriverBankAccountController::class, 'store'])->name('driver.bank-accounts.store');
+        Route::patch('/driver/bank-accounts/{bankAccount}', [DriverBankAccountController::class, 'update'])->name('driver.bank-accounts.update');
+        Route::delete('/driver/bank-accounts/{bankAccount}', [DriverBankAccountController::class, 'destroy'])->name('driver.bank-accounts.destroy');
+        Route::patch('/driver/bank-accounts/{bankAccount}/favorite', [DriverBankAccountController::class, 'markFavorite'])->name('driver.bank-accounts.favorite');
+
+        // Directorio de cooperativas y red de cooperativas del cliente.
+        Route::get('/cooperatives', [CooperativeController::class, 'index'])->name('cooperatives.index');
+        Route::get('/cooperatives/{cooperative}', [CooperativeController::class, 'show'])->name('cooperatives.show');
+        Route::post('/cooperatives/{cooperative}/attach', [CooperativeController::class, 'attach'])->name('cooperatives.attach');
+        Route::delete('/cooperatives/{cooperative}/detach', [CooperativeController::class, 'detach'])->name('cooperatives.detach');
+
+        // El conductor siempre decide si acepta o rechaza el vínculo con una cooperativa.
+        Route::get('/cooperative-driver-invitations', [CooperativeDriverInvitationController::class, 'index'])->name('cooperative-driver-invitations.index');
+        Route::post('/cooperative-driver-invitations/{membership}/respond', [CooperativeDriverInvitationController::class, 'respond'])->name('cooperative-driver-invitations.respond');
+
+        // Ruta Google calculada desde el servidor (protege la clave privada,
+        // con caché/throttle) — reusa MapRouteController TAL CUAL, no
+        // depende de sesión ni de $request->user(), mismo criterio que
+        // DriverProfileController::licensePhoto()/document().
+        Route::post('/maps/route', MapRouteController::class)
+            ->middleware('throttle:30,1,maps.route')
+            ->name('maps.route');
+
+        Route::get('/trust-circle', [TrustCircleController::class, 'index'])->name('trust-circle.index');
+        Route::get('/trust-circle/search', [TrustCircleController::class, 'search'])
+            ->middleware('throttle:30,1,trust-circle.search')
+            ->name('trust-circle.search');
+        Route::post('/trust-circle', [TrustCircleController::class, 'store'])
+            ->middleware('throttle:10,1,trust-circle.store')
+            ->name('trust-circle.store');
+        Route::post('/trust-circle/{connection}/respond', [TrustCircleController::class, 'respond'])->name('trust-circle.respond');
+        Route::put('/trust-circle/{connection}/settings', [TrustCircleController::class, 'updateSettings'])->name('trust-circle.settings.update');
+        Route::delete('/trust-circle/{connection}', [TrustCircleController::class, 'destroy'])->name('trust-circle.destroy');
+        Route::post('/trust-circle/drivers/invite', [TrustCircleController::class, 'inviteDriver'])->name('trust-circle.drivers.invite');
+
+        // Viajes tipo VAN/buseta — /van-trips/browse va ANTES de
+        // /van-trips/{vanTrip}, mismo cuidado de orden que el resto de la API.
+        Route::get('/van-trips', [VanTripController::class, 'index'])->name('van-trips.index');
+        Route::post('/van-trips', [VanTripController::class, 'store'])->name('van-trips.store');
+        Route::get('/van-trips/browse', [VanTripController::class, 'browse'])->name('van-trips.browse');
+        Route::get('/van-trips/{vanTrip}', [VanTripController::class, 'show'])->name('van-trips.show');
+        Route::post('/van-trips/{vanTrip}/cancel', [VanTripController::class, 'cancel'])->name('van-trips.cancel');
+        Route::post('/van-trips/{vanTrip}/reservations', [VanTripReservationController::class, 'store'])->name('van-trip-reservations.store');
+        Route::post('/van-trip-reservations/{reservation}/cancel', [VanTripReservationController::class, 'cancel'])->name('van-trip-reservations.cancel');
+
+        // Canal de radio/walkie-talkie de seguridad. status()/__invoke() de
+        // RadioSessionController (web) ya eran JSON puro sin depender de
+        // sesión ni Inertia — se reusan TAL CUAL, mismo criterio que
+        // MapRouteController. La invitación compartible sigue siendo solo
+        // web (se abre desde un enlace externo en el navegador).
+        Route::get('/radio/status', [RadioSessionController::class, 'status'])
+            ->middleware('throttle:60,1,radio.status')
+            ->name('radio.status');
+        Route::post('/radio/session', RadioSessionController::class)
+            ->middleware('throttle:30,1,radio.session')
+            ->name('radio.session');
+        Route::post('/radio/invitations/{radioChannel:share_code}/join', [RadioChannelController::class, 'join'])
+            ->middleware('throttle:12,1,radio.invitation.join')
+            ->name('radio.invitation.join');
+        Route::patch('/radio/channels/{radioChannel:public_id}', [RadioChannelController::class, 'update'])->name('radio.channels.update');
+        Route::post('/radio/channels/{radioChannel:public_id}/rotate-invitation', [RadioChannelController::class, 'rotateInvitation'])
+            ->middleware('throttle:6,1,radio.channels.rotate-invitation')
+            ->name('radio.channels.rotate-invitation');
+        Route::delete('/radio/channels/{radioChannel:public_id}/members/{memberPublicId}', [RadioChannelController::class, 'removeMember'])->name('radio.channels.members.destroy');
+        Route::delete('/radio/channels/{radioChannel:public_id}/leave', [RadioChannelController::class, 'leave'])->name('radio.channels.leave');
 
         // /rides/active y /rides/history van ANTES de /rides/{ride}, mismo
         // cuidado de orden que el resto de la API.

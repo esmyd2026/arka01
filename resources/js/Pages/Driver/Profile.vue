@@ -1396,7 +1396,12 @@ const VERIFICATION_LABELS = {
                              del usuario): saldo neto con su cooperativa —
                              carreras en efectivo donde se quedó con el margen
                              de la cooperativa, compensadas con las de
-                             transferencia donde fue al revés. -->
+                             transferencia donde fue al revés. Bug real
+                             reportado ("la billetera no está funcionando"):
+                             con saldo 0 esta sección desaparecía sin ningún
+                             aviso, como si la función no existiera — mismo
+                             criterio que ya tiene Cooperative/DriverShow.vue
+                             del otro lado. -->
                         <div v-if="cooperativeWallet && cooperativeWallet.balance !== 0" class="p-3 rounded-arka" :class="cooperativeWallet.balance > 0 ? 'bg-arka-warning/10' : 'bg-arka-primary/10'">
                             <p class="text-sm font-medium" :class="cooperativeWallet.balance > 0 ? 'text-arka-warning' : 'text-arka-primary'">
                                 {{ cooperativeWallet.balance > 0
@@ -1408,6 +1413,10 @@ const VERIFICATION_LABELS = {
                                     ? 'Por carreras en efectivo cuyo margen le correspondía a la cooperativa.'
                                     : 'Por carreras por transferencia cuya parte le correspondía a usted.' }}
                             </p>
+                        </div>
+                        <div v-else-if="cooperativeWallet" class="p-3 rounded-arka bg-arka-base/60">
+                            <p class="text-sm font-medium text-arka-text">Billetera con {{ cooperativeWallet.cooperative_name }}</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Sin saldo pendiente por ahora.</p>
                         </div>
 
                         <!-- Directorio público (sección 3.4): habilitado desde el plan

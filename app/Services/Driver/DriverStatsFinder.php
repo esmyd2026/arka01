@@ -2,6 +2,8 @@
 
 namespace App\Services\Driver;
 
+use App\Models\CooperativeDriverMembership;
+use App\Models\CooperativeWalletEntry;
 use App\Models\DriverTier;
 use App\Models\Ride;
 use App\Models\User;
@@ -38,7 +40,7 @@ class DriverStatsFinder
             'total' => $filteredQuery()->count(),
             'completed' => $filteredQuery()->where('status', 'completed')->count(),
             'cancelled' => $filteredQuery()->where('status', 'cancelled')->count(),
-            'earnings' => (float) $filteredQuery()->where('status', 'completed')->sum('price'),
+            'earnings' => (float) $filteredQuery()->where('status', 'completed')->selectRaw('COALESCE(SUM('.Ride::chargedTotalSql().'), 0) as total')->value('total'),
             'distance_km' => (float) $filteredQuery()->where('status', 'completed')->sum('distance_km'),
         ];
 
@@ -60,11 +62,11 @@ class DriverStatsFinder
         if (! $from && ! $to) {
             $earningsQuery->where('created_at', '>=', now()->subDays(13)->startOfDay());
         }
-        $completedRides = $earningsQuery->get(['created_at', 'price']);
+        $completedRides = $earningsQuery->get(['created_at', 'price', 'stops_price', 'settled_price', 'status']);
 
         $earningsByDay = $completedRides
             ->groupBy(fn (Ride $ride) => $ride->created_at->toDateString())
-            ->map(fn ($rides) => round((float) $rides->sum('price'), 2))
+            ->map(fn ($rides) => round((float) $rides->sum(fn (Ride $ride) => $ride->chargedTotal()), 2))
             ->sortKeys();
 
         $dailyEarnings = $earningsByDay->map(fn ($total, $date) => [
@@ -88,7 +90,7 @@ class DriverStatsFinder
                 'origin_address' => $ride->origin_address,
                 'destination_address' => $ride->destination_address,
                 'distance_km' => $ride->distance_km,
-                'price' => $ride->price,
+                'price' => $ride->chargedTotal(),
                 'payment_method' => $ride->payment_method,
                 'status' => $ride->status,
                 'points_earned' => $ride->points_earned,
@@ -103,6 +105,17 @@ class DriverStatsFinder
                 'tier' => $tier->toBadge(),
                 'next_tier' => $nextTier?->toBadge(),
             ],
+            // Billetera cooperativa-conductor (pedido explícito del
+            // usuario: "el conductor dónde ve cuánto le debe a la
+            // cooperativa o cuánto la cooperativa le debe a él... debería
+            // estar en los indicadores del conductor") — antes solo vivía
+            // en Driver/Profile.vue; mismo criterio y mismo signo que ahí
+            // (positivo = el conductor debe, ver
+            // CooperativeWalletEntry::balanceFor()).
+            'cooperativeWallet' => ($cooperative = CooperativeDriverMembership::activeCooperativeFor($userId)) ? [
+                'cooperative_name' => $cooperative->name,
+                'balance' => CooperativeWalletEntry::balanceFor($cooperative->id, $userId),
+            ] : null,
             'history' => $history,
         ];
     }

@@ -8,6 +8,7 @@ use App\Models\Review;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\RideStop;
+use App\Notifications\CooperativeTransferPaymentNotified;
 use App\Services\Ride\IncomingRideRequestFinder;
 use App\Services\Ride\RideLifecycle;
 use App\Services\Ride\RideRescheduler;
@@ -123,7 +124,7 @@ class RideController extends Controller
             'client' => ['id' => $ride->client_user_id, 'name' => $ride->client?->name ?? 'Cuenta eliminada', 'avatar_url' => $ride->client?->avatar_url],
             'driver' => ['id' => $ride->driver_user_id, 'name' => $ride->driver?->name ?? 'Cuenta eliminada', 'avatar_url' => $ride->driver?->avatar_url],
             'status' => $ride->status,
-            'price' => (float) $ride->price,
+            'price' => $ride->chargedTotal(),
             // Fecha/hora real del hecho, no solo de cuándo se creó la fila
             // (pedido explícito del usuario: "coloquele al menos la fecha y
             // hora de la carrera").
@@ -191,7 +192,7 @@ class RideController extends Controller
         // de una solicitud PROGRAMADA (consideración agregada al alcance).
         // stops: paradas adicionales (pedido explícito del usuario), vacío
         // en la gran mayoría de las carreras.
-        $ride->load(['client', 'driver.driverProfile', 'originSector', 'destinationSector', 'rideRequest', 'stops']);
+        $ride->load(['client', 'driver.driverProfile', 'originSector', 'destinationSector', 'rideRequest.cooperative.bankAccounts', 'stops']);
 
         // Calificación del conductor (pedido explícito del usuario, con
         // mockup de referencia): la tarjeta de "En camino" necesita mostrar
@@ -211,31 +212,41 @@ class RideController extends Controller
         // eligiendo entre los motivos "conductor → cliente" no tendría sentido.
         $direction = $userId === $ride->client_user_id ? 'client_to_driver' : 'driver_to_client';
 
-        // Cuentas bancarias del conductor (pedido explícito del usuario):
-        // solo tiene sentido mostrárselas al CLIENTE, y solo cuando la
-        // carrera es por transferencia — nunca al propio conductor viendo
-        // su carrera, ni en una carrera en efectivo. Pedido explícito del
+        // Cuenta receptora de la transferencia: en carreras comunes es la
+        // del conductor; en carreras de cooperativa es la cuenta de la
+        // organización, que luego liquida internamente al conductor. Solo
+        // tiene sentido mostrársela al CLIENTE y en transferencia. Pedido explícito del
         // usuario ("no encriptes la cédula ni ningún dato, la idea es que el
         // cliente vea todos los datos para hacer la transferencia"): la
         // cédula completa, sin enmascarar — los bancos ecuatorianos la piden
         // tal cual para una transferencia interbancaria, enmascararla le
         // impedía completarla.
-        $driverBankAccounts = ($ride->payment_method === 'transferencia' && $userId === $ride->client_user_id)
-            ? $ride->driver->bankAccounts()->get()->map(fn ($account) => [
-                'id' => $account->id,
-                'account_holder_name' => $account->account_holder_name ?: $ride->driver->full_name,
-                'bank_name' => $account->bank_name,
-                'account_type' => $account->account_type,
-                'account_number' => $account->account_number,
-                'identity_number' => $account->identity_number,
-                'is_favorite' => $account->is_favorite,
-            ])->all()
+        $transferAccounts = ($ride->payment_method === 'transferencia' && $userId === $ride->client_user_id)
+            ? ($ride->rideRequest?->cooperative
+                ? $ride->rideRequest->cooperative->bankAccounts
+                : $ride->driver->bankAccounts()->get())
+                ->map(fn ($account) => [
+                    'id' => $account->id,
+                    'account_holder_name' => $account->account_holder_name
+                        ?: ($ride->rideRequest?->cooperative?->legal_name ?? $ride->rideRequest?->cooperative?->name ?? $ride->driver->full_name),
+                    'bank_name' => $account->bank_name,
+                    'account_type' => $account->account_type,
+                    'account_number' => $account->account_number,
+                    'identity_number' => $account->identity_number,
+                    'is_favorite' => $account->is_favorite,
+                ])->all()
             : [];
 
         return Inertia::render('Ride/Show', [
             'ride' => $ride,
             'isDriver' => $ride->driver_user_id === $userId,
-            'driverBankAccounts' => $driverBankAccounts,
+            'transferAccounts' => $transferAccounts,
+            // Compatibilidad para clientes web/API anteriores; las nuevas
+            // pantallas usan transferAccounts porque el destinatario también
+            // puede ser una cooperativa.
+            'driverBankAccounts' => $ride->rideRequest?->cooperative_id ? [] : $transferAccounts,
+            'transferRecipient' => $ride->rideRequest?->cooperative?->name ?? $ride->driver->full_name,
+            'transferGoesToCooperative' => $ride->rideRequest?->cooperative_id !== null,
             'myReview' => $reviews->get($userId),
             'theirReview' => $reviews->get($otherUserId),
             'ratingReasons' => RatingReason::query()
@@ -250,6 +261,32 @@ class RideController extends Controller
             // más (ver Ride::chatIsOpen() y RideMessageController::store()).
             'messages' => $ride->messages()->with('sender')->oldest()->get(),
         ]);
+    }
+
+    /** El cliente informa que ya transfirió; la cooperativa verifica en su banco. */
+    public function notifyTransferPayment(Request $request, Ride $ride): RedirectResponse
+    {
+        abort_unless($ride->client_user_id === $request->user()->id, 403);
+        $ride->loadMissing('rideRequest.cooperative.user');
+
+        if ($ride->payment_method !== 'transferencia' || ! $ride->rideRequest?->cooperative) {
+            throw ValidationException::withMessages([
+                'payment' => 'Esta carrera no se paga por transferencia a una cooperativa.',
+            ]);
+        }
+
+        if (! in_array($ride->status, ['in_progress', 'completed'], true)) {
+            throw ValidationException::withMessages([
+                'payment' => 'Puede informar la transferencia cuando la carrera esté en curso o completada.',
+            ]);
+        }
+
+        if (! $ride->transfer_payment_notified_at) {
+            $ride->forceFill(['transfer_payment_notified_at' => now()])->save();
+            $ride->rideRequest->cooperative->user->notify(new CooperativeTransferPaymentNotified($ride));
+        }
+
+        return back()->with('status', 'Pago informado a la cooperativa. Ellos verificarán la transferencia en su cuenta.');
     }
 
     /**
