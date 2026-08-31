@@ -6,6 +6,7 @@ use App\Events\CooperativeRideUpdated;
 use App\Events\RideRequested;
 use App\Jobs\ExpireRideOffer;
 use App\Jobs\ExpireWaitingRideRequest;
+use App\Jobs\FallbackCooperativeAssignment;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
 use App\Models\DriverProfile;
@@ -568,12 +569,24 @@ class RideRequestCreator
         }
 
         if ($rideRequest->cooperative_id && ! $rideRequest->driver_user_id) {
-            // Modo manual significa manual de verdad: la solicitud se queda
-            // exclusivamente en la central de la cooperativa hasta que un
-            // operador elija una unidad. Antes se programaba un fallback a
-            // los 30 segundos; con QUEUE_CONNECTION=sync el delay se ejecuta
-            // inmediatamente y el conductor recibía la carrera antes que el
-            // operador, contradiciendo el switch configurado.
+            // Modo manual (pedido explícito del usuario, aclarado de nuevo):
+            // la solicitud se queda en la central de la cooperativa hasta que
+            // un operador elija una unidad, PERO si se agota el tiempo
+            // configurado (`manual_assignment_timeout_seconds`, el mismo que
+            // ya cuenta la insignia "Auto Xs" del panel) se activa un
+            // respaldo automático — nunca a un conductor ajeno, siempre
+            // acotado a los propios candidatos de la cooperativa
+            // (RideDispatchAdvancer::startCooperativeDispatch() ya usa
+            // RideDispatchCandidates::forCooperative(), nunca la bolsa
+            // pública ni "mi flota"). Si el operador asigna o cancela antes,
+            // este job no hace nada (ve `driver_user_id` puesto o el status
+            // ya no es 'pending' y se sale sin efecto).
+            // Requiere QUEUE_CONNECTION distinto de "sync" (acá "database")
+            // para que el delay se respete de verdad en vez de ejecutarse
+            // de inmediato.
+            FallbackCooperativeAssignment::dispatch($rideRequest->id)
+                ->delay(now()->addSeconds(max(15, min(300, (int) $cooperative->manual_assignment_timeout_seconds))));
+
             return $rideRequest;
         }
 

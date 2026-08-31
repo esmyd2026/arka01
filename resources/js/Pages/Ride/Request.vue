@@ -2539,17 +2539,36 @@ function submit() {
                         </p>
                     </div>
 
-                    <!-- Fila de pago tocable (sección 18: "no convertir la
-                         elección de pago en una pantalla obligatoria") — abre el
-                         mismo cajón de opciones, ya en el campo de pago. -->
-                    <button
-                        type="button"
-                        class="w-full flex items-center justify-between pt-2 border-t border-arka-base/10 text-start"
-                        @click="showRideOptions = true"
-                    >
-                        <span class="text-sm text-arka-base/50">Forma de pago</span>
-                        <span class="text-sm text-arka-base">{{ paymentMethod === 'efectivo' ? 'Efectivo' : 'Transferencia' }} ›</span>
-                    </button>
+                    <!-- Forma de pago (bug real reportado por el usuario: "el
+                         cliente al inicio de tomar una carrera no puede
+                         seleccionar el tipo de pago" — cuando se entra desde
+                         "¿A dónde vamos?" de Inicio, `step` arranca en
+                         'driver' y el paso 'destination' con este mismo
+                         control nunca se llega a ver, ver `step` más arriba.
+                         Antes acá solo había una fila que abría el cajón
+                         "Opciones del viaje" — fácil de no notar. Directo,
+                         sin cajón, mismo estilo que el paso 'destination'. -->
+                    <div class="pt-2 border-t border-arka-base/10">
+                        <p class="text-sm text-arka-base/50">Forma de pago</p>
+                        <div class="mt-1.5 grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.06] p-1 text-sm">
+                            <button
+                                type="button"
+                                class="px-3 py-1.5 rounded-full font-medium transition"
+                                :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                                @click="paymentMethod = 'efectivo'"
+                            >
+                                Efectivo
+                            </button>
+                            <button
+                                type="button"
+                                class="px-3 py-1.5 rounded-full font-medium transition"
+                                :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                                @click="paymentMethod = 'transferencia'"
+                            >
+                                Transferencia
+                            </button>
+                        </div>
+                    </div>
 
                     <!-- Acceso discreto (sección 19 del documento): el usuario
                          normal nunca necesita entrar acá. -->
@@ -2601,31 +2620,6 @@ function submit() {
                             <input type="checkbox" v-model="needsTrunk" class="text-arka-primary rounded" />
                             <span class="text-sm text-arka-text">Llevo maletas / necesito cajuela</span>
                         </label>
-
-                        <!-- Forma de pago (pedido explícito del usuario): el conductor
-                             la ve antes de aceptar — "Efectivo" queda elegido por
-                             defecto. -->
-                        <div>
-                            <InputLabel value="Forma de pago" />
-                            <div class="mt-1 flex items-center gap-1 bg-arka-base/60 rounded-full p-1 text-xs w-fit">
-                                <button
-                                    type="button"
-                                    class="px-3 py-1.5 rounded-full font-medium transition"
-                                    :class="paymentMethod === 'efectivo' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
-                                    @click="paymentMethod = 'efectivo'"
-                                >
-                                    Efectivo
-                                </button>
-                                <button
-                                    type="button"
-                                    class="px-3 py-1.5 rounded-full font-medium transition"
-                                    :class="paymentMethod === 'transferencia' ? 'bg-arka-primary/15 text-arka-primary-bright' : 'text-arka-text-muted'"
-                                    @click="paymentMethod = 'transferencia'"
-                                >
-                                    Transferencia
-                                </button>
-                            </div>
-                        </div>
 
                         <PrimaryButton class="w-full justify-center" @click="showRideOptions = false">Listo</PrimaryButton>
                     </div>

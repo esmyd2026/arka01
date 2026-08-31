@@ -265,7 +265,12 @@ class RideRequest extends Model
             ->where(function ($query) use ($driverUserId) {
                 $query->where('driver_user_id', $driverUserId)
                     ->orWhere(function ($query) use ($driverUserId) {
+                        // Mismo criterio que IncomingRideRequestFinder::forDriver(): una
+                        // solicitud de cooperativa sin asignar no cuenta como "de la
+                        // bolsa" de un conductor solo porque comparte `fleet_id` con la
+                        // flota personal del cliente.
                         $query->whereNull('driver_user_id')
+                            ->whereNull('cooperative_id')
                             ->whereIn('fleet_id', function ($sub) use ($driverUserId) {
                                 $sub->select('fleet_id')
                                     ->from('fleet_members')

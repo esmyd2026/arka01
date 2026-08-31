@@ -44,6 +44,19 @@ class RideRequestResponder
             }
 
             if (! $rideRequest->isDirected()) {
+                // Bug grave reportado por el usuario: una solicitud de cooperativa
+                // sin conductor asignado (esperando al operador, o esperando su
+                // propio despacho automático) nunca se puede "autotomar" por ser
+                // miembro de la flota personal del cliente — esa flota no tiene
+                // nada que ver con la cooperativa. Solo cuenta como legítima la
+                // asignación explícita (automática dentro de la cooperativa, o
+                // manual desde CooperativeRideAssignmentController), que ya deja
+                // `driver_user_id` puesto y por lo tanto entra por la rama
+                // `isDirected()` de arriba.
+                if ($rideRequest->cooperative_id) {
+                    abort(403);
+                }
+
                 $isActiveMember = $rideRequest->fleet->activeMembers()
                     ->where('driver_user_id', $userId)
                     ->exists();

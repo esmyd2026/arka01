@@ -337,7 +337,14 @@ class CooperativeModuleTest extends TestCase
         $this->assertNull($rideRequest->driver_user_id);
         $this->assertNull($rideRequest->dispatch_pool);
         $this->assertSame('awaiting_operator', $rideRequest->cooperative_assignment_status);
-        Bus::assertNotDispatched(FallbackCooperativeAssignment::class);
+        // Pedido explícito del usuario: en modo manual nadie recibe la
+        // solicitud de entrada, pero si el operador no asigna a tiempo debe
+        // haber un respaldo — acotado siempre a los conductores de ESTA
+        // cooperativa (ver RideDispatchAdvancer::startCooperativeDispatch()).
+        Bus::assertDispatched(
+            FallbackCooperativeAssignment::class,
+            fn (FallbackCooperativeAssignment $job) => $job->rideRequestId === $rideRequest->id,
+        );
     }
 
     public function test_a_client_cannot_request_from_an_unattached_cooperative(): void

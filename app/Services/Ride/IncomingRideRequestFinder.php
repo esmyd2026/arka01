@@ -34,7 +34,18 @@ class IncomingRideRequestFinder
                     ->where(function ($query) use ($userId) {
                         $query->where('driver_user_id', $userId)
                             ->orWhere(function ($query) use ($userId) {
+                                // Bug grave reportado por el usuario: una solicitud de
+                                // cooperativa sin asignar (`cooperative_id` presente,
+                                // esperando al operador) también tiene `fleet_id` (la
+                                // flota PERSONAL del cliente, ver RideRequestCreator::create()).
+                                // Sin este `whereNull('cooperative_id')`, cualquier
+                                // conductor que resultara ser miembro de esa flota
+                                // personal (aunque no tenga nada que ver con la
+                                // cooperativa) la veía como "de su bolsa" y podía
+                                // tomarla — nunca debe salir de la cooperativa mientras
+                                // no se le asigne un conductor explícitamente.
                                 $query->whereNull('driver_user_id')
+                                    ->whereNull('cooperative_id')
                                     ->whereIn('fleet_id', function ($sub) use ($userId) {
                                         $sub->select('fleet_id')
                                             ->from('fleet_members')
