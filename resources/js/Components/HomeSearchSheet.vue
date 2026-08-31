@@ -39,6 +39,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'place-selected', 'select-recent', 'destination-loading']);
 
+// Card compacta de Inicio (pedido explícito del usuario: "no quiero una
+// sección grande... la card inicial debe contener únicamente título,
+// subtítulo, buscador, Agregar y Programar") — Recientes y las direcciones
+// guardadas no desaparecen ni pierden datos, solo se difiere cuándo se
+// pintan: recién al tocar el buscador. En la variante de escritorio
+// (`compact` false) esto no aplica, sigue todo visible como antes.
+const recentsExpanded = ref(false);
+
 // Bug real reportado por el usuario ("no se ve nada bien", con captura): la
 // lista de "Recientes" mostraba la dirección completa pegada en una sola
 // línea larga y cortada. `FrequentPlaces` solo guarda un string de dirección
@@ -149,25 +157,59 @@ function saveAddress() {
 <template>
     <div class="flex min-h-0 flex-1 flex-col" :class="compact ? 'gap-3.5' : 'gap-5'">
     <div>
-        <h2 class="text-xl font-bold tracking-tight text-arka-base">¿A dónde vas?</h2>
-        <p class="mt-1 text-xs leading-relaxed text-arka-base/50">Tu ubicación actual será el punto de partida.</p>
-        <div class="mt-4">
+        <h2 :class="compact ? 'text-[21px] leading-tight font-bold mb-1' : 'text-2xl font-bold mb-0'" class="tracking-tight text-arka-base">¿A dónde vamos?</h2>
+        <!-- Pedido explícito del usuario: reducir a un detalle discreto, no
+             una segunda línea que compita con el título. -->
+        <p :class="compact ? 'text-xs text-[#929B97]' : 'text-[11px] text-arka-base/35'" class="leading-relaxed">Tu ubicación actual será el punto de partida.</p>
+        <div class="mt-3">
             <AddressAutocomplete
                 :model-value="modelValue"
                 :favorites="frequentPlaces"
                 placeholder="Buscar destino"
-                light
+                flat
                 @update:model-value="$emit('update:modelValue', $event)"
                 @place-selected="$emit('place-selected', $event)"
                 @selection-loading="$emit('destination-loading', $event)"
+                @focus="recentsExpanded = true"
             />
         </div>
     </div>
 
+    <!-- Card inicial compacta (pedido explícito del usuario): en móvil,
+         Agregar/Programar quedan siempre visibles pero chicos — Recientes y
+         las direcciones guardadas se arman más abajo, iguales, solo que
+         recién aparecen al tocar el buscador. -->
+    <div v-if="compact" class="flex items-center justify-between">
+        <button
+            type="button"
+            class="flex items-center gap-1 px-0.5 text-xs font-medium text-arka-base/45 transition hover:text-arka-primary"
+            @click="openAddForm"
+        >
+            <span class="text-sm leading-none">＋</span>
+            Agregar
+        </button>
+
+        <Link
+            v-if="canSchedule"
+            :href="scheduleHref"
+            class="flex h-[38px] items-center gap-1.5 rounded-[20px] border border-[#A8EDD2] bg-[#ECFBF5] px-3.5 text-xs font-semibold text-[#17201D] transition hover:bg-[#DFF7EC]"
+        >
+            <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path stroke-linecap="round" d="M8 3v4M16 3v4M3 10h18" />
+            </svg>
+            Programar
+        </Link>
+    </div>
+
+    <template v-if="!compact || recentsExpanded">
     <!-- Direcciones guardadas + "+" para agregar una nueva (pedido explícito
          del usuario: reemplaza los 3 chips fijos de Casa/Trabajo/Aeropuerto
-         de antes). Scroll horizontal porque la cantidad ya no es fija. -->
-    <div class="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+         de antes). Scroll horizontal porque la cantidad ya no es fija.
+         Oculto en la card compacta hasta expandir (ver `recentsExpanded`
+         arriba) — el botón "+ Agregar" de acá arriba ya cubre esa acción
+         en ese estado, así que no se repite en esta fila. -->
+    <div v-if="!compact" class="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
             v-for="savedRoute in savedChips"
             :key="savedRoute.id"
@@ -180,39 +222,45 @@ function saveAddress() {
             <span class="truncate">{{ savedRoute.alias || 'Guardada' }}</span>
         </button>
 
+        <!-- Pedido explícito del usuario: acción secundaria, sin tarjeta ni
+             sombra — no debe competir visualmente con las direcciones
+             guardadas de al lado. -->
         <button
             type="button"
-            class="flex min-h-10 flex-none items-center gap-2 rounded-full border border-dashed border-arka-base/25 bg-transparent px-3.5 py-2 text-xs font-semibold text-arka-base/65 transition hover:border-arka-primary/50 hover:bg-white"
+            class="flex min-h-10 flex-none items-center gap-1 px-1.5 text-xs font-medium text-arka-base/45 transition hover:text-arka-primary"
             @click="openAddForm"
         >
-            <span class="text-sm">＋</span>
+            <span class="text-sm leading-none">＋</span>
             Agregar
         </button>
-
-        <!-- En móvil vive junto a los accesos rápidos, no al final de una
-             tarjeta alta. Así sigue visible sin quitarle espacio al mapa. -->
-        <Link
-            v-if="compact && canSchedule"
-            :href="scheduleHref"
-            class="flex min-h-10 flex-none items-center gap-2 rounded-full border border-arka-primary/25 bg-arka-primary/10 px-3.5 py-2 text-xs font-semibold text-arka-base transition hover:bg-arka-primary/15"
-        >
-            <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="5" width="18" height="16" rx="2" />
-                <path stroke-linecap="round" d="M8 3v4M16 3v4M3 10h18" />
-            </svg>
-            Programar
-        </Link>
     </div>
 
-    <!-- Recientes (pedido explícito del usuario, con imagen de referencia):
-         cada uno como su propia tarjeta blanca redondeada, no una fila de
-         lista plana — máximo 3, título+dirección en dos líneas. -->
+    <!-- Chips guardados en la card compacta expandida: mismos datos y
+         evento, fila propia (sin "+ Agregar" repetido ni "Programar", que
+         ya viven arriba siempre visibles). -->
+    <div v-if="compact && savedChips.length" class="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+            v-for="savedRoute in savedChips"
+            :key="savedRoute.id"
+            type="button"
+            class="flex min-h-9 max-w-[10rem] flex-none items-center gap-2 rounded-full border border-arka-base/10 bg-white px-3 py-1.5 text-xs font-semibold text-arka-base shadow-sm transition hover:border-arka-primary/40 hover:shadow"
+            @click="selectSavedRoute(savedRoute)"
+        >
+            <img v-if="iconForAlias(savedRoute.alias)" :src="iconForAlias(savedRoute.alias)" class="h-4 w-4 shrink-0" alt="" />
+            <span v-else class="text-sm shrink-0">📍</span>
+            <span class="truncate">{{ savedRoute.alias || 'Guardada' }}</span>
+        </button>
+    </div>
+
+    <!-- Recientes (pedido explícito del usuario: lista limpia, sin "tarjetas
+         dentro de tarjetas" — filas separadas por una línea fina, no cada
+         una con su propio fondo/sombra). -->
     <div
         v-if="frequentPlaces.length"
-        class="space-y-2.5"
-        :class="compact ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 pb-1 [scrollbar-width:thin]' : ''"
+        class="flex flex-col"
+        :class="compact ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 [scrollbar-width:thin]' : ''"
     >
-        <div class="flex items-center justify-between">
+        <div class="mb-1 flex items-center justify-between">
             <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-arka-base/45">Recientes</p>
             <span class="text-[11px] text-arka-base/35">Toca para repetir</span>
         </div>
@@ -220,26 +268,28 @@ function saveAddress() {
             v-for="place in frequentPlaces.slice(0, compact ? 6 : 3)"
             :key="place.address"
             type="button"
-            class="group flex min-h-[3.75rem] w-full items-center gap-3 rounded-2xl border border-arka-base/[0.04] bg-white px-3.5 py-2.5 text-start shadow-[0_5px_18px_rgba(15,23,42,0.045)] transition hover:-translate-y-px hover:shadow-md active:translate-y-0"
+            class="group flex min-h-14 w-full items-center gap-3 border-b border-[#EEF1F0] py-3 text-start transition last:border-b-0 active:bg-[#F6F8F7]"
             @click="$emit('select-recent', place)"
         >
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-arka-primary/10 transition group-hover:bg-arka-primary/15">
-                <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21Z" />
-                    <circle cx="12" cy="9.5" r="2.5" />
-                </svg>
-            </span>
+            <!-- Reloj/historial en vez del pin de ubicación (pedido explícito
+                 del usuario): comunica "algo que ya usaste", no "un lugar
+                 nuevo por marcar". -->
+            <svg class="h-[18px] w-[18px] shrink-0 text-arka-base/35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4.3l2.8 1.7" />
+            </svg>
             <span class="min-w-0 flex-1">
-                <span class="block text-sm font-medium text-arka-base truncate">{{ splitAddress(place.address).title }}</span>
-                <span v-if="splitAddress(place.address).subtitle" class="block text-xs text-arka-base/50 truncate">
+                <span class="block truncate text-sm font-semibold text-arka-base">{{ splitAddress(place.address).title }}</span>
+                <span v-if="splitAddress(place.address).subtitle" class="block truncate text-[12.5px] text-[#89938F]">
                     {{ splitAddress(place.address).subtitle }}
                 </span>
             </span>
-            <svg class="h-4 w-4 shrink-0 text-arka-base/25 transition group-hover:translate-x-0.5 group-hover:text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="h-4 w-4 shrink-0 text-arka-base/20 transition group-hover:translate-x-0.5 group-hover:text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" />
             </svg>
         </button>
     </div>
+    </template>
 
     <!-- Programar viaje: estilo secundario a propósito — no debe competir
          con seleccionar un destino. -->

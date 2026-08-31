@@ -269,7 +269,13 @@ function recenterMap() {
 const DRIVER_MARKER_COLOR = { fleet: '#34d399', cooperative: '#fbbf24', public: '#60a5fa' };
 const nearbyDriverMarkers = computed(() =>
     (props.nearbyDrivers ?? []).map((driver) => ({
-        id: 'car',
+        // Antes todos compartían el mismo id 'car' — no importaba porque
+        // FleetMap.vue borraba y volvía a crear todos los marcadores en
+        // cada actualización. El nuevo movimiento suave (rediseño puramente
+        // visual, GoogleFleetMap.vue) necesita distinguir A CADA conductor
+        // entre una actualización y la siguiente para animar su posición en
+        // vez de saltar — `user_id` ya viene en el payload de siempre.
+        id: `car-${driver.user_id}`,
         lat: driver.lat,
         lng: driver.lng,
         color: DRIVER_MARKER_COLOR[driver.source] ?? DRIVER_MARKER_COLOR.public,
@@ -1096,6 +1102,8 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         :auto-fit="false"
                         :dark="false"
                         :rounded="false"
+                        :minimal-style="true"
+                        origin-marker-style="dot"
                         height="100%"
                         controls-top-offset="64px"
                         :center-offset-y="bottomSheetHeight"
@@ -1143,7 +1151,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          para esto mismo en otras pantallas. -->
                     <button
                         type="button"
-                        class="absolute right-3 top-[4.5rem] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-black/5 bg-white text-arka-base/70 shadow-xl transition hover:text-arka-primary active:scale-95"
+                        class="absolute right-3 top-[4.5rem] z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-arka-base/60 shadow-[0_2px_10px_rgba(16,24,23,0.14)] transition hover:text-arka-primary active:scale-95"
                         aria-label="Centrar en mi ubicación"
                         @click="recenterMap"
                     >
@@ -1186,12 +1194,18 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     </Link>
                 </div>
 
-                <!-- Bottom sheet: fondo GRIS, sin padding lateral, pegado a
-                     los dos bordes y a la nav inferior, sin espacio vacío
-                     entre medio (pedido explícito del usuario). -->
-                <div ref="bottomSheetRef" class="fixed inset-x-3 bottom-[4.75rem] z-20 sm:inset-x-5">
-                    <div class="flex h-[46dvh] max-h-[25rem] min-h-[20rem] flex-col overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f8fa]/95 px-4 pb-4 pt-3 shadow-[0_20px_60px_rgba(3,15,9,0.24)] backdrop-blur-xl sm:px-5">
-                        <div class="mx-auto h-1.5 w-11 rounded-full bg-arka-base/10" aria-hidden="true"></div>
+                <!-- Card flotante compacta (pedido explícito del usuario:
+                     "no quiero una sección grande... el protagonista debe
+                     ser el mapa") — reemplaza el bottom sheet de borde a
+                     borde por una tarjeta chica con margen a los dos lados,
+                     alto según contenido (sin dvh fijo). Recientes queda
+                     oculto hasta que el cliente toca el buscador (ver
+                     `recentsExpanded` en HomeSearchSheet.vue) — mismos
+                     datos y eventos de siempre, solo se difiere CUÁNDO se
+                     pintan. Sigue siendo puramente visual: mismo
+                     `bottomSheetRef`/eventos de siempre. -->
+                <div ref="bottomSheetRef" class="fixed inset-x-[14px] bottom-[4.75rem] z-20">
+                    <div class="max-h-[70dvh] overflow-y-auto overscroll-contain rounded-[22px] border border-black/[0.04] bg-white/95 px-4 py-4 shadow-[0_10px_35px_rgba(15,23,42,0.12)] backdrop-blur-md">
                         <HomeSearchSheet
                             v-model="homeSearchQuery"
                             compact
@@ -1228,6 +1242,8 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 :clickable="true"
                                 :auto-fit="false"
                                 :dark="false"
+                                :minimal-style="true"
+                                origin-marker-style="dot"
                                 height="340px"
                                 @map-click="({ lat, lng }) => goToDestination({ lat, lng })"
                             />
@@ -1257,7 +1273,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
 
                             <button
                                 type="button"
-                                class="absolute right-3 top-3 z-10 h-10 w-10 rounded-full bg-white shadow-lg flex items-center justify-center text-arka-base/70 hover:text-arka-primary"
+                                class="absolute right-3 top-3 z-10 h-12 w-12 rounded-full bg-white shadow-[0_2px_10px_rgba(16,24,23,0.14)] flex items-center justify-center text-arka-base/60 hover:text-arka-primary"
                                 aria-label="Centrar en mi ubicación"
                                 @click="recenterMap"
                             >
@@ -1287,7 +1303,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </p>
                         </Link>
 
-                        <div class="space-y-5 rounded-[28px] border border-white/70 bg-[#f7f8fa] px-6 pb-6 pt-6 shadow-[0_18px_55px_rgba(3,15,9,0.16)]">
+                        <div class="space-y-5 rounded-[28px] bg-white px-6 pb-6 pt-6 shadow-[0_18px_55px_rgba(16,24,23,0.08)]">
                             <HomeSearchSheet
                                 v-model="homeSearchQuery"
                                 :frequent-places="frequentPlaces"

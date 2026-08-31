@@ -621,7 +621,13 @@ const mapMarkers = computed(() => {
     const markers = allCandidates.value
         .filter((driver) => driver.current_lat != null && driver.status !== 'offline')
         .map((driver) => ({
-            id: 'car',
+            // Antes compartían el mismo id 'car' — no importaba porque el
+            // mapa borraba y recreaba todos los marcadores en cada
+            // actualización. El movimiento suave (rediseño puramente
+            // visual, GoogleFleetMap.vue) necesita distinguir cada
+            // conductor entre una actualización y la siguiente.
+            id: `car-${driver.user_id}`,
+            type: 'car',
             lat: Number(driver.current_lat),
             lng: Number(driver.current_lng),
             label: driver.source === 'fleet' ? 'Conductor de tu flota' : 'Conductor público',
@@ -1703,6 +1709,8 @@ function submit() {
                         :auto-fit="true"
                         :fit-marker-ids="['origin', 'destination']"
                         :dark="false"
+                        :minimal-style="true"
+                        origin-marker-style="dot"
                         height="330px"
                         @map-click="pickRoutePoint"
                     />
@@ -1770,6 +1778,8 @@ function submit() {
                         :fit-padding-bottom="138"
                         :dark="false"
                         :rounded="false"
+                        :minimal-style="true"
+                        origin-marker-style="dot"
                         height="310px"
                     />
                     <!-- Bug real reportado por el usuario, con varias capturas

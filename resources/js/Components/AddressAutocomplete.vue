@@ -27,9 +27,21 @@ const props = defineProps({
     // componente se reutiliza en las dos, así que en vez de duplicarlo
     // entero solo cambia de paleta con esta prop, sin tocar su lógica.
     light: { type: Boolean, default: false },
+    // Rediseño puramente visual del buscador de Inicio (pedido explícito del
+    // usuario: "no quiero que parezca un mapa de Google con un formulario
+    // debajo"). Variante propia en vez de tocar `light` de arriba porque
+    // `light` ya se reutiliza tal cual en Ride/Request.vue (origen, destino,
+    // paradas) — cambiarla ahí habría corrido ese rediseño a una pantalla
+    // que no lo pidió. `flat` implica el mismo comportamiento de `light`
+    // (lupa fija a la izquierda, dropdown claro) con su propia paleta.
+    flat: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:modelValue', 'place-selected', 'clear', 'selection-loading']);
+// `focus` es nuevo (pedido explícito del usuario: la card compacta de
+// Inicio revela Recientes recién cuando el cliente toca el buscador) — no
+// reemplaza ni cambia el manejo interno de foco de este componente (abrir
+// favoritos/sugerencias), solo le avisa al padre que puede reaccionar visualmente.
+const emit = defineEmits(['update:modelValue', 'place-selected', 'clear', 'selection-loading', 'focus']);
 
 let placesLib = null;
 let placesLoading = null;
@@ -230,14 +242,16 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
             :placeholder="placeholder"
             class="w-full focus:ring-arka-primary"
             :class="
-                light
-                    ? 'min-h-12 rounded-full ps-11 pe-10 border border-arka-base/[0.06] bg-white text-arka-base placeholder:text-arka-base/40 shadow-[0_8px_24px_rgba(15,23,42,0.06)] focus:border-arka-primary focus:shadow-[0_10px_28px_rgba(52,211,153,0.12)]'
-                    : 'rounded-arka pe-9 border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary'
+                flat
+                    ? 'min-h-[52px] rounded-[15px] ps-11 pe-10 border border-transparent bg-[#F5F7F6] text-arka-base placeholder:text-[#8D9793] transition-colors duration-200 focus:border-arka-primary/40 focus:bg-white'
+                    : light
+                        ? 'min-h-12 rounded-full ps-11 pe-10 border border-arka-base/[0.06] bg-white text-arka-base placeholder:text-arka-base/40 shadow-[0_8px_24px_rgba(15,23,42,0.06)] focus:border-arka-primary focus:shadow-[0_10px_28px_rgba(52,211,153,0.12)]'
+                        : 'rounded-arka pe-9 border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary'
             "
             autocomplete="off"
             @input="onInput"
             @keydown.escape="close"
-            @focus="() => { ensurePlacesLoaded(); open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0; }"
+            @focus="() => { ensurePlacesLoaded(); open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0; emit('focus'); }"
         />
 
         <!-- Ícono de lupa: pedido explícito del usuario, con imagen de
@@ -248,9 +262,9 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
              (a la derecha, solo mientras el campo está vacío), sin tocar
              ninguna otra pantalla que ya la usa así. -->
         <span
-            v-if="light || !modelValue?.trim()"
+            v-if="light || flat || !modelValue?.trim()"
             class="pointer-events-none absolute inset-y-0 flex items-center"
-            :class="light ? 'left-0 ps-4 text-arka-base/40' : 'right-0 px-3 text-arka-text-muted'"
+            :class="flat ? 'left-0 ps-4 text-[#737D79]' : light ? 'left-0 ps-4 text-arka-base/40' : 'right-0 px-3 text-arka-text-muted'"
         >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="7" stroke-linecap="round" stroke-linejoin="round" />
@@ -264,7 +278,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
             v-if="modelValue?.trim()"
             type="button"
             class="absolute inset-y-0 right-0 flex items-center px-2.5"
-            :class="light ? 'text-arka-base/40 hover:text-arka-base/70' : 'text-arka-text-muted hover:text-arka-text'"
+            :class="flat ? 'text-[#737D79] hover:text-arka-base/70' : light ? 'text-arka-base/40 hover:text-arka-base/70' : 'text-arka-text-muted hover:text-arka-text'"
             aria-label="Limpiar"
             tabindex="-1"
             @click="clearField"
@@ -286,13 +300,13 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
         <ul
             v-if="showFavorites"
             class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1"
-            :class="light ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
+            :class="light || flat ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
             <li v-for="place in favorites" :key="place.address">
                 <button
                     type="button"
                     class="w-full px-3 py-2 text-start text-sm flex items-center gap-2"
-                    :class="light ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
+                    :class="light || flat ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
                     @click="selectFavorite(place)"
                 >
                     <span class="text-arka-primary-bright shrink-0">★</span>
@@ -304,13 +318,13 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
         <ul
             v-else-if="showSuggestions"
             class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1"
-            :class="light ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
+            :class="light || flat ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
             <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
                 <button
                     type="button"
                     class="w-full px-3 py-2 text-start text-sm"
-                    :class="light ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
+                    :class="light || flat ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
                     @click="selectSuggestion(suggestion)"
                 >
                     {{ suggestion.placePrediction.text.text }}

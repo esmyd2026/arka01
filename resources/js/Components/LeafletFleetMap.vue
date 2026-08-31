@@ -115,6 +115,19 @@ const props = defineProps({
         type: Number,
         default: 0,
     },
+    // Rediseño puramente visual de Inicio, solo tiene efecto en
+    // GoogleFleetMap.vue — declaradas acá nomás para que Vue no las filtre
+    // como atributos HTML crudos sobre el contenedor del mapa (este
+    // fallback no corre en la práctica: la API key de Google está
+    // configurada, ver Utils/googleMaps.js).
+    minimalStyle: {
+        type: Boolean,
+        default: false,
+    },
+    originMarkerStyle: {
+        type: String,
+        default: 'pin',
+    },
 });
 
 const emit = defineEmits(['map-click', 'user-panned']);

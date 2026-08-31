@@ -19,6 +19,10 @@ defineProps({
     dark: { type: Boolean, default: true },
     controlsTopOffset: { type: String, default: '0px' },
     centerOffsetY: { type: Number, default: 0 },
+    // Rediseño puramente visual de Inicio (ver GoogleFleetMap.vue) — solo
+    // tiene efecto ahí, Leaflet (fallback sin key de Google) los ignora.
+    minimalStyle: { type: Boolean, default: false },
+    originMarkerStyle: { type: String, default: 'pin' },
 });
 
 const emit = defineEmits(['map-click', 'user-panned']);

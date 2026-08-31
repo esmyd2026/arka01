@@ -16,6 +16,13 @@ const props = defineProps({
     dark: { type: Boolean, default: true },
     controlsTopOffset: { type: String, default: '0px' },
     centerOffsetY: { type: Number, default: 0 },
+    // Rediseño puramente visual del mapa de Inicio (pedido explícito del
+    // usuario: "que parezca una aplicación propia de ARKA01, no un mapa de
+    // Google con un formulario debajo"). Ambas son opt-in con default que
+    // preserva el estilo de siempre — ninguna otra pantalla que usa este
+    // componente (Ride/Request.vue, Ride/Show.vue, etc.) cambia de aspecto.
+    minimalStyle: { type: Boolean, default: false },
+    originMarkerStyle: { type: String, default: 'pin' }, // 'pin' | 'dot'
 });
 
 const emit = defineEmits(['map-click', 'user-panned']);
@@ -53,15 +60,59 @@ const LIGHT_STYLES = [
     { elementType: 'labels.text.stroke', stylers: [{ color: '#f4f7f5' }, { weight: 2 }] },
 ];
 
+// Variante "premium" solo para Inicio (pedido explícito del usuario, opt-in
+// vía la prop `minimalStyle` — el resto de pantallas sigue usando
+// LIGHT_STYLES de arriba sin cambios). Mismo criterio que LIGHT_STYLES
+// (oculta POI/transporte que compiten visualmente con los vehículos) pero
+// con la paleta puntual que pidió: calles casi blancas, agua/parques/
+// edificios diferenciados por tono, sin dominar con el verde de la marca.
+const MINIMAL_LIGHT_STYLES = [
+    { elementType: 'geometry', stylers: [{ color: '#F6F8F7' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ visibility: 'on' }, { color: '#E8F2EC' }] },
+    { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+    { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative.neighborhood', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
+    { featureType: 'landscape', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#EEF1F0' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#FFFFFF' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#E5E9E7' }] },
+    { featureType: 'road.local', elementType: 'geometry', stylers: [{ color: '#F9FAFA' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#E4EAE7' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#DDE9EA' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#65716D' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#F6F8F7' }, { weight: 2 }] },
+    { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#98A29E' }] },
+];
+
 const svgUrl = (svg) => `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 const pinSvg = (color) => `<svg width="30" height="40" viewBox="0 0 26 36" xmlns="http://www.w3.org/2000/svg"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.75 13 23 13 23s13-13.25 13-23C26 5.8 20.2 0 13 0z" fill="${color}" stroke="#0b0f0d"/><circle cx="13" cy="13" r="5" fill="#0b0f0d" fill-opacity=".3"/></svg>`;
+// Punto GPS moderno (pedido explícito del usuario: nada de pin verde grande
+// para "mi ubicación" en Inicio) — círculo sólido con borde blanco y una
+// sombra suave, mismo lenguaje que cualquier app de mapas actual.
+const dotSvg = (color) => `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><defs><filter id="d" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-color="#0b0f0d" flood-opacity="0.35"/></filter></defs><circle cx="15" cy="15" r="9" fill="#ffffff" filter="url(#d)"/><circle cx="15" cy="15" r="6.5" fill="${color}"/></svg>`;
 const carSvg = (color = '#34d399', rotation = 0) => `<svg width="32" height="32" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(${rotation} 13 13)"><rect x="7" y="2.5" width="12" height="21" rx="4.5" fill="${color}" stroke="#0b0f0d"/><rect x="8.8" y="5.5" width="8.4" height="4.5" rx="1.3" fill="#0b0f0d" fill-opacity=".45"/><rect x="8.8" y="16" width="8.4" height="4.5" rx="1.3" fill="#0b0f0d" fill-opacity=".3"/></g></svg>`;
+// Vehículo visto desde arriba (pedido explícito del usuario: "no quiero
+// iconos azules rectangulares tipo carro genérico... quiero un vehículo
+// elegante y minimalista"). Solo para Inicio (`minimalStyle`) — el resto de
+// pantallas sigue con `carSvg` de arriba, sin cambios. Blanco, parabrisas/
+// luneta oscuros, un detalle verde ARKA discreto, sombra suave debajo (fuera
+// del grupo que rota, como corresponde a una sombra proyectada en el suelo).
+const carSvgPremium = (color = '#19B982', rotation = 0) => `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><ellipse cx="18" cy="29" rx="8.5" ry="2.6" fill="#0b0f0d" fill-opacity=".16"/><g transform="rotate(${rotation} 18 17)"><path d="M18 4c4 0 6.1 1.8 6.9 5.7l1 5c.4 1.9.4 3.9 0 5.8l-.8 4c-.5 2.2-1.8 3.1-3.6 3.1H14.5c-1.8 0-3.1-.9-3.6-3.1l-.8-4a15 15 0 0 1 0-5.8l1-5C11.9 5.8 14 4 18 4Z" fill="#FFFFFF" stroke="#C7CCC9" stroke-width="1"/><rect x="12" y="9.6" width="12" height="6" rx="2.1" fill="#242B29" fill-opacity=".85"/><rect x="12.7" y="19.6" width="10.6" height="5" rx="1.8" fill="#242B29" fill-opacity=".5"/><circle cx="18" cy="7" r="1.1" fill="${color}"/></g></svg>`;
 
 function markerIcon(marker) {
     const type = marker.type ?? marker.id;
-    if (type === 'origin') return { url: svgUrl(pinSvg('#34d399')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
+    if (type === 'origin') {
+        if (props.originMarkerStyle === 'dot') {
+            return { url: svgUrl(dotSvg('#19B982')), scaledSize: new google.maps.Size(30, 30), anchor: new google.maps.Point(15, 15) };
+        }
+        return { url: svgUrl(pinSvg('#34d399')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
+    }
     if (type === 'destination') return { url: svgUrl(pinSvg('#f87171')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
     if (type === 'base') return { url: svgUrl(pinSvg('#f59e0b')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
+    if (props.minimalStyle) {
+        return { url: svgUrl(carSvgPremium(marker.color ?? '#19B982', marker.rotation ?? 0)), scaledSize: new google.maps.Size(34, 34), anchor: new google.maps.Point(17, 17) };
+    }
     return { url: svgUrl(carSvg(marker.color ?? '#34d399', marker.rotation ?? 0)), scaledSize: new google.maps.Size(32, 32), anchor: new google.maps.Point(16, 16) };
 }
 
@@ -72,12 +123,13 @@ function applyView(lat, lng, zoom = props.zoom) {
     if (props.centerOffsetY) window.setTimeout(() => map?.panBy(0, props.centerOffsetY / 2), 0);
 }
 
-function drawMarkers() {
-    if (!map) return;
+// Comportamiento de siempre, intacto: destruye y vuelve a crear todos los
+// marcadores en cada actualización — lo sigue usando cualquier pantalla que
+// no pase `minimalStyle` (Ride/Request.vue, Ride/Show.vue, etc.).
+function syncMarkersInstant(valid) {
     renderedMarkers.forEach((marker) => marker.setMap(null));
     renderedMarkers = [];
 
-    const valid = props.markers.filter((marker) => marker.lat != null && marker.lng != null);
     valid.forEach((item) => {
         renderedMarkers.push(new google.maps.Marker({
             map,
@@ -88,7 +140,123 @@ function drawMarkers() {
             optimized: false,
         }));
     });
+}
 
+// Movimiento suave (pedido explícito del usuario, solo Inicio vía
+// `minimalStyle`): en vez de borrar y recrear el marcador en cada ping de
+// ubicación (lo que hacía "saltar" de un punto a otro), reutiliza la MISMA
+// instancia de Marker por id y anima su posición y rumbo entre el valor
+// viejo y el nuevo. No toca de dónde vienen esas coordenadas ni con qué
+// frecuencia llegan — solo cómo se dibuja la transición entre una y otra.
+const ANIMATION_MS = 700;
+const animatedMarkers = new Map(); // id -> { marker, lat, lng, rotation, raf }
+
+function bearingBetween(lat1, lng1, lat2, lng2) {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLng = toRad(lng2 - lng1);
+    const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+// Nunca gira "por el camino largo" (ej. de 350° a 10° son 20°, no 340°).
+function shortestDeltaAngle(from, to) {
+    let delta = (to - from) % 360;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
+}
+
+const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+
+function animateMarkerTo(state, item) {
+    if (state.raf) cancelAnimationFrame(state.raf);
+
+    const fromLat = state.lat;
+    const fromLng = state.lng;
+    const toLat = Number(item.lat);
+    const toLng = Number(item.lng);
+    const fromRotation = state.rotation;
+    // Si el marcador ya trae su propio rumbo real (ej. Ride/Show.vue,
+    // `carHeading` calculado entre las dos últimas posiciones GPS conocidas
+    // del conductor asignado), se respeta ESE valor — no se recalcula uno
+    // propio. Solo cuando no viene ninguno (ej. Inicio, lista de conductores
+    // cercanos sin heading) se deriva del propio desplazamiento del
+    // marcador, y solo si de verdad se movió (evita que tiemble girando por
+    // ruido de GPS con el conductor detenido).
+    const movedMeaningfully = Math.abs(toLat - fromLat) > 0.00003 || Math.abs(toLng - fromLng) > 0.00003;
+    const toRotation = item.rotation != null
+        ? item.rotation
+        : (movedMeaningfully ? bearingBetween(fromLat, fromLng, toLat, toLng) : fromRotation);
+    const deltaRotation = shortestDeltaAngle(fromRotation, toRotation);
+    const start = performance.now();
+    let lastIconUpdate = 0;
+
+    const step = (now) => {
+        const t = Math.min(1, (now - start) / ANIMATION_MS);
+        const eased = easeOutCubic(t);
+        const lat = fromLat + (toLat - fromLat) * eased;
+        const lng = fromLng + (toLng - fromLng) * eased;
+        const rotation = fromRotation + deltaRotation * eased;
+
+        state.lat = lat;
+        state.lng = lng;
+        state.rotation = rotation;
+        state.marker.setPosition({ lat, lng });
+
+        // Regenerar el ícono en cada frame decodificaría un SVG nuevo hasta
+        // 60 veces por segundo por auto — de sobra para el ojo, de más para
+        // el navegador. Cada ~100ms alcanza para ver el giro suave.
+        if (now - lastIconUpdate > 100 || t === 1) {
+            state.marker.setIcon(markerIcon({ id: item.id, type: item.type, color: item.color, rotation }));
+            lastIconUpdate = now;
+        }
+
+        state.raf = t < 1 ? requestAnimationFrame(step) : null;
+    };
+
+    state.raf = requestAnimationFrame(step);
+}
+
+function syncMarkersAnimated(valid) {
+    const seen = new Set();
+
+    valid.forEach((item) => {
+        seen.add(item.id);
+        const lat = Number(item.lat);
+        const lng = Number(item.lng);
+        const state = animatedMarkers.get(item.id);
+
+        if (!state) {
+            const marker = new google.maps.Marker({
+                map,
+                position: { lat, lng },
+                title: item.label ?? '',
+                icon: markerIcon(item),
+                clickable: !props.clickable || !['origin', 'destination'].includes(item.id),
+                optimized: false,
+            });
+            animatedMarkers.set(item.id, { marker, lat, lng, rotation: 0, raf: null });
+            return;
+        }
+
+        if (Math.abs(state.lat - lat) > 1e-9 || Math.abs(state.lng - lng) > 1e-9) {
+            animateMarkerTo(state, item);
+        }
+    });
+
+    Array.from(animatedMarkers.keys()).forEach((id) => {
+        if (seen.has(id)) return;
+        const state = animatedMarkers.get(id);
+        if (state.raf) cancelAnimationFrame(state.raf);
+        state.marker.setMap(null);
+        animatedMarkers.delete(id);
+    });
+}
+
+// Mismo criterio de encuadre de siempre, sin cambios — solo se movió a su
+// propia función para que la puedan llamar los dos caminos de arriba.
+function applyAutoFit(valid) {
     const fitMarkers = props.fitMarkerIds.length
         ? valid.filter((item) => props.fitMarkerIds.includes(item.id))
         : valid;
@@ -109,6 +277,19 @@ function drawMarkers() {
     });
 }
 
+function drawMarkers() {
+    if (!map) return;
+    const valid = props.markers.filter((marker) => marker.lat != null && marker.lng != null);
+
+    if (props.minimalStyle) {
+        syncMarkersAnimated(valid);
+    } else {
+        syncMarkersInstant(valid);
+    }
+
+    applyAutoFit(valid);
+}
+
 function drawRoute() {
     routeLine?.setMap(null);
     routeLine = null;
@@ -126,7 +307,7 @@ onMounted(() => {
     map = new google.maps.Map(mapEl.value, {
         center: { lat: Number(props.center.lat), lng: Number(props.center.lng) },
         zoom: props.zoom,
-        styles: props.dark ? DARK_STYLES : LIGHT_STYLES,
+        styles: props.dark ? DARK_STYLES : (props.minimalStyle ? MINIMAL_LIGHT_STYLES : LIGHT_STYLES),
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
@@ -165,11 +346,16 @@ watch(() => [props.center?.lat, props.center?.lng], ([lat, lng]) => applyView(la
 // sheet puede cambiar solo (usa `dvh`, que se recalcula cuando la barra de
 // direcciones se oculta/aparece), así que esto también corrige ese caso.
 watch(() => props.centerOffsetY, () => applyView(props.center?.lat, props.center?.lng, props.zoom));
-watch(() => props.dark, (dark) => map?.setOptions({ styles: dark ? DARK_STYLES : LIGHT_STYLES }));
+watch(() => props.dark, (dark) => map?.setOptions({ styles: dark ? DARK_STYLES : (props.minimalStyle ? MINIMAL_LIGHT_STYLES : LIGHT_STYLES) }));
 
 onBeforeUnmount(() => {
     listeners.forEach((listener) => listener.remove());
     renderedMarkers.forEach((marker) => marker.setMap(null));
+    animatedMarkers.forEach((state) => {
+        if (state.raf) cancelAnimationFrame(state.raf);
+        state.marker.setMap(null);
+    });
+    animatedMarkers.clear();
     routeLine?.setMap(null);
     map = null;
 });

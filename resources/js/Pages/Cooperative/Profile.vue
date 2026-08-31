@@ -184,7 +184,7 @@ function uploadLogo(event) {
                             <p class="mt-1 text-xs text-arka-text-muted">Seleccione la parada en las sugerencias; se usará para calcular cercanía.</p>
                             <InputError class="mt-1" :message="form.errors.main_address || form.errors.stand_lat || form.errors.stand_lng" />
                             <div class="mt-3 overflow-hidden rounded-arka border border-arka-text-muted/15">
-                                <FleetMap :markers="baseMarkers" :center="baseCenter" :zoom="15" :dark="false" :clickable="true" height="280px" @map-click="selectStandOnMap" />
+                                <FleetMap :markers="baseMarkers" :center="baseCenter" :zoom="15" :dark="false" :minimal-style="true" :clickable="true" height="280px" @map-click="selectStandOnMap" />
                             </div>
                             <p class="mt-2 text-xs text-arka-text-muted">La marca amarilla identifica la base. También puede tocar el mapa para ajustar el punto exacto.</p>
                         </div>

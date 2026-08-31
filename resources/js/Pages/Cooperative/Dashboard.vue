@@ -205,7 +205,7 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div v-if="cooperative.stand_lat == null || cooperative.stand_lng == null" class="mx-5 mb-3 rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">Falta ubicar la base. <Link :href="route('cooperative.profile.edit')" class="font-semibold underline">Marcar ahora</Link></div>
-                        <FleetMap :markers="mapMarkers" :dark="false" height="360px" />
+                        <FleetMap :markers="mapMarkers" :dark="false" :minimal-style="true" height="360px" />
                         <div class="border-t border-arka-text-muted/10 p-4 sm:p-5">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div><h4 class="font-semibold text-arka-text">Estado de las unidades</h4><p class="text-xs text-arka-text-muted">Actualización automática cada 15 segundos</p></div>
