@@ -107,6 +107,27 @@ class RideRequested implements ShouldBroadcast
             'payment_method' => $this->rideRequest->payment_method,
             'status' => $this->rideRequest->status,
             'current_offered_price' => $this->rideRequest->current_offered_price,
+            // Bug real reportado por el usuario ("cuando le da pedir carrera
+            // sigue sin aparecer los costos por cada parada... supongo que
+            // al conductor tampoco le aparece"): confirmado — este evento en
+            // vivo (IncomingRideRequestModal, la primera pantalla que ve el
+            // conductor) nunca mandaba las paradas ni el total real,
+            // `current_offered_price` es solo el tramo final. El respaldo
+            // por polling (RideController::syncRequests(), mismo
+            // IncomingRideRequestFinder que ya se corrigió) sí las traía —
+            // por eso el bug aparecía "a veces sí, a veces no" según cuál de
+            // los dos caminos llegara primero.
+            'stops_price' => (float) ($this->rideRequest->stops_price ?? 0),
+            'total_offered_price' => round(
+                (float) $this->rideRequest->current_offered_price + (float) ($this->rideRequest->stops_price ?? 0),
+                2
+            ),
+            'stops' => $this->rideRequest->stops->map(fn ($stop) => [
+                'sequence' => $stop->sequence,
+                'address' => $stop->address,
+                'leg_distance_km' => $stop->leg_distance_km !== null ? (float) $stop->leg_distance_km : null,
+                'leg_price' => (float) $stop->leg_price,
+            ])->values()->all(),
             'is_scheduled' => $this->rideRequest->is_scheduled,
             'scheduled_at' => $this->rideRequest->scheduled_at,
             'round_trip' => $this->rideRequest->round_trip,

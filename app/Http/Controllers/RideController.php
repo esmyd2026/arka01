@@ -43,7 +43,15 @@ class RideController extends Controller
         return RideRequest::query()
             ->where('client_user_id', $userId)
             ->whereIn('status', ['pending', 'negotiating', 'waiting'])
-            ->with(['driver', 'negotiatingDriver', 'originSector', 'destinationSector'])
+            ->with([
+                'driver',
+                'negotiatingDriver',
+                'originSector',
+                'destinationSector',
+                // La tarjeta de solicitud activa debe mostrar el recorrido
+                // real completo, no saltar visualmente del origen al destino.
+                'stops' => fn ($query) => $query->orderBy('sequence'),
+            ])
             ->latest()
             ->get();
     }
@@ -206,10 +214,12 @@ class RideController extends Controller
         // Cuentas bancarias del conductor (pedido explícito del usuario):
         // solo tiene sentido mostrárselas al CLIENTE, y solo cuando la
         // carrera es por transferencia — nunca al propio conductor viendo
-        // su carrera, ni en una carrera en efectivo. Confidencialidad
-        // (mismo criterio que DriverProfile::maskedPlate()): la cédula del
-        // titular llega enmascarada, el cliente no necesita verla completa
-        // para poder transferir.
+        // su carrera, ni en una carrera en efectivo. Pedido explícito del
+        // usuario ("no encriptes la cédula ni ningún dato, la idea es que el
+        // cliente vea todos los datos para hacer la transferencia"): la
+        // cédula completa, sin enmascarar — los bancos ecuatorianos la piden
+        // tal cual para una transferencia interbancaria, enmascararla le
+        // impedía completarla.
         $driverBankAccounts = ($ride->payment_method === 'transferencia' && $userId === $ride->client_user_id)
             ? $ride->driver->bankAccounts()->get()->map(fn ($account) => [
                 'id' => $account->id,
@@ -217,7 +227,7 @@ class RideController extends Controller
                 'bank_name' => $account->bank_name,
                 'account_type' => $account->account_type,
                 'account_number' => $account->account_number,
-                'masked_identity_number' => $account->maskedIdentityNumber(),
+                'identity_number' => $account->identity_number,
                 'is_favorite' => $account->is_favorite,
             ])->all()
             : [];
@@ -412,6 +422,11 @@ class RideController extends Controller
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
             'cancel_rest' => ['sometimes', 'boolean'],
+            // Pedido explícito del usuario: completar una parada lejos del
+            // punto exacto debe permitir un motivo, igual que el destino
+            // final — mismo catálogo de motivos (RideLifecycle::EARLY_COMPLETION_REASONS).
+            'completion_reason' => ['nullable', 'string', Rule::in(RideLifecycle::EARLY_COMPLETION_REASONS)],
+            'completion_note' => ['nullable', 'string', 'max:500'],
         ]);
 
         $this->rideStopCompleter->complete(
@@ -421,6 +436,8 @@ class RideController extends Controller
             isset($validated['lat']) ? (float) $validated['lat'] : null,
             isset($validated['lng']) ? (float) $validated['lng'] : null,
             (bool) ($validated['cancel_rest'] ?? false),
+            $validated['completion_reason'] ?? null,
+            $validated['completion_note'] ?? null,
         );
 
         return back();

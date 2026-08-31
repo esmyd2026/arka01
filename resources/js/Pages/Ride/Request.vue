@@ -651,16 +651,32 @@ const mapMarkers = computed(() => {
         markers.push({ id: 'destination', lat: destinationLat.value, lng: destinationLng.value, label: 'Destino' });
     }
 
-    // Paradas adicionales (pedido explícito del usuario) — reusa el ícono
-    // "base" de FleetMap.vue (pin ámbar, ya definido y sin uso hoy), distinto
-    // de origen (verde) y destino (rojo), para distinguirlas de un vistazo.
+    // Cada parada usa una identidad propia y estable. Además de evitar el pin
+    // genérico de ubicación, esto permite numerarlas y encuadrarlas junto con
+    // el origen y el destino sin confundirlas con ninguno de los dos.
     stops.value.forEach((stop, index) => {
         if (stop.lat == null) return;
-        markers.push({ id: 'base', lat: stop.lat, lng: stop.lng, label: `Parada ${index + 1}` });
+        markers.push({
+            id: `stop-${index + 1}`,
+            type: 'stop',
+            order: index + 1,
+            lat: stop.lat,
+            lng: stop.lng,
+            label: `Parada ${index + 1}`,
+        });
     });
 
     return markers;
 });
+
+// El mapa debe mostrar el recorrido completo. Antes solo encuadraba origen y
+// destino, por lo que una parada alejada podía quedar cortada o pegada al
+// borde aun cuando la línea sí pasaba por ella.
+const routeFitMarkerIds = computed(() => [
+    'origin',
+    ...stops.value.map((_, index) => `stop-${index + 1}`),
+    'destination',
+]);
 
 async function pickRoutePoint({ lat, lng }) {
     resolvingMapPoint.value = true;
@@ -804,8 +820,36 @@ const destinationLoadingTitle = computed(() => {
 // paradas esto no cambia en nada.
 const stopLegs = ref([]);
 
+// Bug real reportado por el usuario ("parece que calcula el km de la
+// primera parada al destino y no el origen-parada-...-destino"): el "X km ·
+// Y min" de la tarjeta de resumen mostraba SOLO routeDistanceKm/
+// routeDurationMin (el tramo final, ver el comentario de arriba) — correcto
+// para el precio, pero engañoso como "distancia total del viaje" cuando hay
+// paradas. Puramente para mostrar: suma el tramo final + todos los tramos
+// de las paradas. NO se usa para precio ni se manda al backend — eso sigue
+// siendo routeDistanceKm tal cual, sin tocar el contrato con el servidor.
+const totalTripDistanceKm = computed(() => {
+    if (routeDistanceKm.value == null) return null;
+    return stopLegs.value.reduce((sum, leg) => sum + (leg.distanceKm ?? 0), routeDistanceKm.value);
+});
+const totalTripDurationMin = computed(() => {
+    if (routeDurationMin.value == null) return null;
+    return stopLegs.value.reduce((sum, leg) => sum + (leg.durationMin ?? 0), routeDurationMin.value);
+});
+
+// El texto del buscador NO forma parte del trazado. Antes el `watch` profundo
+// observaba el objeto completo de `stops`, incluido `address`, y cada tecla
+// volvía a consultar OSRM y encendía el loading de pantalla. La ruta solo
+// necesita recalcularse cuando una parada ya tiene coordenadas nuevas.
+const routeStopsSignature = computed(() =>
+    stops.value
+        .filter((stop) => stop.lat != null && stop.lng != null)
+        .map((stop) => `${Number(stop.lat).toFixed(6)},${Number(stop.lng).toFixed(6)}`)
+        .join('|')
+);
+
 watch(
-    [originLat, originLng, destinationLat, destinationLng, stops],
+    [originLat, originLng, destinationLat, destinationLng, routeStopsSignature],
     async () => {
         const requestId = ++routeRequestId;
 
@@ -852,7 +896,7 @@ watch(
             if (requestId === routeRequestId) routeLoading.value = false;
         }
     },
-    { immediate: true, deep: true }
+    { immediate: true }
 );
 
 // --- Precio sugerido (sección 5): distancia × tarifa de referencia. Es una
@@ -1332,8 +1376,18 @@ function swapOriginDestination() {
     stops.value = [...stops.value].reverse();
 }
 
+// Bug real reportado por el usuario ("pedí una ruta con varias paradas y no
+// funcionó"): al escribir una parada a mano sin tocar ninguna sugerencia del
+// autocompletado, `stop.lat` se quedaba en null — el submit() de más abajo
+// la filtraba en silencio (`stops.value.filter(stop => stop.lat != null)`),
+// así que la carrera se creaba igual, pero como si esa parada nunca hubiera
+// existido, sin avisar nada. canSubmit ahora exige que toda parada agregada
+// tenga coordenadas reales antes de dejar pedir la carrera.
+const hasUnresolvedStop = computed(() => stops.value.some((stop) => stop.lat == null));
+
 const canSubmit = computed(() => {
     if (originLat.value == null || destinationLat.value == null) return false;
+    if (hasUnresolvedStop.value) return false;
     if (whenMode.value === 'scheduled') return Boolean(scheduledDate.value && scheduledTime.value);
     // Pedido explícito del usuario: no dejar mandar una contraoferta por
     // debajo del precio estimado (se validaba en el backend, pero no tenía
@@ -1416,7 +1470,10 @@ function submit() {
                 ? { background: destinationBackground }
                 : null"
         >
-            <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div
+                class="mx-auto px-3 sm:px-6 lg:px-8"
+                :class="step === 'destination' ? 'max-w-xl' : 'max-w-3xl space-y-6'"
+            >
                 <!-- Rediseño UX (pedido explícito del usuario, guiado por
                      ARKA01_Rediseno_UX_Flujo_Carreras.md): paso 1, "¿A dónde
                      vas?" — todo lo que hace falta para tener origen y
@@ -1424,18 +1481,18 @@ function submit() {
                      paso en vez de ser el arranque de un scroll largo. -->
                 <template v-if="step === 'destination'">
                 <ArkaRouteLoader :show="destinationLoading" :title="destinationLoadingTitle" />
-                <div class="flex flex-col gap-4 rounded-[28px] border border-white/70 bg-[#f4f7f5] p-4 shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06] sm:p-6">
-                <div class="order-1 flex items-start justify-between gap-4 px-1">
+                <div class="flex flex-col overflow-hidden rounded-[26px] border border-white/70 bg-[#f4f7f5] shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06]">
+                <div class="order-1 flex items-center justify-between gap-4 bg-white/95 px-4 py-3.5 sm:px-5">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.14em] text-arka-primary">
                             {{ whenMode === 'scheduled' ? 'Viaje programado' : 'Nueva carrera' }}
                         </p>
-                        <h1 class="mt-1 text-2xl font-bold tracking-tight text-arka-base">
-                            {{ whenMode === 'scheduled' ? 'Programa tu viaje' : '¿A dónde vas?' }}
+                        <h1 class="mt-0.5 text-[22px] font-bold tracking-tight text-arka-base">
+                            {{ whenMode === 'scheduled' ? 'Programa tu viaje' : '¿A dónde vamos?' }}
                         </h1>
-                        <p class="mt-1 text-sm text-arka-base/50">Completa los datos y luego elige quién te llevará.</p>
+                        <p class="mt-0.5 text-xs text-arka-base/45">Revisa el punto de partida y el destino.</p>
                     </div>
-                    <button type="button" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-arka-base/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
+                    <button type="button" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-arka-base/[0.06] bg-[#f6f8f7] text-arka-base/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
                         </svg>
@@ -1443,7 +1500,7 @@ function submit() {
                 </div>
                 <!-- Selector de flota: solo aparece si el cliente tiene más de una
                      (sección 7.3, plan Multi-flota). -->
-                <div v-if="fleets.length > 1" class="order-5 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm">
+                <div v-if="fleets.length > 1" class="order-6 mx-3 mt-3 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:mx-4">
                     <InputLabel value="Pedir carrera desde la flota" light />
                     <SearchableSelect
                         class="mt-1"
@@ -1454,23 +1511,20 @@ function submit() {
                     />
                 </div>
 
-                <div v-if="locationError" class="order-3 rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-4 text-sm text-arka-base/70">
+                <div v-if="locationError" class="order-4 mx-3 mt-3 rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-3 text-sm text-arka-base/70 sm:mx-4">
                     {{ locationError }}
                 </div>
 
                 <!-- ¿Cuándo? (consideración agregada al alcance, pedido explícito del
                      usuario): "ahora mismo" por defecto, o programar fecha/hora — con
                      la opción de marcarla como ida y vuelta. -->
-                <div class="order-4 space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:p-5">
-                    <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-arka-primary">Opciones del viaje</p>
-                        <h3 class="mt-0.5 text-lg font-bold text-arka-base">¿Cuándo deseas viajar?</h3>
-                    </div>
+                <div class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-base/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
+                    <p class="text-xs font-semibold text-arka-base/55">¿Cuándo viajas?</p>
 
                     <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
                         <button
                             type="button"
-                            class="px-4 py-1.5 rounded-full font-medium transition"
+                            class="px-3 py-2 rounded-full font-medium transition"
                             :class="whenMode === 'now' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
                             @click="whenMode = 'now'"
                         >
@@ -1478,7 +1532,7 @@ function submit() {
                         </button>
                         <button
                             type="button"
-                            class="px-4 py-1.5 rounded-full font-medium transition"
+                            class="px-3 py-2 rounded-full font-medium transition"
                             :class="whenMode === 'scheduled' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
                             @click="whenMode = 'scheduled'"
                         >
@@ -1553,23 +1607,58 @@ function submit() {
                     </div>
                 </div>
 
+                <!-- Forma de pago (bug real reportado por el usuario: "en esta
+                     pantalla no aparece el tipo de pago" — antes solo se podía
+                     elegir en el cajón "Opciones del viaje" del paso "Elige tu
+                     conductor", fácil de no abrir nunca). Mismo ref
+                     `paymentMethod` que ya usa ese paso más abajo — es la
+                     misma decisión, ahora también visible y editable acá,
+                     junto a "¿Cuándo viajas?", el mismo tipo de decisión
+                     temprana. `order-5`, mismo valor que el bloque de arriba
+                     — entre los dos solo importa el orden real del DOM. -->
+                <div class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-base/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
+                    <p class="text-xs font-semibold text-arka-base/55">Forma de pago</p>
+
+                    <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
+                        <button
+                            type="button"
+                            class="px-3 py-2 rounded-full font-medium transition"
+                            :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                            @click="paymentMethod = 'efectivo'"
+                        >
+                            Efectivo
+                        </button>
+                        <button
+                            type="button"
+                            class="px-3 py-2 rounded-full font-medium transition"
+                            :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                            @click="paymentMethod = 'transferencia'"
+                        >
+                            Transferencia
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Origen/Destino (pedido explícito del usuario: "simplificar la
                      búsqueda... que sea más fácil pedir una carrera") — buscador con
                      Google Places como campo principal, con los lugares ya usados
                      antes como favoritos (ver AddressAutocomplete.vue). -->
-                <div class="order-3 relative z-10 -mt-10 space-y-4 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-[0_14px_35px_rgba(1,12,7,0.16)] sm:p-5">
-                    <div>
-                        <h3 class="text-lg font-bold text-arka-base">Tu recorrido</h3>
-                        <p class="text-xs text-arka-base/45">Escribe una dirección o ajusta cada punto directamente en el mapa.</p>
+                <div class="order-3 relative z-10 mx-3 -mt-7 space-y-3 rounded-[22px] border border-arka-base/[0.05] bg-white p-4 shadow-[0_14px_35px_rgba(1,12,7,0.16)] sm:mx-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-lg font-bold text-arka-base">Direcciones</h3>
+                            <p class="text-xs text-arka-base/40">Puede escribirlas o moverlas en el mapa.</p>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-[#ecfbf5] px-2.5 py-1 text-[11px] font-semibold text-arka-primary">Paso 1 de 3</span>
                     </div>
 
                     <!-- "Mis rutas" (pedido explícito del usuario): tomar una
                          ruta guardada de una, sin escribir ni marcar nada. -->
-                    <div v-if="savedRoutes.length" class="flex flex-wrap gap-2">
+                    <div v-if="savedRoutes.length" class="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <div
                             v-for="saved in savedRoutes"
                             :key="saved.id"
-                            class="group flex items-center gap-1.5 rounded-full border border-arka-base/10 bg-[#f7f8fa] py-1.5 pl-3 pr-1.5 hover:border-arka-primary/50"
+                            class="group flex shrink-0 items-center gap-1.5 rounded-full border border-arka-base/10 bg-[#f7f8fa] py-1.5 pl-3 pr-1.5 hover:border-arka-primary/50"
                         >
                             <button type="button" class="text-sm text-arka-base" @click="useSavedRoute(saved)">
                                 📍 {{ saved.alias || saved.origin_address || 'Ruta guardada' }}
@@ -1585,8 +1674,8 @@ function submit() {
                         </div>
                     </div>
 
-                    <div class="relative pl-7">
-                        <span class="absolute left-[5px] top-7 h-[calc(100%+2.25rem)] w-px bg-arka-base/15" aria-hidden="true"></span>
+                    <div class="relative pl-6">
+                        <span class="absolute left-[5px] top-7 h-[calc(100%+1.75rem)] w-px bg-arka-base/12" aria-hidden="true"></span>
                         <span class="absolute left-0 top-7 h-3 w-3 rounded-full border-[3px] border-arka-primary bg-white" aria-hidden="true"></span>
                         <div class="flex items-center justify-between gap-2">
                             <InputLabel for="origin_address" value="Origen" light />
@@ -1596,11 +1685,15 @@ function submit() {
                                  pantalla (por si falló, o si el cliente se movió). -->
                             <button
                                 type="button"
-                                class="text-xs text-arka-primary hover:text-arka-primary-bright shrink-0"
+                                class="flex shrink-0 items-center gap-1 text-[11px] font-medium text-arka-primary hover:text-arka-primary-bright"
                                 :disabled="locatingOrigin"
                                 @click="() => useCurrentLocationAsOrigin()"
                             >
-                                📍 {{ locatingOrigin ? 'Ubicándote…' : 'Usar mi ubicación actual' }}
+                                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3" />
+                                    <path stroke-linecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                                </svg>
+                                {{ locatingOrigin ? 'Ubicándote…' : 'Mi ubicación' }}
                             </button>
                         </div>
                         <AddressAutocomplete
@@ -1621,7 +1714,12 @@ function submit() {
                          cada una cobrada por separado) — entre origen y
                          destino, mismo AddressAutocomplete reusado. -->
                     <div v-for="(stop, index) in stops" :key="index" class="relative pl-7">
-                        <span class="absolute left-0 top-7 h-3 w-3 rounded-full bg-amber-500 ring-4 ring-amber-50" aria-hidden="true"></span>
+                        <!-- La numeración coincide con el punto intermedio del
+                             mapa para reconocer cada parada inmediatamente. -->
+                        <span
+                            class="absolute -left-0.5 top-8 flex h-5 w-5 items-center justify-center rounded-full bg-amber-600 text-[10px] font-bold leading-none text-white ring-4 ring-amber-50 shadow-sm"
+                            aria-hidden="true"
+                        >{{ index + 1 }}</span>
                         <div class="flex items-center justify-between gap-2">
                             <InputLabel :for="`stop_address_${index}`" :value="`Parada ${index + 1}`" light />
                             <button type="button" class="text-xs text-arka-danger hover:underline shrink-0" @click="removeStop(index)">Quitar</button>
@@ -1637,17 +1735,24 @@ function submit() {
                             @place-selected="(place) => pickStopFromAddress(index, place)"
                             @clear="clearStop(index)"
                         />
+                        <!-- Bug real reportado por el usuario: escribir la
+                             dirección a mano sin elegir una sugerencia dejaba
+                             esta parada sin coordenadas, y se descartaba sola
+                             al pedir la carrera sin ningún aviso. -->
+                        <p v-if="stop.lat == null" class="mt-1 text-xs text-arka-warning">
+                            {{ stop.address ? 'Elegí una sugerencia de la lista para fijar esta parada en el mapa — no alcanza con escribir la dirección.' : 'Completá esta parada o quitala con "Quitar".' }}
+                        </p>
                     </div>
                     <button
                         v-if="stops.length < MAX_STOPS"
                         type="button"
-                        class="pl-7 text-sm font-medium text-arka-primary hover:text-arka-primary-bright"
+                        class="pl-7 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
                         @click="addStop"
                     >
                         + Agregar parada
                     </button>
 
-                    <div class="relative pl-7">
+                    <div class="relative pl-6">
                         <span class="absolute left-0 top-7 h-3 w-3 rounded-sm bg-rose-500 ring-4 ring-rose-50" aria-hidden="true"></span>
                         <InputLabel for="destination_address" value="Destino" light />
                         <AddressAutocomplete
@@ -1695,7 +1800,7 @@ function submit() {
                          hace falta (ej. el conductor lo entiende de un vistazo). -->
                     <button
                         type="button"
-                        class="text-sm text-arka-primary hover:text-arka-primary-bright"
+                        class="text-xs font-medium text-arka-primary hover:text-arka-primary-bright"
                         @click="showZoneDetails = !showZoneDetails"
                     >
                         {{ showZoneDetails ? 'Ocultar' : 'Precisar ciudad/sector (opcional)' }}
@@ -1742,53 +1847,44 @@ function submit() {
 
                 <!-- Mapa: confirmación visual del recorrido, y una forma de ajustar el
                      destino a mano tocando el mapa (sección 9.3: Leaflet + OpenStreetMap). -->
-                <div class="order-2 relative -mx-4 min-h-[330px] overflow-hidden border-y border-arka-base/[0.05] bg-white sm:-mx-6">
+                <div class="order-2 relative min-h-[285px] overflow-hidden border-y border-arka-base/[0.05] bg-white">
                     <FleetMap
                         :markers="mapMarkers"
                         :center="mapCenter ?? undefined"
                         :route="routeCoords"
+                        animate-route
                         :clickable="true"
                         :auto-fit="true"
-                        :fit-marker-ids="['origin', 'destination']"
+                        :fit-marker-ids="routeFitMarkerIds"
                         :dark="false"
                         :minimal-style="true"
                         origin-marker-style="dot"
-                        height="330px"
+                        destination-marker-style="dot"
+                        height="285px"
                         @map-click="pickRoutePoint"
                     />
-                    <div class="absolute left-14 right-3 top-3 z-[500] flex justify-end gap-2">
-                        <button type="button" class="rounded-full border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur transition" :class="mapEditingPoint === 'origin' ? 'border-arka-primary bg-arka-primary text-arka-base' : 'border-white/70 bg-white/90 text-arka-base/65'" @click="mapEditingPoint = 'origin'">
-                            <span class="mr-1 inline-block h-2 w-2 rounded-full bg-current"></span> Mover origen
+                    <div class="absolute right-3 top-3 z-[500] flex rounded-full border border-white/80 bg-white/90 p-1 shadow-lg backdrop-blur">
+                        <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'origin' ? 'bg-arka-primary text-arka-base shadow-sm' : 'text-arka-base/55'" @click="mapEditingPoint = 'origin'">
+                            <span class="mr-1 inline-block h-2 w-2 rounded-full bg-current"></span> Origen
                         </button>
-                        <button type="button" class="rounded-full border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur transition" :class="mapEditingPoint === 'destination' ? 'border-rose-500 bg-rose-500 text-white' : 'border-white/70 bg-white/90 text-arka-base/65'" @click="mapEditingPoint = 'destination'">
-                            <span class="mr-1 inline-block h-2 w-2 rounded-sm bg-current"></span> Mover destino
+                        <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'destination' ? 'bg-rose-500 text-white shadow-sm' : 'text-arka-base/55'" @click="mapEditingPoint = 'destination'">
+                            <span class="mr-1 inline-block h-2 w-2 rounded-sm bg-current"></span> Destino
                         </button>
                     </div>
-                    <div class="absolute bottom-12 left-1/2 z-[500] -translate-x-1/2 whitespace-nowrap rounded-full bg-arka-base/90 px-4 py-2 text-xs font-medium text-white shadow-lg backdrop-blur">
-                        Toca el mapa para ubicar el {{ mapEditingPoint === 'origin' ? 'origen' : 'destino' }} exacto
+                    <div class="absolute bottom-10 left-1/2 z-[500] -translate-x-1/2 whitespace-nowrap rounded-full bg-arka-base/85 px-3 py-1.5 text-[11px] font-medium text-white shadow-lg backdrop-blur">
+                        Toca para mover el {{ mapEditingPoint === 'origin' ? 'origen' : 'destino' }}
                     </div>
                 </div>
 
                 <!-- Acción 1 del documento: elegido el destino, "Continuar"
                      lleva al paso de elegir conductor — nada de formulario
                      largo en el medio (sección 5). -->
-                <div class="order-6 sticky bottom-20 z-20 rounded-2xl bg-[#f4f7f5]/95 px-1 pb-1 pt-2 backdrop-blur-sm">
+                <div class="order-7 mx-3 pb-4 pt-3 sm:mx-4">
                     <!-- Secuencia visible (pedido explícito del usuario): deja
                          claro que Continuar NO envía todavía la solicitud, sino
                          que abre el siguiente paso para elegir conductor. -->
-                    <div class="mb-2 flex items-center justify-between px-1">
-                        <div class="flex items-center gap-2">
-                            <div class="flex gap-1" aria-hidden="true">
-                                <span class="h-1.5 w-6 rounded-full bg-arka-primary"></span>
-                                <span class="h-1.5 w-6 rounded-full bg-arka-base/10"></span>
-                                <span class="h-1.5 w-6 rounded-full bg-arka-base/10"></span>
-                            </div>
-                            <span class="text-[11px] font-semibold text-arka-base/45">Paso 1 de 3</span>
-                        </div>
-                        <span class="text-[11px] text-arka-base/45">Siguiente: conductor</span>
-                    </div>
                     <PrimaryButton class="min-h-12 w-full justify-between text-sm" :disabled="!canProceedToDriver || destinationLoading" @click="goToDriverStep">
-                        <span class="flex-1 text-center">{{ destinationLoading ? 'Preparando recorrido…' : 'Continuar' }}</span>
+                        <span class="flex-1 text-center">{{ destinationLoading ? 'Preparando recorrido…' : 'Continuar y elegir conductor' }}</span>
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-base/10" aria-hidden="true">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" />
@@ -1813,16 +1909,18 @@ function submit() {
                         :markers="mapMarkers"
                         :center="mapCenter ?? undefined"
                         :route="routeCoords"
+                        animate-route
                         :clickable="false"
                         :auto-fit="true"
-                        :fit-marker-ids="['origin', 'destination']"
-                        :fit-padding-top="72"
-                        :fit-padding-bottom="138"
+                        :fit-marker-ids="routeFitMarkerIds"
+                        :fit-padding-top="36"
+                        :fit-padding-bottom="76"
                         :dark="false"
                         :rounded="false"
                         :minimal-style="true"
                         origin-marker-style="dot"
-                        height="310px"
+                        destination-marker-style="dot"
+                        height="340px"
                     />
                     <!-- Bug real reportado por el usuario, con varias capturas
                          repetidas ("la tarjeta sigue apareciendo por debajo
@@ -1839,7 +1937,12 @@ function submit() {
                          Components/FleetMap.vue (`isolate`). Ya solucionado
                          eso, el solape puede ser el de verdad (como el
                          bosquejo), no el parche de 12px. -->
-                    <div class="-mt-24 mx-3 sm:mx-6 lg:mx-4 relative z-10 p-3.5 bg-arka-card/95 backdrop-blur-md shadow-2xl rounded-arka border border-arka-text-muted/20">
+                    <!-- Rediseño puramente visual (pedido explícito del usuario:
+                         "mejoremos esto más profesional"): tema claro para
+                         combinar con el mapa minimalista de acá arriba — antes
+                         era una tarjeta oscura flotando sobre un mapa claro,
+                         un contraste que se veía descuidado, no premium. -->
+                    <div class="-mt-24 mx-3 sm:mx-6 lg:mx-4 relative z-10 p-4 bg-white/95 backdrop-blur-md shadow-[0_10px_35px_rgba(15,23,42,0.12)] rounded-[22px] border border-black/[0.04]">
                         <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0 flex-1">
                                 <!-- Mini recorrido: origen y destino se leen como
@@ -1849,40 +1952,47 @@ function submit() {
                                 <div class="relative">
                                     <span class="absolute left-[4px] top-2 bottom-2 w-px bg-gradient-to-b from-arka-primary via-arka-primary/45 to-arka-danger/70"></span>
                                     <div class="relative flex min-w-0 gap-3">
-                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-arka-card bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
+                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
                                         <div class="min-w-0 flex-1">
-                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-primary/80">Recoger en</p>
-                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-text">{{ originAddress || 'Mi ubicación' }}</p>
+                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-primary">Recoger en</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-base">{{ originAddress || 'Mi ubicación' }}</p>
                                         </div>
                                     </div>
 
                                     <!-- Paradas adicionales (pedido explícito del usuario) —
                                          mismos nodos conectados, entre origen y destino. -->
                                     <div v-for="(stop, index) in stops" :key="index" class="relative mt-3 flex min-w-0 gap-3">
-                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-arka-card bg-amber-500 shadow-[0_0_0_2px_rgba(245,158,11,0.18)]"></span>
+                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-amber-500 shadow-[0_0_0_2px_rgba(245,158,11,0.18)]"></span>
                                         <div class="min-w-0 flex-1">
                                         <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">Parada {{ index + 1 }}</p>
-                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-text">{{ stop.address || 'Parada marcada en el mapa' }}</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-base">{{ stop.address || 'Parada marcada en el mapa' }}</p>
                                         </div>
                                     </div>
 
                                     <div class="relative mt-3 flex min-w-0 gap-3">
-                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border-2 border-arka-card bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.16)]"></span>
+                                        <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border-2 border-white bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.16)]"></span>
                                         <div class="min-w-0 flex-1">
-                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-danger/80">Destino</p>
-                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-text">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
+                                        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-500">Destino</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-base">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
                                         </div>
                                     </div>
                                 </div>
                                 <!-- Pedido explícito del usuario: "indicar los km y
                                      minutos de ese recorrido" — distancia y duración
                                      REALES de manejo (OSRM, misma ruta dibujada en el
-                                     mapa), no la línea recta. -->
-                                <p v-if="routeDistanceKm != null" class="ml-[26px] mt-2 flex items-center gap-1.5 text-xs text-arka-text-muted">
+                                     mapa), no la línea recta. Bug real reportado por
+                                     el usuario ("parece que calcula el km de la
+                                     primera parada al destino"): acá se muestra el
+                                     recorrido COMPLETO (origen→paradas→destino,
+                                     totalTripDistanceKm) — el precio sigue
+                                     calculándose tramo por tramo tal cual, esto es
+                                     solo para que el número que lee el cliente
+                                     represente el viaje entero, no un pedazo. -->
+                                <p v-if="routeDistanceKm != null" class="ml-[26px] mt-2 flex items-center gap-1.5 text-xs text-arka-base/50">
                                     <span class="inline-block h-1 w-1 rounded-full bg-arka-primary"></span>
-                                    {{ routeDistanceKm.toFixed(1) }} km · {{ Math.round(routeDurationMin) }} min estimados
+                                    {{ totalTripDistanceKm.toFixed(1) }} km · {{ Math.round(totalTripDurationMin) }} min estimados
                                 </p>
-                                <p v-else-if="originLat != null && destinationLat != null" class="ml-[26px] mt-2 text-xs text-arka-text-muted">
+                                <p v-else-if="originLat != null && destinationLat != null" class="ml-[26px] mt-2 text-xs text-arka-base/50">
                                     Calculando recorrido…
                                 </p>
                             </div>
@@ -1892,7 +2002,7 @@ function submit() {
                                      direcciones de nuevo. -->
                                 <button
                                     type="button"
-                                    class="grid h-8 w-8 place-items-center rounded-arka border border-arka-text-muted/20 text-arka-text-muted transition hover:bg-arka-base hover:text-arka-text"
+                                    class="grid h-8 w-8 place-items-center rounded-full border border-black/[0.06] text-arka-base/50 transition hover:bg-[#F5F7F6] hover:text-arka-base"
                                     aria-label="Invertir recoger y destino"
                                     title="Invertir recoger y destino"
                                     :disabled="originLat == null || destinationLat == null"
@@ -1902,7 +2012,13 @@ function submit() {
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h11l-3-3M17 17H6l3 3" />
                                     </svg>
                                 </button>
-                                <SecondaryButton size="sm" class="shrink-0" @click="backToDestinationStep">Cambiar</SecondaryButton>
+                                <button
+                                    type="button"
+                                    class="shrink-0 rounded-full border border-black/[0.06] px-3.5 py-2 text-xs font-semibold text-arka-base/70 transition hover:bg-[#F5F7F6] hover:text-arka-base"
+                                    @click="backToDestinationStep"
+                                >
+                                    Cambiar
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2364,6 +2480,13 @@ function submit() {
                         Opciones del viaje ({{ rideOptionsSummary }}) ›
                     </button>
                 </div>
+
+                <!-- Bug real reportado por el usuario: sin este aviso, el botón
+                     "Pedir ahora" deshabilitado por una parada sin coordenadas
+                     no daba ninguna pista de por qué no reaccionaba. -->
+                <p v-if="hasUnresolvedStop" class="text-center text-xs text-arka-warning">
+                    Completá todas las paradas (elegí una sugerencia de la lista) antes de pedir.
+                </p>
 
                 <!-- Sticky (sección 34: "Pedir ahora" siempre accesible con el
                      pulgar) — sin segunda pantalla de "¿está seguro?" (sección 11). -->

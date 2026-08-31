@@ -98,6 +98,10 @@ const isClient = usePage().props.auth.isClient;
 const incoming = ref([...props.incomingRequestsAsDriver]);
 const myPending = ref([...props.pendingRequestsAsClient]);
 const activeImmediateRequest = computed(() => myPending.value.find((request) => !request.is_scheduled && ['pending', 'negotiating', 'waiting'].includes(request.status)) ?? null);
+const activeImmediateStops = computed(() =>
+    [...(activeImmediateRequest.value?.stops ?? [])]
+        .sort((a, b) => Number(a.sequence) - Number(b.sequence))
+);
 const otherPendingRequests = computed(() => myPending.value.filter((request) => request.id !== activeImmediateRequest.value?.id));
 const reminderRideIds = ref(new Set(props.scheduledRides.filter((ride) => ride.driver_reminder_sent_at).map((ride) => ride.id)));
 const upcomingReminderRide = computed(() => props.scheduledRides.find((ride) => ride.driver_user_id === userId && reminderRideIds.value.has(ride.id)) ?? null);
@@ -527,16 +531,47 @@ function confirmRaiseOffer(id) {
 
                         <div class="mt-5 h-2 overflow-hidden rounded-full bg-arka-base/80"><div class="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-arka-primary/30 via-arka-primary to-arka-lime"></div></div>
 
-                        <div class="mt-5 rounded-2xl border border-arka-text-muted/10 bg-arka-base/55 p-4">
-                            <div class="flex gap-3">
-                                <div class="flex shrink-0 flex-col items-center pt-1">
-                                    <span class="h-3 w-3 rounded-full bg-arka-primary ring-4 ring-arka-primary/10"></span>
-                                    <span class="my-1 min-h-12 w-0.5 flex-1 bg-gradient-to-b from-arka-primary to-arka-danger"></span>
-                                    <span class="h-3 w-3 rotate-45 rounded-[2px] bg-arka-danger ring-4 ring-arka-danger/10"></span>
-                                </div>
-                                <div class="min-w-0 flex-1 space-y-4">
-                                    <div><p class="text-[10px] font-semibold uppercase tracking-wider text-arka-primary">Recoger en</p><p class="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.origin_address || 'Origen marcado en el mapa' }}</p></div>
-                                    <div><p class="text-[10px] font-semibold uppercase tracking-wider text-arka-danger">Destino</p><p class="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.destination_address || 'Destino seleccionado' }}</p></div>
+                        <div class="mt-5 overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/55">
+                            <div class="flex items-center justify-between border-b border-arka-text-muted/10 px-4 py-3">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-text-muted">Tu recorrido</p>
+                                <span v-if="activeImmediateStops.length" class="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold text-amber-400">
+                                    {{ activeImmediateStops.length }} parada{{ activeImmediateStops.length === 1 ? '' : 's' }}
+                                </span>
+                            </div>
+
+                            <div class="px-4 py-4">
+                                <div class="relative space-y-4 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-px before:bg-arka-text-muted/25">
+                                    <div class="relative flex min-w-0 gap-3">
+                                        <span class="relative z-10 mt-0.5 h-4 w-4 shrink-0 rounded-full border-[3px] border-arka-base bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-arka-primary">Recoger en</p>
+                                            <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.origin_address || 'Origen marcado en el mapa' }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div v-for="(stop, index) in activeImmediateStops" :key="stop.id ?? stop.sequence ?? index" class="relative flex min-w-0 gap-3">
+                                        <span class="relative z-10 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-600 text-[8px] font-bold leading-none text-white ring-[3px] ring-arka-base">
+                                            {{ stop.sequence ?? index + 1 }}
+                                        </span>
+                                        <div class="min-w-0 flex-1">
+                                            <!-- Bug real reportado por el usuario ("habíamos pedido que
+                                                 cada parada tenga su propio cálculo y costos... sigue sin
+                                                 aparecer") — el dato ya venía del backend, solo faltaba
+                                                 pintarlo acá. -->
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-400">
+                                                Parada {{ stop.sequence ?? index + 1 }}<span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span><span v-if="stop.leg_price != null"> · ${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                            </p>
+                                            <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ stop.address || 'Parada marcada en el mapa' }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="relative flex min-w-0 gap-3">
+                                        <span class="relative z-10 mt-0.5 h-4 w-4 shrink-0 rounded-[4px] border-[3px] border-arka-base bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.18)]"></span>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-arka-danger">Destino final</p>
+                                            <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.destination_address || 'Destino seleccionado' }}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -546,10 +581,14 @@ function confirmRaiseOffer(id) {
                                 <p class="text-[10px] uppercase tracking-wide text-arka-text-muted">Estado</p>
                                 <p class="truncate text-sm text-arka-text">{{ activeImmediateRequest.status === 'waiting' ? 'Esperando una unidad disponible' : activeImmediateRequest.driver ? `Contactando a ${activeImmediateRequest.driver.name}` : 'Buscando conductores cercanos' }}</p>
                             </div>
-                            <div class="shrink-0 text-right"><p class="text-[10px] text-arka-text-muted">Oferta</p><p class="font-bold text-arka-primary">${{ Number(activeImmediateRequest.current_offered_price).toFixed(2) }}</p></div>
+                            <!-- Bug real reportado por el usuario: current_offered_price es
+                                 solo el tramo final — sin sumar stops_price, la "Oferta" que
+                                 veía el propio cliente no coincidía con lo que el conductor
+                                 termina viendo (ya corregido) ni con el total real. -->
+                            <div class="shrink-0 text-right"><p class="text-[10px] text-arka-text-muted">Oferta</p><p class="font-bold text-arka-primary">${{ (Number(activeImmediateRequest.current_offered_price) + Number(activeImmediateRequest.stops_price ?? 0)).toFixed(2) }}</p></div>
                         </div>
 
-                        <button type="button" class="mx-auto mt-4 flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-arka-danger" @click="cancelRequest(activeImmediateRequest.id)">
+                        <button type="button" class="mx-auto mt-4 flex min-h-11 items-center gap-2 rounded-full border border-arka-danger/25 px-5 text-sm font-semibold text-arka-danger transition hover:bg-arka-danger/10" @click="cancelRequest(activeImmediateRequest.id)">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 2.25a9.75 9.75 0 1 0 0 19.5 9.75 9.75 0 0 0 0-19.5Zm-2.47 6.22a.75.75 0 0 0-1.06 1.06L10.94 12l-2.47 2.47a.75.75 0 1 0 1.06 1.06L12 13.06l2.47 2.47a.75.75 0 1 0 1.06-1.06L13.06 12l2.47-2.47a.75.75 0 1 0-1.06-1.06L12 10.94 9.53 8.47Z" clip-rule="evenodd" /></svg>
                             Cancelar solicitud
                         </button>
@@ -681,10 +720,15 @@ function confirmRaiseOffer(id) {
                             <div class="flex items-center justify-between gap-3 border-b border-arka-text-muted/10 bg-arka-primary/10 px-4 py-3">
                                 <div>
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">Carrera disponible</p>
-                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.current_offered_price).toFixed(2) }}</p>
+                                    <!-- Bug real reportado por el usuario ("revisa si le llega al
+                                         conductor igual"): current_offered_price es solo el tramo
+                                         final — sin sumar stops_price, el conductor veía menos de
+                                         lo que en realidad le corresponde por todo el recorrido. -->
+                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.total_offered_price ?? r.current_offered_price).toFixed(2) }}</p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-sm font-semibold text-arka-text">{{ Number(r.distance_km).toFixed(1) }} km</p>
+                                    <p v-if="r.stops?.length" class="text-xs font-semibold text-arka-warning">+{{ r.stops.length }} parada{{ r.stops.length === 1 ? '' : 's' }}</p>
                                     <p class="text-xs capitalize text-arka-text-muted">{{ r.payment_method ?? 'efectivo' }}</p>
                                 </div>
                             </div>
@@ -768,6 +812,15 @@ function confirmRaiseOffer(id) {
                                         <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km (ya incluida arriba)</span>
                                         <span class="text-arka-text font-medium">${{ Number(r.pickup_fare).toFixed(2) }}</span>
                                     </div>
+                                    <!-- Bug real reportado por el usuario: antes las paradas ni
+                                         aparecían acá — el conductor aceptaba sin saber que el
+                                         recorrido pasaba por otro lado antes del destino. -->
+                                    <template v-if="r.stops?.length">
+                                        <div v-for="stop in r.stops" :key="stop.sequence" class="flex items-center justify-between text-sm">
+                                            <span class="text-arka-text-muted truncate pr-2">Parada {{ stop.sequence }} · {{ stop.address ?? 'sin referencia' }}{{ stop.leg_distance_km != null ? ` · ${stop.leg_distance_km.toFixed(1)} km` : '' }}</span>
+                                            <span class="shrink-0 text-arka-text font-medium">${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                        </div>
+                                    </template>
                                 </div>
 
                                 <PrimaryButton class="min-h-12 w-full justify-center text-sm" :disabled="processingRequestId === r.id || secondsLeft(r) === 0" @click="acceptRequest(r.id)">

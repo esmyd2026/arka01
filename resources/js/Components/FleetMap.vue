@@ -11,6 +11,7 @@ defineProps({
     height: { type: String, default: '320px' },
     clickable: { type: Boolean, default: false },
     route: { type: Array, default: () => [] },
+    animateRoute: { type: Boolean, default: false },
     autoFit: { type: Boolean, default: true },
     fitMarkerIds: { type: Array, default: () => [] },
     fitPaddingTop: { type: Number, default: 40 },
@@ -23,6 +24,7 @@ defineProps({
     // tiene efecto ahí, Leaflet (fallback sin key de Google) los ignora.
     minimalStyle: { type: Boolean, default: false },
     originMarkerStyle: { type: String, default: 'pin' },
+    destinationMarkerStyle: { type: String, default: 'pin' },
 });
 
 const emit = defineEmits(['map-click', 'user-panned']);

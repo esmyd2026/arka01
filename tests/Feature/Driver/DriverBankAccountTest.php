@@ -147,13 +147,16 @@ class DriverBankAccountTest extends TestCase
             'status' => 'in_progress',
         ]);
 
+        // Pedido explícito del usuario ("no encriptes la cédula ni ningún
+        // dato, la idea es que el cliente vea todos los datos para hacer la
+        // transferencia"): cédula completa, sin enmascarar — los bancos
+        // ecuatorianos la piden tal cual para una transferencia interbancaria.
         $this->actingAs($client)->get(route('rides.show', $ride))
             ->assertInertia(fn (Assert $page) => $page
                 ->has('driverBankAccounts', 2)
                 ->where('driverBankAccounts.0.bank_name', 'Banco Favorito')
                 ->where('driverBankAccounts.0.is_favorite', true)
-                ->where('driverBankAccounts.0.masked_identity_number', 'xxxxxxx321')
-                ->missing('driverBankAccounts.0.identity_number')
+                ->where('driverBankAccounts.0.identity_number', '0987654321')
             );
     }
 

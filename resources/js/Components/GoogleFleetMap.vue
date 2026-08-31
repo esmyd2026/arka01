@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { arkaVehicleSvg } from '@/Utils/mapVehicleMarker';
 
 const props = defineProps({
     markers: { type: Array, default: () => [] },
@@ -8,6 +9,7 @@ const props = defineProps({
     height: { type: String, default: '320px' },
     clickable: { type: Boolean, default: false },
     route: { type: Array, default: () => [] },
+    animateRoute: { type: Boolean, default: false },
     autoFit: { type: Boolean, default: true },
     fitMarkerIds: { type: Array, default: () => [] },
     fitPaddingTop: { type: Number, default: 40 },
@@ -23,12 +25,15 @@ const props = defineProps({
     // componente (Ride/Request.vue, Ride/Show.vue, etc.) cambia de aspecto.
     minimalStyle: { type: Boolean, default: false },
     originMarkerStyle: { type: String, default: 'pin' }, // 'pin' | 'dot'
+    destinationMarkerStyle: { type: String, default: 'pin' }, // 'pin' | 'dot'
 });
 
 const emit = defineEmits(['map-click', 'user-panned']);
 const mapEl = ref(null);
 let map = null;
 let routeLine = null;
+let routeHalo = null;
+let routeAnimationFrame = null;
 let renderedMarkers = [];
 let listeners = [];
 let lastFitSignature = null;
@@ -91,6 +96,9 @@ const pinSvg = (color) => `<svg width="30" height="40" viewBox="0 0 26 36" xmlns
 // para "mi ubicación" en Inicio) — círculo sólido con borde blanco y una
 // sombra suave, mismo lenguaje que cualquier app de mapas actual.
 const dotSvg = (color) => `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><defs><filter id="d" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-color="#0b0f0d" flood-opacity="0.35"/></filter></defs><circle cx="15" cy="15" r="9" fill="#ffffff" filter="url(#d)"/><circle cx="15" cy="15" r="6.5" fill="${color}"/></svg>`;
+// Punto intermedio compacto: conserva el ámbar de las paradas del formulario,
+// pero evita que se lea como otro origen/destino. El número aclara el orden.
+const stopDotSvg = (order = 1) => `<svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg"><defs><filter id="s" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1" stdDeviation="1.4" flood-color="#0b0f0d" flood-opacity="0.28"/></filter></defs><circle cx="14" cy="14" r="10" fill="#ffffff" filter="url(#s)"/><circle cx="14" cy="14" r="7.5" fill="#D97706"/><text x="14" y="17" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#ffffff">${order}</text></svg>`;
 const carSvg = (color = '#34d399', rotation = 0) => `<svg width="32" height="32" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(${rotation} 13 13)"><rect x="7" y="2.5" width="12" height="21" rx="4.5" fill="${color}" stroke="#0b0f0d"/><rect x="8.8" y="5.5" width="8.4" height="4.5" rx="1.3" fill="#0b0f0d" fill-opacity=".45"/><rect x="8.8" y="16" width="8.4" height="4.5" rx="1.3" fill="#0b0f0d" fill-opacity=".3"/></g></svg>`;
 // Vehículo visto desde arriba (pedido explícito del usuario: "no quiero
 // iconos azules rectangulares tipo carro genérico... quiero un vehículo
@@ -98,7 +106,6 @@ const carSvg = (color = '#34d399', rotation = 0) => `<svg width="32" height="32"
 // pantallas sigue con `carSvg` de arriba, sin cambios. Blanco, parabrisas/
 // luneta oscuros, un detalle verde ARKA discreto, sombra suave debajo (fuera
 // del grupo que rota, como corresponde a una sombra proyectada en el suelo).
-const carSvgPremium = (color = '#19B982', rotation = 0) => `<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><ellipse cx="18" cy="29" rx="8.5" ry="2.6" fill="#0b0f0d" fill-opacity=".16"/><g transform="rotate(${rotation} 18 17)"><path d="M18 4c4 0 6.1 1.8 6.9 5.7l1 5c.4 1.9.4 3.9 0 5.8l-.8 4c-.5 2.2-1.8 3.1-3.6 3.1H14.5c-1.8 0-3.1-.9-3.6-3.1l-.8-4a15 15 0 0 1 0-5.8l1-5C11.9 5.8 14 4 18 4Z" fill="#FFFFFF" stroke="#C7CCC9" stroke-width="1"/><rect x="12" y="9.6" width="12" height="6" rx="2.1" fill="#242B29" fill-opacity=".85"/><rect x="12.7" y="19.6" width="10.6" height="5" rx="1.8" fill="#242B29" fill-opacity=".5"/><circle cx="18" cy="7" r="1.1" fill="${color}"/></g></svg>`;
 
 function markerIcon(marker) {
     const type = marker.type ?? marker.id;
@@ -108,10 +115,19 @@ function markerIcon(marker) {
         }
         return { url: svgUrl(pinSvg('#34d399')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
     }
-    if (type === 'destination') return { url: svgUrl(pinSvg('#f87171')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
+    if (type === 'destination') {
+        if (props.destinationMarkerStyle === 'dot') {
+            return { url: svgUrl(dotSvg('#f87171')), scaledSize: new google.maps.Size(30, 30), anchor: new google.maps.Point(15, 15) };
+        }
+        return { url: svgUrl(pinSvg('#f87171')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
+    }
+    if (type === 'stop') return { url: svgUrl(stopDotSvg(marker.order)), scaledSize: new google.maps.Size(28, 28), anchor: new google.maps.Point(14, 14) };
     if (type === 'base') return { url: svgUrl(pinSvg('#f59e0b')), scaledSize: new google.maps.Size(30, 40), anchor: new google.maps.Point(15, 40) };
     if (props.minimalStyle) {
-        return { url: svgUrl(carSvgPremium(marker.color ?? '#19B982', marker.rotation ?? 0)), scaledSize: new google.maps.Size(34, 34), anchor: new google.maps.Point(17, 17) };
+        // Inicio y seguimiento en carrera comparten exactamente el mismo
+        // vehículo. Si hay rumbo gira la misma silueta, no la reemplaza.
+        const url = svgUrl(arkaVehicleSvg(marker.rotation ?? 0, marker.color ?? '#19B982'));
+        return { url, scaledSize: new google.maps.Size(34, 34), anchor: new google.maps.Point(17, 17) };
     }
     return { url: svgUrl(carSvg(marker.color ?? '#34d399', marker.rotation ?? 0)), scaledSize: new google.maps.Size(32, 32), anchor: new google.maps.Point(16, 16) };
 }
@@ -151,14 +167,6 @@ function syncMarkersInstant(valid) {
 const ANIMATION_MS = 700;
 const animatedMarkers = new Map(); // id -> { marker, lat, lng, rotation, raf }
 
-function bearingBetween(lat1, lng1, lat2, lng2) {
-    const toRad = (d) => (d * Math.PI) / 180;
-    const dLng = toRad(lng2 - lng1);
-    const y = Math.sin(dLng) * Math.cos(toRad(lat2));
-    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
-    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-}
-
 // Nunca gira "por el camino largo" (ej. de 350° a 10° son 20°, no 340°).
 function shortestDeltaAngle(from, to) {
     let delta = (to - from) % 360;
@@ -177,17 +185,11 @@ function animateMarkerTo(state, item) {
     const toLat = Number(item.lat);
     const toLng = Number(item.lng);
     const fromRotation = state.rotation;
-    // Si el marcador ya trae su propio rumbo real (ej. Ride/Show.vue,
-    // `carHeading` calculado entre las dos últimas posiciones GPS conocidas
-    // del conductor asignado), se respeta ESE valor — no se recalcula uno
-    // propio. Solo cuando no viene ninguno (ej. Inicio, lista de conductores
-    // cercanos sin heading) se deriva del propio desplazamiento del
-    // marcador, y solo si de verdad se movió (evita que tiemble girando por
-    // ruido de GPS con el conductor detenido).
-    const movedMeaningfully = Math.abs(toLat - fromLat) > 0.00003 || Math.abs(toLng - fromLng) > 0.00003;
-    const toRotation = item.rotation != null
-        ? item.rotation
-        : (movedMeaningfully ? bearingBetween(fromLat, fromLng, toLat, toLng) : fromRotation);
+    // Solo se rota cuando el payload trae un rumbo real. Inicio no lo trae,
+    // así que el vehículo permanece orientado al norte: no se infiere un
+    // dato de navegación a partir de dos coordenadas.
+    const hasRotation = item.rotation != null;
+    const toRotation = hasRotation ? Number(item.rotation) : fromRotation;
     const deltaRotation = shortestDeltaAngle(fromRotation, toRotation);
     const start = performance.now();
     let lastIconUpdate = 0;
@@ -207,7 +209,7 @@ function animateMarkerTo(state, item) {
         // Regenerar el ícono en cada frame decodificaría un SVG nuevo hasta
         // 60 veces por segundo por auto — de sobra para el ojo, de más para
         // el navegador. Cada ~100ms alcanza para ver el giro suave.
-        if (now - lastIconUpdate > 100 || t === 1) {
+        if (hasRotation && (now - lastIconUpdate > 100 || t === 1)) {
             state.marker.setIcon(markerIcon({ id: item.id, type: item.type, color: item.color, rotation }));
             lastIconUpdate = now;
         }
@@ -236,7 +238,7 @@ function syncMarkersAnimated(valid) {
                 clickable: !props.clickable || !['origin', 'destination'].includes(item.id),
                 optimized: false,
             });
-            animatedMarkers.set(item.id, { marker, lat, lng, rotation: 0, raf: null });
+            animatedMarkers.set(item.id, { marker, lat, lng, rotation: Number(item.rotation ?? 0), raf: null });
             return;
         }
 
@@ -291,16 +293,67 @@ function drawMarkers() {
 }
 
 function drawRoute() {
+    if (routeAnimationFrame) cancelAnimationFrame(routeAnimationFrame);
+    routeAnimationFrame = null;
     routeLine?.setMap(null);
+    routeHalo?.setMap(null);
     routeLine = null;
+    routeHalo = null;
     if (!map || !props.route.length) return;
+
+    const fullPath = props.route.map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) }));
+
+    routeHalo = new google.maps.Polyline({
+        map,
+        path: props.animateRoute ? fullPath.slice(0, 1) : fullPath,
+        strokeColor: '#ffffff',
+        strokeOpacity: 0.92,
+        strokeWeight: 5,
+        clickable: false,
+        zIndex: 2,
+    });
     routeLine = new google.maps.Polyline({
         map,
-        path: props.route.map((point) => ({ lat: Number(point.lat), lng: Number(point.lng) })),
-        strokeColor: '#34d399',
-        strokeOpacity: 0.9,
-        strokeWeight: 5,
+        path: props.animateRoute ? fullPath.slice(0, 1) : fullPath,
+        strokeColor: '#176B4D',
+        strokeOpacity: 1,
+        strokeWeight: 3,
+        clickable: false,
+        zIndex: 3,
+        icons: [{
+            icon: {
+                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                fillColor: '#0d3b2c',
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 1,
+                scale: 3,
+            },
+            offset: '100%',
+        }],
     });
+
+    if (!props.animateRoute || fullPath.length < 2) return;
+
+    const duration = Math.min(1600, Math.max(900, fullPath.length * 8));
+    const startedAt = performance.now();
+    const revealRoute = (now) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        const eased = 1 - (1 - progress) ** 3;
+        const visiblePoints = Math.max(2, Math.ceil(eased * fullPath.length));
+        const visiblePath = fullPath.slice(0, visiblePoints);
+        routeHalo?.setPath(visiblePath);
+        routeLine?.setPath(visiblePath);
+
+        if (progress < 1) {
+            routeAnimationFrame = requestAnimationFrame(revealRoute);
+        } else {
+            routeHalo?.setPath(fullPath);
+            routeLine?.setPath(fullPath);
+            routeAnimationFrame = null;
+        }
+    };
+    routeAnimationFrame = requestAnimationFrame(revealRoute);
 }
 
 onMounted(() => {
@@ -356,6 +409,8 @@ onBeforeUnmount(() => {
         state.marker.setMap(null);
     });
     animatedMarkers.clear();
+    if (routeAnimationFrame) cancelAnimationFrame(routeAnimationFrame);
+    routeHalo?.setMap(null);
     routeLine?.setMap(null);
     map = null;
 });
@@ -367,11 +422,11 @@ onBeforeUnmount(() => {
 // dos puntos juntos cada vez, para que siempre se vea el tramo que falta,
 // no un zoom arbitrario. `maxZoom` evita que se acerque demasiado si el
 // conductor ya está casi encima del objetivo.
-function fitTo(points, { maxZoom = 17 } = {}) {
+function fitTo(points, { maxZoom = 17, paddingTop = 60, paddingRight = 60, paddingBottom = 60, paddingLeft = 60 } = {}) {
     if (!map || points.length < 2) return;
     const bounds = new google.maps.LatLngBounds();
     points.forEach((point) => bounds.extend({ lat: Number(point.lat), lng: Number(point.lng) }));
-    map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+    map.fitBounds(bounds, { top: paddingTop, right: paddingRight, bottom: paddingBottom, left: paddingLeft });
     google.maps.event.addListenerOnce(map, 'idle', () => {
         if ((map?.getZoom() ?? 0) > maxZoom) map.setZoom(maxZoom);
     });

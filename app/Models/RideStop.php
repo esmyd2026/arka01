@@ -27,6 +27,11 @@ class RideStop extends Model
         'status',
         'completed_at',
         'cancelled_at',
+        // Pedido explícito del usuario: completar lejos del punto exacto
+        // debe permitir un motivo, igual que al completar el destino final
+        // (ver RideLifecycle::EARLY_COMPLETION_REASONS).
+        'completion_reason',
+        'completion_note',
     ];
 
     protected $casts = [

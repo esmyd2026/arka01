@@ -8,6 +8,7 @@ use App\Models\Ride;
 use App\Models\RideStop;
 use App\Models\User;
 use App\Notifications\RideCompletedPushNotification;
+use App\Services\Haversine;
 use App\Services\RideDispatchAdvancer;
 use App\Services\WhatsAppFreeformSender;
 use Illuminate\Validation\ValidationException;
@@ -20,10 +21,16 @@ use Illuminate\Validation\ValidationException;
  */
 class RideStopCompleter
 {
-    public function __construct(private readonly RideLifecycle $rideLifecycle) {}
-
-    public function complete(Ride $ride, RideStop $stop, User $actingUser, ?float $lat, ?float $lng, bool $cancelRest): void
-    {
+    public function complete(
+        Ride $ride,
+        RideStop $stop,
+        User $actingUser,
+        ?float $lat,
+        ?float $lng,
+        bool $cancelRest,
+        ?string $completionReason = null,
+        ?string $completionNote = null,
+    ): void {
         if ($ride->driver_user_id !== $actingUser->id) {
             abort(403);
         }
@@ -45,15 +52,30 @@ class RideStopCompleter
             ]);
         }
 
-        $this->rideLifecycle->assertNearRideLocation(
-            $lat,
-            $lng,
+        // Pedido explícito del usuario: "debería permitir que termine [la
+        // parada] como en el flujo normal, que si no está en el punto exacto
+        // coloque un motivo y termine esa parada" — mismo criterio que
+        // RideLifecycle::complete() con el destino final: sin motivo, lejos
+        // del punto bloquea; con motivo, se acepta y queda guardado.
+        $isNearStop = ! isset($lat, $lng) || Haversine::distanceKm(
             (float) $stop->lat,
             (float) $stop->lng,
-            'Parece que todavía no está en la parada — inténtelo cuando esté más cerca.',
-        );
+            $lat,
+            $lng,
+        ) <= RideLifecycle::RIDE_ACTION_LOCATION_TOLERANCE_KM;
 
-        $stop->update(['status' => 'completed', 'completed_at' => now()]);
+        if (! $isNearStop && ! $completionReason) {
+            throw ValidationException::withMessages([
+                'completion_reason' => 'Parece que todavía no está en la parada — elija un motivo para completarla igual.',
+            ]);
+        }
+
+        $stop->update([
+            'status' => 'completed',
+            'completed_at' => now(),
+            'completion_reason' => ! $isNearStop ? $completionReason : null,
+            'completion_note' => ! $isNearStop ? $completionNote : null,
+        ]);
 
         if ($cancelRest) {
             $ride->stops()

@@ -47,7 +47,13 @@ class IncomingRideRequestFinder
             ->orWhere(function ($query) use ($userId) {
                 $query->where('status', 'negotiating')->where('negotiating_driver_user_id', $userId);
             })
-            ->with(['client', 'originSector', 'destinationSector'])
+            // Bug real reportado por el usuario ("revisa si le llega al
+            // conductor igual"): sin cargar 'stops' acá, el conductor
+            // aceptaba una solicitud con paradas creyendo que era un viaje
+            // directo — ni la pantalla ni el aviso por WhatsApp mostraban
+            // las paradas ni su parte del precio (`stops_price`), recién
+            // aparecían en rides.show DESPUÉS de aceptar, ya comprometido.
+            ->with(['client', 'originSector', 'destinationSector', 'stops'])
             ->latest()
             ->get();
 
@@ -89,6 +95,15 @@ class IncomingRideRequestFinder
             $rideRequest->client_trust = $this->trustIndex->calculate($rideRequest->client, $driver);
             $rideRequest->route_padding_km = PriceCalculator::DISTANCE_PADDING_KM;
             $rideRequest->route_padding_fare = $routePaddingFare;
+            // Bug real reportado por el usuario: `current_offered_price` es
+            // SOLO el tramo final (última parada → destino, ver
+            // RideRequestCreator::create()) — sin esto, el conductor veía un
+            // precio menor al que en realidad le corresponde por todo el
+            // recorrido con paradas.
+            $rideRequest->total_offered_price = round(
+                (float) $rideRequest->current_offered_price + (float) ($rideRequest->stops_price ?? 0),
+                2
+            );
         });
 
         return $incoming;

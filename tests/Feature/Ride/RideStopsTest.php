@@ -79,6 +79,25 @@ class RideStopsTest extends TestCase
         $this->assertSame($expected, (float) $rideRequest->stops_price);
     }
 
+    public function test_the_client_requests_page_exposes_every_pending_stop_in_order(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+
+        $this->actingAs($client)
+            ->post(route('ride-requests.store'), $this->payloadWithStops($driver->id))
+            ->assertRedirect();
+
+        $this->actingAs($client)
+            ->get(route('rides.index'))
+            ->assertInertia(fn ($page) => $page
+                ->has('pendingRequestsAsClient.0.stops', 2)
+                ->where('pendingRequestsAsClient.0.stops.0.sequence', 1)
+                ->where('pendingRequestsAsClient.0.stops.0.address', 'Parada 1')
+                ->where('pendingRequestsAsClient.0.stops.1.sequence', 2)
+                ->where('pendingRequestsAsClient.0.stops.1.address', 'Parada 2')
+            );
+    }
+
     public function test_a_fifth_stop_is_rejected(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
@@ -177,6 +196,44 @@ class RideStopsTest extends TestCase
         $this->actingAs($driver)
             ->post(route('rides.stops.complete', [$ride->id, $ride->stops[0]->id]))
             ->assertSessionHasErrors('ride');
+    }
+
+    public function test_completing_a_stop_far_away_requires_a_reason(): void
+    {
+        [, $driver, $ride] = $this->acceptedRideWithStops();
+        $this->markPickedUp($driver, $ride);
+        $firstStop = $ride->stops[0];
+
+        $this->actingAs($driver)
+            ->post(route('rides.stops.complete', [$ride->id, $firstStop->id]), [
+                // Bien lejos de -0.1850, -78.4700 (más de 1.5 km).
+                'lat' => -0.1350,
+                'lng' => -78.4700,
+            ])
+            ->assertSessionHasErrors('completion_reason');
+
+        $this->assertSame('pending', $firstStop->fresh()->status);
+    }
+
+    public function test_completing_a_stop_far_away_succeeds_with_a_reason(): void
+    {
+        [, $driver, $ride] = $this->acceptedRideWithStops();
+        $this->markPickedUp($driver, $ride);
+        $firstStop = $ride->stops[0];
+
+        $this->actingAs($driver)
+            ->post(route('rides.stops.complete', [$ride->id, $firstStop->id]), [
+                'lat' => -0.1350,
+                'lng' => -78.4700,
+                'completion_reason' => 'Otro motivo',
+                'completion_note' => 'El acceso estaba cerrado.',
+            ])
+            ->assertRedirect();
+
+        $firstStop->refresh();
+        $this->assertSame('completed', $firstStop->status);
+        $this->assertSame('Otro motivo', $firstStop->completion_reason);
+        $this->assertSame('El acceso estaba cerrado.', $firstStop->completion_note);
     }
 
     public function test_completing_a_stop_with_cancel_rest_closes_the_ride_early(): void

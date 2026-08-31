@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { arkaVehicleSvg } from '@/Utils/mapVehicleMarker';
 import L from 'leaflet';
 import { fixLeafletIcons } from '@/Utils/leafletIcons';
 
@@ -35,6 +36,10 @@ const props = defineProps({
     route: {
         type: Array,
         default: () => [],
+    },
+    animateRoute: {
+        type: Boolean,
+        default: false,
     },
     // Encuadra los marcadores cuando cambia DE QUÉ se compone la lista (fix
     // real reportado: se marcaba el origen y el mapa se centraba bien, pero
@@ -128,6 +133,10 @@ const props = defineProps({
         type: String,
         default: 'pin',
     },
+    destinationMarkerStyle: {
+        type: String,
+        default: 'pin',
+    },
 });
 
 const emit = defineEmits(['map-click', 'user-panned']);
@@ -136,6 +145,8 @@ const mapEl = ref(null);
 let map = null;
 let markerLayer = null;
 let routeLine = null;
+let routeHalo = null;
+let routeAnimationFrame = null;
 // Bug real reportado (con captura: "dice que ya viene en camino y no veo lo
 // que está sucediendo"): el mapa arrancaba siempre centrado en Quito por
 // defecto si la pantalla no pasaba un :center explícito (ej.
@@ -232,6 +243,7 @@ function applyControlsTopOffset() {
 watch(() => props.controlsTopOffset, applyControlsTopOffset);
 
 onBeforeUnmount(() => {
+    if (routeAnimationFrame) cancelAnimationFrame(routeAnimationFrame);
     map?.remove();
 });
 
@@ -254,6 +266,49 @@ const DRIVER_DOT_SVG = `
         <circle cx="11" cy="11" r="3" fill="#0b0f0d"/>
     </svg>
 `;
+
+const LOCATION_DOT_SVG = (fill) => `
+    <svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="location-dot-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="1" stdDeviation="1.6" flood-color="#0b0f0d" flood-opacity="0.35"/>
+            </filter>
+        </defs>
+        <circle cx="15" cy="15" r="9" fill="#ffffff" filter="url(#location-dot-shadow)"/>
+        <circle cx="15" cy="15" r="6.5" fill="${fill}"/>
+    </svg>
+`;
+
+function locationDotIcon(fill) {
+    return L.divIcon({
+        html: LOCATION_DOT_SVG(fill),
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -15],
+    });
+}
+
+function stopDotIcon(order = 1) {
+    return L.divIcon({
+        html: `
+            <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <filter id="stop-dot-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feDropShadow dx="0" dy="1" stdDeviation="1.4" flood-color="#0b0f0d" flood-opacity="0.28"/>
+                    </filter>
+                </defs>
+                <circle cx="14" cy="14" r="10" fill="#ffffff" filter="url(#stop-dot-shadow)"/>
+                <circle cx="14" cy="14" r="7.5" fill="#D97706"/>
+                <text x="14" y="17" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#ffffff">${order}</text>
+            </svg>
+        `,
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -14],
+    });
+}
 
 // Auto visto desde arriba (pedido explícito del usuario: "iconos de carrito
 // como los de Uber", en vez del pin celeste genérico de Leaflet que traían
@@ -328,6 +383,16 @@ const ICONS = {
 // tendría sentido (nunca se repetiría el mismo ícono).
 const carIconsByColor = new Map();
 function carIcon(color, rotation = null) {
+    if (props.minimalStyle) {
+        return L.divIcon({
+            html: arkaVehicleSvg(rotation ?? 0, color ?? '#19B982'),
+            className: '',
+            iconSize: [34, 34],
+            iconAnchor: [17, 17],
+            popupAnchor: [0, -17],
+        });
+    }
+
     if (rotation != null) {
         return L.divIcon({
             html: `<div style="transform: rotate(${rotation}deg); transform-origin: 50% 50%;">${CAR_SVG(color)}</div>`,
@@ -366,7 +431,20 @@ function drawMarkers() {
         // de cooperativa / azul público) le gana al ícono fijo de "car" — ver
         // carIcon() arriba.
         const markerType = marker.type ?? marker.id;
-        const options = markerType === 'car' && marker.color ? { icon: carIcon(marker.color, marker.rotation ?? null) } : ICONS[markerType] ? { icon: ICONS[markerType] } : {};
+        let options;
+        if (markerType === 'origin' && props.originMarkerStyle === 'dot') {
+            options = { icon: locationDotIcon('#19B982') };
+        } else if (markerType === 'destination' && props.destinationMarkerStyle === 'dot') {
+            options = { icon: locationDotIcon('#f87171') };
+        } else if (markerType === 'stop') {
+            options = { icon: stopDotIcon(marker.order) };
+        } else {
+            options = markerType === 'car' && marker.color
+                ? { icon: carIcon(marker.color, marker.rotation ?? null) }
+                : ICONS[markerType]
+                    ? { icon: ICONS[markerType] }
+                    : {};
+        }
 
         // Bug reportado por el usuario ("si moví en el mapa no se
         // recalculó"): un marcador de Leaflet es interactivo por
@@ -429,17 +507,46 @@ function drawMarkers() {
 function drawRoute() {
     if (!map) return;
 
+    if (routeAnimationFrame) cancelAnimationFrame(routeAnimationFrame);
+    routeAnimationFrame = null;
+
     if (routeLine) {
         routeLine.remove();
         routeLine = null;
     }
+    if (routeHalo) {
+        routeHalo.remove();
+        routeHalo = null;
+    }
 
     if (!props.route.length) return;
 
-    routeLine = L.polyline(
-        props.route.map((p) => [p.lat, p.lng]),
-        { color: '#34d399', weight: 4, opacity: 0.8 }
-    ).addTo(map);
+    const fullPath = props.route.map((point) => [point.lat, point.lng]);
+    const initialPath = props.animateRoute ? fullPath.slice(0, 1) : fullPath;
+    routeHalo = L.polyline(initialPath, { color: '#ffffff', weight: 5, opacity: 0.9, interactive: false }).addTo(map);
+    routeLine = L.polyline(initialPath, { color: '#176B4D', weight: 3, opacity: 1, interactive: false }).addTo(map);
+
+    if (!props.animateRoute || fullPath.length < 2) return;
+
+    const duration = Math.min(1600, Math.max(900, fullPath.length * 8));
+    const startedAt = performance.now();
+    const revealRoute = (now) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        const eased = 1 - (1 - progress) ** 3;
+        const visiblePoints = Math.max(2, Math.ceil(eased * fullPath.length));
+        const visiblePath = fullPath.slice(0, visiblePoints);
+        routeHalo?.setLatLngs(visiblePath);
+        routeLine?.setLatLngs(visiblePath);
+
+        if (progress < 1) {
+            routeAnimationFrame = requestAnimationFrame(revealRoute);
+        } else {
+            routeHalo?.setLatLngs(fullPath);
+            routeLine?.setLatLngs(fullPath);
+            routeAnimationFrame = null;
+        }
+    };
+    routeAnimationFrame = requestAnimationFrame(revealRoute);
 }
 
 // Redibuja los marcadores cuando cambian (ubicación en vivo vía Echo, sección 9.3).
@@ -480,11 +587,11 @@ watch(
 // dos puntos juntos cada vez, para que siempre se vea el tramo que falta,
 // no un zoom arbitrario. `maxZoom` evita que se acerque demasiado si el
 // conductor ya está casi encima del objetivo.
-function fitTo(points, { maxZoom = 17 } = {}) {
+function fitTo(points, { maxZoom = 17, paddingTop = 60, paddingRight = 60, paddingBottom = 60, paddingLeft = 60 } = {}) {
     if (!map || points.length < 2) return;
     map.fitBounds(L.latLngBounds(points.map((point) => [point.lat, point.lng])), {
-        paddingTopLeft: [50, 50],
-        paddingBottomRight: [50, 50],
+        paddingTopLeft: [paddingLeft, paddingTop],
+        paddingBottomRight: [paddingRight, paddingBottom],
         maxZoom,
     });
 }

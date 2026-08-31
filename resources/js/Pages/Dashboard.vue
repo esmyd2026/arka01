@@ -1205,7 +1205,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                      pintan. Sigue siendo puramente visual: mismo
                      `bottomSheetRef`/eventos de siempre. -->
                 <div ref="bottomSheetRef" class="fixed inset-x-[14px] bottom-[4.75rem] z-20">
-                    <div class="max-h-[70dvh] overflow-y-auto overscroll-contain rounded-[22px] border border-black/[0.04] bg-white/95 px-4 py-4 shadow-[0_10px_35px_rgba(15,23,42,0.12)] backdrop-blur-md">
+                    <div class="max-h-[70dvh] overflow-y-auto overscroll-contain rounded-[22px] border border-black/[0.04] bg-white/95 px-4 py-3.5 shadow-[0_10px_35px_rgba(15,23,42,0.12)] backdrop-blur-md">
                         <HomeSearchSheet
                             v-model="homeSearchQuery"
                             compact

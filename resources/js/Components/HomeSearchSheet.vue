@@ -155,13 +155,13 @@ function saveAddress() {
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col" :class="compact ? 'gap-3.5' : 'gap-5'">
+    <div class="flex min-h-0 flex-1 flex-col" :class="compact ? 'gap-3' : 'gap-5'">
     <div>
-        <h2 :class="compact ? 'text-[21px] leading-tight font-bold mb-1' : 'text-2xl font-bold mb-0'" class="tracking-tight text-arka-base">¿A dónde vamos?</h2>
+        <h2 :class="compact ? 'text-xl leading-tight font-bold mb-0.5' : 'text-2xl font-bold mb-0'" class="tracking-tight text-arka-base">¿A dónde vamos?</h2>
         <!-- Pedido explícito del usuario: reducir a un detalle discreto, no
              una segunda línea que compita con el título. -->
         <p :class="compact ? 'text-xs text-[#929B97]' : 'text-[11px] text-arka-base/35'" class="leading-relaxed">Tu ubicación actual será el punto de partida.</p>
-        <div class="mt-3">
+        <div :class="compact ? 'mt-2.5' : 'mt-3'">
             <AddressAutocomplete
                 :model-value="modelValue"
                 :favorites="frequentPlaces"
@@ -192,7 +192,7 @@ function saveAddress() {
         <Link
             v-if="canSchedule"
             :href="scheduleHref"
-            class="flex h-[38px] items-center gap-1.5 rounded-[20px] border border-[#A8EDD2] bg-[#ECFBF5] px-3.5 text-xs font-semibold text-[#17201D] transition hover:bg-[#DFF7EC]"
+            class="flex h-9 items-center gap-1.5 rounded-[20px] border border-[#A8EDD2] bg-[#ECFBF5] px-3.5 text-xs font-semibold text-[#17201D] transition hover:bg-[#DFF7EC]"
         >
             <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="5" width="18" height="16" rx="2" />

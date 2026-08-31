@@ -125,11 +125,15 @@ function discard() {
             <div class="mt-4 grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-arka-primary/25 bg-arka-primary/10 p-4">
                 <div>
                     <p class="text-xs text-arka-text-muted">Usted recibe</p>
+                    <!-- Bug real reportado por el usuario: current_offered_price
+                         es solo el tramo final — sin sumar stops_price el
+                         conductor veía menos de lo que en realidad le
+                         corresponde por todo el recorrido con paradas. -->
                     <p class="text-3xl font-bold leading-none text-arka-primary-bright">
-                        ${{ Number(current.current_offered_price).toFixed(2) }}
+                        ${{ Number(current.total_offered_price ?? current.current_offered_price).toFixed(2) }}
                     </p>
                     <p class="mt-1 text-xs text-arka-text-muted">
-                        {{ Number(current.distance_km).toFixed(1) }} km · <span class="capitalize">{{ current.payment_method ?? 'efectivo' }}</span>
+                        {{ Number(current.distance_km).toFixed(1) }} km<span v-if="current.stops?.length"> + {{ current.stops.length }} parada{{ current.stops.length === 1 ? '' : 's' }}</span> · <span class="capitalize">{{ current.payment_method ?? 'efectivo' }}</span>
                     </p>
                 </div>
                 <div v-if="secondsLeft !== null" class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 text-base font-bold"
@@ -170,6 +174,10 @@ function discard() {
                     <div class="flex flex-col items-center pt-1.5 shrink-0">
                         <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
                         <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
+                        <template v-for="stop in current.stops" :key="stop.sequence">
+                            <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+                            <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
+                        </template>
                         <span class="h-2.5 w-2.5 rounded-full bg-arka-danger"></span>
                     </div>
                     <div class="flex-1 space-y-2.5 min-w-0">
@@ -178,6 +186,18 @@ function discard() {
                                 {{ current.origin_sector?.name ?? 'Origen sin sector' }}
                             </p>
                             <p class="text-xs text-arka-text-muted">{{ current.origin_address ?? 'Sin referencia' }}</p>
+                        </div>
+                        <!-- Bug real reportado por el usuario ("supongo que al
+                             conductor tampoco le aparece"): antes las paradas
+                             no salían acá — el conductor aceptaba sin saber
+                             que el recorrido pasaba por otro lado antes del
+                             destino, ni cuánto le tocaba por cada tramo. -->
+                        <div v-for="stop in current.stops" :key="stop.sequence">
+                            <p class="text-arka-text font-medium truncate">
+                                Parada {{ stop.sequence }}{{ stop.leg_distance_km != null ? ` · ${stop.leg_distance_km.toFixed(1)} km` : '' }}
+                                <span class="font-semibold text-amber-600">· ${{ Number(stop.leg_price).toFixed(2) }}</span>
+                            </p>
+                            <p class="text-xs text-arka-text-muted">{{ stop.address ?? 'Sin referencia' }}</p>
                         </div>
                         <div>
                             <p class="text-arka-text font-medium truncate">

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, shallowRef } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { loadGooglePlaces } from '@/Utils/googleMaps';
 
 // Input de dirección con sugerencias de Google Places (decisión explícita del
@@ -60,6 +60,58 @@ let suggestionRequest = 0;
 const suggestions = shallowRef([]);
 const open = ref(false);
 const loading = ref(false);
+const inputRef = ref(null);
+const mobileDropdownStyle = ref({});
+
+// En pantallas angostas el teclado puede dejar apenas unos píxeles debajo
+// del campo. La bandeja se posiciona dentro del visual viewport real: debajo
+// si cabe y, si no, arriba del input. Así nunca queda escondida por el teclado.
+function positionMobileDropdown() {
+    if (typeof window === 'undefined' || window.innerWidth >= 640 || !inputRef.value) return;
+
+    const viewport = window.visualViewport;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportBottom = viewportTop + viewportHeight;
+    const rect = inputRef.value.getBoundingClientRect();
+    const gap = 6;
+    const edge = 10;
+    const desiredHeight = 224;
+    const minimumUsefulHeight = 112;
+    const availableBelow = viewportBottom - rect.bottom - gap - edge;
+    const availableAbove = rect.top - viewportTop - gap - edge;
+    const width = Math.min(rect.width, window.innerWidth - edge * 2);
+    const left = Math.max(edge, Math.min(rect.left, window.innerWidth - width - edge));
+
+    if (availableBelow >= minimumUsefulHeight) {
+        mobileDropdownStyle.value = {
+            left: `${left}px`,
+            top: `${rect.bottom + gap}px`,
+            width: `${width}px`,
+            maxHeight: `${Math.min(desiredHeight, availableBelow)}px`,
+        };
+        return;
+    }
+
+    const height = Math.max(88, Math.min(desiredHeight, availableAbove));
+    mobileDropdownStyle.value = {
+        left: `${left}px`,
+        top: `${Math.max(viewportTop + edge, rect.top - gap - height)}px`,
+        width: `${width}px`,
+        maxHeight: `${height}px`,
+    };
+}
+
+function refreshMobileDropdownPosition() {
+    if (!open.value) return;
+    nextTick(positionMobileDropdown);
+}
+
+onMounted(() => {
+    window.addEventListener('resize', refreshMobileDropdownPosition);
+    window.visualViewport?.addEventListener('resize', refreshMobileDropdownPosition);
+    window.visualViewport?.addEventListener('scroll', refreshMobileDropdownPosition);
+});
 
 // No descargar Google Maps al abrir una pantalla. En móvil es uno de los
 // recursos externos más pesados y muchas personas ni siquiera tocarán este
@@ -109,6 +161,8 @@ function onInput(event) {
 
 const showFavorites = computed(() => open.value && !props.modelValue?.trim() && props.favorites.length > 0);
 const showSuggestions = computed(() => open.value && !showFavorites.value && suggestions.value.length > 0);
+
+watch([open, suggestions, showFavorites], refreshMobileDropdownPosition);
 
 function selectFavorite(place) {
     emit('update:modelValue', place.address);
@@ -230,17 +284,23 @@ function close() {
     open.value = false;
 }
 
-onBeforeUnmount(() => clearTimeout(debounceTimer));
+onBeforeUnmount(() => {
+    clearTimeout(debounceTimer);
+    window.removeEventListener('resize', refreshMobileDropdownPosition);
+    window.visualViewport?.removeEventListener('resize', refreshMobileDropdownPosition);
+    window.visualViewport?.removeEventListener('scroll', refreshMobileDropdownPosition);
+});
 </script>
 
 <template>
     <div class="relative">
         <input
+            ref="inputRef"
             :id="id"
             type="text"
             :value="modelValue"
             :placeholder="placeholder"
-            class="w-full focus:ring-arka-primary"
+            class="relative z-[1501] w-full focus:ring-arka-primary"
             :class="
                 flat
                     ? 'min-h-[52px] rounded-[15px] ps-11 pe-10 border border-transparent bg-[#F5F7F6] text-arka-base placeholder:text-[#8D9793] transition-colors duration-200 focus:border-arka-primary/40 focus:bg-white'
@@ -251,7 +311,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
             autocomplete="off"
             @input="onInput"
             @keydown.escape="close"
-            @focus="() => { ensurePlacesLoaded(); open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0; emit('focus'); }"
+            @focus="() => { ensurePlacesLoaded(); open = !modelValue?.trim() ? favorites.length > 0 : suggestions.length > 0; refreshMobileDropdownPosition(); emit('focus'); }"
         />
 
         <!-- Ícono de lupa: pedido explícito del usuario, con imagen de
@@ -263,7 +323,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
              ninguna otra pantalla que ya la usa así. -->
         <span
             v-if="light || flat || !modelValue?.trim()"
-            class="pointer-events-none absolute inset-y-0 flex items-center"
+            class="pointer-events-none absolute inset-y-0 z-[1502] flex items-center"
             :class="flat ? 'left-0 ps-4 text-[#737D79]' : light ? 'left-0 ps-4 text-arka-base/40' : 'right-0 px-3 text-arka-text-muted'"
         >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -277,7 +337,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
         <button
             v-if="modelValue?.trim()"
             type="button"
-            class="absolute inset-y-0 right-0 flex items-center px-2.5"
+            class="absolute inset-y-0 right-0 z-[1502] flex items-center px-2.5"
             :class="flat ? 'text-[#737D79] hover:text-arka-base/70' : light ? 'text-arka-base/40 hover:text-arka-base/70' : 'text-arka-text-muted hover:text-arka-text'"
             aria-label="Limpiar"
             tabindex="-1"
@@ -299,7 +359,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
              antes de escribir nada, como "lugares recientes". -->
         <ul
             v-if="showFavorites"
-            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1"
+            class="absolute z-[1500] mt-1 hidden w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1 sm:block"
             :class="light || flat ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
             <li v-for="place in favorites" :key="place.address">
@@ -317,7 +377,7 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
 
         <ul
             v-else-if="showSuggestions"
-            class="absolute z-[1500] mt-1 w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1"
+            class="absolute z-[1500] mt-1 hidden w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1 sm:block"
             :class="light || flat ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
         >
             <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
@@ -331,5 +391,38 @@ onBeforeUnmount(() => clearTimeout(debounceTimer));
                 </button>
             </li>
         </ul>
+
+        <!-- En móvil se teletransporta al body para que ningún contenedor con
+             overflow/transform la recorte y se mantiene dentro del espacio
+             visible que deja el teclado. -->
+        <Teleport to="body">
+            <ul
+                v-if="showFavorites"
+                class="fixed z-[1600] overflow-y-auto overscroll-contain rounded-2xl border border-arka-base/10 bg-white py-1 shadow-2xl sm:hidden"
+                :style="mobileDropdownStyle"
+            >
+                <li class="sticky top-0 border-b border-arka-base/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-arka-base/45">Lugares recientes</li>
+                <li v-for="place in favorites" :key="place.address">
+                    <button type="button" class="flex w-full items-center gap-2 px-3 py-3 text-start text-sm text-arka-base active:bg-arka-cream" @click="selectFavorite(place)">
+                        <span class="shrink-0 text-arka-primary">★</span>
+                        <span class="line-clamp-2">{{ place.address }}</span>
+                    </button>
+                </li>
+            </ul>
+
+            <ul
+                v-else-if="showSuggestions"
+                class="fixed z-[1600] overflow-y-auto overscroll-contain rounded-2xl border border-arka-base/10 bg-white py-1 shadow-2xl sm:hidden"
+                :style="mobileDropdownStyle"
+            >
+                <li class="sticky top-0 border-b border-arka-base/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-arka-base/45">Direcciones encontradas</li>
+                <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
+                    <button type="button" class="flex w-full items-start gap-2.5 px-3 py-3 text-start text-sm text-arka-base active:bg-arka-cream" @click="selectSuggestion(suggestion)">
+                        <svg class="mt-0.5 h-4 w-4 shrink-0 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                        <span class="line-clamp-2 leading-snug">{{ suggestion.placePrediction.text.text }}</span>
+                    </button>
+                </li>
+            </ul>
+        </Teleport>
     </div>
 </template>

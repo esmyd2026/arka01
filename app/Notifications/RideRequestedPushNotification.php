@@ -31,14 +31,20 @@ class RideRequestedPushNotification extends Notification implements ShouldQueue
     public function toWebPush($notifiable, $notification): WebPushMessage
     {
         $clientName = $this->rideRequest->client->name;
-        $price = $this->rideRequest->current_offered_price;
+        // Bug real reportado por el usuario ("revisa si le llega al
+        // conductor igual"): current_offered_price es solo el tramo final —
+        // sumar stops_price para no subdeclarar cuánto le corresponde por
+        // todo el recorrido (ver IncomingRideRequestFinder::forDriver()).
+        $price = round((float) $this->rideRequest->current_offered_price + (float) ($this->rideRequest->stops_price ?? 0), 2);
+        $stopsCount = $this->rideRequest->stops()->count();
+        $stopsNote = $stopsCount > 0 ? ' con '.$stopsCount.' parada'.($stopsCount === 1 ? '' : 's') : '';
 
         // Pedido explícito del usuario: si viene PROGRAMADA, el aviso tiene
         // que decirlo — si no, el conductor entiende que es "para ahora" y
         // puede confundirse (o preocuparse de más) sin la fecha/hora real.
         $body = $this->rideRequest->is_scheduled
-            ? "{$clientName} programó una carrera para el {$this->rideRequest->scheduled_at->format('d/m')} a las {$this->rideRequest->scheduled_at->format('H:i')} por \${$price}."
-            : "{$clientName} te pidió una carrera por \${$price}.";
+            ? "{$clientName} programó una carrera{$stopsNote} para el {$this->rideRequest->scheduled_at->format('d/m')} a las {$this->rideRequest->scheduled_at->format('H:i')} por \${$price}."
+            : "{$clientName} te pidió una carrera{$stopsNote} por \${$price}.";
 
         return (new WebPushMessage)
             ->title($this->rideRequest->is_scheduled ? 'Carrera programada nueva' : 'Nueva solicitud de carrera')

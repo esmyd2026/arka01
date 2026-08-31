@@ -61,7 +61,10 @@ class RideLifecycle
         'Otro motivo',
     ];
 
-    private const RIDE_ACTION_LOCATION_TOLERANCE_KM = 1.5;
+    // Pública: RideStopCompleter también la necesita para el mismo criterio
+    // de "lejos del punto exacto, con motivo se acepta igual" al completar
+    // una parada (pedido explícito del usuario).
+    public const RIDE_ACTION_LOCATION_TOLERANCE_KM = 1.5;
 
     private const AUTOMATIC_PICKUP_ARRIVAL_RADIUS_KM = 0.15;
 
