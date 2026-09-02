@@ -58,6 +58,7 @@ use App\Http\Controllers\FleetController;
 use App\Http\Controllers\FleetInvitationController;
 use App\Http\Controllers\FleetMemberController;
 use App\Http\Controllers\GuestRideController;
+use App\Http\Controllers\LandingCtaEventController;
 use App\Http\Controllers\MapRouteController;
 use App\Http\Controllers\MyPlanController;
 use App\Http\Controllers\OnboardingController;
@@ -87,6 +88,7 @@ use App\Http\Controllers\WhatsAppLocationPickerController;
 use App\Models\Cooperative;
 use App\Models\SiteSetting;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 /*
@@ -101,12 +103,20 @@ use Inertia\Inertia;
 */
 
 Route::get('/', function () {
+    $ctaToken = Str::random(48);
+    session([
+        'landing_cta_token' => $ctaToken,
+        'landing_cta_issued_at' => now()->timestamp,
+        'landing_cta_recorded_events' => [],
+    ]);
+
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
         // Pedido explícito del usuario: imagen de fondo del hero,
         // configurable desde /admin/sitio — ver App\Models\SiteSetting.
         'heroBackgroundUrl' => SiteSetting::current()->hero_background_url,
+        'ctaInteractionToken' => $ctaToken,
         'guestCooperatives' => Cooperative::query()
             ->where('status', 'approved')
             ->whereNull('suspended_at')
@@ -117,6 +127,10 @@ Route::get('/', function () {
             ->get(['id', 'name', 'logo_path', 'stand_lat', 'stand_lng']),
     ]);
 });
+
+Route::post('/interacciones/portada', [LandingCtaEventController::class, 'store'])
+    ->middleware('throttle:12,1,landing-cta.store')
+    ->name('landing-cta.store');
 
 Route::post('/viajar-como-invitado', [GuestRideController::class, 'store'])
     ->middleware(['guest', 'throttle:4,1,guest-rides.store'])
@@ -226,13 +240,25 @@ Route::middleware('auth')->group(function () {
 
     // Perfil y documentos privados de la cuenta Cooperativa. El registro
     // crea la cuenta base; este formulario completa la postulación legal.
+    // Pedido explícito del usuario: "las cooperativas deberian ser como los
+    // conductores, si no me llenan todo no pueden ir a mas ningun lado
+    // hasta que yo les verifique y les apruebe" — estas 4 rutas son
+    // justamente las que necesita para completar y enviar su postulación,
+    // así que quedan siempre accesibles sin el gate de abajo.
     Route::middleware('cooperative')->group(function () {
-        Route::get('/cooperativa', [CooperativeDashboardController::class, 'index'])->name('cooperative.dashboard');
-        Route::patch('/cooperativa/configuracion-despacho', [CooperativeDashboardController::class, 'updateDispatchSettings'])->name('cooperative.dispatch-settings.update');
         Route::get('/cooperativa/perfil', [CooperativeProfileController::class, 'edit'])->name('cooperative.profile.edit');
         Route::post('/cooperativa/perfil', [CooperativeProfileController::class, 'update'])->name('cooperative.profile.update');
         Route::post('/cooperativa/perfil/enviar-revision', [CooperativeProfileController::class, 'submitForReview'])->name('cooperative.profile.submit-review');
         Route::post('/cooperativa/perfil/logo', [CooperativeProfileController::class, 'updateLogo'])->name('cooperative.profile.logo.update');
+    });
+
+    // El resto del panel de la cooperativa (despacho, conductores, billetera,
+    // clientes, pagos) queda bloqueado hasta que un admin la apruebe — antes
+    // solo se le avisaba con un banner en el dashboard, pero nada se lo
+    // impedía de verdad (ver App\Http\Middleware\EnsureCooperativeIsApproved).
+    Route::middleware(['cooperative', 'cooperative_approved'])->group(function () {
+        Route::get('/cooperativa', [CooperativeDashboardController::class, 'index'])->name('cooperative.dashboard');
+        Route::patch('/cooperativa/configuracion-despacho', [CooperativeDashboardController::class, 'updateDispatchSettings'])->name('cooperative.dispatch-settings.update');
         Route::get('/cooperativa/conductores', [CooperativeDriverController::class, 'index'])->name('cooperative.drivers.index');
         Route::get('/cooperativa/conductores/buscar', [CooperativeDriverController::class, 'search'])->name('cooperative.drivers.search');
         Route::post('/cooperativa/conductores/invitar', [CooperativeDriverController::class, 'invite'])->name('cooperative.drivers.invite');

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Modal from '@/Components/Modal.vue';
@@ -32,6 +32,7 @@ const props = defineProps({
     // desde /admin/sitio, ver Admin\SiteSettingController) — null hasta que
     // un admin suba una, el hero se ve con el fondo oscuro liso de siempre.
     heroBackgroundUrl: { type: String, default: null },
+    ctaInteractionToken: { type: String, default: '' },
 });
 
 const authUser = usePage().props.auth?.user ?? null;
@@ -42,11 +43,74 @@ const authUser = usePage().props.auth?.user ?? null;
 // con un fundido suave una vez lista, en vez de aparecer de golpe cuando
 // pesa mucho. Mientras tanto se ve el fondo oscuro liso de siempre.
 const heroBackgroundLoaded = ref(false);
+const showingWelcomeCta = ref(false);
+const ctaHoneypot = ref('');
+let welcomeCtaTimer = null;
+
+function visitorToken() {
+    const storageKey = 'arka01_visitor_token';
+    let token = window.localStorage.getItem(storageKey);
+    if (!token) {
+        token = window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+        window.localStorage.setItem(storageKey, token);
+    }
+    return token;
+}
+
+async function recordCtaEvent(event, target = 'general') {
+    if (!props.ctaInteractionToken) return;
+
+    try {
+        await window.axios.post(route('landing-cta.store'), {
+            event,
+            target,
+            visitor_token: visitorToken(),
+            interaction_token: props.ctaInteractionToken,
+            website: ctaHoneypot.value,
+            automated: Boolean(navigator.webdriver),
+            path: window.location.pathname,
+            referrer: document.referrer || null,
+        });
+    } catch {
+        // La analítica nunca debe impedir el registro ni molestar al visitante.
+    }
+}
+
+function closeWelcomeCta() {
+    showingWelcomeCta.value = false;
+}
+
+async function followWelcomeCta() {
+    await recordCtaEvent('click', 'general');
+    window.location.assign(route('register'));
+}
+
+function goToLogin() {
+    window.location.assign(route('login'));
+}
+
 onMounted(() => {
-    if (!props.heroBackgroundUrl) return;
-    const image = new Image();
-    image.onload = () => { heroBackgroundLoaded.value = true; };
-    image.src = props.heroBackgroundUrl;
+    if (props.heroBackgroundUrl) {
+        const image = new Image();
+        image.onload = () => { heroBackgroundLoaded.value = true; };
+        image.src = props.heroBackgroundUrl;
+    }
+
+    if (!authUser && props.canRegister) {
+        const lastShown = Number(window.localStorage.getItem('arka01_welcome_cta_shown_at') || 0);
+        const sevenDays = 7 * 24 * 60 * 60 * 1000;
+        if (Date.now() - lastShown > sevenDays) {
+            welcomeCtaTimer = window.setTimeout(() => {
+                showingWelcomeCta.value = true;
+                window.localStorage.setItem('arka01_welcome_cta_shown_at', String(Date.now()));
+                recordCtaEvent('impression');
+            }, 4500);
+        }
+    }
+});
+
+onUnmounted(() => {
+    if (welcomeCtaTimer) window.clearTimeout(welcomeCtaTimer);
 });
 
 // Encuesta corta (pedido explícito del usuario: "colocalo en la raíz
@@ -56,6 +120,9 @@ onMounted(() => {
 const surveyDone = ref(typeof window !== 'undefined' && window.localStorage.getItem('arka01_survey_done') === '1');
 
 const showingGuestIdentity = ref(false);
+// El buscador público inicia resumido para que el primer contacto sea simple:
+// una sola pregunta y las acciones principales de acceso a la vista.
+const showingGuestRideForm = ref(false);
 const guestLocationMessage = ref('');
 const guestForm = useForm({
     origin_address: '', origin_lat: null, origin_lng: null,
@@ -103,6 +170,30 @@ function chooseDestination(place) {
     guestForm.destination_lng = place.lng;
 }
 
+// El buscador se comporta como una reserva de viaje: invertir el trayecto
+// intercambia también sus coordenadas, no solo el texto visible.
+function swapGuestRoute() {
+    const origin = {
+        address: guestForm.origin_address,
+        lat: guestForm.origin_lat,
+        lng: guestForm.origin_lng,
+    };
+
+    guestForm.origin_address = guestForm.destination_address;
+    guestForm.origin_lat = guestForm.destination_lat;
+    guestForm.origin_lng = guestForm.destination_lng;
+    guestForm.destination_address = origin.address;
+    guestForm.destination_lat = origin.lat;
+    guestForm.destination_lng = origin.lng;
+
+    if (guestForm.origin_lat != null && guestForm.origin_lng != null) {
+        guestForm.cooperative_id = nearestCooperative(
+            Number(guestForm.origin_lat),
+            Number(guestForm.origin_lng),
+        )?.id ?? null;
+    }
+}
+
 function useCurrentLocation() {
     guestLocationMessage.value = 'Ubicando…';
     if (!navigator.geolocation) {
@@ -136,24 +227,26 @@ function submitGuestRide() {
 // provisto) — reemplaza el flujo de pasos anterior por dos fichas con lo que
 // gana cada lado, más el diagrama del medio.
 const CLIENT_FEATURES = [
-    { title: 'Tu propia flota', text: 'Agregue a sus conductores de confianza.' },
-    { title: 'Elige con quién viajar', text: 'Usted decide quién le lleva y cuándo.' },
-    { title: 'Conductores verificados', text: 'Perfiles verificados, viajes más seguros.' },
-    { title: 'Viaja cuando lo necesites', text: 'Programe o solicite su viaje al instante.' },
+    { title: 'Solicita tu viaje', text: 'Indica a dónde quieres ir.' },
+    { title: 'Elige cómo viajar', text: 'Tu flota, una cooperativa o conductores públicos.' },
+    { title: 'Conoce tus opciones', text: 'Revisa reputación e información antes de elegir.' },
+    { title: 'Guarda a quien te dio confianza', text: 'Agrégalo a tu flota para volver a solicitarlo.' },
+    { title: 'Construye tu red', text: 'Conecta, recibe recomendaciones y amplía tus opciones de confianza.' },
 ];
 const DRIVER_FEATURES = [
-    { title: 'Tú fijas tu tarifa por km', text: 'Defina el precio que desea cobrar.' },
-    { title: '0% comisión por viaje', text: 'Sin comisión por viaje, solo paga una tarifa fija mensual.' },
-    { title: 'Clientes de confianza', text: 'Viaje con personas verificadas y con buen historial.' },
-    { title: 'Tú decides qué viajes aceptar', text: 'Acepte solo los viajes que le convienen.' },
+    { title: 'Tú decides cómo trabajar', text: 'Define tu tarifa y cuándo estar disponible.' },
+    { title: 'Conoce antes de aceptar', text: 'Revisa la reputación e índice de confianza del cliente.' },
+    { title: 'Construye tu propia clientela', text: 'Tus clientes privados pueden agregarte y volver a solicitarte.' },
+    { title: 'Haz crecer tu reputación', text: 'Cada carrera, calificación e historial fortalece tu perfil.' },
+    { title: 'Independiente o con cooperativa', text: 'Desarrolla tu actividad privada y también trabaja dentro de una cooperativa.' },
 ];
 
 const WHY_ARKA01 = [
-    { title: 'Seguridad', text: 'Botón SOS y contactos de confianza.' },
-    { title: 'Privacidad', text: 'Tú decides quién ve tu información y tus viajes.' },
-    { title: 'Precios justos', text: 'Transparente, sin sorpresas ni cobros ocultos.' },
-    { title: 'Califica y mejora', text: 'Tu opinión ayuda a tener mejores experiencias.' },
-    { title: 'Soporte real', text: 'Estamos para ayudarte cuando lo necesites.' },
+    { title: 'Relaciones que continúan', text: 'Una buena carrera puede convertirse en una relación para futuros viajes.' },
+    { title: 'Tú eliges con quién viajar', text: 'Tu flota, cooperativas o conductores públicos según tus necesidades.' },
+    { title: 'Confianza visible', text: 'Reputación, calificaciones e índice de confianza para tomar mejores decisiones.' },
+    { title: 'Una red que crece contigo', text: 'Clientes, conductores y cooperativas conectados en un mismo ecosistema.' },
+    { title: 'Tecnología para todos', text: 'Solicita, conduce o gestiona tu cooperativa desde Arka01, con apoyo de WhatsApp.' },
 ];
 
 // "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14) — público, sin
@@ -303,58 +396,6 @@ function submitFeedback() {
                         </li>
                     </ul>
 
-                    <div class="mt-5 flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
-                        <!-- Pedido explícito del usuario ("la gente se pierde"):
-                             los dos en modo botón, iniciar sesión primero — quien
-                             ya tiene cuenta es quien más se confundía antes, con
-                             "crear mi círculo" como único botón grande y el
-                             login escondido en un texto chico debajo. Pedido
-                             explícito del usuario (con mockup de referencia):
-                             botones más grandes y directos. -->
-                        <Link
-                            v-if="canLogin"
-                            :href="route('login')"
-                            class="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-arka-primary rounded-arka font-bold text-sm uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/20 hover:bg-arka-primary-bright transition"
-                        >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 8.5 15 12l-4 3.5M15 12H4" />
-                            </svg>
-                            Iniciar sesión
-                        </Link>
-                        <!-- Bug real reportado por el usuario: con tipo=cliente
-                             forzado, quien quería registrarse como conductor
-                             nunca veía esa opción — tenía sentido cuando el botón
-                             se llamaba "Crear mi círculo" (acción específica de
-                             cliente), ya no ahora que es genérico "Crear una
-                             cuenta". Sin el parámetro, Auth/Register.vue arranca
-                             en el primer paso y deja elegir. -->
-                        <Link
-                            v-if="canRegister"
-                            :href="route('register')"
-                            class="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-transparent border border-arka-primary/50 rounded-arka font-bold text-sm uppercase tracking-wide text-arka-primary-bright hover:bg-arka-primary/10 transition"
-                        >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="9.5" cy="8.5" r="3" stroke-linecap="round" stroke-linejoin="round" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M18 8v6M15 11h6" />
-                            </svg>
-                            Crear cuenta
-                        </Link>
-                        <!-- Ancla simple a la sección que ya existe más abajo — sin
-                             duplicar contenido en una página aparte (pedido
-                             explícito del usuario). -->
-                        <a
-                            href="#como-funciona"
-                            class="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-transparent border border-arka-text-muted/30 rounded-arka font-bold text-sm uppercase tracking-wide text-arka-text hover:bg-arka-card transition"
-                        >
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z" />
-                            </svg>
-                            ¿Cómo funciona?
-                        </a>
-                    </div>
-
                     <!-- Encuesta corta (pedido explícito del usuario: "en la
                          raíz también") — mismo lado izquierdo que el resto
                          del bloque (hereda text-center lg:text-start). -->
@@ -375,46 +416,136 @@ function submitFeedback() {
 
                 <!-- Acceso urgente sin correo: conserva la identidad visual de
                      la app y asigna la cooperativa más cercana al origen. -->
-                <div class="relative mx-auto w-full max-w-md rounded-[1.75rem] border border-arka-primary/15 bg-arka-card p-5 shadow-2xl sm:p-7">
-                    <div class="mb-5 flex items-start justify-between gap-4">
-                        <div>
-                            <h2 class="text-2xl font-bold text-arka-text">¿A dónde vamos?</h2>
-                        </div>
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 text-arka-primary">
-                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 17h14l-1.5-6h-11L5 17Zm2-6 2-4h6l2 4M7 17v2m10-2v2"/><circle cx="8" cy="15" r="1" fill="currentColor"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg>
+                <div class="mx-auto w-full max-w-lg">
+                <!-- Acciones principales antes del buscador: el visitante decide
+                     primero si entra, se registra o conoce el funcionamiento. -->
+                <div class="mb-4 grid grid-cols-2 gap-2.5">
+                    <Link
+                        v-if="canLogin"
+                        :href="route('login')"
+                        class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/20 transition hover:-translate-y-0.5 hover:bg-arka-primary-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                    >
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4M11 8.5 15 12l-4 3.5M15 12H4"/></svg>
+                        Iniciar sesión
+                    </Link>
+                    <Link
+                        v-if="canRegister"
+                        :href="route('register')"
+                        class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-arka-primary/45 bg-arka-card/80 px-4 py-3 text-sm font-bold uppercase tracking-wide text-arka-primary-bright transition hover:-translate-y-0.5 hover:border-arka-primary hover:bg-arka-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                    >
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9.5" cy="8.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0M18 8v6M15 11h6"/></svg>
+                        Crear cuenta
+                    </Link>
+                    <a
+                        href="#como-funciona"
+                        class="group col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-arka-text-muted/15 bg-arka-card/55 px-4 py-2.5 text-sm font-semibold text-arka-text-muted transition hover:border-arka-primary/35 hover:bg-arka-primary/[0.06] hover:text-arka-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                    >
+                        <span class="flex h-6 w-6 items-center justify-center rounded-full border border-arka-primary/30 text-arka-primary">
+                            <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z"/></svg>
                         </span>
-                    </div>
+                        Cómo funciona
+                    </a>
+                </div>
 
-                    <div class="space-y-4">
+                <div class="relative overflow-visible rounded-[1.75rem] border border-arka-primary/20 bg-arka-card shadow-2xl">
+                    <!-- Cabecera inspirada en un buscador de reservas: primero
+                         explica la acción y después presenta el trayecto. -->
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between gap-3 rounded-[1.75rem] px-5 py-3.5 text-start transition hover:bg-arka-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary focus-visible:ring-offset-2 focus-visible:ring-offset-arka-base sm:px-6"
+                        :class="showingGuestRideForm ? 'rounded-b-none border-b border-arka-text-muted/10' : ''"
+                        :aria-expanded="showingGuestRideForm"
+                        aria-controls="guest-ride-form"
+                        @click="showingGuestRideForm = !showingGuestRideForm"
+                    >
                         <div>
-                            <div class="mb-1.5 flex items-center justify-between gap-3">
-                                <label class="text-xs font-semibold uppercase tracking-wide text-arka-text-muted">Punto de partida</label>
-                                <button type="button" class="text-xs font-medium text-arka-primary hover:text-arka-primary-bright" @click="useCurrentLocation">Usar mi ubicación</button>
+                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-arka-primary">Solicitud rápida</p>
+                            <h2 class="mt-0.5 text-xl font-bold text-arka-text">¿A dónde vamos?</h2>
+                            <p class="mt-0.5 text-[11px] text-arka-text-muted">{{ showingGuestRideForm ? 'Defina su recorrido y consulte la tarifa.' : 'Toque para indicar su origen y destino.' }}</p>
+                        </div>
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-arka-primary/15 text-arka-primary">
+                            <svg class="h-5 w-5 transition-transform duration-200" :class="showingGuestRideForm ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                        </span>
+                    </button>
+
+                    <div v-show="showingGuestRideForm" id="guest-ride-form" class="px-5 py-4 sm:px-6">
+                        <div class="mb-2.5 flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-text-muted">Trayecto</p>
+                                <p class="mt-0.5 text-sm font-semibold text-arka-text">Origen y destino</p>
                             </div>
-                            <AddressAutocomplete v-model="guestForm.origin_address" placeholder="¿Dónde le recogemos?" @place-selected="chooseOrigin" @clear="guestForm.origin_lat = guestForm.origin_lng = null" />
-                            <p v-if="guestLocationMessage" class="mt-1.5 text-xs text-arka-text-muted">{{ guestLocationMessage }}</p>
-                            <p v-if="guestForm.errors.origin_address" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.origin_address }}</p>
+                            <button
+                                type="button"
+                                class="inline-flex h-8 items-center gap-1.5 rounded-full border border-arka-text-muted/20 px-2.5 text-[11px] font-semibold text-arka-text transition hover:border-arka-primary/50 hover:text-arka-primary"
+                                aria-label="Invertir punto de partida y destino"
+                                @click="swapGuestRoute"
+                            >
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h11m0 0-3-3m3 3-3 3M17 17H6m0 0 3 3m-3-3 3-3"/></svg>
+                                Invertir
+                            </button>
                         </div>
-                        <div>
-                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-arka-text-muted">Destino</label>
-                            <AddressAutocomplete v-model="guestForm.destination_address" placeholder="Escriba su destino" @place-selected="chooseDestination" @clear="guestForm.destination_lat = guestForm.destination_lng = null" />
-                            <p v-if="guestForm.errors.destination_address" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.destination_address }}</p>
+
+                        <!-- La línea y los puntos convierten los campos en un
+                             recorrido reconocible, no en credenciales de login. -->
+                        <div class="relative ps-8">
+                            <div class="absolute bottom-8 left-[9px] top-8 w-px bg-gradient-to-b from-arka-primary via-arka-primary/40 to-arka-danger/70"></div>
+
+                            <div class="relative pb-3">
+                                <span class="absolute -left-8 top-8 h-[11px] w-[11px] rounded-full border-[3px] border-arka-card bg-arka-primary ring-1 ring-arka-primary/50"></span>
+                                <div class="mb-1.5 flex items-center justify-between gap-3">
+                                    <label class="text-[10px] font-bold uppercase tracking-[0.14em] text-arka-primary">Origen</label>
+                                    <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-arka-primary hover:text-arka-primary-bright" @click="useCurrentLocation">
+                                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+                                        Mi ubicación
+                                    </button>
+                                </div>
+                                <AddressAutocomplete v-model="guestForm.origin_address" placeholder="Ciudad, calle o punto de referencia" @place-selected="chooseOrigin" @clear="guestForm.origin_lat = guestForm.origin_lng = null" />
+                                <p v-if="guestLocationMessage" class="mt-1.5 text-xs text-arka-text-muted">{{ guestLocationMessage }}</p>
+                                <p v-if="guestForm.errors.origin_address" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.origin_address }}</p>
+                            </div>
+
+                            <div class="relative">
+                                <span class="absolute -left-8 top-8 h-[11px] w-[11px] rotate-45 rounded-[3px] border-[3px] border-arka-card bg-arka-danger ring-1 ring-arka-danger/50"></span>
+                                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-arka-danger">Destino</label>
+                                <AddressAutocomplete v-model="guestForm.destination_address" placeholder="Ciudad, calle o punto de referencia" @place-selected="chooseDestination" @clear="guestForm.destination_lat = guestForm.destination_lng = null" />
+                                <p v-if="guestForm.errors.destination_address" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.destination_address }}</p>
+                            </div>
                         </div>
+
+                        <div class="my-3 h-px bg-arka-text-muted/10"></div>
+
                         <div v-if="guestCooperatives.length">
-                            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-arka-text-muted">Le atenderá</label>
+                            <div class="mb-1.5 flex items-center gap-2">
+                                <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-arka-primary/10 text-arka-primary">
+                                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="m12 3 7 3v5c0 4-2.6 7-7 9-4.4-2-7-5-7-9V6l7-3Z"/><path stroke-linecap="round" d="m9 11 2 2 4-4"/></svg>
+                                </span>
+                                <div>
+                                    <label class="block text-xs font-semibold text-arka-text">Cooperativa que atenderá</label>
+                                    <p class="text-[9px] text-arka-text-muted">Sugerimos la opción disponible más cercana.</p>
+                                </div>
+                            </div>
                             <SearchableSelect v-model="guestForm.cooperative_id" :options="cooperativeOptions" placeholder="Seleccione una cooperativa" />
-                            <p v-if="assignedCooperative" class="mt-2 text-xs text-arka-text-muted">Asignada por cercanía a su punto de partida. Puede cambiarla.</p>
+                            <p v-if="assignedCooperative" class="mt-1.5 text-[10px] text-arka-primary">✓ {{ assignedCooperative.name }} seleccionada por cercanía. Puede cambiarla.</p>
                             <p v-if="guestForm.errors.cooperative_id" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.cooperative_id }}</p>
                         </div>
                         <div v-else class="rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">
                             No hay cooperativas disponibles en este momento.
                         </div>
-                        <button type="button" :disabled="!guestCooperatives.length" class="flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-arka-base transition hover:bg-arka-primary-bright disabled:cursor-not-allowed disabled:opacity-40" @click="continueAsGuest">
-                            Ver tarifa y solicitar
+
+                        <div class="mt-3 grid grid-cols-3 gap-2 border-y border-arka-text-muted/10 py-2 text-center">
+                            <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full bg-arka-primary text-[9px] font-bold text-arka-base">1</span><p class="text-[9px] text-arka-text-muted">Ruta</p></div>
+                            <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full border border-arka-primary/40 text-[9px] font-bold text-arka-primary">2</span><p class="text-[9px] text-arka-text-muted">Tarifa</p></div>
+                            <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full border border-arka-primary/40 text-[9px] font-bold text-arka-primary">3</span><p class="text-[9px] text-arka-text-muted">Confirmar</p></div>
+                        </div>
+
+                        <button type="button" :disabled="!guestCooperatives.length" class="mt-3 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3 text-xs font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright disabled:cursor-not-allowed disabled:opacity-40" @click="continueAsGuest">
+                            Consultar tarifa
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6"/></svg>
                         </button>
-                        <p class="text-center text-[11px] leading-relaxed text-arka-text-muted">Antes de enviar verá la ruta, el precio y podrá confirmar o corregir los datos.</p>
+                        <p class="mt-2 text-center text-[9px] leading-4 text-arka-text-muted">Nada se envía hasta que revise la tarifa y confirme.</p>
                     </div>
+                </div>
+
                 </div>
             </div>
 
@@ -438,23 +569,39 @@ function submitFeedback() {
                             Para <span class="text-arka-primary">Clientes</span>
                         </h2>
                     </div>
-                    <p class="text-sm text-arka-text-muted mb-4">Viaje con personas que conoce y en quienes confía.</p>
+                    <p class="mb-5 mt-3 text-sm font-medium leading-6 text-arka-text-muted">
+                        Empieza buscando un viaje. Termina construyendo tu propia red de conductores de confianza.
+                    </p>
 
                     <ul>
                         <li v-for="(feature, i) in CLIENT_FEATURES" :key="feature.title" class="flex items-start gap-3">
                             <!-- Pedido explícito del usuario: una línea que una los
                                  puntos, no puntos sueltos — mismo criterio que el
                                  diagrama del medio, pero vertical. -->
-                            <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="mt-1.5 h-2 w-2 rounded-full bg-arka-primary shrink-0"></span>
-                                <div v-if="i < CLIENT_FEATURES.length - 1" class="w-px flex-1 min-h-[1.5rem] bg-arka-primary/25 mt-1"></div>
+                            <div class="flex w-8 shrink-0 flex-col items-center self-stretch">
+                                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-arka-primary/45 bg-arka-primary/10 text-[9px] font-bold tracking-wide text-arka-primary">
+                                    {{ String(i + 1).padStart(2, '0') }}
+                                </span>
+                                <div v-if="i < CLIENT_FEATURES.length - 1" class="mt-1 min-h-[1.5rem] w-px flex-1 bg-arka-primary/30"></div>
                             </div>
-                            <div class="pb-3">
+                            <div class="pb-4">
                                 <p class="text-sm font-medium text-arka-text">{{ feature.title }}</p>
                                 <p class="text-xs text-arka-text-muted">{{ feature.text }}</p>
                             </div>
                         </li>
                     </ul>
+
+                    <div class="mt-1 flex items-start gap-3 rounded-arka border border-arka-primary/15 bg-arka-primary/[0.06] p-3">
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 text-arka-primary">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4A8 8 0 1 1 20 11.5Z" />
+                            </svg>
+                        </span>
+                        <div>
+                            <p class="text-xs font-semibold text-arka-text">También desde WhatsApp</p>
+                            <p class="mt-0.5 text-[11px] leading-4 text-arka-text-muted">Solicita viajes de forma sencilla cuando lo necesites.</p>
+                        </div>
+                    </div>
 
                     <Link
                         v-if="canRegister"
@@ -512,7 +659,7 @@ function submitFeedback() {
                     </div>
 
                     <ul class="mt-6 space-y-2 text-start max-w-[16rem] mx-auto">
-                        <li v-for="point in ['Red privada y segura', 'Control total para usted', 'Viajes sin intermediarios']" :key="point" class="flex items-center gap-2 text-sm text-arka-text-muted">
+                        <li v-for="point in ['Su red de confianza primero', 'Perfiles e índice de confianza', 'Seguimiento y seguridad en carrera']" :key="point" class="flex items-center gap-2 text-sm text-arka-text-muted">
                             <svg class="h-4 w-4 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
                             </svg>
@@ -534,15 +681,19 @@ function submitFeedback() {
                             Para <span class="text-arka-primary">Conductores</span>
                         </h2>
                     </div>
-                    <p class="text-sm text-arka-text-muted mb-4">Usted maneja su negocio, nosotros le conectamos.</p>
+                    <p class="mb-5 mt-3 text-sm font-medium leading-6 text-arka-text-muted">
+                        Empieza con una carrera. Termina construyendo una red de clientes que quieren volver a viajar contigo.
+                    </p>
 
                     <ul>
                         <li v-for="(feature, i) in DRIVER_FEATURES" :key="feature.title" class="flex items-start gap-3">
-                            <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="mt-1.5 h-2 w-2 rounded-full bg-arka-primary shrink-0"></span>
-                                <div v-if="i < DRIVER_FEATURES.length - 1" class="w-px flex-1 min-h-[1.5rem] bg-arka-primary/25 mt-1"></div>
+                            <div class="flex w-8 shrink-0 flex-col items-center self-stretch">
+                                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-arka-primary/45 bg-arka-primary/10 text-[9px] font-bold tracking-wide text-arka-primary">
+                                    {{ String(i + 1).padStart(2, '0') }}
+                                </span>
+                                <div v-if="i < DRIVER_FEATURES.length - 1" class="mt-1 min-h-[1.5rem] w-px flex-1 bg-arka-primary/30"></div>
                             </div>
-                            <div class="pb-3">
+                            <div class="pb-4">
                                 <p class="text-sm font-medium text-arka-text">{{ feature.title }}</p>
                                 <p class="text-xs text-arka-text-muted">{{ feature.text }}</p>
                             </div>
@@ -562,38 +713,72 @@ function submitFeedback() {
                 </div>
             </div>
 
-            <!-- ¿Por qué elegir Arka01? -->
-            <div class="mt-16">
-                <h2 class="text-center text-lg font-semibold text-arka-text mb-6">
-                    ¿Por qué elegir <span class="text-arka-primary">Arka01</span>?
-                </h2>
-                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                    <div v-for="item in WHY_ARKA01" :key="item.title" class="text-center">
-                        <span class="mx-auto h-11 w-11 rounded-full bg-arka-primary/15 flex items-center justify-center mb-2">
-                            <svg v-if="item.title === 'Seguridad'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
-                            </svg>
-                            <svg v-else-if="item.title === 'Privacidad'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
-                            </svg>
-                            <svg v-else-if="item.title === 'Precios justos'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v10M14.5 9.5a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.9-2.5 2s1.1 1.7 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2a2.5 2.5 0 0 1-2.5-1.5" />
-                            </svg>
-                            <svg v-else-if="item.title === 'Califica y mejora'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m12 3.5 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7L12 3.5Z" />
-                            </svg>
-                            <svg v-else class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 5.5h16v10.5H8.5L4 20V5.5Z" />
-                            </svg>
-                        </span>
-                        <p class="text-sm font-medium text-arka-text">{{ item.title }}</p>
-                        <p class="text-xs text-arka-text-muted">{{ item.text }}</p>
-                    </div>
+            <!-- Las cooperativas forman parte de la red, pero conservamos el
+                 bloque principal original limpio y fácil de recorrer. -->
+            <div class="mt-8 flex flex-col items-center gap-4 rounded-arka border border-arka-primary/20 bg-arka-card p-5 text-center shadow sm:flex-row sm:px-6 sm:text-start">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15">
+                    <svg class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 20V8l8-4 8 4v12M8 20v-4h8v4M8 10h.01M12 10h.01M16 10h.01" />
+                    </svg>
+                </span>
+                <div class="flex-1">
+                    <p class="text-sm font-semibold text-arka-text">Para cooperativas</p>
+                    <p class="mt-1 text-xs leading-5 text-arka-text-muted">Organice sus unidades verificadas, reciba solicitudes y asigne cada carrera desde su propia central de despacho.</p>
                 </div>
+                <Link
+                    v-if="canRegister"
+                    :href="route('register')"
+                    class="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-arka-primary hover:text-arka-primary-bright"
+                >
+                    Soy cooperativa
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
+                </Link>
             </div>
 
+            <!-- ¿Por qué elegir Arka01? -->
+            <div class="mt-16">
+                <h2 class="mx-auto mb-2 max-w-2xl text-center text-2xl font-semibold leading-tight text-arka-text sm:text-3xl">
+                    Más que encontrar un viaje.
+                    <span class="block text-arka-primary">Construye una red para los próximos.</span>
+                </h2>
+                <p class="mx-auto mb-8 max-w-xl text-center text-sm leading-6 text-arka-text-muted">
+                    Cinco formas en las que Arka01 convierte cada experiencia en más confianza y mejores conexiones.
+                </p>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <div v-for="item in WHY_ARKA01" :key="item.title" class="rounded-arka border border-arka-text-muted/10 bg-arka-card/50 p-4 text-center">
+                        <span class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-arka-primary/15">
+                            <svg v-if="item.title === 'Relaciones que continúan'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 12.5 11 15a2 2 0 0 0 2.8 0l5.4-5.4a2.5 2.5 0 0 0-3.5-3.5L14 7.8l-1.7-1.7a2.5 2.5 0 0 0-3.5 0L7.4 7.5" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m3.5 9 3.7 3.7a2 2 0 0 0 2.8 0l2.3-2.3M2 7l3-3 3 3-3 3-3-3Zm14 10 3-3 3 3-3 3-3-3Z" />
+                            </svg>
+                            <svg v-else-if="item.title === 'Tú eliges con quién viajar'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16l-2-6.2a2 2 0 0 0-1.9-1.4H7.9A2 2 0 0 0 6 9.8L4 16Zm2 0v2m12-2v2" />
+                                <circle cx="8" cy="15.5" r="1" fill="currentColor" stroke="none" /><circle cx="16" cy="15.5" r="1" fill="currentColor" stroke="none" />
+                            </svg>
+                            <svg v-else-if="item.title === 'Confianza visible'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 7 3v5c0 4-2.6 7-7 9-4.4-2-7-5-7-9V6l7-3Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m9 11 2 2 4-4" />
+                            </svg>
+                            <svg v-else-if="item.title === 'Una red que crece contigo'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <circle cx="12" cy="5" r="2.5" /><circle cx="5" cy="17" r="2.5" /><circle cx="19" cy="17" r="2.5" />
+                                <path stroke-linecap="round" d="m10.7 7.2-4.4 7.6m7-7.6 4.4 7.6M7.5 17h9" />
+                            </svg>
+                            <svg v-else class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <rect x="5" y="3" width="10" height="18" rx="2" /><path stroke-linecap="round" d="M8.5 17.5h3" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M14 7h6v7h-2.5L15 16v-2h-1V7Z" />
+                            </svg>
+                        </span>
+                        <p class="text-sm font-semibold leading-5 text-arka-text">{{ item.title }}</p>
+                        <p class="mt-1 text-xs leading-5 text-arka-text-muted">{{ item.text }}</p>
+                    </div>
+                </div>
+                <p class="mt-8 text-center text-base font-medium text-arka-text">
+                    Cada viaje puede ser el comienzo de la
+                    <span class="text-arka-primary">próxima conexión.</span>
+                </p>
+            </div>
             <!-- "Ayúdanos a mejorar ARKA01" (roadmap de mejoras, sección 14): barra
                  discreta, el formulario en sí vive en un modal. -->
             <button
@@ -678,6 +863,50 @@ function submitFeedback() {
                     <button type="button" class="mt-4 text-sm text-arka-text-muted hover:text-arka-text" @click="showingFeedback = false">
                         Cerrar
                     </button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- CTA de bienvenida: aparece una sola vez por semana y solo a
+             visitantes sin sesión. Su apertura y el clic principal se miden
+             por separado para distinguir alcance de intención real. -->
+        <Modal :show="showingWelcomeCta" max-width="md" @close="closeWelcomeCta">
+            <div class="relative overflow-hidden p-6 sm:p-7">
+                <input v-model="ctaHoneypot" type="text" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
+                <div class="pointer-events-none absolute -end-16 -top-20 h-48 w-48 rounded-full bg-arka-primary/10 blur-2xl"></div>
+
+                <button type="button" class="absolute end-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/15 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary" aria-label="Cerrar" @click="closeWelcomeCta">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="m6 6 12 12M18 6 6 18" /></svg>
+                </button>
+
+                <div class="relative">
+                    <span class="grid h-12 w-12 place-items-center rounded-2xl border border-arka-primary/25 bg-arka-primary/10 text-arka-primary">
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <circle cx="7" cy="8" r="3" />
+                            <circle cx="17" cy="8" r="3" />
+                            <path stroke-linecap="round" d="M2.5 19a4.5 4.5 0 0 1 9 0M12.5 19a4.5 4.5 0 0 1 9 0M10 11.5h4" />
+                        </svg>
+                    </span>
+                    <p class="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-arka-primary">Movilidad basada en confianza</p>
+                    <h2 class="mt-2 max-w-sm text-2xl font-bold leading-tight text-arka-text">No elija un viaje a ciegas. Construya su propia red.</h2>
+                    <p class="mt-3 text-sm leading-6 text-arka-text-muted">
+                        Conecte con conductores, clientes y cooperativas verificadas. Vea su reputación, encuentre relaciones en común y mantenga el control de cada viaje.
+                    </p>
+
+                    <div class="mt-5 grid grid-cols-3 gap-2">
+                        <div v-for="item in ['Su círculo', 'Índice de confianza', 'Viaje acompañado']" :key="item" class="rounded-xl border border-arka-text-muted/10 bg-arka-base/50 px-2 py-3 text-center text-[11px] font-medium leading-4 text-arka-text-muted">
+                            {{ item }}
+                        </div>
+                    </div>
+
+                    <button type="button" class="mt-6 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright" @click="followWelcomeCta">
+                        Crear mi cuenta
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6" /></svg>
+                    </button>
+                    <button v-if="canLogin" type="button" class="mt-3 w-full text-center text-sm font-medium text-arka-text-muted hover:text-arka-primary" @click="goToLogin">
+                        Ya tengo una cuenta
+                    </button>
+                    <p class="mt-4 text-center text-[10px] leading-4 text-arka-text-muted/80">Sin comisiones ocultas por viaje. Usted decide con quién conectarse.</p>
                 </div>
             </div>
         </Modal>

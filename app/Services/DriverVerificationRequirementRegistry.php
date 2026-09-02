@@ -24,7 +24,13 @@ class DriverVerificationRequirementRegistry
     public const ITEMS = [
         'identity_document' => 'Foto de cédula',
         'license_photo' => 'Foto de licencia',
-        'police_record' => 'Antecedentes penales',
+        // Pedido explícito del usuario ("quitemos, ocultalo... coloquemos
+        // mejor la matricula del vehiculo"): reemplaza a 'police_record' acá
+        // y en Driver/Profile.vue — la columna police_record_path y los
+        // documentos ya subidos con ella se conservan sin tocar (ver
+        // DriverProfile::getPoliceRecordUrlAttribute()), solo dejó de
+        // pedirse y de contar como requisito.
+        'vehicle_registration' => 'Matrícula del vehículo',
         'has_insurance' => 'Declarar que cuenta con seguro',
         'profile_photo' => 'Foto de perfil',
     ];

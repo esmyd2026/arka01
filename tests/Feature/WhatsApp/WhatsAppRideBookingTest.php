@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\WhatsApp;
 
+use App\Jobs\NotifyWhatsAppStillSearchingForDriver;
 use App\Models\ChatbotConversation;
 use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
@@ -12,9 +13,12 @@ use App\Models\RideRequest;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Models\WhatsAppSession;
 use App\Models\WhatsAppSetting;
 use App\Services\Chatbot\ChatbotEngine;
+use App\Services\RideDispatchAdvancer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -102,12 +106,13 @@ class WhatsAppRideBookingTest extends TestCase
             'type' => 'location', 'location' => ['lat' => -2.167, 'lng' => -79.900, 'address' => 'Centro', 'name' => null],
         ]);
         $engine->respondTo($client->phone, $client, '2');
-        $engine->respondTo($client->phone, $client, 'wa_pool_fleet');
+        $engine->respondTo($client->phone, $client, 'wa_select_driver:'.$driver->id);
         $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
 
         $this->assertDatabaseHas('ride_requests', [
             'client_user_id' => $client->id,
             'fleet_id' => $fleet->id,
+            'driver_user_id' => $driver->id,
             'origin_address' => 'Alborada',
             'destination_address' => 'Centro',
             'is_scheduled' => false,
@@ -209,7 +214,7 @@ class WhatsAppRideBookingTest extends TestCase
             'type' => 'location', 'location' => ['lat' => -2.16, 'lng' => -79.91, 'address' => 'Centro', 'name' => null],
         ]);
         $engine->respondTo($client->phone, $client, '2');
-        $engine->respondTo($client->phone, $client, 'wa_pool_fleet');
+        $engine->respondTo($client->phone, $client, 'wa_select_driver:'.$driver->id);
         $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
 
         $this->assertDatabaseHas('ride_requests', [
@@ -233,7 +238,11 @@ class WhatsAppRideBookingTest extends TestCase
         Config::set('services.whatsapp.phone_number_id', '123456');
         Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
         $cooperativeOwner = User::factory()->create();
-        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeOwner->id, 'name' => 'Coop', 'stand_lat' => -2.1690, 'stand_lng' => -79.8990]);
+        // Pública (pedido explícito del usuario: "listarle las cooperativas
+        // disponibles... desde la que esta publica o de su flota") — sin
+        // esto, un invitado sin cooperativas propias no vería ninguna
+        // opción en la lista de askWhoAttends().
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeOwner->id, 'name' => 'Coop', 'stand_lat' => -2.1690, 'stand_lng' => -79.8990, 'is_public' => true]);
         $cooperative->forceFill(['status' => 'approved'])->save();
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create(['driver_type' => 'public_transport', 'current_lat' => -2.1700, 'current_lng' => -79.9000, 'passenger_capacity' => 4, 'rate_per_km' => 0.5]);
@@ -255,6 +264,7 @@ class WhatsAppRideBookingTest extends TestCase
         $engine->respondTo($phone, $user, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.1701, 'lng' => -79.9001, 'address' => 'Origen', 'name' => null]]);
         $engine->respondTo($phone, $user, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.1800, 'lng' => -79.9100, 'address' => 'Destino', 'name' => null]]);
         $engine->respondTo($phone, $user, '1');
+        $engine->respondTo($phone, $user, 'wa_select_coop:'.$cooperative->id);
         $engine->respondTo($phone, $user, 'wa_booking_confirm');
 
         $this->assertNull($user->fresh()->password_set_at);
@@ -330,15 +340,16 @@ class WhatsAppRideBookingTest extends TestCase
     }
 
     /**
-     * Pedido explícito del usuario: "si ese numero ya esta registrado que
-     * busque si tiene flota y si no tiene indicarle que se buscara un
-     * conductor de las cooperativas mas cercanas a su punto de partida y
-     * que confirme SI, o No. y alli mismo que le diga el costo aproximado".
-     * Sin flota propia, el selector "Mi flota/Cooperativas/Públicos" se
-     * salta y busca solo la cooperativa aprobada más cercana con
-     * conductores elegibles de verdad.
+     * Corrección explícita del usuario sobre el flujo anterior ("mejor
+     * listarle las cooperativas disponibles — pública o de su flota — y sus
+     * conductores también de su flota, y que el seleccione"): ya no se
+     * busca sola y en silencio la cooperativa más cercana ni se muestra un
+     * costo aproximado antes de confirmar — sin flota propia, se le listan
+     * las cooperativas disponibles (públicas o de su red) para que elija, y
+     * la confirmación ya no incluye ningún precio (se define recién cuando
+     * un conductor de verdad la acepta).
      */
-    public function test_a_client_without_a_fleet_gets_an_automatic_nearest_cooperative_offer_with_a_price(): void
+    public function test_a_client_without_a_fleet_can_choose_a_public_cooperative_from_the_list(): void
     {
         WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
         $client = User::factory()->create([
@@ -355,6 +366,7 @@ class WhatsAppRideBookingTest extends TestCase
             'name' => 'Coop Cercana',
             'stand_lat' => -2.1690,
             'stand_lng' => -79.8990,
+            'is_public' => true,
         ]);
         $cooperative->forceFill(['status' => 'approved'])->save();
 
@@ -386,11 +398,18 @@ class WhatsAppRideBookingTest extends TestCase
         ]);
         $engine->respondTo($client->phone, $client, '1');
 
-        // Sin selector: ya debería estar esperando la confirmación con precio.
+        // Sin flota, con una cooperativa pública disponible: la lista ya
+        // debería tenerla como opción.
         $conversation = ChatbotConversation::forPhone($client->phone);
-        $this->assertSame('WA_BOOKING_CONFIRM', $conversation->pending_intent);
-        $this->assertSame($cooperative->id, $conversation->context['cooperative_id']);
-        $this->assertArrayHasKey('estimated_price', $conversation->context);
+        $this->assertSame('WA_BOOKING_SELECT', $conversation->pending_intent);
+        $this->assertContains($cooperative->id, $conversation->context['select_cooperative_ids']);
+
+        $engine->respondTo($client->phone, $client, 'wa_select_coop:'.$cooperative->id);
+
+        // Pedido explícito del usuario: sin precio en la confirmación.
+        $confirmContext = ChatbotConversation::forPhone($client->phone)->context;
+        $this->assertArrayNotHasKey('estimated_price', $confirmContext);
+        $this->assertSame($cooperative->id, $confirmContext['cooperative_id']);
 
         $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
 
@@ -411,7 +430,7 @@ class WhatsAppRideBookingTest extends TestCase
      * incluyendo el flag `whatsapp_guest_booking` que
      * RideRequestController::store() exige para esta única excepción.
      */
-    public function test_a_driver_without_a_fleet_can_actually_book_a_ride_via_the_nearest_cooperative(): void
+    public function test_a_driver_without_a_fleet_can_actually_book_a_ride_via_a_public_cooperative(): void
     {
         WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
         $requester = User::factory()->create([
@@ -426,6 +445,7 @@ class WhatsAppRideBookingTest extends TestCase
             'name' => 'Coop Cercana',
             'stand_lat' => -2.1690,
             'stand_lng' => -79.8990,
+            'is_public' => true,
         ]);
         $cooperative->forceFill(['status' => 'approved'])->save();
 
@@ -456,6 +476,7 @@ class WhatsAppRideBookingTest extends TestCase
             'type' => 'location', 'location' => ['lat' => -2.1800, 'lng' => -79.9100, 'address' => 'Destino', 'name' => null],
         ]);
         $engine->respondTo($requester->phone, $requester, '1');
+        $engine->respondTo($requester->phone, $requester, 'wa_select_coop:'.$cooperative->id);
         $engine->respondTo($requester->phone, $requester, 'wa_booking_confirm');
 
         $this->assertDatabaseHas('ride_requests', [
@@ -516,5 +537,209 @@ class WhatsAppRideBookingTest extends TestCase
 
         $this->assertDatabaseHas('users', ['phone' => $phone, 'name' => 'Ana Lopez', 'role' => 'cliente']);
         $this->assertSame('WA_BOOKING_WHEN', ChatbotConversation::forPhone($phone)->pending_intent);
+    }
+
+    /**
+     * Pedido explícito del usuario: "el de la cantidad de cuantas personas
+     * puede ser una lista de cantidades con botones 1, menor a 4 menor a 7
+     * para que sea mas rapido" — se ofrecen como botones, pero un número
+     * escrito a mano sigue funcionando por las dudas.
+     */
+    public function test_passenger_count_uses_quick_reply_buttons_and_still_accepts_a_typed_number(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+        $client = User::factory()->create(['phone' => '+593991112201', 'whatsapp_privacy_accepted_at' => now()]);
+        // Con flota (y un conductor en ella), askWhoAttends() no limpia la
+        // conversación después de guardar la cantidad — lo que interesa acá
+        // es solo confirmar que ese número se haya guardado.
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.137, 'lng' => -79.894, 'address' => 'Origen', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.167, 'lng' => -79.900, 'address' => 'Destino', 'name' => null]]);
+
+        $paxButtons = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn ($request) => ($request['interactive']['type'] ?? null) === 'button');
+        $this->assertSame(
+            ['wa_pax:1', 'wa_pax:3', 'wa_pax:6'],
+            collect($paxButtons['interactive']['action']['buttons'])->pluck('reply.id')->all()
+        );
+
+        // Un número tipeado a mano (no una de las 3 opciones) también vale.
+        $engine->respondTo($client->phone, $client, '5');
+        $this->assertSame(5, ChatbotConversation::forPhone($client->phone)->context['passenger_count']);
+    }
+
+    /**
+     * Pedido explícito del usuario: "podrias mejor listarle las
+     * cooperativas disponibles... y sus conductores tambien de su flota. y
+     * que el seleccione" — un cliente con flota Y cooperativas ve las dos
+     * cosas juntas en una sola lista, no un selector de categorías.
+     */
+    public function test_the_selection_list_combines_fleet_drivers_and_cooperatives(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        $client = User::factory()->create(['phone' => '+593991112202', 'whatsapp_privacy_accepted_at' => now()]);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $fleetDriver = User::factory()->create(['name' => 'Pedro Flota']);
+        DriverProfile::factory()->for($fleetDriver)->create();
+        FleetMember::factory()->for($fleet)->for($fleetDriver, 'driver')->create(['added_by' => $client->id]);
+
+        $cooperativeOwner = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeOwner->id, 'name' => 'Coop Amazonas',
+            'stand_lat' => -2.1690, 'stand_lng' => -79.8990, 'is_public' => true,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.1701, 'lng' => -79.9001, 'address' => 'Origen', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.1800, 'lng' => -79.9100, 'address' => 'Destino', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, 'wa_pax:1');
+
+        $context = ChatbotConversation::forPhone($client->phone)->context;
+        $this->assertSame('WA_BOOKING_SELECT', ChatbotConversation::forPhone($client->phone)->pending_intent);
+        $this->assertContains($fleetDriver->id, $context['select_driver_ids']);
+        $this->assertContains($cooperative->id, $context['select_cooperative_ids']);
+    }
+
+    /**
+     * Pedido explícito del usuario: "en cuanto al mensaje de confirmar
+     * mejor que no coloques los precios de la carreras, dejemos que cuando
+     * se asigne el conductor se maneje el precio."
+     */
+    public function test_the_confirmation_message_never_shows_a_price(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+        $client = User::factory()->create(['phone' => '+593991112203', 'whatsapp_privacy_accepted_at' => now()]);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -2.138, 'current_lng' => -79.895, 'passenger_capacity' => 4]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.137, 'lng' => -79.894, 'address' => 'Origen', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.167, 'lng' => -79.900, 'address' => 'Destino', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, 'wa_pax:1');
+        $engine->respondTo($client->phone, $client, 'wa_select_driver:'.$driver->id);
+
+        $confirmMessage = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn ($request) => ($request['interactive']['body']['text'] ?? null) && str_contains($request['interactive']['body']['text'], 'Confirme su solicitud'));
+
+        $this->assertStringNotContainsString('$', $confirmMessage['interactive']['body']['text']);
+        $this->assertStringNotContainsString('Costo aproximado', $confirmMessage['interactive']['body']['text']);
+    }
+
+    /**
+     * Pedido explícito del usuario: "una vez se genere la solicitud podrias
+     * agregar un boton de cancelar solicitud" y "si no ha recibido ninguna
+     * repuesta en unos 30 segundos... que indique que se esta buscando un
+     * conductor".
+     */
+    public function test_creating_a_request_offers_a_cancel_button_and_schedules_a_still_searching_check(): void
+    {
+        Bus::fake();
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+        $client = User::factory()->create(['phone' => '+593991112204', 'whatsapp_privacy_accepted_at' => now()]);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -2.138, 'current_lng' => -79.895, 'passenger_capacity' => 4]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.137, 'lng' => -79.894, 'address' => 'Origen', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.167, 'lng' => -79.900, 'address' => 'Destino', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, 'wa_pax:1');
+        $engine->respondTo($client->phone, $client, 'wa_select_driver:'.$driver->id);
+        $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
+
+        $rideRequest = RideRequest::where('client_user_id', $client->id)->latest('id')->firstOrFail();
+
+        $successMessage = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn ($request) => ($request['interactive']['body']['text'] ?? null) && str_contains($request['interactive']['body']['text'], 'Solicitud #'));
+        $this->assertSame(
+            ['wa_pending_cancel'],
+            collect($successMessage['interactive']['action']['buttons'])->pluck('reply.id')->all()
+        );
+
+        Bus::assertDispatched(NotifyWhatsAppStillSearchingForDriver::class, fn ($job) => $job->rideRequestId === $rideRequest->id);
+    }
+
+    /**
+     * Pedido explícito del usuario: "si realmente no se encontro que la
+     * misma plataforma indique y le mande un boton que diga pedir
+     * nuevamente y que intente nuevamente con esos mismo parametros."
+     */
+    public function test_an_expired_request_offers_a_retry_button_that_recreates_the_same_request(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+        $client = User::factory()->create(['phone' => '+593991112205', 'whatsapp_privacy_accepted_at' => now()]);
+        // notifyWhatsAppExpired() solo avisa a quien tiene sesión activa de
+        // WhatsApp (mismo criterio que el resto de avisos puntuales).
+        WhatsAppSession::query()->create(['user_id' => $client->id, 'opened_at' => now(), 'expires_at' => now()->addHours(20)]);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['is_available' => true, 'current_lat' => -2.138, 'current_lng' => -79.895, 'passenger_capacity' => 4]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'pedir carrera');
+        $engine->respondTo($client->phone, $client, 'wa_when_now');
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.137, 'lng' => -79.894, 'address' => 'Origen', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, '[ubicacion]', ['type' => 'location', 'location' => ['lat' => -2.167, 'lng' => -79.900, 'address' => 'Destino', 'name' => null]]);
+        $engine->respondTo($client->phone, $client, 'wa_pax:1');
+        $engine->respondTo($client->phone, $client, 'wa_select_driver:'.$driver->id);
+        $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
+
+        $rideRequest = RideRequest::where('client_user_id', $client->id)->latest('id')->firstOrFail();
+
+        // Fuerza el vencimiento: nadie más en la bolsa, expira de una.
+        RideDispatchAdvancer::advanceOrExpire($rideRequest->id, $rideRequest->driver_user_id);
+        $this->assertSame('expired', $rideRequest->fresh()->status);
+
+        $retryMessage = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn ($request) => ($request['interactive']['action']['buttons'][0]['reply']['id'] ?? null) === 'wa_retry_request:'.$rideRequest->id);
+        $this->assertNotNull($retryMessage);
+
+        $engine->respondTo($client->phone, $client, 'wa_retry_request:'.$rideRequest->id);
+
+        // Con QUEUE_CONNECTION=sync el job de vencimiento de la NUEVA
+        // solicitud también corre de inmediato (mismo comportamiento ya
+        // señalado en otros tests de este archivo) — lo que importa acá es
+        // que el reintento sí creó una solicitud nueva con los mismos
+        // parámetros, no que haya quedado "pending" en este entorno de test.
+        $this->assertSame(2, RideRequest::where('client_user_id', $client->id)->count());
+        $retryRequest = RideRequest::where('client_user_id', $client->id)->latest('id')->firstOrFail();
+        $this->assertNotSame($rideRequest->id, $retryRequest->id);
+        $this->assertSame('Origen', $retryRequest->origin_address);
+        $this->assertSame('Destino', $retryRequest->destination_address);
+        $this->assertSame($driver->id, $retryRequest->driver_user_id);
     }
 }

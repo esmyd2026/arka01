@@ -163,6 +163,52 @@ class CooperativeModuleTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario: "la cooperativas deberian ser como los
+     * conductores si no me llenan todo no pueden ir a mas ningun lado hasta
+     * que yo les verifique y les apruebe" — antes del gate, una cooperativa
+     * 'pending' podía navegar libremente a su panel, conductores, billetera,
+     * etc.; solo un banner en el dashboard avisaba que "aún no puede
+     * operar", pero nada se lo impedía de verdad.
+     */
+    public function test_an_unapproved_cooperative_is_redirected_away_from_its_panel(): void
+    {
+        $user = User::factory()->create();
+        Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Pendiente']);
+
+        foreach ([
+            'cooperative.dashboard',
+            'cooperative.drivers.index',
+            'cooperative.wallet',
+            'cooperative.clients.index',
+        ] as $routeName) {
+            $this->actingAs($user)->get(route($routeName))
+                ->assertRedirect(route('cooperative.profile.edit'));
+        }
+    }
+
+    /**
+     * El propio formulario de perfil (completar y enviar la postulación)
+     * tiene que seguir accesible sin importar el estado — si no, la
+     * cooperativa nunca podría llegar a aprobarse.
+     */
+    public function test_an_unapproved_cooperative_can_still_reach_its_own_profile_form(): void
+    {
+        $user = User::factory()->create();
+        Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Pendiente']);
+
+        $this->actingAs($user)->get(route('cooperative.profile.edit'))->assertOk();
+    }
+
+    public function test_an_approved_cooperative_can_reach_its_panel(): void
+    {
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Aprobada']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->actingAs($user)->get(route('cooperative.dashboard'))->assertOk();
+    }
+
+    /**
      * Pedido explícito del usuario ("mejoremos la privacidad de las
      * cooperativas") — persistencia simple del toggle nuevo, mismo endpoint
      * que ya guarda el resto del perfil (borrador o completo).

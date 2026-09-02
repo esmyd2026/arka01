@@ -3,19 +3,17 @@
 namespace App\Services\Chatbot;
 
 use App\Http\Controllers\RideRequestController;
+use App\Jobs\NotifyWhatsAppStillSearchingForDriver;
 use App\Models\ChatbotConversation;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
-use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\FleetMember;
 use App\Models\RideRequest;
 use App\Models\User;
 use App\Models\WhatsAppSetting;
 use App\Services\GoogleGeocodingService;
-use App\Services\GoogleRoutesService;
 use App\Services\Haversine;
-use App\Services\PriceCalculator;
-use App\Services\RideDispatchCandidates;
 use App\Services\WhatsAppFreeformSender;
 use App\Services\WhatsAppRideAccess;
 use Carbon\Carbon;
@@ -31,7 +29,6 @@ class WhatsAppRideBookingHandler
 {
     public function __construct(
         private readonly GoogleGeocodingService $geocoder,
-        private readonly GoogleRoutesService $routes,
     ) {}
 
     public function handle(string $phone, ?User $user, string $text, array $metadata, ChatbotConversation $conversation): bool
@@ -40,8 +37,15 @@ class WhatsAppRideBookingHandler
         $startsBooking = in_array(MessageNormalizer::normalize($text), [
             'pedir carrera', 'solicitar carrera', 'pedir un viaje', 'solicitar viaje', 'viaje',
         ], true);
+        // Pedido explícito del usuario: "si realmente no se encontro que la
+        // misma plataforma indique y le mande un boton que diga pedir
+        // nuevamente y que intente nuevamente con esos mismo parametros" —
+        // llega como acción propia (RideDispatchAdvancer::notifyWhatsAppExpired()),
+        // sin depender de ningún estado de conversación previo, igual que
+        // "pedir carrera" arranca el flujo desde cero.
+        $isRetry = (bool) preg_match('/^wa_retry_request:(\d+)$/', $text, $retryMatch);
 
-        if (! $startsBooking && ! str_starts_with((string) $state, 'WA_BOOKING_') && $state !== 'WA_PRIVACY_CONSENT') {
+        if (! $startsBooking && ! $isRetry && ! str_starts_with((string) $state, 'WA_BOOKING_') && $state !== 'WA_PRIVACY_CONSENT') {
             return false;
         }
 
@@ -70,6 +74,10 @@ class WhatsAppRideBookingHandler
             WhatsAppFreeformSender::sendText($phone, $reason);
 
             return true;
+        }
+
+        if ($isRetry) {
+            return $this->retryExpiredRequest($phone, $user, (int) $retryMatch[1], $conversation);
         }
 
         if ($startsBooking) {
@@ -293,51 +301,51 @@ class WhatsAppRideBookingHandler
         }
 
         if ($state === 'WA_BOOKING_PAX') {
-            $pax = (int) trim($text);
-            if (! ctype_digit(trim($text)) || $pax < 1 || $pax > 8) {
-                WhatsAppFreeformSender::sendText($phone, 'Escriba un número de personas válido, entre 1 y 8.');
+            // Pedido explícito del usuario: botones de cantidad en vez de
+            // texto libre, para que sea más rápido — se acepta también un
+            // número escrito a mano (alguien puede tipear "5" igual, aunque
+            // los botones no lo ofrezcan como opción exacta).
+            $pax = match (true) {
+                preg_match('/^wa_pax:(\d+)$/', $text, $match) === 1 => (int) $match[1],
+                ctype_digit(trim($text)) => (int) trim($text),
+                default => null,
+            };
+            if ($pax === null || $pax < 1 || $pax > 8) {
+                WhatsAppFreeformSender::sendText($phone, 'Elija una opción de la lista o escriba un número de personas válido, entre 1 y 8.');
 
                 return true;
             }
             $context['passenger_count'] = $pax;
 
-            // Pedido explícito del usuario: "si ese numero ya esta
-            // registrado que busque si tiene flota y si no tiene indicarle
-            // que se buscara un conductor de las cooperativas mas cercanas".
-            // Con flota propia (con conductores) sigue el selector de
-            // siempre; sin flota, se salta ese paso y busca solo.
-            if ($user && $user->fleets()->whereHas('activeMembers')->exists()) {
-                $this->setState($conversation, 'WA_BOOKING_CATEGORY', $context);
-                WhatsAppFreeformSender::sendButtons($phone, '¿Quién desea que atienda la carrera?', [
-                    ['id' => 'wa_pool_fleet', 'title' => 'Mi flota'],
-                    ['id' => 'wa_pool_coop', 'title' => 'Cooperativas'],
-                    ['id' => 'wa_pool_public', 'title' => 'Públicos'],
-                ]);
-
-                return true;
-            }
-
-            return $this->offerNearestCooperative($phone, $conversation, $context);
+            return $this->askWhoAttends($phone, $user, $conversation, $context);
         }
 
-        if ($state === 'WA_BOOKING_CATEGORY') {
-            if ($text === 'wa_pool_coop') {
-                return $this->askCooperative($phone, $user, $conversation, $context);
+        if ($state === 'WA_BOOKING_SELECT') {
+            // Pedido explícito del usuario: listar de una vez a los
+            // conductores de su flota y las cooperativas disponibles (de su
+            // red o públicas), para que elija directo a quién se la pide —
+            // ver askWhoAttends() más abajo.
+            if ($text === 'wa_select_public') {
+                $context['dispatch_pool'] = 'public';
+
+                return $this->confirm($phone, $conversation, $context);
             }
-            $context['dispatch_pool'] = $text === 'wa_pool_public' ? 'public' : 'fleet';
+            if (preg_match('/^wa_select_driver:(\d+)$/', $text, $match) && in_array((int) $match[1], $context['select_driver_ids'] ?? [], true)) {
+                $context['driver_user_id'] = (int) $match[1];
+                $context['driver_name'] = $context['select_driver_names'][$match[1]] ?? null;
+                $context['dispatch_pool'] = 'fleet';
 
-            return $this->confirm($phone, $conversation, $context);
-        }
-
-        if ($state === 'WA_BOOKING_COOPERATIVE') {
-            if (! preg_match('/^wa_coop:(\d+)$/', $text, $match) || ! in_array((int) $match[1], $context['cooperative_ids'] ?? [], true)) {
-                WhatsAppFreeformSender::sendText($phone, 'Seleccione una cooperativa de la lista enviada.');
-
-                return true;
+                return $this->confirm($phone, $conversation, $context);
             }
-            $context['cooperative_id'] = (int) $match[1];
+            if (preg_match('/^wa_select_coop:(\d+)$/', $text, $match) && in_array((int) $match[1], $context['select_cooperative_ids'] ?? [], true)) {
+                $context['cooperative_id'] = (int) $match[1];
+                $context['cooperative_name'] = $context['select_cooperative_names'][$match[1]] ?? null;
 
-            return $this->confirm($phone, $conversation, $context);
+                return $this->confirm($phone, $conversation, $context);
+            }
+            WhatsAppFreeformSender::sendText($phone, 'Elija una opción de la lista enviada.');
+
+            return true;
         }
 
         if ($state === 'WA_BOOKING_CONFIRM') {
@@ -367,28 +375,35 @@ class WhatsAppRideBookingHandler
 
     /**
      * Pedido explícito del usuario ("cuando pida nuevamente mostrarle las
-     * ubicaciones que ha solicitado para volverlas a repetir") — si el
-     * cliente ya tiene carreras anteriores, ofrece sus últimas direcciones
-     * (distintas entre sí) como lista real de WhatsApp. En todos los casos
-     * se manda después el botón nativo de ubicación: abre el mapa dentro de
-     * WhatsApp y devuelve las coordenadas sin sacar al cliente del chat.
+     * ubicaciones que ha solicitado para volverlas a repetir", y luego
+     * "esto del chatbot podemos dejarlo en un solo mensaje que tenga los dos
+     * botones"): antes se mandaban SIEMPRE dos mensajes seguidos (la lista
+     * de recientes y, aparte, el botón nativo de ubicación) — ahora, si hay
+     * recientes, van los dos en un solo mensaje de lista (las direcciones
+     * más una fila "Nueva ubicación"); el botón nativo recién se manda si
+     * elige esa fila (ver 'wa_recent_new' en handle()). Sin recientes
+     * (cliente nuevo, o primera dirección de la conversación) sigue siendo
+     * un único mensaje con el botón nativo, como siempre.
      */
     private function askLocation(string $phone, ChatbotConversation $conversation, string $state, array $context, string $message, ?User $user): bool
     {
         $field = $state === 'WA_BOOKING_ORIGIN' ? 'origin' : 'destination';
 
         $recent = $this->recentAddressOptions($user, $field);
-        $this->setState($conversation, $state, $context);
 
         if ($recent) {
             $context['recent_'.$field.'_options'] = $recent;
             $this->setState($conversation, $state, $context);
             $rows = collect($recent)
                 ->map(fn (array $point, int $i) => ['id' => "wa_recent_{$field}:{$i}", 'title' => $point['address']])
+                ->push(['id' => 'wa_recent_new', 'title' => '📍 Nueva ubicación'])
                 ->all();
-            WhatsAppFreeformSender::sendList($phone, 'Puede repetir una ubicación reciente o enviar un punto nuevo con el botón del siguiente mensaje.', 'Ver recientes', $rows);
+            WhatsAppFreeformSender::sendList($phone, $message."\n\nPuede repetir una ubicación reciente o elegir \"Nueva ubicación\" para compartir un punto nuevo o escribir una dirección.", 'Ver opciones', $rows);
+
+            return true;
         }
 
+        $this->setState($conversation, $state, $context);
         $this->sendNativeLocationRequest($phone, $message);
 
         return true;
@@ -441,10 +456,17 @@ class WhatsAppRideBookingHandler
             return $this->askLocation($phone, $conversation, 'WA_BOOKING_DESTINATION', $context, '¿A dónde vamos? Comparta ubicación, dirección o coordenadas.', $user);
         }
 
-        // Pedido explícito del usuario: preguntar cuántas personas son
-        // (antes quedaba fijo en 1, ver createRide() más abajo).
+        // Pedido explícito del usuario: botones de cantidad ("1, menor a 4,
+        // menor a 7") en vez de texto libre, para que sea más rápido — el
+        // valor real que se manda es el tope de cada rango (3 y 6), así el
+        // conductor que se le ofrezca siempre tiene lugar de sobra para
+        // cualquier cantidad real dentro de ese rango.
         $this->setState($conversation, 'WA_BOOKING_PAX', $context);
-        WhatsAppFreeformSender::sendText($phone, '¿Cuántas personas son?');
+        WhatsAppFreeformSender::sendButtons($phone, '¿Cuántas personas son?', [
+            ['id' => 'wa_pax:1', 'title' => '1 persona'],
+            ['id' => 'wa_pax:3', 'title' => 'Menos de 4'],
+            ['id' => 'wa_pax:6', 'title' => 'Menos de 7'],
+        ]);
 
         return true;
     }
@@ -490,91 +512,79 @@ class WhatsAppRideBookingHandler
         return $this->geocoder->resolve($text, $biasPoint['lat'] ?? null, $biasPoint['lng'] ?? null);
     }
 
-    private function askCooperative(string $phone, User $user, ChatbotConversation $conversation, array $context): bool
-    {
-        $origin = $context['origin'];
-        $cooperatives = $user->clientCooperativeLinks()->with('cooperative.activeDriverMemberships')->get()
-            ->pluck('cooperative')->filter(fn ($coop) => $coop?->isApproved() && $coop->stand_lat !== null)
-            ->sortBy(fn ($coop) => Haversine::distanceKm((float) $origin['lat'], (float) $origin['lng'], (float) $coop->stand_lat, (float) $coop->stand_lng))
-            ->take(3)->values();
-        if ($cooperatives->isEmpty()) {
-            WhatsAppFreeformSender::sendText($phone, 'No tiene cooperativas habilitadas cerca. Elija Mi flota o Públicos.');
-
-            return true;
-        }
-        $context['cooperative_ids'] = $cooperatives->pluck('id')->all();
-        $this->setState($conversation, 'WA_BOOKING_COOPERATIVE', $context);
-        WhatsAppFreeformSender::sendButtons($phone, 'Cooperativas de su red más cercanas al origen:', $cooperatives->map(fn ($coop) => [
-            'id' => 'wa_coop:'.$coop->id,
-            'title' => Str::limit($coop->name, 20, ''),
-        ])->all());
-
-        return true;
-    }
-
     /**
-     * Pedido explícito del usuario: si el cliente no tiene flota propia,
-     * buscar solo entre las cooperativas APROBADAS más cercanas al origen
-     * (sin el filtro de "ya vinculada" que sí tiene askCooperative(), pensado
-     * para el otro caso — cliente CON cooperativas propias eligiendo entre
-     * ellas) — y mostrarle el costo aproximado con km reales de Google antes
-     * de confirmar. Prueba cada cooperativa en orden hasta encontrar una con
-     * al menos un conductor elegible de verdad (RideDispatchCandidates ya
-     * filtra disponibilidad, capacidad, alcance).
+     * Pedido explícito del usuario: "listarle las cooperativas disponibles
+     * — desde la que está pública o de su flota — y sus conductores también
+     * de su flota, y que el seleccione" — reemplaza al selector de
+     * categorías (Mi flota/Cooperativas/Públicos) y a la búsqueda automática
+     * y silenciosa de la cooperativa más cercana: ahora siempre se listan
+     * las opciones reales (conductores de su flota + cooperativas de su red
+     * o públicas) para que el cliente elija directo a quién se la pide,
+     * mismo criterio que "Elige tu conductor" del lado web
+     * (RideRequestController::create()).
      */
-    private function offerNearestCooperative(string $phone, ChatbotConversation $conversation, array $context): bool
+    private function askWhoAttends(string $phone, ?User $user, ChatbotConversation $conversation, array $context): bool
     {
         $origin = $context['origin'];
-        $destination = $context['destination'];
-        $passengerCount = (int) ($context['passenger_count'] ?? 1);
 
+        $fleetDrivers = $user
+            ? FleetMember::query()
+                ->whereHas('fleet', fn ($query) => $query->where('owner_user_id', $user->id))
+                ->whereNull('left_at')
+                ->where('requests_disabled', false)
+                ->with('driver')
+                ->get()
+                ->pluck('driver')
+                ->filter()
+                ->take(5)
+            : collect();
+
+        // Mismo criterio que RideRequestController::create() del lado web:
+        // cooperativas que el cliente ya agregó a su red, más las que un
+        // admin marcó como públicas — nunca una cooperativa ajena y privada.
+        $addedCooperativeIds = $user
+            ? ClientCooperative::query()->where('client_user_id', $user->id)->pluck('cooperative_id')
+            : collect();
         $cooperatives = Cooperative::query()
             ->where('status', 'approved')
             ->whereNull('suspended_at')
             ->whereNotNull('stand_lat')
+            ->where(fn ($query) => $query->whereIn('id', $addedCooperativeIds)->orWhere('is_public', true))
             ->get()
+            ->filter(fn (Cooperative $coop) => $coop->max_request_distance_km === null
+                || Haversine::distanceKm((float) $origin['lat'], (float) $origin['lng'], (float) $coop->stand_lat, (float) $coop->stand_lng) <= $coop->max_request_distance_km)
             ->sortBy(fn (Cooperative $coop) => Haversine::distanceKm((float) $origin['lat'], (float) $origin['lng'], (float) $coop->stand_lat, (float) $coop->stand_lng))
-            ->take(5);
+            ->take(4)
+            ->values();
 
-        foreach ($cooperatives as $cooperative) {
-            $candidateIds = RideDispatchCandidates::forCooperative($cooperative, (float) $origin['lat'], (float) $origin['lng'], $passengerCount);
-            if (empty($candidateIds)) {
-                continue;
-            }
+        if ($fleetDrivers->isEmpty() && $cooperatives->isEmpty()) {
+            $this->clear($conversation);
+            // Mismo mensaje que la pantalla web ("Elige tu conductor") para
+            // este mismo caso vacío — ver Ride/Request.vue.
+            WhatsAppFreeformSender::sendText($phone, 'Todavía no tiene conductores agregados a su flota ni cooperativas en su red. Puede agregarlos desde Arka01, o escribir "pedir carrera" de nuevo para elegir del directorio público.');
 
-            // Sin la clave de Google configurada, route() devuelve null — se
-            // sigue mostrando un aproximado con línea recta en vez de
-            // trabarse (mismo respaldo que ya usa RideRequestController).
-            $route = $this->routes->route((float) $origin['lat'], (float) $origin['lng'], (float) $destination['lat'], (float) $destination['lng']);
-            $distanceKm = $route['distance_km'] ?? null;
-            $distanceKm ??= Haversine::distanceKm((float) $origin['lat'], (float) $origin['lng'], (float) $destination['lat'], (float) $destination['lng']);
-
-            $topDriver = DriverProfile::query()->where('user_id', $candidateIds[0])->first();
-            $price = $topDriver ? PriceCalculator::suggestedPrice(
-                $distanceKm,
-                (float) $topDriver->rate_per_km,
-                driverMinimumFare: $topDriver->minimum_fare !== null ? (float) $topDriver->minimum_fare : null,
-            ) : null;
-
-            $context['cooperative_id'] = $cooperative->id;
-            $context['cooperative_name'] = $cooperative->name;
-            // RideRequestController::store() solo acepta un `cooperative_id`
-            // que el cliente ya tenga vinculado (ClientCooperative) — acá se
-            // vincula recién al confirmar (createRide()), nunca antes: no
-            // tiene sentido sumarla a su red si al final dice "No".
-            $context['auto_link_cooperative'] = true;
-            if (! empty($route['distance_km'])) {
-                $context['route_distance_km'] = $route['distance_km'];
-            }
-            if ($price) {
-                $context['estimated_price'] = $price['total'];
-            }
-
-            return $this->confirm($phone, $conversation, $context);
+            return true;
         }
 
-        $this->clear($conversation);
-        WhatsAppFreeformSender::sendText($phone, 'No encontramos conductores disponibles en las cooperativas cercanas por ahora. Intente más tarde, o arme su flota de confianza desde Arka01.');
+        $rows = [];
+        $driverNames = [];
+        foreach ($fleetDrivers as $driver) {
+            $rows[] = ['id' => 'wa_select_driver:'.$driver->id, 'title' => '🚗 '.Str::limit($driver->full_name, 22, '')];
+            $driverNames[$driver->id] = $driver->full_name;
+        }
+        $cooperativeNames = [];
+        foreach ($cooperatives as $cooperative) {
+            $rows[] = ['id' => 'wa_select_coop:'.$cooperative->id, 'title' => '🏢 '.Str::limit($cooperative->name, 22, '')];
+            $cooperativeNames[$cooperative->id] = $cooperative->name;
+        }
+        $rows[] = ['id' => 'wa_select_public', 'title' => '🌐 Directorio público'];
+
+        $context['select_driver_ids'] = $fleetDrivers->pluck('id')->all();
+        $context['select_driver_names'] = $driverNames;
+        $context['select_cooperative_ids'] = $cooperatives->pluck('id')->all();
+        $context['select_cooperative_names'] = $cooperativeNames;
+        $this->setState($conversation, 'WA_BOOKING_SELECT', $context);
+        WhatsAppFreeformSender::sendList($phone, '¿Quién le atiende esta carrera?', 'Elegir', $rows);
 
         return true;
     }
@@ -583,18 +593,24 @@ class WhatsAppRideBookingHandler
     {
         $this->setState($conversation, 'WA_BOOKING_CONFIRM', $context);
         $when = ! empty($context['is_scheduled']) ? Carbon::parse($context['scheduled_at'])->format('d/m/Y H:i') : 'Ahora mismo';
-        $message = "Confirme su solicitud:\n🟢 {$context['origin']['address']}\n🔴 {$context['destination']['address']}\n🕐 {$when}";
 
-        // Pedido explícito del usuario: "que le diga el costo aproximado de
-        // la carrera" cuando se buscó sola una cooperativa cercana — en el
-        // flujo de siempre (flota propia/elegida a mano) no se muestra
-        // precio acá, se sigue viendo recién al aceptar un conductor.
-        if (! empty($context['cooperative_name'])) {
-            $message = "Buscaremos un conductor en {$context['cooperative_name']}, la cooperativa más cercana a su origen.\n\n{$message}";
-            if (! empty($context['estimated_price'])) {
-                $message .= "\n💵 Costo aproximado: \$".number_format((float) $context['estimated_price'], 2);
-            }
-        }
+        // Pedido explícito del usuario: "a quién se la pedís" según lo que
+        // haya elegido en askWhoAttends() — un conductor puntual, una
+        // cooperativa, o el directorio público si no tiene ninguna opción
+        // propia cerca.
+        $who = match (true) {
+            ! empty($context['driver_name']) => "🚗 Conductor: {$context['driver_name']}",
+            ! empty($context['cooperative_name']) => "🏢 Cooperativa: {$context['cooperative_name']}",
+            ($context['dispatch_pool'] ?? null) === 'public' => '🌐 Directorio público',
+            default => '🚗 Su flota de confianza',
+        };
+
+        // Pedido explícito del usuario: "que no coloques los precios de la
+        // carrera, dejemos que cuando se asigne el conductor se maneje el
+        // precio" — antes se mostraba un costo aproximado acá para la
+        // cooperativa más cercana; ahora el precio recién se ve una vez que
+        // un conductor de verdad toma la solicitud.
+        $message = "*Confirme su solicitud*\n\n{$who}\n🟢 Origen: {$context['origin']['address']}\n🔴 Destino: {$context['destination']['address']}\n🕐 {$when}\n\nEl precio se calcula según la tarifa de quien la reciba y se lo confirmamos apenas la acepte.";
 
         WhatsAppFreeformSender::sendButtons($phone, $message, [
             ['id' => 'wa_booking_confirm', 'title' => 'Confirmar'],
@@ -609,6 +625,7 @@ class WhatsAppRideBookingHandler
         $payload = [
             'fleet_id' => $user->fleets()->value('id'),
             'cooperative_id' => $context['cooperative_id'] ?? null,
+            'driver_user_id' => $context['driver_user_id'] ?? null,
             'dispatch_pool' => $context['dispatch_pool'] ?? null,
             'origin_lat' => $context['origin']['lat'], 'origin_lng' => $context['origin']['lng'], 'origin_address' => $context['origin']['address'],
             'destination_lat' => $context['destination']['lat'], 'destination_lng' => $context['destination']['lng'], 'destination_address' => $context['destination']['address'],
@@ -627,25 +644,12 @@ class WhatsAppRideBookingHandler
         }
         // Pedido explícito del usuario: "lo que te coloque por origen y
         // destino deberas pasarlo por la api de google para determinar los
-        // km" — si ya se calculó (siempre que se ofreció una cooperativa
-        // cercana automáticamente), se manda el km real en vez de dejar que
-        // el servidor recalcule con línea recta (RideRequestController ya
+        // km" — si ya se calculó, se manda el km real en vez de dejar que el
+        // servidor recalcule con línea recta (RideRequestController ya
         // confía en este campo si está dentro de un rango razonable contra
         // la línea recta, ver su validación de route_distance_km).
         if (! empty($context['route_distance_km'])) {
             $payload['route_distance_km'] = $context['route_distance_km'];
-        }
-
-        // RideRequestController::store() solo acepta una cooperativa que el
-        // cliente ya tenga en su red (ClientCooperative) — la búsqueda
-        // automática de la más cercana (offerNearestCooperative()) recién
-        // vincula acá, justo antes de mandar la solicitud, nunca antes de
-        // que confirme con "Sí".
-        if (! empty($context['auto_link_cooperative']) && ! empty($context['cooperative_id'])) {
-            ClientCooperative::query()->firstOrCreate([
-                'client_user_id' => $user->id,
-                'cooperative_id' => $context['cooperative_id'],
-            ]);
         }
 
         $request = Request::create('/flota/solicitar', 'POST', $payload);
@@ -659,7 +663,19 @@ class WhatsAppRideBookingHandler
             // `current_offered_price`, `offered_price` no existe como
             // columna (Eloquent devuelve null en silencio en vez de un
             // error, por eso pasó desapercibido).
-            WhatsAppFreeformSender::sendText($phone, '✅ Solicitud #'.$rideRequest->id.' creada por $'.number_format((float) $rideRequest->current_offered_price, 2).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.');
+            // Pedido explícito del usuario: botón para cancelar la solicitud
+            // apenas queda creada, sin tener que escribirle nada al bot
+            // primero — reusa el mismo id "wa_pending_cancel" que ya maneja
+            // WhatsAppPendingRequestHandler para una solicitud sin aceptar.
+            WhatsAppFreeformSender::sendButtons(
+                $phone,
+                '✅ Solicitud #'.$rideRequest->id.' creada por $'.number_format((float) $rideRequest->current_offered_price, 2).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.',
+                [['id' => 'wa_pending_cancel', 'title' => 'Cancelar solicitud']],
+            );
+            // Pedido explícito del usuario: "si no ha recibido ninguna
+            // repuesta en unos 30 segundos y la solicitud sigue viva que
+            // indique que se esta buscando un conductor".
+            NotifyWhatsAppStillSearchingForDriver::dispatch($rideRequest->id)->delay(now()->addSeconds(30));
             $this->offerFullRegistrationIfFirstGuestRide($phone, $user);
         } catch (ValidationException $e) {
             $this->clear($conversation);
@@ -670,6 +686,37 @@ class WhatsAppRideBookingHandler
         }
 
         return true;
+    }
+
+    /**
+     * Pedido explícito del usuario: "si realmente no se encontro que la
+     * misma plataforma indique y le mande un boton que diga pedir
+     * nuevamente y que intente nuevamente con esos mismo parametros" —
+     * vuelve a armar exactamente la misma solicitud (mismo origen, destino,
+     * cantidad de pasajeros y a quién iba dirigida) sin volver a preguntar
+     * nada, ya que el cliente solo quiere reintentar, no cambiar nada.
+     */
+    private function retryExpiredRequest(string $phone, ?User $user, int $rideRequestId, ChatbotConversation $conversation): bool
+    {
+        $original = $user ? RideRequest::query()->where('id', $rideRequestId)->where('client_user_id', $user->id)->first() : null;
+
+        if (! $user || ! $original) {
+            WhatsAppFreeformSender::sendText($phone, 'No pudimos encontrar esa solicitud. Escriba "pedir carrera" para empezar de nuevo.');
+
+            return true;
+        }
+
+        $context = [
+            'origin' => ['lat' => (float) $original->origin_lat, 'lng' => (float) $original->origin_lng, 'address' => $original->origin_address],
+            'destination' => ['lat' => (float) $original->destination_lat, 'lng' => (float) $original->destination_lng, 'address' => $original->destination_address],
+            'passenger_count' => $original->passenger_count,
+            'is_scheduled' => false,
+            'dispatch_pool' => $original->dispatch_pool,
+            'cooperative_id' => $original->cooperative_id,
+            'driver_user_id' => $original->price_reference_driver_user_id,
+        ];
+
+        return $this->createRide($phone, $user, $conversation, $context);
     }
 
     /**

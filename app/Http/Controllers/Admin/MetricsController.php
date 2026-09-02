@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Cooperative;
 use App\Models\Fleet;
+use App\Models\LandingCtaEvent;
 use App\Models\Ride;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
@@ -35,6 +36,7 @@ class MetricsController extends Controller
             'clientPlans' => $clientPlans,
             'cooperativePlans' => $cooperativePlans,
             'estimatedMrr' => round($mrr, 2),
+            'landingCta' => $this->landingCtaMetrics(),
             'totals' => [
                 'users' => User::query()->count(),
                 'drivers' => User::query()->whereHas('driverProfile')->count(),
@@ -45,6 +47,45 @@ class MetricsController extends Controller
                 'approvedCooperatives' => Cooperative::query()->where('status', 'approved')->count(),
             ],
         ]);
+    }
+
+    /**
+     * Embudo de la portada. Se separan eventos totales de visitantes únicos:
+     * un doble clic no debe aparentar que llegaron dos personas diferentes.
+     */
+    private function landingCtaMetrics(): array
+    {
+        $since = now()->subDays(30);
+        $events = LandingCtaEvent::query()
+            ->where('created_at', '>=', $since)
+            ->get(['event_type', 'visitor_hash', 'created_at']);
+        $impressions = $events->where('event_type', 'impression');
+        $clicks = $events->where('event_type', 'click');
+
+        $uniqueVisitors = $impressions->pluck('visitor_hash')->unique()->count();
+        $uniqueClicks = $clicks->pluck('visitor_hash')->unique()->count();
+
+        $daily = collect(range(13, 0))->map(function (int $daysAgo) use ($impressions, $clicks) {
+            $day = now()->subDays($daysAgo);
+            $date = $day->toDateString();
+
+            return [
+                'date' => $date,
+                'label' => $day->format('d/m'),
+                'impressions' => $impressions->filter(fn (LandingCtaEvent $event) => $event->created_at->toDateString() === $date)->pluck('visitor_hash')->unique()->count(),
+                'clicks' => $clicks->filter(fn (LandingCtaEvent $event) => $event->created_at->toDateString() === $date)->pluck('visitor_hash')->unique()->count(),
+            ];
+        });
+
+        return [
+            'unique_visitors_30d' => $uniqueVisitors,
+            'unique_clicks_30d' => $uniqueClicks,
+            'clicks_today' => $clicks->filter(fn (LandingCtaEvent $event) => $event->created_at->isToday())->count(),
+            'clicks_7d' => $clicks->filter(fn (LandingCtaEvent $event) => $event->created_at->gte(now()->subDays(7)))->count(),
+            'conversion_rate' => $uniqueVisitors > 0 ? round(($uniqueClicks / $uniqueVisitors) * 100, 1) : 0,
+            'daily' => $daily,
+            'max_daily' => max((int) $daily->max('impressions'), 1),
+        ];
     }
 
     /**

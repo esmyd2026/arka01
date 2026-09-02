@@ -272,7 +272,7 @@ class AdminSystemControllerTest extends TestCase
         $user = User::factory()->create(['is_admin' => false]);
 
         $this->actingAs($user)->patch(route('admin.system.driver-requirements.update'), [
-            'disabled' => ['police_record'],
+            'disabled' => ['vehicle_registration'],
         ])->assertForbidden();
     }
 
@@ -281,11 +281,11 @@ class AdminSystemControllerTest extends TestCase
         $admin = User::factory()->create(['is_admin' => true]);
 
         $this->actingAs($admin)->patch(route('admin.system.driver-requirements.update'), [
-            'disabled' => ['police_record', 'has_insurance'],
+            'disabled' => ['vehicle_registration', 'has_insurance'],
         ])->assertRedirect();
 
         $this->assertSame(
-            ['police_record', 'has_insurance'],
+            ['vehicle_registration', 'has_insurance'],
             SiteSetting::current()->disabled_driver_requirements
         );
     }

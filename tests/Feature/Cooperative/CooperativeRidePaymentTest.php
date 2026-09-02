@@ -129,6 +129,7 @@ class CooperativeRidePaymentTest extends TestCase
         $client = User::factory()->create();
         $driver = User::factory()->create();
         $cooperative = Cooperative::query()->create(['user_id' => $owner->id, 'name' => 'Viaje Seguro']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
         CooperativeDriverMembership::query()->create([
             'cooperative_id' => $cooperative->id,
             'driver_user_id' => $driver->id,

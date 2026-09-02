@@ -131,7 +131,7 @@ class RoleSwitchingTest extends TestCase
                 'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
                 'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
                 'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
-                'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+                'vehicle_registration' => UploadedFile::fake()->create('matricula.pdf', 100, 'application/pdf'),
             ]))
             ->assertSessionHasNoErrors();
 

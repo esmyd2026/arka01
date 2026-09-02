@@ -160,7 +160,16 @@ class DriverProfileUpdater
             'profile_photo' => ['nullable', 'image', 'max:4096'],
             'identity_document' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
             'license_photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            // 'police_record' se mantiene aceptado por compatibilidad (app
+            // móvil vieja, o quien lo mande igual) pero ya no se pide ni se
+            // exige — reemplazado por 'vehicle_registration' (pedido
+            // explícito del usuario, ver DriverVerificationRequirementRegistry).
             'police_record' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            'vehicle_registration' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            // Foto del vehículo (pedido explícito del usuario): opcional a
+            // propósito — nunca formó parte de DriverVerificationRequirementRegistry,
+            // los datos técnicos del vehículo ya se validan por texto.
+            'vehicle_photo' => ['nullable', 'image', 'max:4096'],
         ], [
             'minimum_fare.max' => 'La plataforma no permite superar $'.number_format($adminMinimumFare, 2).' como tarifa mínima de una carrera (tope general definido en /admin/tarifas). Puede dejarla en blanco o poner una menor.',
         ]);
@@ -255,6 +264,9 @@ class DriverProfileUpdater
         $isSubmittingVerification = ! $existingProfile
             || $request->hasFile('identity_document')
             || $request->hasFile('license_photo')
+            || $request->hasFile('vehicle_registration')
+            // 'police_record' ya no se pide, pero si igual llega (app móvil
+            // vieja) sigue contando como "está enviando su verificación".
             || $request->hasFile('police_record');
 
         if ($isSubmittingVerification) {
@@ -265,7 +277,7 @@ class DriverProfileUpdater
             foreach ([
                 'identity_document' => 'identity_document_path',
                 'license_photo' => 'license_photo_path',
-                'police_record' => 'police_record_path',
+                'vehicle_registration' => 'vehicle_registration_path',
             ] as $input => $pathField) {
                 if (DriverVerificationRequirementRegistry::isRequired($input)
                     && ! $request->hasFile($input) && blank($existingProfile?->{$pathField})) {
@@ -291,7 +303,7 @@ class DriverProfileUpdater
         // revisión", no se puede subir una foto nueva — recién se habilita de
         // nuevo si un admin la rechaza (ahí sí hace falta corregir y volver a
         // subir) o si todavía no había ninguna.
-        if (($request->hasFile('identity_document') || $request->hasFile('license_photo') || $request->hasFile('police_record'))
+        if (($request->hasFile('identity_document') || $request->hasFile('license_photo') || $request->hasFile('vehicle_registration') || $request->hasFile('police_record'))
             && $existingProfile && ! $existingProfile->canUploadDocuments()) {
             throw ValidationException::withMessages([
                 'license_photo' => 'Su documentación está en revisión — no se puede volver a subir hasta que un admin la revise.',
@@ -315,7 +327,11 @@ class DriverProfileUpdater
 
         foreach ([
             'identity_document' => 'identity_document_path',
+            // 'police_record' se conserva acá solo por compatibilidad (app
+            // móvil vieja que todavía lo mande) — ya no se pide ni se exige,
+            // ver DriverVerificationRequirementRegistry.
             'police_record' => 'police_record_path',
+            'vehicle_registration' => 'vehicle_registration_path',
         ] as $input => $pathField) {
             if ($request->hasFile($input)) {
                 if ($existingProfile?->{$pathField}) {
@@ -326,6 +342,19 @@ class DriverProfileUpdater
             }
             unset($validated[$input]);
         }
+
+        // Foto del vehículo (pedido explícito del usuario): disco público,
+        // mismo criterio que profile_photo — el modelo ya tenía la columna y
+        // el accesor de siempre (getVehiclePhotoUrlAttribute()), nunca hubo
+        // por dónde subirla desde este formulario.
+        if ($request->hasFile('vehicle_photo')) {
+            if ($existingProfile?->vehicle_photo_path) {
+                Storage::disk('public')->delete($existingProfile->vehicle_photo_path);
+            }
+            $validated['vehicle_photo_path'] = $request->file('vehicle_photo')->store('driver-vehicle-photos', 'public');
+            $reviewedDocuments = true;
+        }
+        unset($validated['vehicle_photo']);
 
         if ($request->hasFile('license_photo')) {
             // Auditoría de seguridad (pedido explícito del usuario): la

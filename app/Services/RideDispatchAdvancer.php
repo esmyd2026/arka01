@@ -218,6 +218,7 @@ class RideDispatchAdvancer
             broadcast(new RideRequestExpired($rideRequest));
             broadcast(new CooperativeRideUpdated($rideRequest, 'expired'));
             $rideRequest->client->notify(new RideRequestExpiredPushNotification($rideRequest));
+            self::notifyWhatsAppExpired($rideRequest);
 
             return;
         }
@@ -376,5 +377,28 @@ class RideDispatchAdvancer
 
         broadcast(new RideRequestExpired($rideRequest));
         $rideRequest->client->notify(new RideRequestExpiredPushNotification($rideRequest));
+        self::notifyWhatsAppExpired($rideRequest);
+    }
+
+    /**
+     * Pedido explícito del usuario: "si realmente no se encontro que la
+     * misma plataforma indique y le mande un boton que diga pedir
+     * nuevamente y que intente nuevamente con esos mismo parametros" — el
+     * botón lo procesa WhatsAppRideBookingHandler::retryExpiredRequest(),
+     * que vuelve a armar la solicitud con el mismo origen, destino,
+     * cantidad de pasajeros y a quién iba dirigida.
+     */
+    private static function notifyWhatsAppExpired(RideRequest $rideRequest): void
+    {
+        $client = $rideRequest->client;
+        if (! $client?->phone || ! $client->hasActiveWhatsAppSession()) {
+            return;
+        }
+
+        WhatsAppFreeformSender::sendButtons(
+            $client->phone,
+            "😔 No encontramos un conductor disponible para su solicitud #{$rideRequest->id} por ahora.",
+            [['id' => 'wa_retry_request:'.$rideRequest->id, 'title' => 'Pedir nuevamente']],
+        );
     }
 }

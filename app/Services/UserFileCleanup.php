@@ -37,6 +37,9 @@ class UserFileCleanup
             if ($user->driverProfile->police_record_path) {
                 Storage::disk('local')->delete($user->driverProfile->police_record_path);
             }
+            if ($user->driverProfile->vehicle_registration_path) {
+                Storage::disk('local')->delete($user->driverProfile->vehicle_registration_path);
+            }
             if ($user->driverProfile->vehicle_photo_path) {
                 Storage::disk('public')->delete($user->driverProfile->vehicle_photo_path);
             }

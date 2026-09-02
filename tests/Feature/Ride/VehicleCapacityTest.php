@@ -63,7 +63,7 @@ class VehicleCapacityTest extends TestCase
                 'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
                 'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
                 'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
-                'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+                'vehicle_registration' => UploadedFile::fake()->create('matricula.pdf', 100, 'application/pdf'),
             ]))
             ->assertSessionHasNoErrors();
 
@@ -102,9 +102,9 @@ class VehicleCapacityTest extends TestCase
      */
     public function test_a_driver_missing_a_disabled_requirement_can_still_become_available(): void
     {
-        SiteSetting::current()->update(['disabled_driver_requirements' => ['police_record']]);
+        SiteSetting::current()->update(['disabled_driver_requirements' => ['vehicle_registration']]);
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create(['police_record_path' => null, 'is_available' => false]);
+        DriverProfile::factory()->for($driver)->create(['vehicle_registration_path' => null, 'is_available' => false]);
 
         $this->actingAs($driver)->post(route('driver.location.update'), [
             'lat' => -0.18,

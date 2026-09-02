@@ -130,7 +130,20 @@ async function confirmTakeover() {
     <GuestLayout>
         <Head title="Iniciar sesión" />
 
-        <div v-if="status" class="mb-4 font-medium text-sm text-arka-primary-bright">
+        <div class="mb-6 flex items-center gap-3">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-arka-primary/25 bg-arka-primary/10 text-arka-primary">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5h-4M11 8.5 15 12l-4 3.5M15 12H4" />
+                </svg>
+            </span>
+            <div>
+                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-arka-primary">Acceso seguro</p>
+                <h1 class="mt-0.5 text-xl font-bold text-arka-text">Bienvenido de nuevo</h1>
+                <p class="mt-0.5 text-xs text-arka-text-muted">Ingrese a su cuenta de Arka01.</p>
+            </div>
+        </div>
+
+        <div v-if="status" class="mb-4 rounded-arka border border-arka-primary/20 bg-arka-primary/10 px-3 py-2.5 text-sm font-medium text-arka-primary-bright">
             {{ status }}
         </div>
 
@@ -141,15 +154,24 @@ async function confirmTakeover() {
                      (ej. jperez) — el backend resuelve cuál es. -->
                 <InputLabel for="login" value="Teléfono, correo o usuario" />
 
-                <TextInput
-                    id="login"
-                    type="text"
-                    class="mt-1 block w-full"
-                    v-model="form.login"
-                    required
-                    autofocus
-                    autocomplete="username"
-                />
+                <div class="relative mt-1.5">
+                    <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center ps-3.5 text-arka-text-muted">
+                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <circle cx="12" cy="8" r="3.5" />
+                            <path stroke-linecap="round" d="M5 20a7 7 0 0 1 14 0" />
+                        </svg>
+                    </span>
+                    <TextInput
+                        id="login"
+                        type="text"
+                        class="block min-h-12 w-full border-arka-primary/20 bg-[#17251f] ps-10 text-sm hover:border-arka-primary/40"
+                        v-model="form.login"
+                        required
+                        autofocus
+                        autocomplete="username"
+                        placeholder="Ej. usuario, correo o teléfono"
+                    />
+                </div>
 
                 <InputError class="mt-2" :message="form.errors.login" />
 
@@ -229,15 +251,21 @@ async function confirmTakeover() {
                 </div>
             </div>
 
-            <div class="mt-4">
+            <div class="mt-5">
                 <InputLabel for="password" value="Contraseña" />
 
-                <div class="relative mt-1">
+                <div class="relative mt-1.5">
+                    <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center ps-3.5 text-arka-text-muted">
+                        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <rect x="5" y="10" width="14" height="10" rx="2" />
+                            <path stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3" />
+                        </svg>
+                    </span>
                     <TextInput
                         id="password"
                         ref="passwordInput"
                         :type="showPassword ? 'text' : 'password'"
-                        class="block w-full pr-10"
+                        class="block min-h-12 w-full border-arka-primary/20 bg-[#17251f] ps-10 pe-11 text-sm hover:border-arka-primary/40"
                         v-model="form.password"
                         required
                         autocomplete="current-password"
@@ -263,27 +291,32 @@ async function confirmTakeover() {
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
-            <div class="flex items-center justify-end mt-4">
+            <div class="mt-3 flex justify-end">
                 <Link
                     v-if="canResetPassword"
                     :href="route('password.request')"
-                    class="underline text-sm text-arka-text-muted hover:text-arka-text rounded-arka focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-arka-card focus:ring-arka-primary"
+                    class="rounded text-xs font-medium text-arka-primary hover:text-arka-primary-bright focus:outline-none focus:ring-2 focus:ring-arka-primary"
                 >
                     ¿Olvidó su contraseña?
                 </Link>
-
-                <PrimaryButton class="ms-4" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
-                    Iniciar sesión
-                </PrimaryButton>
             </div>
+
+            <PrimaryButton
+                class="mt-5 min-h-12 w-full justify-center text-sm shadow-lg shadow-arka-primary/15"
+                :class="{ 'opacity-50': form.processing }"
+                :disabled="form.processing"
+            >
+                {{ form.processing ? 'Ingresando…' : 'Iniciar sesión' }}
+                <svg v-if="!form.processing" class="ms-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6" /></svg>
+            </PrimaryButton>
         </form>
 
         <!-- Alternativa al usuario y contraseña de siempre — solo aparece si
              ya se completaron las credenciales de Google en .env. -->
         <template v-if="$page.props.googleLoginEnabled">
-            <div class="mt-8 flex items-center gap-3">
+            <div class="mt-7 flex items-center gap-3">
                 <div class="flex-1 h-px bg-arka-text-muted/20" />
-                <span class="text-xs text-arka-text-muted">o</span>
+                <span class="text-[10px] font-semibold uppercase tracking-[0.14em] text-arka-text-muted">O continúe con</span>
                 <div class="flex-1 h-px bg-arka-text-muted/20" />
             </div>
 
@@ -294,10 +327,10 @@ async function confirmTakeover() {
                  (mismo criterio visual que el botón oficial de Google), pero
                  sin llegar a w-full como en Register.vue — pedido explícito
                  del usuario: no tan grande que opaque a "Iniciar sesión". -->
-            <div class="mt-5 flex justify-center">
+            <div class="mt-4">
                 <a
                     :href="route('auth.google.redirect')"
-                    class="flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-arka bg-white border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-50 hover:shadow transition"
+                    class="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-arka border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-gray-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
                 >
                     <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.87c2.27-2.09 3.58-5.17 3.58-8.82Z" />
@@ -315,7 +348,7 @@ async function confirmTakeover() {
              en el login... al lado izquierdo") — mismo criterio de
              localStorage que el banner del Home para no insistir a quien ya
              respondió. -->
-        <p v-if="!surveyDone" class="mt-6 text-start text-sm">
+        <p v-if="!surveyDone" class="mt-5 border-t border-arka-text-muted/10 pt-4 text-center text-xs">
             <Link :href="route('survey.show')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
                 Cuentanos tu experiencia con Arka01 (2 min) →
             </Link>

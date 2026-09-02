@@ -212,7 +212,11 @@ const form = useForm({
     profile_photo: null,
     identity_document: null,
     license_photo: null,
-    police_record: null,
+    // Reemplaza a police_record (pedido explícito del usuario: "quitemos,
+    // ocultalo... coloquemos mejor la matricula del vehiculo") — el
+    // certificado de antecedentes penales ya no se pide desde acá.
+    vehicle_registration: null,
+    vehicle_photo: null,
 });
 
 // Si el color ya guardado no está en la lista fija (ej. dato viejo cargado
@@ -360,7 +364,7 @@ watch(
             activeProfileSection.value = 'vehicle';
         } else if (keys.some((key) => ['rate_per_km', 'minimum_fare', 'max_request_distance_km', 'accepts_cash', 'accepts_transfer'].includes(key))) {
             activeProfileSection.value = 'work';
-        } else if (keys.some((key) => ['driver_type', 'profile_photo', 'identity_document', 'license_photo', 'police_record', 'has_insurance'].includes(key))) {
+        } else if (keys.some((key) => ['driver_type', 'profile_photo', 'identity_document', 'license_photo', 'vehicle_registration', 'has_insurance'].includes(key))) {
             activeProfileSection.value = 'verification';
         } else {
             activeProfileSection.value = 'visibility';
@@ -809,7 +813,16 @@ const VERIFICATION_LABELS = {
                              cantidad de pasajeros y cajuela al pedir una carrera — un
                              dato a medias no sirve para eso. Sin completarlos no te
                              podés poner disponible (ver el aviso más abajo del switch
-                             "Activarme"). -->
+                             "Activarme").
+                             Sin `required` nativo a propósito (mismo bug real que
+                             rate_per_km, ver más abajo): esta sección arranca abierta
+                             mientras esté incompleta, pero el usuario puede colapsarla
+                             a mano tocando su encabezado antes de enviar — con
+                             `required`, el navegador bloquearía el envío entero en
+                             silencio al no poder enfocar un campo oculto. El backend ya
+                             valida cada uno como obligatorio (DriverProfileUpdater::rules())
+                             y el watch de más abajo reabre esta sección sola si el
+                             servidor rechaza alguno. -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <InputLabel for="vehicle_make" value="Marca del vehículo" />
@@ -819,7 +832,6 @@ const VERIFICATION_LABELS = {
                                     class="mt-1 block w-full"
                                     v-model="form.vehicle_make"
                                     :disabled="vehicleFieldLocked('vehicle_make')"
-                                    required
                                 />
                                 <InputError class="mt-2" :message="form.errors.vehicle_make" />
                             </div>
@@ -832,7 +844,6 @@ const VERIFICATION_LABELS = {
                                     class="mt-1 block w-full"
                                     v-model="form.vehicle_model"
                                     :disabled="vehicleFieldLocked('vehicle_model')"
-                                    required
                                 />
                                 <InputError class="mt-2" :message="form.errors.vehicle_model" />
                             </div>
@@ -844,7 +855,6 @@ const VERIFICATION_LABELS = {
                                     v-model="form.vehicle_color"
                                     class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text disabled:cursor-not-allowed disabled:opacity-60"
                                     :disabled="vehicleFieldLocked('vehicle_color')"
-                                    required
                                 >
                                     <option value="" disabled>Elija un color</option>
                                     <option v-for="color in vehicleColorOptions" :key="color" :value="color">{{ color }}</option>
@@ -859,7 +869,6 @@ const VERIFICATION_LABELS = {
                                     v-model="form.vehicle_type"
                                     class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text disabled:cursor-not-allowed disabled:opacity-60"
                                     :disabled="vehicleFieldLocked('vehicle_type')"
-                                    required
                                 >
                                     <option value="" disabled>Elija un tipo</option>
                                     <option v-for="(label, value) in vehicleTypes" :key="value" :value="value">{{ label }}</option>
@@ -875,7 +884,6 @@ const VERIFICATION_LABELS = {
                                     class="mt-1 block w-full"
                                     v-model="form.vehicle_plate"
                                     :disabled="vehicleFieldLocked('vehicle_plate')"
-                                    required
                                 />
                                 <InputError class="mt-2" :message="form.errors.vehicle_plate" />
                             </div>
@@ -888,7 +896,6 @@ const VERIFICATION_LABELS = {
                                     class="mt-1 block w-full"
                                     v-model="form.vehicle_year"
                                     :disabled="vehicleFieldLocked('vehicle_year')"
-                                    required
                                 />
                                 <InputError class="mt-2" :message="form.errors.vehicle_year" />
                             </div>
@@ -903,7 +910,6 @@ const VERIFICATION_LABELS = {
                                     class="mt-1 block w-full"
                                     v-model="form.passenger_capacity"
                                     :disabled="vehicleFieldLocked('passenger_capacity')"
-                                    required
                                 />
                                 <InputError class="mt-2" :message="form.errors.passenger_capacity" />
                             </div>
@@ -1091,25 +1097,50 @@ const VERIFICATION_LABELS = {
                                 </div>
 
                                 <div>
-                                    <InputLabel for="police_record" value="Certificado de antecedentes penales" />
+                                    <!-- Pedido explícito del usuario ("quitemos, ocultalo y que
+                                         no sea obligatorio... coloquemos mejor la matricula del
+                                         vehiculo"): reemplaza al certificado de antecedentes
+                                         penales — ver DriverVerificationRequirementRegistry. -->
+                                    <InputLabel for="vehicle_registration" value="Matrícula del vehículo" />
                                     <a
-                                        v-if="driverProfile?.police_record_url"
-                                        :href="driverProfile.police_record_url"
+                                        v-if="driverProfile?.vehicle_registration_url"
+                                        :href="driverProfile.vehicle_registration_url"
                                         target="_blank"
                                         class="mt-2 block text-sm font-medium text-arka-primary-bright hover:underline"
                                     >Ver documento actual</a>
                                     <input
-                                        id="police_record"
+                                        id="vehicle_registration"
                                         type="file"
                                         accept="image/*,application/pdf"
                                         :disabled="driverProfile?.verification_status === 'pending'"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
-                                        @input="form.police_record = $event.target.files[0]"
+                                        @input="form.vehicle_registration = $event.target.files[0]"
                                     />
-                                    <InputError class="mt-2" :message="form.errors.police_record" />
+                                    <InputError class="mt-2" :message="form.errors.vehicle_registration" />
+                                </div>
+
+                                <div>
+                                    <!-- Pedido explícito del usuario ("si puedes tambien la foto
+                                         del vehiculo"): opcional a propósito, la columna y el
+                                         acceso ya existían (getVehiclePhotoUrlAttribute()) pero
+                                         nunca hubo por dónde subirla desde este formulario. -->
+                                    <InputLabel for="vehicle_photo" value="Foto del vehículo (opcional)" />
+                                    <img
+                                        v-if="driverProfile?.vehicle_photo_url"
+                                        :src="driverProfile.vehicle_photo_url"
+                                        class="mt-1 h-24 w-full rounded-arka object-cover"
+                                        alt="Foto actual del vehículo"
+                                    />
+                                    <input
+                                        id="vehicle_photo"
+                                        type="file"
+                                        accept="image/*"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                        @input="form.vehicle_photo = $event.target.files[0]"
+                                    />
+                                    <InputError class="mt-2" :message="form.errors.vehicle_photo" />
                                 </div>
                             </div>
-                            <p class="text-xs text-arka-text-muted">No solicitamos fotografía del vehículo. Los datos técnicos del auto se validan en el perfil.</p>
 
                             <!-- Pedido explícito del usuario: seguro que lo proteja a él,
                                  a los pasajeros y al vehículo — autodeclarado con un
@@ -1236,6 +1267,17 @@ const VERIFICATION_LABELS = {
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <InputLabel for="rate_per_km" value="Tarifa por km (USD)" />
+                                <!-- Bug reportado por el usuario (producción): este campo vive
+                                     dentro de una sección colapsable que no está abierta por
+                                     defecto para un conductor nuevo. Con `required` nativo, al
+                                     enviar el formulario el navegador intenta enfocar este
+                                     input para mostrar el error de validación, no puede porque
+                                     está oculto (v-show), y bloquea el envío entero en silencio
+                                     ("An invalid form control ... is not focusable" en consola,
+                                     sin ningún aviso visible para el conductor). El backend ya
+                                     valida esto como requerido (DriverProfileUpdater::rules())
+                                     y el watch de más arriba ya abre esta sección sola cuando
+                                     el servidor rechaza el campo — no hace falta duplicarlo acá. -->
                                 <TextInput
                                     id="rate_per_km"
                                     type="number"
@@ -1243,7 +1285,6 @@ const VERIFICATION_LABELS = {
                                     min="0"
                                     class="mt-1 block w-full"
                                     v-model="form.rate_per_km"
-                                    required
                                 />
                                 <InputError class="mt-2" :message="form.errors.rate_per_km" />
                             </div>

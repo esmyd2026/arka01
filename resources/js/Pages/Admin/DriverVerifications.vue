@@ -47,9 +47,13 @@ function documentsFor(profile) {
         { key: 'identity', label: 'Cédula', url: profile.identity_document_url, kind: 'image' },
         { key: 'license', label: 'Licencia', url: profile.license_photo_url, kind: 'image' },
         { key: 'vehicle', label: 'Vehículo', url: profile.vehicle_photo_url, kind: 'image' },
-        // Antecedentes puede ser PDF o imagen; se muestra en un visor
-        // contenido para no crear otro scroll horizontal en la ficha.
-        { key: 'police', label: 'Antecedentes', url: profile.police_record_url, kind: 'document' },
+        // Puede ser PDF o imagen; se muestra en un visor contenido para no
+        // crear otro scroll horizontal en la ficha.
+        { key: 'registration', label: 'Matrícula', url: profile.vehicle_registration_url, kind: 'document' },
+        // Ya no se pide (pedido explícito del usuario, reemplazada por la
+        // matrícula de arriba) — se conserva solo para no perder de vista un
+        // documento que un conductor ya haya subido antes de este cambio.
+        { key: 'police', label: 'Antecedentes (histórico)', url: profile.police_record_url, kind: 'document' },
     ].filter((document) => document.url);
 }
 

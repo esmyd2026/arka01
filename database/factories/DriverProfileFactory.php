@@ -43,7 +43,11 @@ class DriverProfileFactory extends Factory
             'verification_status' => 'approved',
             'identity_document_path' => 'driver-documents/test-identity.pdf',
             'license_photo_path' => 'driver-documents/test-license.jpg',
+            // Ya no se pide (reemplazada por vehicle_registration_path, ver
+            // DriverVerificationRequirementRegistry) — se conserva acá solo
+            // para no alterar fixtures de tests que todavía la esperen.
             'police_record_path' => 'driver-documents/test-police-record.pdf',
+            'vehicle_registration_path' => 'driver-documents/test-vehicle-registration.pdf',
             'has_insurance' => true,
             // El código de invitación se genera solo en el evento "creating" del
             // modelo (App\Models\DriverProfile::booted), no hace falta acá.

@@ -22,6 +22,7 @@ class DriverProfile extends Model
         'vehicle_photo_url',
         'identity_document_url',
         'police_record_url',
+        'vehicle_registration_url',
         'registration_complete',
     ];
 
@@ -31,6 +32,11 @@ class DriverProfile extends Model
         'license_photo_path',
         'identity_document_path',
         'police_record_path',
+        // Pedido explícito del usuario: reemplaza a police_record_path en el
+        // formulario del conductor (ver DriverVerificationRequirementRegistry)
+        // — police_record_path se conserva para no perder documentos viejos,
+        // pero ya no se pide ni se exige.
+        'vehicle_registration_path',
         'has_insurance',
         'vehicle_make',
         'vehicle_model',
@@ -171,6 +177,13 @@ class DriverProfile extends Model
     {
         return $this->police_record_path
             ? route('driver-profile.document', ['user' => $this->user_id, 'type' => 'police-record'])
+            : null;
+    }
+
+    public function getVehicleRegistrationUrlAttribute(): ?string
+    {
+        return $this->vehicle_registration_path
+            ? route('driver-profile.document', ['user' => $this->user_id, 'type' => 'vehicle-registration'])
             : null;
     }
 
@@ -506,7 +519,7 @@ class DriverProfile extends Model
         foreach ([
             'identity_document' => ['identity_document_path', 'foto de cédula'],
             'license_photo' => ['license_photo_path', 'foto de licencia'],
-            'police_record' => ['police_record_path', 'antecedentes penales'],
+            'vehicle_registration' => ['vehicle_registration_path', 'matrícula del vehículo'],
         ] as $requirement => [$field, $label]) {
             if (DriverVerificationRequirementRegistry::isRequired($requirement) && ! filled($this->{$field})) {
                 $missing->push(['key' => $requirement, 'label' => $label, 'section' => 'verification']);

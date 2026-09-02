@@ -83,7 +83,7 @@ class DriverVerificationTest extends TestCase
             'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
             'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
             'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
-            'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+            'vehicle_registration' => UploadedFile::fake()->create('matricula.pdf', 100, 'application/pdf'),
         ]);
 
         $response->assertRedirect();
@@ -92,7 +92,7 @@ class DriverVerificationTest extends TestCase
         $this->assertSame('pending', $profile->verification_status);
         Storage::disk('local')->assertExists($profile->identity_document_path);
         Storage::disk('local')->assertExists($profile->license_photo_path);
-        Storage::disk('local')->assertExists($profile->police_record_path);
+        Storage::disk('local')->assertExists($profile->vehicle_registration_path);
         Storage::disk('public')->assertExists($driver->fresh()->avatar_path);
         Notification::assertSentTo($admin, AdminDriverLifecyclePushNotification::class, fn ($notification) => $notification->stage === 'ready');
     }
@@ -152,7 +152,7 @@ class DriverVerificationTest extends TestCase
             'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
             'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
             'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
-            'police_record' => UploadedFile::fake()->create('antecedentes.pdf', 100, 'application/pdf'),
+            'vehicle_registration' => UploadedFile::fake()->create('matricula.pdf', 100, 'application/pdf'),
             // has_insurance deliberadamente ausente.
         ])->assertSessionHasErrors('has_insurance');
 
@@ -170,7 +170,7 @@ class DriverVerificationTest extends TestCase
     {
         Storage::fake('local');
         Storage::fake('public');
-        SiteSetting::current()->update(['disabled_driver_requirements' => ['has_insurance', 'police_record']]);
+        SiteSetting::current()->update(['disabled_driver_requirements' => ['has_insurance', 'vehicle_registration']]);
         $driver = User::factory()->create();
 
         $this->actingAs($driver)->post(route('driver.profile.update'), [
@@ -186,7 +186,7 @@ class DriverVerificationTest extends TestCase
             'profile_photo' => UploadedFile::fake()->image('perfil.jpg'),
             'identity_document' => UploadedFile::fake()->image('cedula.jpg'),
             'license_photo' => UploadedFile::fake()->image('licencia.jpg'),
-            // has_insurance y police_record deliberadamente ausentes.
+            // has_insurance y vehicle_registration deliberadamente ausentes.
         ])->assertSessionHasNoErrors();
 
         $this->assertNotNull($driver->driverProfile()->first());

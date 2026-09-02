@@ -195,7 +195,10 @@ class DriverProfileController extends Controller
         $path = match ($type) {
             'identity' => $user->driverProfile?->identity_document_path,
             'license' => $user->driverProfile?->license_photo_path,
+            // Se conserva para no romper el enlace de documentos ya subidos
+            // antes de este cambio — ya no se pide ni se exige uno nuevo.
             'police-record' => $user->driverProfile?->police_record_path,
+            'vehicle-registration' => $user->driverProfile?->vehicle_registration_path,
             default => null,
         };
 

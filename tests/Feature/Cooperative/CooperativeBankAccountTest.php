@@ -22,6 +22,7 @@ class CooperativeBankAccountTest extends TestCase
     {
         $owner = User::factory()->create();
         $cooperative = Cooperative::query()->create(['user_id' => $owner->id, 'name' => 'Viaje Seguro', 'ruc' => '0999999999001']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
 
         $this->actingAs($owner)->post(route('cooperative.bank-accounts.store'), [
             'account_holder_name' => 'Viaje Seguro S.A.',
@@ -72,6 +73,7 @@ class CooperativeBankAccountTest extends TestCase
         $client = User::factory()->create();
         $driver = User::factory()->create();
         $cooperative = Cooperative::query()->create(['user_id' => $owner->id, 'name' => 'Viaje Seguro']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
         $account = CooperativeBankAccount::query()->create([
             'cooperative_id' => $cooperative->id,
             'account_holder_name' => 'Viaje Seguro S.A.',
