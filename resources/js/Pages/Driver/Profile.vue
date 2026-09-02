@@ -190,7 +190,10 @@ const form = useForm({
     passenger_capacity: props.driverProfile?.passenger_capacity ?? '',
     has_trunk: props.driverProfile?.has_trunk ?? false,
     vehicle_amenities: props.driverProfile?.vehicle_amenities ?? [],
-    rate_per_km: props.driverProfile?.rate_per_km ?? '',
+    // Pedido explícito del usuario: precargado en 0.35 para que un
+    // conductor nuevo no tenga que adivinar una tarifa — puede cambiarla
+    // antes de guardar.
+    rate_per_km: props.driverProfile?.rate_per_km ?? 0.35,
     minimum_fare: props.driverProfile?.minimum_fare ?? '',
     max_request_distance_km: props.driverProfile?.max_request_distance_km ?? '',
     // Cargo por distancia de recogida (pedido explícito del usuario): el
