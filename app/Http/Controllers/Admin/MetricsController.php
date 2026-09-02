@@ -61,6 +61,8 @@ class MetricsController extends Controller
             ->get(['event_type', 'visitor_hash', 'created_at']);
         $impressions = $events->where('event_type', 'impression');
         $clicks = $events->where('event_type', 'click');
+        $loginIntents = $events->where('event_type', 'login');
+        $dismissals = $events->where('event_type', 'dismiss');
 
         $uniqueVisitors = $impressions->pluck('visitor_hash')->unique()->count();
         $uniqueClicks = $clicks->pluck('visitor_hash')->unique()->count();
@@ -80,6 +82,8 @@ class MetricsController extends Controller
         return [
             'unique_visitors_30d' => $uniqueVisitors,
             'unique_clicks_30d' => $uniqueClicks,
+            'unique_login_intents_30d' => $loginIntents->pluck('visitor_hash')->unique()->count(),
+            'unique_dismissals_30d' => $dismissals->pluck('visitor_hash')->unique()->count(),
             'clicks_today' => $clicks->filter(fn (LandingCtaEvent $event) => $event->created_at->isToday())->count(),
             'clicks_7d' => $clicks->filter(fn (LandingCtaEvent $event) => $event->created_at->gte(now()->subDays(7)))->count(),
             'conversion_rate' => $uniqueVisitors > 0 ? round(($uniqueClicks / $uniqueVisitors) * 100, 1) : 0,

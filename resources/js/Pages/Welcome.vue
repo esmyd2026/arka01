@@ -77,6 +77,7 @@ async function recordCtaEvent(event, target = 'general') {
 }
 
 function closeWelcomeCta() {
+    recordCtaEvent('dismiss', 'general');
     showingWelcomeCta.value = false;
 }
 
@@ -85,7 +86,8 @@ async function followWelcomeCta() {
     window.location.assign(route('register'));
 }
 
-function goToLogin() {
+async function goToLogin() {
+    await recordCtaEvent('login', 'general');
     window.location.assign(route('login'));
 }
 

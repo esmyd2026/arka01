@@ -60,29 +60,37 @@ defineProps({
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-primary">Portada · últimos 30 días</p>
                             <h3 class="mt-1 text-xl font-semibold text-arka-text">Interés en crear una cuenta</h3>
-                            <p class="mt-1 text-sm text-arka-text-muted">Visitantes reales que vieron el llamado y avanzaron al registro.</p>
+                            <p class="mt-1 text-sm text-arka-text-muted">Qué hicieron los visitantes reales después de ver el llamado.</p>
                         </div>
                         <span class="w-fit rounded-full border border-arka-primary/20 bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                             {{ landingCta.conversion_rate }}% de conversión
                         </span>
                     </div>
 
-                    <div class="grid grid-cols-2 divide-x divide-y divide-arka-text-muted/10 sm:grid-cols-4 sm:divide-y-0">
+                    <div class="grid grid-cols-2 divide-x divide-y divide-arka-text-muted/10 sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0">
                         <div class="p-4 sm:p-5">
                             <p class="text-2xl font-bold text-arka-text">{{ landingCta.unique_visitors_30d }}</p>
-                            <p class="mt-1 text-xs text-arka-text-muted">Personas alcanzadas</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Vieron el llamado</p>
                         </div>
                         <div class="p-4 sm:p-5">
                             <p class="text-2xl font-bold text-arka-primary-bright">{{ landingCta.unique_clicks_30d }}</p>
-                            <p class="mt-1 text-xs text-arka-text-muted">Personas que hicieron clic</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Crear mi cuenta</p>
+                        </div>
+                        <div class="p-4 sm:p-5">
+                            <p class="text-2xl font-bold text-arka-text">{{ landingCta.unique_login_intents_30d }}</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Ya tengo cuenta</p>
+                        </div>
+                        <div class="p-4 sm:p-5">
+                            <p class="text-2xl font-bold text-arka-text">{{ landingCta.unique_dismissals_30d }}</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Cerraron el llamado</p>
                         </div>
                         <div class="p-4 sm:p-5">
                             <p class="text-2xl font-bold text-arka-text">{{ landingCta.clicks_7d }}</p>
-                            <p class="mt-1 text-xs text-arka-text-muted">Clics en 7 días</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Registros en 7 días</p>
                         </div>
                         <div class="p-4 sm:p-5">
                             <p class="text-2xl font-bold text-arka-text">{{ landingCta.clicks_today }}</p>
-                            <p class="mt-1 text-xs text-arka-text-muted">Clics hoy</p>
+                            <p class="mt-1 text-xs text-arka-text-muted">Registros hoy</p>
                         </div>
                     </div>
 

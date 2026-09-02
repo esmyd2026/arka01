@@ -12,7 +12,10 @@ class LandingCtaEventController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'event' => ['required', 'in:impression,click'],
+            // Cada salida del modal se mide por separado: avanzar al registro,
+            // ir al acceso o cerrarlo. Así el administrador entiende la
+            // decisión tomada sin identificar personalmente al visitante.
+            'event' => ['required', 'in:impression,click,login,dismiss'],
             'target' => ['nullable', 'in:general,client,driver,cooperative'],
             'visitor_token' => ['required', 'uuid'],
             'interaction_token' => ['required', 'string', 'size:48'],

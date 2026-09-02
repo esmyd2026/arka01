@@ -61,6 +61,36 @@ class LandingCtaAnalyticsTest extends TestCase
         $this->assertDatabaseCount('landing_cta_events', 0);
     }
 
+    public function test_dismiss_and_existing_account_actions_are_recorded_separately(): void
+    {
+        $token = str_repeat('c', 48);
+        $session = [
+            'landing_cta_token' => $token,
+            'landing_cta_issued_at' => now()->subSeconds(5)->timestamp,
+            'landing_cta_recorded_events' => [],
+        ];
+        $payload = [
+            'target' => 'general',
+            'visitor_token' => '9aa73ba9-41bd-4e6b-8904-7ad91c486326',
+            'interaction_token' => $token,
+            'website' => '',
+            'automated' => false,
+            'path' => '/',
+        ];
+
+        $this->withSession($session)->withHeader('User-Agent', 'Mozilla/5.0 Chrome/140')
+            ->postJson(route('landing-cta.store'), [...$payload, 'event' => 'dismiss'])
+            ->assertOk()
+            ->assertJson(['recorded' => true]);
+
+        $this->postJson(route('landing-cta.store'), [...$payload, 'event' => 'login'])
+            ->assertOk()
+            ->assertJson(['recorded' => true]);
+
+        $this->assertDatabaseHas('landing_cta_events', ['event_type' => 'dismiss']);
+        $this->assertDatabaseHas('landing_cta_events', ['event_type' => 'login']);
+    }
+
     public function test_admin_metrics_include_the_landing_conversion_funnel(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);
@@ -78,6 +108,20 @@ class LandingCtaAnalyticsTest extends TestCase
             'session_hash' => str_repeat('2', 64),
             'landing_path' => '/',
         ]);
+        LandingCtaEvent::query()->create([
+            'event_type' => 'login',
+            'target' => 'general',
+            'visitor_hash' => str_repeat('3', 64),
+            'session_hash' => str_repeat('4', 64),
+            'landing_path' => '/',
+        ]);
+        LandingCtaEvent::query()->create([
+            'event_type' => 'dismiss',
+            'target' => 'general',
+            'visitor_hash' => str_repeat('5', 64),
+            'session_hash' => str_repeat('6', 64),
+            'landing_path' => '/',
+        ]);
 
         $this->actingAs($admin)->get(route('admin.metrics.index'))
             ->assertOk()
@@ -85,6 +129,8 @@ class LandingCtaAnalyticsTest extends TestCase
                 ->component('Admin/Metrics')
                 ->where('landingCta.unique_visitors_30d', 1)
                 ->where('landingCta.unique_clicks_30d', 1)
+                ->where('landingCta.unique_login_intents_30d', 1)
+                ->where('landingCta.unique_dismissals_30d', 1)
                 ->where('landingCta.conversion_rate', 100)
             );
     }
