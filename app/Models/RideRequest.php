@@ -38,6 +38,14 @@ class RideRequest extends Model
         'destination_address',
         'destination_sector_id',
         'distance_km',
+        // Tarifa REAL usada para cotizar esta solicitud (pedido explícito
+        // del usuario: la trazabilidad necesita "el cobro al cliente por km,
+        // según lo configurado para esa carrera") — la de la cooperativa
+        // cuando `cooperative_id` está presente, si no la del conductor
+        // puntual (ver RideRequestCreator::create()). Nunca se vuelve a
+        // calcular después: RideRequestResponder::accept() la copia tal cual
+        // a `rides.rate_per_km_snapshot`.
+        'rate_per_km',
         // Cargo por trayecto de recogida (pedido explícito del usuario): el
         // monto PROPUESTO al candidato actual — se recalcula en cada salto
         // del despacho secuencial (ver App\Services\RideDispatchAdvancer),

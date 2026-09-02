@@ -9,6 +9,7 @@ use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
 use App\Notifications\CooperativeDriverInvitationPushNotification;
+use App\Notifications\CooperativeDriverRemovedPushNotification;
 use App\Services\Cooperative\CooperativeDriverResponder;
 use App\Services\PlanLimits;
 use App\Services\WhatsAppFreeformSender;
@@ -41,18 +42,6 @@ class CooperativeDriverController extends Controller
             ->with('driver.driverProfile')
             ->latest()
             ->get();
-
-        // Pedido explícito del usuario: "cuando una cooperativa tenga que
-        // buscar a un conductor... tiene que tener el plan mayor al
-        // gratis, y tiene que estar vigente. por lo contrario aparecera
-        // bloqueado" — se calcula siempre en vivo (nunca se guarda, mismo
-        // criterio que cooperativeDriverDiscountPercent()), y solo aplica a
-        // vínculos 'accepted' (uno 'pending'/'suspended' ya está sin recibir
-        // carreras por otro motivo, no hace falta marcarlo también).
-        $memberships->each(function ($membership) {
-            $membership->is_plan_blocked = $membership->status === 'accepted'
-                && ! $this->planLimits->hasActivePaidPlan($membership->driver);
-        });
 
         return Inertia::render('Cooperative/Drivers', [
             'cooperative' => $cooperative,
@@ -91,14 +80,25 @@ class CooperativeDriverController extends Controller
             }) / 60);
         };
 
-        $history = (clone $rides)->with('client:id,name')
+        // Mismas columnas de trazabilidad que Cooperative/Wallet.vue (pedido
+        // explícito del usuario: "en cada conductor de cooperativa quiero
+        // ver esa tabla también para ver el detalle de las gestiones") — acá
+        // ya no hace falta la columna "Conductor" porque la pantalla entera
+        // es de un solo conductor.
+        $history = (clone $rides)->with(['client:id,name', 'walletEntry'])
             ->latest()->paginate(15)->through(fn (Ride $ride) => [
                 'id' => $ride->id,
                 'client' => $ride->client?->name ?? 'Cliente',
                 'origin' => $ride->origin_address,
                 'destination' => $ride->destination_address,
                 'distance_km' => (float) $ride->distance_km,
+                // Ver CooperativeWalletController::index() — misma columna,
+                // mismo criterio (tarifa cotizada real, no la actual del perfil).
+                'rate_per_km' => $ride->rate_per_km_snapshot !== null ? (float) $ride->rate_per_km_snapshot : null,
                 'price' => $ride->chargedTotal(),
+                'driver_pay' => $ride->cooperativeDriverPay(),
+                'driver_owes' => $ride->walletEntry?->direction === 'driver_owes_cooperative' ? (float) $ride->walletEntry->amount : 0.0,
+                'cooperative_owes' => $ride->walletEntry?->direction === 'cooperative_owes_driver' ? (float) $ride->walletEntry->amount : 0.0,
                 'status' => $ride->status,
                 'payment_method' => $ride->payment_method,
                 'date' => ($ride->completed_at ?? $ride->cancelled_at ?? $ride->created_at)?->toIso8601String(),
@@ -240,6 +240,21 @@ class CooperativeDriverController extends Controller
     {
         $this->assertOwned($request, $membership);
         $membership->forceFill(['status' => 'removed', 'ended_at' => now(), 'suspended_at' => null])->save();
+
+        // Bug real encontrado (no reportado, hallado al implementar el
+        // acceso cooperativa vs. independiente): esto se quedaba en
+        // 'public_transport' para siempre, aunque la membresía ya hubiera
+        // terminado — CooperativeDriverResponder::respond() sí lo pone en
+        // 'public_transport' al aceptar, pero nada lo revertía al salir.
+        // Solo afecta la etiqueta de confianza mostrada (el acceso real se
+        // resuelve aparte, vía DriverAccessResolver sobre la membresía).
+        $membership->driver->driverProfile?->update(['driver_type' => 'independent']);
+
+        // Pedido explícito del usuario ("¿se actualiza eso para el
+        // conductor?"): el acceso ya se resuelve solo en el siguiente
+        // request (DriverAccessResolver), pero antes no había ningún aviso
+        // — el conductor se quedaba sin carreras nuevas sin explicación.
+        $membership->driver->notify(new CooperativeDriverRemovedPushNotification($membership->cooperative));
 
         return back()->with('status', 'Conductor retirado de la cooperativa.');
     }

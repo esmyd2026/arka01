@@ -71,6 +71,10 @@ class CooperativeDashboardController extends Controller
                 'pendingRequests' => RideRequest::query()->where('cooperative_id', $cooperative->id)->where('status', 'pending')->count(),
                 'scheduledRequests' => RideRequest::query()->where('cooperative_id', $cooperative->id)->where('is_scheduled', true)->whereIn('status', ['pending', 'accepted'])->count(),
                 'activeRequests' => RideRequest::query()->where('cooperative_id', $cooperative->id)->where('status', 'accepted')->count(),
+                'paymentsToReview' => Ride::query()
+                    ->where('payment_status', 'proof_submitted')
+                    ->whereHas('rideRequest', fn ($query) => $query->where('cooperative_id', $cooperative->id))
+                    ->count(),
             ],
             'requests' => $requests
                 ->map(function ($rideRequest) use ($memberships, $clientRideStats, $clientReviewStats) {

@@ -46,12 +46,11 @@ class CooperativeDispatchCascadeTest extends TestCase
             'responded_at' => now(),
         ]);
 
-        // Pedido explícito del usuario: un conductor de cooperativa necesita
-        // un plan pago vigente para que el despacho automático lo considere
-        // (ver PlanLimits::hasActivePaidPlan()) — este test cubre la
-        // mecánica de la cascada en sí, no el filtro de plan (eso lo cubre
-        // CooperativeDriverPlanGatingTest), así que el fixture arranca con
-        // uno activo para no chocar con esa regla nueva.
+        // El plan del conductor ya no condiciona su elegibilidad para el
+        // despacho de cooperativa (ver RideDispatchCandidates::forCooperative())
+        // — se le da uno activo igual porque no es lo que este test cubre
+        // (la mecánica de la cascada en sí), y así queda igual de válido si
+        // esa regla vuelve a cambiar.
         $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
         Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
 

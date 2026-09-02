@@ -7,6 +7,7 @@ use App\Models\AdminAuditLog;
 use App\Models\Cooperative;
 use App\Models\CooperativeDocument;
 use App\Services\AdminAuditLogger;
+use App\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,6 +18,8 @@ use Inertia\Response;
 class CooperativeController extends Controller
 {
     private const REQUIRED_DOCUMENTS = ['ruc', 'legal_appointment', 'operating_authorization', 'operating_permit'];
+
+    public function __construct(private readonly PlanLimits $planLimits) {}
 
     public function index(Request $request): Response
     {
@@ -33,6 +36,18 @@ class CooperativeController extends Controller
             ->latest('submitted_at')
             ->paginate(20)
             ->withQueryString();
+
+        // Pedido explícito del usuario: la lista del admin no mostraba nada
+        // de visibilidad ni de cuántos clientes tiene cada cooperativa —
+        // client_links_count ya se contaba (withCount de arriba) pero no se
+        // usaba, y el plan/vigencia no se calculaba en absoluto acá.
+        $cooperatives->getCollection()->transform(function (Cooperative $cooperative) {
+            $planInfo = $cooperative->user ? $this->planLimits->forCooperative($cooperative->user) : null;
+            $cooperative->plan_name = $planInfo['plan_name'] ?? null;
+            $cooperative->subscription_status = $planInfo['subscription_status'] ?? null;
+
+            return $cooperative;
+        });
 
         return Inertia::render('Admin/Cooperatives/Index', [
             'cooperatives' => $cooperatives,
@@ -131,6 +146,23 @@ class CooperativeController extends Controller
         return back()->with('status', $validated['enabled']
             ? 'Operación por WhatsApp habilitada para la cooperativa.'
             : 'Operación por WhatsApp deshabilitada para todos sus conductores.');
+    }
+
+    /**
+     * Pedido explícito del usuario: "yo le colocaría ese check para que
+     * puedan aparecer a cualquier cliente sin necesidad de que lo agregue a
+     * su flota de cooperativa" — visible en "Elige tu conductor" con la
+     * insignia "Pública", sin pasar por ClientCooperative (ver
+     * RideRequestController::create() y RideRequestCreator::create()).
+     */
+    public function updatePublicVisibility(Request $request, Cooperative $cooperative): RedirectResponse
+    {
+        $validated = $request->validate(['is_public' => ['required', 'boolean']]);
+        $cooperative->forceFill(['is_public' => $validated['is_public']])->save();
+
+        return back()->with('status', $validated['is_public']
+            ? 'Cooperativa marcada como pública: aparece en "Elige tu conductor" de cualquier cliente.'
+            : 'Cooperativa ya no es pública: solo la ven los clientes que la agregaron.');
     }
 
     public function reviewDocument(Request $request, CooperativeDocument $document): RedirectResponse

@@ -83,6 +83,27 @@ class AdminPlanMaintenanceTest extends TestCase
         $this->assertDatabaseHas('subscription_plans', ['id' => $plan->id, 'express_enabled' => false]);
     }
 
+    /**
+     * Pedido explícito del usuario: habilitar por plan que sus conductores
+     * acepten solicitudes de más de una cooperativa a la vez.
+     */
+    public function test_an_admin_can_enable_multi_cooperative_for_a_plan(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'basico')->firstOrFail();
+
+        $this->actingAs($admin)->patch(route('admin.plans.update', $plan), [
+            'owner_type' => 'driver',
+            'code' => 'basico',
+            'name' => 'Básico',
+            'monthly_price' => $plan->monthly_price,
+            'max_clients' => $plan->max_clients,
+            'multi_cooperative_enabled' => true,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('subscription_plans', ['id' => $plan->id, 'multi_cooperative_enabled' => true]);
+    }
+
     public function test_an_admin_can_edit_an_existing_plans_price_and_limits(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

@@ -50,6 +50,11 @@ class Cooperative extends Model
         'manual_assignment_timeout_seconds',
         'whatsapp_ride_actions_enabled',
         'show_fleet_publicly',
+        // Pedido explícito del usuario: prendido a mano por un admin desde
+        // /admin/cooperativas, hace que esta cooperativa aparezca en "Elige
+        // tu conductor" de CUALQUIER cliente, sin que la haya agregado a su
+        // lista (ver ClientCooperative) — ver RideRequestController::create().
+        'is_public',
     ];
 
     protected $casts = [
@@ -61,6 +66,7 @@ class Cooperative extends Model
         'automatic_assignment_enabled' => 'boolean',
         'has_insurance' => 'boolean',
         'show_fleet_publicly' => 'boolean',
+        'is_public' => 'boolean',
         'manual_assignment_timeout_seconds' => 'integer',
         'declared_driver_count' => 'integer',
         'declared_unit_count' => 'integer',

@@ -65,6 +65,153 @@ class CooperativeWalletTest extends TestCase
         ]);
     }
 
+    /**
+     * Pedido explícito del usuario: "que sea una tabla con las columnas de
+     * nombre del cliente, origen, destino, cuánto fue cobrado al cliente,
+     * cuánto se paga al conductor, el tipo de pago, y cuánto el conductor
+     * debe, cuánto le debo al conductor" — verifica que la fila de la
+     * carrera en Cooperative/Wallet.vue trae exactamente esas columnas.
+     */
+    public function test_the_wallet_screen_exposes_the_per_ride_traceability_columns(): void
+    {
+        $cooperative = $this->cooperativeWithRates(0.50, 0.30);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+        $ride = $this->rideFor($cooperative, $driver, 'efectivo', 10.0);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        $this->actingAs($cooperative->user)->get(route('cooperative.wallet'))
+            ->assertInertia(fn ($page) => $page
+                ->where('rides.data.0.client', $ride->client->name)
+                ->where('rides.data.0.origin', $ride->origin_address)
+                ->where('rides.data.0.destination', $ride->destination_address)
+                ->where('rides.data.0.payment_method', 'efectivo')
+                ->where('rides.data.0.price', 10)
+                // El conductor cobró los $10 en efectivo, pero solo le
+                // correspondían $6 (60%, ratio 0.30/0.50) — le debe $4.
+                ->where('rides.data.0.driver_pay', 6)
+                ->where('rides.data.0.driver_owes', 4)
+                ->where('rides.data.0.cooperative_owes', 0));
+    }
+
+    /**
+     * Pedido explícito del usuario: "en cada conductor de cooperativa
+     * quiero ver esa tabla también para ver el detalle de las gestiones" —
+     * Cooperative/DriverShow.vue necesita las mismas columnas que ya
+     * verifica test_the_wallet_screen_exposes_the_per_ride_traceability_columns().
+     */
+    public function test_the_driver_detail_screen_exposes_the_same_traceability_columns(): void
+    {
+        $cooperative = $this->cooperativeWithRates(0.50, 0.30);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $membership = CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+        $ride = $this->rideFor($cooperative, $driver, 'transferencia', 10.0);
+
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        $this->actingAs($cooperative->user)->get(route('cooperative.drivers.show', $membership))
+            ->assertInertia(fn ($page) => $page
+                ->where('rides.data.0.client', $ride->client->name)
+                ->where('rides.data.0.payment_method', 'transferencia')
+                ->where('rides.data.0.price', 10)
+                // Por transferencia la cooperativa se quedó con los $10,
+                // pero solo le correspondían $6 — le debe $6 al conductor.
+                ->where('rides.data.0.driver_pay', 6)
+                ->where('rides.data.0.driver_owes', 0)
+                ->where('rides.data.0.cooperative_owes', 6));
+    }
+
+    /**
+     * Bug real reportado por el usuario ("faltaría agregar los km y el
+     * cobro al cliente por km, según lo configurado para esa carrera"): al
+     * revisar cómo mostrar esa columna se encontró que `rate_per_km_snapshot`
+     * se llenaba con la tarifa ACTUAL del perfil del conductor
+     * (RideRequestResponder::accept()), nunca con la tarifa real de la
+     * cooperativa usada para cotizar — quedaba mal en toda carrera de
+     * cooperativa. Verifica el arreglo: la tarifa que llega a la tabla es la
+     * de la solicitud (la de la cooperativa), no la del conductor.
+     */
+    public function test_the_traceability_rate_per_km_is_the_cooperatives_rate_not_the_drivers_own(): void
+    {
+        $cooperative = $this->cooperativeWithRates(0.50, 0.30);
+        $driver = User::factory()->create();
+        // A propósito muy distinta a la de la cooperativa, para confirmar
+        // que la tabla NO usa esta.
+        DriverProfile::factory()->for($driver)->create(['rate_per_km' => 0.10]);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+        $client = User::factory()->create();
+        $rideRequest = RideRequest::factory()->create([
+            'client_user_id' => $client->id,
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'rate_per_km' => 0.50,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($driver)->post(route('ride-requests.accept', $rideRequest))->assertRedirect();
+        $ride = Ride::query()->where('ride_request_id', $rideRequest->id)->firstOrFail();
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        $this->assertSame('0.50', (string) $ride->fresh()->rate_per_km_snapshot);
+
+        $this->actingAs($cooperative->user)->get(route('cooperative.wallet'))
+            ->assertInertia(fn ($page) => $page->where('rides.data.0.rate_per_km', 0.5));
+    }
+
+    /**
+     * Bug real reportado por el usuario: "elimine a mis conductores y se
+     * eliminaron mis datos de carreras, no debe ser" — retirar a un
+     * conductor (baja lógica, `status = 'removed'`) no debe hacer
+     * desaparecer sus carreras ni ganancias históricas de la billetera del
+     * equipo, aunque ya no aparezca en el roster operativo.
+     */
+    public function test_removing_a_driver_keeps_their_historical_rides_in_the_wallet_screen(): void
+    {
+        $cooperative = $this->cooperativeWithRates(0.50, 0.30);
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $membership = CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperative->user_id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+        $ride = $this->rideFor($cooperative, $driver, 'efectivo', 10.0);
+        $this->actingAs($driver)->post(route('rides.complete', $ride))->assertRedirect();
+
+        $membership->forceFill(['status' => 'removed', 'ended_at' => now()])->save();
+
+        $this->actingAs($cooperative->user)->get(route('cooperative.wallet'))
+            ->assertInertia(fn ($page) => $page
+                ->where('rides.data.0.client', $ride->client->name)
+                ->where('rides.data.0.price', 10)
+                ->where('earnings.total', 10)
+                ->where('earnings.completed_rides', 1)
+            );
+    }
+
     public function test_completing_a_cash_ride_makes_the_driver_owe_the_cooperative(): void
     {
         $cooperative = $this->cooperativeWithRates(0.50, 0.30);

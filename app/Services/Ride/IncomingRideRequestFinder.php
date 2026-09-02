@@ -117,6 +117,12 @@ class IncomingRideRequestFinder
             $rideRequest->driver_total_offered_price = $rideRequest->driverPayEstimate();
             $rideRequest->is_cooperative_request = $rideRequest->cooperative_id !== null;
             $rideRequest->cooperative_driver_rate_per_km = $rideRequest->cooperative?->driver_pay_rate_per_km;
+            // Pedido explícito del usuario: que el panel del conductor deje
+            // claro de dónde viene cada solicitud ("Cooperativa X — carrera
+            // asignada por tu cooperativa" vs. "Solicitud directa — cliente
+            // privado") — la relación `cooperative` ya se resolvió arriba,
+            // esto no agrega ninguna consulta nueva.
+            $rideRequest->cooperative_name = $rideRequest->cooperative?->name;
             $rideRequest->offer_comparison = $comparisonService->forDriver($rideRequest, $driver);
         });
 

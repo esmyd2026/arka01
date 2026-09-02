@@ -72,7 +72,8 @@ function accept() {
     const id = current.value.id;
 
     router.post(route('ride-requests.accept', id), {}, {
-        preserveScroll: true,
+        preserveScroll: false,
+        preserveState: false,
         onSuccess: () => {
             dismissIncomingRideRequest(id);
             window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));

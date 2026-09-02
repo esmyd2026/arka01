@@ -6,6 +6,7 @@ use App\Events\FleetInvitationCreated;
 use App\Models\Fleet;
 use App\Models\FleetInvitation;
 use App\Notifications\FleetInvitationPushNotification;
+use App\Services\Driver\DriverAccessResolver;
 use App\Services\PlanLimits;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -19,10 +20,22 @@ use Illuminate\Validation\ValidationException;
  */
 class FleetInvitationCreator
 {
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly DriverAccessResolver $driverAccess,
+    ) {}
 
     public function create(Fleet $fleet, int $driverUserId, int $invitedByUserId, string $initiatedBy, ?string $message): FleetInvitation
     {
+        // Pedido explícito del usuario: un conductor cubierto solo por su
+        // cooperativa no puede sumarse a flotas privadas de clientes (pagaría
+        // dos veces por el mismo trabajo), y aunque tenga plan profesional,
+        // no puede convertir en cliente propio a alguien que lo conoció por
+        // una carrera de cooperativa — ver DriverAccessResolver. Primero,
+        // antes que cualquier cupo: no tiene sentido gastar cupo del cliente
+        // en una invitación que de todas formas no se puede aceptar.
+        $this->driverAccess->ensureDriverCanBePrivatelyLinked($driverUserId, $fleet);
+
         $maxDriversPerFleet = $this->planLimits->forClient($fleet->owner)['max_drivers_per_fleet'];
 
         if ($maxDriversPerFleet !== null && $fleet->activeMemberCount() >= $maxDriversPerFleet) {

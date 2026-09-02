@@ -7,6 +7,7 @@ import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { confirmDialog } from '@/Utils/confirmDialog';
 
 defineProps({
     cooperative: { type: Object, required: true },
@@ -31,6 +32,20 @@ async function search() {
 
 function invite(driver) {
     router.post(route('cooperative.drivers.invite'), { driver_user_id: driver.id }, { preserveScroll: true, onSuccess: () => (driver.membership_status = 'pending') });
+}
+
+// Pedido explícito del usuario: "el botón de suspender o eliminar conductor
+// no tiene una confirmación, simplemente ya los saca" — suspender y retirar
+// afectan de inmediato el despacho del conductor (y retirar, además, corta
+// el vínculo activo) — ninguno de los dos puede ser un solo clic accidental.
+async function suspend(membership) {
+    if (!(await confirmDialog(`¿Suspender a ${membership.driver.name}? Deja de recibir carreras de la cooperativa hasta que lo reactive.`))) return;
+    router.post(route('cooperative.drivers.suspend', membership.id), {}, { preserveScroll: true });
+}
+
+async function remove(membership) {
+    if (!(await confirmDialog(`¿Retirar a ${membership.driver.name} de la cooperativa? Deja de recibir carreras de inmediato. Su historial de carreras y billetera con la cooperativa se conservan.`, { danger: true }))) return;
+    router.delete(route('cooperative.drivers.remove', membership.id), { preserveScroll: true });
 }
 </script>
 
@@ -71,18 +86,6 @@ function invite(driver) {
                             <div class="flex-1">
                                 <p class="font-medium text-arka-text flex items-center gap-2 flex-wrap">
                                     {{ membership.driver.name }}
-                                    <!-- Pedido explícito del usuario: "tiene que tener el
-                                         plan mayor al gratis, y tiene que estar vigente. por
-                                         lo contrario aparecera bloqueado" — sigue vinculado
-                                         (no se le retira solo), pero la cooperativa ya no lo
-                                         despacha automáticamente hasta que renueve. -->
-                                    <span
-                                        v-if="membership.is_plan_blocked"
-                                        class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-arka-danger/15 text-arka-danger"
-                                        title="Su plan de conductor está en Gratis o vencido — no recibe carreras de la cooperativa hasta que renueve."
-                                    >
-                                        Bloqueado
-                                    </span>
                                 </p>
                                 <p class="mt-1 text-xs text-arka-text-muted">
                                     {{ membership.status }}
@@ -92,9 +95,9 @@ function invite(driver) {
                             </div>
                             <div class="flex gap-2">
                                 <Link :href="route('cooperative.drivers.show', membership.id)" class="inline-flex items-center rounded-lg border border-arka-primary/40 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-arka-primary transition hover:bg-arka-primary/10">Ver perfil</Link>
-                                <SecondaryButton v-if="membership.status === 'accepted'" @click="router.post(route('cooperative.drivers.suspend', membership.id))">Suspender</SecondaryButton>
+                                <SecondaryButton v-if="membership.status === 'accepted'" @click="suspend(membership)">Suspender</SecondaryButton>
                                 <PrimaryButton v-if="membership.status === 'suspended'" @click="router.post(route('cooperative.drivers.reactivate', membership.id))">Reactivar</PrimaryButton>
-                                <DangerButton @click="router.delete(route('cooperative.drivers.remove', membership.id))">Retirar</DangerButton>
+                                <DangerButton @click="remove(membership)">Retirar</DangerButton>
                             </div>
                         </div>
                     </div>

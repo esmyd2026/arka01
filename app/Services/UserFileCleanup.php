@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Ride;
 use App\Models\SubscriptionRequest;
 use App\Models\User;
 use App\Models\VanTrip;
@@ -56,5 +57,18 @@ class UserFileCleanup
             ->whereNotNull('payment_proof_path')
             ->get()
             ->each(fn (SubscriptionRequest $request) => Storage::disk('local')->delete($request->payment_proof_path));
+
+        // Comprobantes de carreras. También se incluyen las carreras de una
+        // cooperativa administrada por esta cuenta: las cascadas de la base
+        // eliminan las filas, pero no conocen el archivo privado del disco.
+        Ride::query()
+            ->whereNotNull('payment_proof_path')
+            ->where(function ($query) use ($user) {
+                $query->where('client_user_id', $user->id)
+                    ->orWhere('driver_user_id', $user->id)
+                    ->orWhereHas('rideRequest.cooperative', fn ($cooperative) => $cooperative->where('user_id', $user->id));
+            })
+            ->get()
+            ->each(fn (Ride $ride) => Storage::disk('local')->delete($ride->payment_proof_path));
     }
 }

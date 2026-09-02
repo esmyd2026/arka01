@@ -35,15 +35,21 @@ class RideDispatchCandidates
         bool $needsTrunk = false,
     ): array {
         $busyDriverIds = Ride::query()->where('status', 'in_progress')->pluck('driver_user_id');
-        $planLimits = new PlanLimits;
 
         return $cooperative->activeDriverMemberships()
             ->with('driver.driverProfile')
             ->get()
             ->map(fn ($membership) => $membership->driver)
-            ->filter(function (User $driver) use ($busyDriverIds, $originLat, $originLng, $passengerCount, $needsTrunk, $planLimits) {
+            ->filter(function (User $driver) use ($busyDriverIds, $originLat, $originLng, $passengerCount, $needsTrunk) {
                 $profile = $driver->driverProfile;
 
+                // Corrección explícita del usuario sobre una regla anterior
+                // ("tiene que tener el plan mayor al gratis"): la cooperativa
+                // es quien paga para que su conductor opere dentro de ella —
+                // el conductor no paga dos veces. Su plan personal (incluido
+                // Gratis) solo sigue limitando su CARTERA PRIVADA propia
+                // (ver DriverAccessResolver::privateClientCapacity()), nunca
+                // su elegibilidad para el despacho de la cooperativa.
                 return $profile
                     && $profile->driver_type === 'public_transport'
                     && $profile->canBecomeAvailable()
@@ -53,15 +59,7 @@ class RideDispatchCandidates
                     && ! $busyDriverIds->contains($driver->id)
                     && $profile->isWithinRangeOf($originLat, $originLng)
                     && $profile->passenger_capacity >= $passengerCount
-                    && (! $needsTrunk || $profile->has_trunk)
-                    // Pedido explícito del usuario: "cuando una cooperativa
-                    // tenga que buscar a un conductor... tiene que tener el
-                    // plan mayor al gratis, y tiene que estar vigente" — si
-                    // bajó a Gratis o le venció la suscripción, se lo salta
-                    // del despacho automático (sigue viéndose en el panel de
-                    // la cooperativa, solo que "Bloqueado" — ver
-                    // CooperativeDriverController::index()).
-                    && $planLimits->hasActivePaidPlan($driver);
+                    && (! $needsTrunk || $profile->has_trunk);
             })
             // La cooperativa sigue siendo la bolsa elegida por el cliente;
             // el motor solo ordena a sus unidades elegibles.

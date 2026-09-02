@@ -20,6 +20,12 @@ const props = defineProps({
     // conductor") — null si no pertenece a ninguna cooperativa, mismo campo
     // y mismo signo que ya usa Driver/Profile.vue.
     cooperativeWallet: { type: Object, default: null },
+    // Trazabilidad de las carreras de cooperativa (pedido explícito del
+    // usuario: "el conductor debería tener la trazabilidad de las carreras
+    // de cooperativas en sus indicadores") — null si no pertenece a
+    // ninguna cooperativa, mismas columnas que ya usa la cooperativa del
+    // otro lado (Cooperative/Wallet.vue, Cooperative/DriverShow.vue).
+    cooperativeRideHistory: { type: Object, default: null },
     history: { type: Object, required: true },
 });
 
@@ -123,10 +129,18 @@ const statusSegments = computed(() => [
                             ? 'Por carreras en efectivo cuyo margen le correspondía a la cooperativa.'
                             : 'Por carreras por transferencia cuya parte le correspondía a usted.' }}
                     </p>
+                    <!-- Pedido explícito del usuario: "en ese mensaje mándalo al
+                         desglose... para que vea la trazabilidad" -->
+                    <a href="#cooperativa-desglose" class="mt-2 inline-block text-xs font-semibold underline" :class="cooperativeWallet.balance > 0 ? 'text-arka-warning' : 'text-arka-primary'">
+                        Ver desglose de sus carreras →
+                    </a>
                 </div>
                 <div v-else-if="cooperativeWallet" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <p class="text-sm font-medium text-arka-text">Billetera con {{ cooperativeWallet.cooperative_name }}</p>
                     <p class="mt-1 text-xs text-arka-text-muted">Sin saldo pendiente por ahora.</p>
+                    <a href="#cooperativa-desglose" class="mt-2 inline-block text-xs font-semibold text-arka-primary underline">
+                        Ver desglose de sus carreras →
+                    </a>
                 </div>
 
                 <!-- Filtros (pedido explícito del usuario). -->
@@ -190,6 +204,63 @@ const statusSegments = computed(() => [
                     <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                         <h3 class="text-sm font-medium text-arka-text mb-4">Ganancia por día</h3>
                         <BarChart :data="dailyEarnings" value-prefix="$" />
+                    </div>
+                </div>
+
+                <!-- Trazabilidad con la cooperativa (pedido explícito del
+                     usuario: "el conductor debería tener la trazabilidad de
+                     las carreras de cooperativas en sus indicadores") —
+                     mismas columnas que ve la cooperativa del otro lado, acá
+                     enlazadas desde el mensaje de la billetera de arriba. -->
+                <div v-if="cooperativeRideHistory" id="cooperativa-desglose" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka scroll-mt-4">
+                    <h3 class="text-lg font-medium text-arka-text mb-3">
+                        Trazabilidad con {{ cooperativeWallet?.cooperative_name }} ({{ cooperativeRideHistory.total }})
+                    </h3>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[860px] border-collapse text-sm">
+                            <thead>
+                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                    <th class="py-2 pr-3">Fecha</th>
+                                    <th class="py-2 pr-3">Cliente</th>
+                                    <th class="py-2 pr-3">Origen → Destino</th>
+                                    <th class="py-2 pr-3">Pago</th>
+                                    <th class="py-2 pr-3 text-right">Cobrado al cliente</th>
+                                    <th class="py-2 pr-3 text-right">Pagado a usted</th>
+                                    <th class="py-2 pr-3 text-right">Usted debe</th>
+                                    <th class="py-2 pr-3 text-right">Le deben</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-arka-text-muted/10 [font-variant-numeric:tabular-nums]">
+                                <tr v-for="ride in cooperativeRideHistory.data" :key="ride.id">
+                                    <td class="py-2 pr-3 text-arka-text-muted whitespace-nowrap">{{ formatDate(ride.date) }}</td>
+                                    <td class="py-2 pr-3 text-arka-text">{{ ride.client }}</td>
+                                    <td class="py-2 pr-3 text-arka-text-muted max-w-[220px] truncate" :title="`${ride.origin} → ${ride.destination}`">
+                                        {{ ride.origin }} → {{ ride.destination }}
+                                    </td>
+                                    <td class="py-2 pr-3 text-arka-text-muted capitalize">{{ ride.payment_method }}</td>
+                                    <td class="py-2 pr-3 text-right text-arka-text font-semibold">${{ Number(ride.price).toFixed(2) }}</td>
+                                    <td class="py-2 pr-3 text-right text-arka-text">${{ Number(ride.driver_pay).toFixed(2) }}</td>
+                                    <td class="py-2 pr-3 text-right" :class="ride.driver_owes > 0 ? 'font-semibold text-arka-warning' : 'text-arka-text-muted'">{{ ride.driver_owes > 0 ? `$${Number(ride.driver_owes).toFixed(2)}` : '—' }}</td>
+                                    <td class="py-2 pr-3 text-right" :class="ride.cooperative_owes > 0 ? 'font-semibold text-arka-primary' : 'text-arka-text-muted'">{{ ride.cooperative_owes > 0 ? `$${Number(ride.cooperative_owes).toFixed(2)}` : '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <p v-if="!cooperativeRideHistory.data.length" class="py-6 text-center text-sm text-arka-text-muted">
+                            Todavía no tiene carreras de esta cooperativa.
+                        </p>
+                    </div>
+
+                    <div v-if="cooperativeRideHistory.prev_page_url || cooperativeRideHistory.next_page_url" class="flex justify-between pt-3">
+                        <Link v-if="cooperativeRideHistory.prev_page_url" :href="cooperativeRideHistory.prev_page_url" preserve-state preserve-scroll class="text-sm text-arka-primary hover:text-arka-primary-bright">
+                            &larr; Anterior
+                        </Link>
+                        <span v-else></span>
+
+                        <Link v-if="cooperativeRideHistory.next_page_url" :href="cooperativeRideHistory.next_page_url" preserve-state preserve-scroll class="text-sm text-arka-primary hover:text-arka-primary-bright">
+                            Siguiente &rarr;
+                        </Link>
                     </div>
                 </div>
 

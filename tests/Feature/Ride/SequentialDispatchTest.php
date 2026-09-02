@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
@@ -662,6 +663,26 @@ class SequentialDispatchTest extends TestCase
         $this->assertSame('expired', $rideRequest->fresh()->status);
         Event::assertDispatched(RideRequestExpired::class);
         Notification::assertSentTo($client, RideRequestExpiredPushNotification::class);
+    }
+
+    public function test_the_latest_expired_request_stays_visible_after_reload_so_the_client_can_retry(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $rideRequest = RideRequest::factory()->create([
+            'fleet_id' => $fleet->id,
+            'client_user_id' => $client->id,
+            'status' => 'expired',
+            'driver_user_id' => null,
+            'dispatch_pool' => 'fleet',
+            'requested_at' => now(),
+        ]);
+
+        $this->actingAs($client)->get(route('rides.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('pendingRequestsAsClient.0.id', $rideRequest->id)
+                ->where('pendingRequestsAsClient.0.status', 'expired')
+            );
     }
 
     /**

@@ -28,6 +28,7 @@ class DriverClientFinder
     public function __construct(
         private readonly PlanLimits $planLimits,
         private readonly TrustIndexCalculator $trustCalculator,
+        private readonly DriverAccessResolver $driverAccess,
     ) {}
 
     /**
@@ -175,13 +176,14 @@ class DriverClientFinder
     }
 
     /**
-     * SOLO por código de socio (pedido explícito del usuario: "limitemos la
-     * búsqueda por código nada más, porque chocarían con millones de
-     * personas") — mismo criterio que FleetController::searchDrivers(), del
-     * otro lado.
+     * Por código de socio, nombre, apellido o usuario (pedido explícito del
+     * usuario: "puedes habilitar para que busque por nombre y usuario
+     * tambien") — mismo criterio que FleetDriverSearch::search(), del otro
+     * lado, que ya buscaba así.
      */
     public function searchClients(User $driver, string $term): Collection
     {
+        $term = ltrim($term, '@');
         $memberCode = ctype_digit($term) ? (int) $term : null;
         $driverId = $driver->id;
 
@@ -189,7 +191,12 @@ class DriverClientFinder
             ->where('id', '!=', $driverId)
             ->where('role', 'cliente')
             ->with('city')
-            ->when($memberCode, fn ($query) => $query->where('member_code', $memberCode), fn ($query) => $query->whereRaw('1 = 0'))
+            ->where(function ($query) use ($term, $memberCode) {
+                $query->when($memberCode, fn ($query) => $query->where('member_code', $memberCode))
+                    ->orWhere('name', 'like', '%'.$term.'%')
+                    ->orWhere('last_name', 'like', '%'.$term.'%')
+                    ->orWhere('username', 'like', '%'.$term.'%');
+            })
             ->limit(10)
             ->get();
 
@@ -219,9 +226,17 @@ class DriverClientFinder
             ->get()
             ->keyBy('reviewee_user_id');
 
-        return $clients->map(function (User $client) use ($fleetsByOwner, $memberFleetIds, $pendingFleetIds, $ratings) {
+        return $clients->map(function (User $client) use ($driverId, $fleetsByOwner, $memberFleetIds, $pendingFleetIds, $ratings) {
             $clientFleetIds = ($fleetsByOwner->get($client->id) ?? collect())->pluck('id');
             $rating = $ratings->get($client->id);
+
+            // Pedido explícito del usuario ("asi mismo con luis que si le
+            // aparece que le diga este cliente pertenece a tu flota de
+            // cooperativa"): mismo chequeo que del lado del cliente
+            // (FleetDriverSearch), en espejo — no hace falta una Fleet real
+            // todavía (puede no existir ninguna si nunca se cruzaron antes),
+            // ensureDriverCanBePrivatelyLinked() solo necesita el owner_user_id.
+            $transientFleet = new Fleet(['owner_user_id' => $client->id]);
 
             return [
                 'user_id' => $client->id,
@@ -235,6 +250,7 @@ class DriverClientFinder
                 'status' => match (true) {
                     $clientFleetIds->intersect($memberFleetIds)->isNotEmpty() => 'member',
                     $clientFleetIds->intersect($pendingFleetIds)->isNotEmpty() => 'pending',
+                    ! $this->driverAccess->canBePrivatelyLinked($driverId, $transientFleet) => 'cooperative_locked',
                     default => 'not_invited',
                 },
             ];

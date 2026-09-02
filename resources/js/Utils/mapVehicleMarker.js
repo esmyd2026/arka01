@@ -1,7 +1,15 @@
 // Única silueta del vehículo Arka01 para todos los motores y pantallas.
 // El lienzo cuadrado deja espacio para rotarlo sin recortar la carrocería.
-export function arkaVehicleSvg(rotation = 0, accent = '#19B982') {
+// `ringColor` es opcional y aditivo (pedido explícito del usuario: "que se
+// distinga el color del vehículo de acuerdo a su estado" en el mapa
+// operativo de la cooperativa) — un halo detrás de la carrocería, sin tocar
+// el diseño premium blanco/discreto que ya usan Inicio y el seguimiento en
+// vivo, donde `ringColor` nunca se manda.
+export function arkaVehicleSvg(rotation = 0, accent = '#19B982', ringColor = null) {
     const safeRotation = Number.isFinite(Number(rotation)) ? Number(rotation) : 0;
+    const ring = ringColor
+        ? `<circle cx="22" cy="22" r="19.5" fill="${ringColor}" fill-opacity="0.22" stroke="${ringColor}" stroke-width="2.25"/>`
+        : '';
 
     return `<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -15,6 +23,7 @@ export function arkaVehicleSvg(rotation = 0, accent = '#19B982') {
                 <stop stop-color="#17211E"/><stop offset="1" stop-color="#35413D"/>
             </linearGradient>
         </defs>
+        ${ring}
         <g transform="rotate(${safeRotation} 22 22)">
             <g transform="translate(8 1) scale(.9)" filter="url(#vehicle-shadow)">
                 <rect x="3.1" y="10.3" width="2.1" height="7.2" rx="1.05" fill="#3B4641"/>

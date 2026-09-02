@@ -87,14 +87,53 @@ const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progre
                 <p class="mt-2 text-sm text-arka-text-muted">Sin saldo pendiente con este conductor.</p>
             </section>
 
+            <!-- Trazabilidad (pedido explícito del usuario: "en cada
+                 conductor de cooperativa quiero ver esa tabla también para
+                 ver el detalle de las gestiones") — misma tabla que
+                 Cooperative/Wallet.vue, sin la columna "Conductor" porque acá
+                 ya es un solo conductor. -->
             <section class="rounded-2xl bg-arka-card">
                 <div class="border-b border-arka-text-muted/10 p-5"><p class="text-xs uppercase tracking-widest text-arka-primary">Historial</p><h2 class="mt-1 font-semibold text-arka-text">Carreras e ingresos individuales</h2></div>
                 <p v-if="!rides.data.length" class="p-6 text-sm text-arka-text-muted">Este conductor todavía no registra carreras con la cooperativa.</p>
-                <div v-else class="divide-y divide-arka-text-muted/10">
-                    <article v-for="ride in rides.data" :key="ride.id" class="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                        <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-arka-text">{{ ride.client }}</p><span class="rounded-full px-2 py-0.5 text-[11px]" :class="ride.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : ride.status === 'cancelled' ? 'bg-rose-400/10 text-rose-300' : 'bg-sky-400/10 text-sky-300'">{{ statusLabel[ride.status] || ride.status }}</span></div><p class="mt-1 truncate text-sm text-arka-text-muted">{{ ride.origin }} → {{ ride.destination }}</p><p class="mt-1 text-xs text-arka-text-muted">{{ date(ride.date) }} · {{ ride.distance_km }} km · {{ ride.payment_method }}</p></div>
-                        <p class="text-lg font-bold" :class="ride.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-primary'">{{ money(ride.price) }}</p>
-                    </article>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[980px] border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-arka-text-muted/10 text-left text-xs uppercase tracking-wide text-arka-text-muted">
+                                <th class="px-4 py-3 font-medium">Fecha</th>
+                                <th class="px-4 py-3 font-medium">Cliente</th>
+                                <th class="px-4 py-3 font-medium">Origen</th>
+                                <th class="px-4 py-3 font-medium">Destino</th>
+                                <th class="px-4 py-3 text-right font-medium">Km</th>
+                                <th class="px-4 py-3 text-right font-medium">$/km</th>
+                                <th class="px-4 py-3 font-medium">Pago</th>
+                                <th class="px-4 py-3 text-right font-medium">Cobrado al cliente</th>
+                                <th class="px-4 py-3 text-right font-medium">Pagado al conductor</th>
+                                <th class="px-4 py-3 text-right font-medium">Debe el conductor</th>
+                                <th class="px-4 py-3 text-right font-medium">Le debemos al conductor</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-arka-text-muted/10 [font-variant-numeric:tabular-nums]">
+                            <tr v-for="ride in rides.data" :key="ride.id" class="align-top">
+                                <td class="whitespace-nowrap px-4 py-3 text-xs text-arka-text-muted">
+                                    {{ date(ride.date) }}
+                                    <span
+                                        class="mt-1 block w-fit rounded-full px-2 py-0.5 text-[10px]"
+                                        :class="ride.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : ride.status === 'cancelled' ? 'bg-rose-400/10 text-rose-300' : 'bg-sky-400/10 text-sky-300'"
+                                    >{{ statusLabel[ride.status] || ride.status }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-arka-text">{{ ride.client }}</td>
+                                <td class="max-w-[220px] truncate px-4 py-3 text-arka-text-muted" :title="ride.origin">{{ ride.origin }}</td>
+                                <td class="max-w-[220px] truncate px-4 py-3 text-arka-text-muted" :title="ride.destination">{{ ride.destination }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-arka-text-muted">{{ ride.distance_km != null ? `${ride.distance_km.toFixed(1)} km` : '—' }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-arka-text-muted">{{ ride.rate_per_km != null ? money(ride.rate_per_km) : '—' }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-arka-text-muted capitalize">{{ ride.payment_method }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right font-semibold" :class="ride.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-text'">{{ money(ride.price) }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-arka-text">{{ money(ride.driver_pay) }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right" :class="ride.driver_owes > 0 ? 'font-semibold text-amber-300' : 'text-arka-text-muted'">{{ ride.driver_owes > 0 ? money(ride.driver_owes) : '—' }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right" :class="ride.cooperative_owes > 0 ? 'font-semibold text-emerald-300' : 'text-arka-text-muted'">{{ ride.cooperative_owes > 0 ? money(ride.cooperative_owes) : '—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <div v-if="rides.links.length > 3" class="flex flex-wrap gap-2 border-t border-arka-text-muted/10 p-4"><Link v-for="link in rides.links" :key="link.label" :href="link.url || '#'" v-html="link.label" class="rounded-lg px-3 py-1.5 text-xs" :class="link.active ? 'bg-arka-primary text-black' : 'bg-black/10 text-arka-text-muted'" /></div>
             </section>

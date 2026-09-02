@@ -137,9 +137,17 @@ const props = defineProps({
         type: String,
         default: 'pin',
     },
+    vehicleStatusRing: {
+        type: Boolean,
+        default: false,
+    },
+    draggableMarkerIds: {
+        type: Array,
+        default: () => [],
+    },
 });
 
-const emit = defineEmits(['map-click', 'user-panned']);
+const emit = defineEmits(['map-click', 'user-panned', 'marker-drag-start', 'marker-drag-end']);
 
 const mapEl = ref(null);
 let map = null;
@@ -465,11 +473,23 @@ function drawMarkers() {
         // pines de origen/destino — los únicos pensados para reubicarse
         // tocando encima —, los autos siguen interactivos y absorben el
         // clic en vez de dejarlo pasar.
-        if (props.clickable && (marker.id === 'origin' || marker.id === 'destination')) {
+        const draggable = props.draggableMarkerIds.includes(marker.id);
+        if (props.clickable && !draggable && (marker.id === 'origin' || marker.id === 'destination')) {
             options.interactive = false;
         }
 
+        options.draggable = draggable;
+        options.autoPan = draggable;
+
         const leafletMarker = L.marker([marker.lat, marker.lng], options).addTo(markerLayer);
+
+        if (draggable) {
+            leafletMarker.on('dragstart', () => emit('marker-drag-start', { id: marker.id }));
+            leafletMarker.on('dragend', (event) => {
+                const point = event.target.getLatLng();
+                emit('marker-drag-end', { id: marker.id, lat: point.lat, lng: point.lng });
+            });
+        }
 
         if (!props.clickable) {
             leafletMarker.bindPopup(marker.label ?? '');

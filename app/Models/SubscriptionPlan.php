@@ -35,6 +35,12 @@ class SubscriptionPlan extends Model
         // VAN, ya era una función abierta — este flag permite RESTRINGIRLA
         // por plan, no habilitarla desde cero.
         'express_enabled',
+        // Pedido explícito del usuario: por defecto un conductor solo puede
+        // estar afiliado a UNA cooperativa activa a la vez (ver
+        // CooperativeDriverResponder::respond()) — este flag, configurable
+        // por plan, le permite al admin habilitar para un plan puntual que
+        // sus conductores acepten solicitudes de más de una cooperativa.
+        'multi_cooperative_enabled',
         'max_fleets',
         'max_drivers_per_fleet',
         'max_cooperatives',
@@ -52,6 +58,7 @@ class SubscriptionPlan extends Model
         'verified_badge' => 'boolean',
         'van_trips_enabled' => 'boolean',
         'express_enabled' => 'boolean',
+        'multi_cooperative_enabled' => 'boolean',
         'is_active' => 'boolean',
     ];
 

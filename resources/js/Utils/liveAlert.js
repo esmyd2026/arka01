@@ -35,6 +35,26 @@ export function unlockAudioContext() {
     }
 }
 
+/**
+ * Bug reportado por el usuario ("no está llegando el sonido al panel de la
+ * cooperativa cuando le llega una carrera"): el WebSocket y el aviso visual
+ * llegan bien, pero si en TODA la sesión todavía no hubo ni un clic/toque
+ * real (un operador de despacho a veces solo deja la pantalla abierta
+ * esperando), el AudioContext sigue "suspended" y playIncomingRideAlert()
+ * falla en silencio (ver el catch de playCategory() más abajo) — sin que se
+ * note nada raro en pantalla. Se usa para mostrar un aviso propio en la
+ * Central de despacho en vez de depender de que el operador note la falta
+ * de sonido recién cuando ya se le pasó una carrera.
+ */
+export function isAudioUnlocked() {
+    try {
+        const ctx = context();
+        return !ctx || ctx.state === 'running';
+    } catch {
+        return true;
+    }
+}
+
 let armed = false;
 
 /**

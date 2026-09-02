@@ -72,6 +72,7 @@ use App\Http\Controllers\ReferralController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\RideController;
 use App\Http\Controllers\RideMessageController;
+use App\Http\Controllers\RidePaymentController;
 use App\Http\Controllers\RideRequestController;
 use App\Http\Controllers\SavedRouteController;
 use App\Http\Controllers\SosAlertController;
@@ -244,6 +245,8 @@ Route::middleware('auth')->group(function () {
         // cuánto facturó y el saldo de billetera agregado — antes solo se
         // podía ver conductor por conductor (cooperative.drivers.show).
         Route::get('/cooperativa/billetera', [CooperativeWalletController::class, 'index'])->name('cooperative.wallet');
+        Route::post('/cooperativa/pagos/{ride}/confirmar-transferencia', [RidePaymentController::class, 'confirmTransfer'])->name('cooperative.payments.transfer.confirm');
+        Route::post('/cooperativa/pagos/{ride}/rechazar-transferencia', [RidePaymentController::class, 'rejectTransfer'])->name('cooperative.payments.transfer.reject');
         Route::post('/cooperativa/cuentas-bancarias', [CooperativeBankAccountController::class, 'store'])->name('cooperative.bank-accounts.store');
         Route::delete('/cooperativa/cuentas-bancarias/{bankAccount}', [CooperativeBankAccountController::class, 'destroy'])->name('cooperative.bank-accounts.destroy');
         Route::patch('/cooperativa/cuentas-bancarias/{bankAccount}/principal', [CooperativeBankAccountController::class, 'markFavorite'])->name('cooperative.bank-accounts.favorite');
@@ -391,6 +394,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/carreras/{ride}/llegue', [RideController::class, 'arrived'])->name('rides.arrived');
     Route::post('/carreras/{ride}/recogido', [RideController::class, 'pickedUp'])->name('rides.picked-up');
     Route::post('/carreras/{ride}/transferencia-notificada', [RideController::class, 'notifyTransferPayment'])->name('rides.transfer-payment.notify');
+    Route::post('/carreras/{ride}/comprobante-pago', [RidePaymentController::class, 'uploadProof'])->name('rides.payment-proof.store');
+    Route::get('/carreras/{ride}/comprobante-pago', [RidePaymentController::class, 'proof'])->name('rides.payment-proof.show');
+    Route::post('/carreras/{ride}/confirmar-efectivo', [RidePaymentController::class, 'confirmCash'])->name('rides.cash-payment.confirm');
     Route::post('/carreras/{ride}/cancelar', [RideController::class, 'cancel'])->name('rides.cancel');
     // Editar una carrera programada (pedido explícito del usuario: "si es
     // que se equivocaron") — el cliente propone, el conductor confirma o
@@ -533,6 +539,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/cooperativas/{cooperative}/suspender', [AdminCooperativeController::class, 'suspend'])->name('cooperatives.suspend');
     Route::post('/cooperativas/{cooperative}/reactivar', [AdminCooperativeController::class, 'reactivate'])->name('cooperatives.reactivate');
     Route::patch('/cooperativas/{cooperative}/whatsapp', [AdminCooperativeController::class, 'updateWhatsApp'])->name('cooperatives.whatsapp');
+    Route::patch('/cooperativas/{cooperative}/publica', [AdminCooperativeController::class, 'updatePublicVisibility'])->name('cooperatives.public-visibility');
     Route::post('/cooperativas/documentos/{document}/revisar', [AdminCooperativeController::class, 'reviewDocument'])->name('cooperative-documents.review');
     // Perfil completo de un usuario (pedido explícito del usuario): toda la
     // información relevante de un conductor o cliente en una sola pantalla,

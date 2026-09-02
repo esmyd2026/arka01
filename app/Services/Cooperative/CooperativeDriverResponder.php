@@ -5,6 +5,7 @@ namespace App\Services\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\User;
 use App\Notifications\CooperativeDriverResponsePushNotification;
+use App\Services\PlanLimits;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -16,6 +17,8 @@ use Illuminate\Validation\ValidationException;
  */
 class CooperativeDriverResponder
 {
+    public function __construct(private readonly PlanLimits $planLimits) {}
+
     public function pendingInvitations(User $driver): Collection
     {
         return $driver->cooperativeDriverMemberships()
@@ -35,7 +38,13 @@ class CooperativeDriverResponder
 
         $accepted = $decision === 'accept';
 
-        if ($accepted) {
+        // Pedido explícito del usuario: por defecto un conductor solo puede
+        // estar afiliado a UNA cooperativa activa a la vez — pero el admin
+        // puede habilitar por plan (`multi_cooperative_enabled`, ver
+        // PlanLimits::forDriver()) que ciertos conductores acepten
+        // solicitudes de más de una. Sin ese flag prendido, se mantiene la
+        // regla de siempre.
+        if ($accepted && ! $this->planLimits->forDriver($driver)['multi_cooperative_enabled']) {
             $alreadyActive = CooperativeDriverMembership::query()
                 ->where('driver_user_id', $driver->id)
                 ->where('status', 'accepted')

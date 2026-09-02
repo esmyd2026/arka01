@@ -132,6 +132,9 @@ const homeLng = ref(null);
 // quedaba en el centro de Quito por defecto de FleetMap.vue, sin ningún
 // indicio de qué había pasado.
 const homeMapCenter = ref(props.homeInitialCenter);
+const homeSearchCenter = computed(() => homeLat.value != null && homeLng.value != null
+    ? { lat: homeLat.value, lng: homeLng.value }
+    : homeMapCenter.value);
 const homeSearchQuery = ref('');
 const destinationSelectionLoading = ref(false);
 const destinationNavigationLoading = ref(false);
@@ -1220,6 +1223,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             :saved-routes="savedRoutes"
                             :origin-lat="homeLat"
                             :origin-lng="homeLng"
+                            :search-center="homeSearchCenter"
                             :can-schedule="hasRoute('ride-requests.create')"
                             :schedule-href="hasRoute('ride-requests.create') ? route('ride-requests.create', { programar: 1 }) : null"
                             @place-selected="({ lat, lng, address }) => goToDestination({ lat, lng, address })"
@@ -1317,6 +1321,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 :saved-routes="savedRoutes"
                                 :origin-lat="homeLat"
                                 :origin-lng="homeLng"
+                                :search-center="homeSearchCenter"
                                 :can-schedule="hasRoute('ride-requests.create')"
                                 :schedule-href="hasRoute('ride-requests.create') ? route('ride-requests.create', { programar: 1 }) : null"
                                 @place-selected="({ lat, lng, address }) => goToDestination({ lat, lng, address })"

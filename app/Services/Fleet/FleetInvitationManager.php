@@ -7,6 +7,7 @@ use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\User;
 use App\Notifications\FleetInvitationRespondedPushNotification;
+use App\Services\Driver\DriverAccessResolver;
 use App\Services\PlanLimits;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +24,7 @@ class FleetInvitationManager
     public function __construct(
         private readonly FleetInvitationCreator $invitationCreator,
         private readonly PlanLimits $planLimits,
+        private readonly DriverAccessResolver $driverAccess,
     ) {}
 
     /**
@@ -40,6 +42,13 @@ class FleetInvitationManager
                 'invitation' => 'Esa invitación ya no está pendiente.',
             ]);
         }
+
+        // Defensa en profundidad (pedido explícito del usuario): mismo
+        // chequeo que ya corrió al crear la invitación, repetido acá porque
+        // es el momento real en que se crea el FleetMember — cubre el caso
+        // borde de que el conductor tuviera plan pagado al invitar pero lo
+        // haya perdido antes de aceptar.
+        $this->driverAccess->ensureDriverCanBePrivatelyLinked($invitation->driver_user_id, $invitation->fleet);
 
         // Cupo de clientes de confianza según el plan vigente del conductor.
         // Bloquea la aceptación y sugiere subir de plan.

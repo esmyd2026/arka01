@@ -318,6 +318,7 @@ const mapCenter = ref(props.initialOrigin ? { lat: props.initialOrigin.lat, lng:
 const mapEditingPoint = ref('destination');
 const resolvingDestinationSelection = ref(false);
 const resolvingMapPoint = ref(false);
+const draggingMapMarker = ref(false);
 
 // Geocodificación inversa gratis, sin API key (OpenStreetMap Nominatim —
 // mismo criterio que OSRM para el trazado del recorrido, sección 9.3): para
@@ -405,7 +406,8 @@ if (props.initialOrigin) {
 // Pedido explícito del usuario: cantidad de pasajeros (por defecto 1) y si
 // hace falta cajuela para maletas (por defecto no) — filtran qué
 // conductores pueden tomar la carrera (ver driversWithDistance más abajo).
-const passengerCount = ref(props.initialOptions.passenger_count ?? 1);
+const initialPassengerCount = Number(props.initialOptions.passenger_count ?? 1);
+const passengerCount = ref(Number.isFinite(initialPassengerCount) ? Math.min(8, Math.max(1, Math.trunc(initialPassengerCount))) : 1);
 const needsTrunk = ref(props.initialOptions.needs_trunk ?? false);
 
 // Distancia a cada conductor, calculada en el navegador (Haversine) solo
@@ -567,14 +569,21 @@ function recommendCategory() {
 }
 
 // Selección por defecto al entrar a "Elige tu conductor" (pedido explícito
-// del usuario): "Todos" salvo que esté vacía, ahí sí cae en cascada. Se
+// del usuario): cascada Mi flota → Cooperativas → Todos — si tiene
+// conductores propios, arranca ahí ("Siempre primero"); si no tiene flota
+// pero sí cooperativas disponibles, arranca en Cooperativas; si tampoco,
+// recién ahí cae en "Todos" (y si ni eso hay, el respaldo de siempre). Se
 // preselecciona el primero de la lista (el más cercano, sortBy='distance')
 // para que "Ver disponibles"/"Pedir ahora" ya tengan a quién apuntar sin
 // perder la posibilidad de elegir otro con un toque.
 watch(step, (value) => {
     if (value !== 'driver' || activeCategory.value) return;
 
-    activeCategory.value = categoryCounts.value.all > 0 ? 'all' : recommendCategory();
+    activeCategory.value = categoryCounts.value.fleet > 0
+        ? 'fleet'
+        : categoryCounts.value.cooperative > 0
+            ? 'cooperative'
+            : (categoryCounts.value.all > 0 ? 'all' : recommendCategory());
 
     if (activeCategory.value === 'fleet' && fleetCandidates.value.length) {
         selectedDriverId.value = fleetCandidates.value[0].user_id;
@@ -686,6 +695,41 @@ const routeFitMarkerIds = computed(() => [
     ...stops.value.map((_, index) => `stop-${index + 1}`),
     'destination',
 ]);
+
+// En el paso de direcciones todos los puntos reales del recorrido pueden
+// corregirse arrastrándolos. En los mapas posteriores vuelven a ser solo
+// informativos porque la ruta ya fue confirmada.
+const routeDraggableMarkerIds = computed(() => [
+    ...(originLat.value != null ? ['origin'] : []),
+    ...stops.value.map((stop, index) => stop.lat != null ? `stop-${index + 1}` : null).filter(Boolean),
+    ...(destinationLat.value != null ? ['destination'] : []),
+]);
+
+const mapEditingPointLabel = computed(() => {
+    if (mapEditingPoint.value === 'origin') return 'origen';
+    if (mapEditingPoint.value === 'destination') return 'destino';
+    if (mapEditingPoint.value.startsWith('stop-')) {
+        return `parada ${Number(mapEditingPoint.value.slice('stop-'.length)) + 1}`;
+    }
+    return 'punto';
+});
+
+function editingPointFromMarkerId(id) {
+    if (id === 'origin' || id === 'destination') return id;
+    if (id.startsWith('stop-')) return `stop-${Math.max(0, Number(id.slice('stop-'.length)) - 1)}`;
+    return 'destination';
+}
+
+function startDraggingRouteMarker({ id }) {
+    mapEditingPoint.value = editingPointFromMarkerId(id);
+    draggingMapMarker.value = true;
+}
+
+async function finishDraggingRouteMarker({ id, lat, lng }) {
+    mapEditingPoint.value = editingPointFromMarkerId(id);
+    draggingMapMarker.value = false;
+    await pickRoutePoint({ lat, lng });
+}
 
 async function pickRoutePoint({ lat, lng }) {
     resolvingMapPoint.value = true;
@@ -1168,11 +1212,16 @@ function estimatedTotalPriceForCooperative(cooperative) {
     return roundUpToDime(base + applyTimeSurcharge(base) + stopPrices.reduce((total, price) => total + price, 0));
 }
 
-// Recomendación automática: primero el menor total estimado para la ruta y,
-// cuando dos opciones cuestan lo mismo, la más cercana al punto de recogida.
-// Si todavía no hay ruta/tarifa suficiente, la cercanía decide por sí sola.
+// Recomendación automática: primero la que el cliente ya agregó a su propia
+// red (is_added) — pedido explícito del usuario: "la que tiene que estar
+// seleccionada por defecto tiene que ser al de su flota", aunque una
+// cooperativa pública gane en precio o cercanía. Entre empates del mismo
+// grupo (agregadas entre sí, o públicas entre sí), decide el menor total
+// estimado y, si empatan, la más cercana al punto de recogida.
 const recommendedCooperative = computed(() => {
     return [...props.cooperatives].sort((left, right) => {
+        if (left.is_added !== right.is_added) return left.is_added ? -1 : 1;
+
         const leftPrice = estimatedTotalPriceForCooperative(left) ?? Number.POSITIVE_INFINITY;
         const rightPrice = estimatedTotalPriceForCooperative(right) ?? Number.POSITIVE_INFINITY;
         if (leftPrice !== rightPrice) return leftPrice - rightPrice;
@@ -1323,17 +1372,7 @@ const roundTrip = ref(false);
 const scheduledNotes = ref('');
 // Forma de pago (pedido explícito del usuario): "efectivo" de default,
 // el cliente todavía no tenía ninguna forma de elegirla.
-const paymentMethod = ref(props.initialOptions.payment_method ?? 'efectivo');
-
-// Resumen de una línea para el chip cerrado de "¿Cuántos van?" (mockup
-// acordado antes de tocar esto) — se recalcula solo con lo que ya hay
-// elegido, no depende de nada nuevo.
-const rideOptionsSummary = computed(() => {
-    const pax = `${passengerCount.value} pasajero${passengerCount.value === 1 ? '' : 's'}`;
-    const pay = paymentMethod.value === 'efectivo' ? 'Efectivo' : 'Transferencia';
-    const trunk = needsTrunk.value ? 'con cajuela' : 'sin cajuela';
-    return `${pax} · ${pay} · ${trunk}`;
-});
+const paymentMethod = ref(props.initialOptions.payment_method === 'transferencia' ? 'transferencia' : 'efectivo');
 
 // Cambiar de ciudad reinicia los sectores elegidos (son de la ciudad
 // anterior) y recentra el mapa ahí (consideración agregada al alcance).
@@ -1927,14 +1966,17 @@ function submit() {
                         :route="routeCoords"
                         animate-route
                         :clickable="true"
+                        :draggable-marker-ids="routeDraggableMarkerIds"
                         :auto-fit="true"
                         :fit-marker-ids="routeFitMarkerIds"
                         :dark="false"
                         :minimal-style="true"
-                        origin-marker-style="dot"
-                        destination-marker-style="dot"
+                        origin-marker-style="pin"
+                        destination-marker-style="pin"
                         height="285px"
                         @map-click="pickRoutePoint"
+                        @marker-drag-start="startDraggingRouteMarker"
+                        @marker-drag-end="finishDraggingRouteMarker"
                     />
                     <div class="absolute right-3 top-3 z-[500] flex rounded-full border border-white/80 bg-white/90 p-1 shadow-lg backdrop-blur">
                         <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'origin' ? 'bg-arka-primary text-arka-base shadow-sm' : 'text-arka-base/55'" @click="mapEditingPoint = 'origin'">
@@ -1944,8 +1986,11 @@ function submit() {
                             <span class="mr-1 inline-block h-2 w-2 rounded-sm bg-current"></span> Destino
                         </button>
                     </div>
-                    <div class="absolute bottom-10 left-1/2 z-[500] -translate-x-1/2 whitespace-nowrap rounded-full bg-arka-base/85 px-3 py-1.5 text-[11px] font-medium text-white shadow-lg backdrop-blur">
-                        Toca para mover el {{ mapEditingPoint === 'origin' ? 'origen' : 'destino' }}
+                    <div class="pointer-events-none absolute bottom-8 left-1/2 z-[500] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-arka-base/90 px-3.5 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
+                        <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 12h18m-3-3 3 3-3 3M9 6l3-3 3 3M6 9l-3 3 3 3M9 18l3 3 3-3" />
+                        </svg>
+                        {{ draggingMapMarker ? `Moviendo ${mapEditingPointLabel}…` : `Arrastra el ${mapEditingPointLabel} para ajustarlo` }}
                     </div>
                 </div>
 
@@ -2094,6 +2139,71 @@ function submit() {
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Decisiones principales del viaje siempre visibles. Se
+                             ubican junto al recorrido porque aplican a cualquier
+                             conductor o cooperativa que el cliente elija después. -->
+                        <div class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 border-t border-arka-base/[0.07] pt-3">
+                            <div class="min-w-0">
+                                <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-base/45">Forma de pago</p>
+                                <div class="grid grid-cols-2 gap-1 rounded-xl bg-[#F3F6F5] p-1 text-xs">
+                                    <button
+                                        type="button"
+                                        class="flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 font-semibold transition"
+                                        :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-base shadow-sm ring-1 ring-black/[0.04]' : 'text-arka-base/45 hover:text-arka-base/70'"
+                                        @click="paymentMethod = 'efectivo'"
+                                    >
+                                        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                            <rect x="3" y="6" width="18" height="12" rx="2" />
+                                            <path stroke-linecap="round" d="M7 9h.01M17 15h.01" />
+                                            <circle cx="12" cy="12" r="2.5" />
+                                        </svg>
+                                        Efectivo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 font-semibold transition"
+                                        :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-base shadow-sm ring-1 ring-black/[0.04]' : 'text-arka-base/45 hover:text-arka-base/70'"
+                                        @click="paymentMethod = 'transferencia'"
+                                    >
+                                        <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                                            <path stroke-linecap="round" d="M3 9h18M7 15h4" />
+                                        </svg>
+                                        Transferencia
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-base/45">Personas</p>
+                                <div class="flex h-10 items-center rounded-xl border border-black/[0.06] bg-[#F8FAF9] p-1">
+                                    <button
+                                        type="button"
+                                        class="grid h-8 w-8 place-items-center rounded-lg text-arka-base/55 transition hover:bg-white hover:text-arka-base disabled:cursor-not-allowed disabled:opacity-30"
+                                        aria-label="Quitar una persona"
+                                        :disabled="passengerCount <= 1"
+                                        @click="passengerCount = Math.max(1, passengerCount - 1)"
+                                    >
+                                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <path stroke-linecap="round" d="M5 12h14" />
+                                        </svg>
+                                    </button>
+                                    <span class="min-w-7 text-center text-sm font-bold tabular-nums text-arka-base">{{ passengerCount }}</span>
+                                    <button
+                                        type="button"
+                                        class="grid h-8 w-8 place-items-center rounded-lg text-arka-primary transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+                                        aria-label="Agregar una persona"
+                                        :disabled="passengerCount >= 8"
+                                        @click="passengerCount = Math.min(8, passengerCount + 1)"
+                                    >
+                                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <path stroke-linecap="round" d="M12 5v14M5 12h14" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2123,6 +2233,15 @@ function submit() {
                             {{ whenMode === 'scheduled' ? 'Programar' : 'Pedir ahora' }}
                         </PrimaryButton>
                     </div>
+
+                    <!-- Pedido explícito del usuario: "que arriba me salga un mensaje
+                         para comenzar a pedir carreras debes tener conductores
+                         agregados a tu flota o cooperativas" — arriba de las
+                         categorías, no al final del panel como el aviso genérico
+                         de más abajo, para que se vea sin tener que desplazarse. -->
+                    <p v-if="!categoryCounts.fleet && !categoryCounts.cooperative" class="text-sm text-arka-warning bg-arka-warning/10 border border-arka-warning/30 rounded-arka px-3 py-2">
+                        Para comenzar a pedir carreras, agregá conductores a tu flota o una cooperativa a tu red.
+                    </p>
 
                     <InputError :message="form.errors.cooperative_id" />
                     <p v-if="form.errors.driver_user_id" class="text-sm text-arka-danger">
@@ -2177,7 +2296,19 @@ function submit() {
                                         </span>
                                     </span>
                                     <span class="shrink-0 text-right">
-                                        <span class="block text-sm text-arka-base/50">{{ categoryCounts[category] }} ›</span>
+                                        <!-- Pedido explícito del usuario: "ayudame a colocar mejor
+                                             el boton de agregar conductores a mi flota" — antes acá
+                                             solo se veía "0 ›" sin ninguna acción posible. stop.prevent
+                                             para que el clic navegue a Mi Flota en vez de solo
+                                             expandir/colapsar una categoría vacía. -->
+                                        <span
+                                            v-if="category === 'fleet' && !categoryCounts.fleet"
+                                            class="inline-flex items-center gap-0.5 text-sm font-semibold text-arka-primary hover:text-arka-primary-bright"
+                                            @click.stop="router.visit(route('fleet.index'))"
+                                        >
+                                            Agregar conductor →
+                                        </span>
+                                        <span v-else class="block text-sm text-arka-base/50">{{ categoryCounts[category] }} ›</span>
                                         <span
                                             v-if="formattedStartingPrice(category)"
                                             class="mt-0.5 flex items-center justify-end gap-1 text-[11px] font-semibold text-arka-primary"
@@ -2239,6 +2370,15 @@ function submit() {
                                             class="shrink-0 rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-arka-primary"
                                         >
                                             Recomendada
+                                        </span>
+                                        <!-- Pedido explícito del usuario: distinguir las que un
+                                             admin activó para cualquier cliente (sin que la haya
+                                             agregado) de las que sí agregó a su propia red. -->
+                                        <span
+                                            v-if="cooperative.is_public"
+                                            class="shrink-0 rounded-full bg-arka-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-arka-warning"
+                                        >
+                                            Pública
                                         </span>
                                     </span>
                                     <!-- Bug reportado por el usuario ("ese enlace no funciona"):
@@ -2539,37 +2679,6 @@ function submit() {
                         </p>
                     </div>
 
-                    <!-- Forma de pago (bug real reportado por el usuario: "el
-                         cliente al inicio de tomar una carrera no puede
-                         seleccionar el tipo de pago" — cuando se entra desde
-                         "¿A dónde vamos?" de Inicio, `step` arranca en
-                         'driver' y el paso 'destination' con este mismo
-                         control nunca se llega a ver, ver `step` más arriba.
-                         Antes acá solo había una fila que abría el cajón
-                         "Opciones del viaje" — fácil de no notar. Directo,
-                         sin cajón, mismo estilo que el paso 'destination'. -->
-                    <div class="pt-2 border-t border-arka-base/10">
-                        <p class="text-sm text-arka-base/50">Forma de pago</p>
-                        <div class="mt-1.5 grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.06] p-1 text-sm">
-                            <button
-                                type="button"
-                                class="px-3 py-1.5 rounded-full font-medium transition"
-                                :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
-                                @click="paymentMethod = 'efectivo'"
-                            >
-                                Efectivo
-                            </button>
-                            <button
-                                type="button"
-                                class="px-3 py-1.5 rounded-full font-medium transition"
-                                :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
-                                @click="paymentMethod = 'transferencia'"
-                            >
-                                Transferencia
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- Acceso discreto (sección 19 del documento): el usuario
                          normal nunca necesita entrar acá. -->
                     <button
@@ -2577,7 +2686,7 @@ function submit() {
                         class="text-sm text-arka-primary hover:text-arka-primary-bright"
                         @click="showRideOptions = true"
                     >
-                        Opciones del viaje ({{ rideOptionsSummary }}) ›
+                        Equipaje y otras preferencias ›
                     </button>
                 </div>
 
@@ -2597,24 +2706,11 @@ function submit() {
                 </div>
                 </template>
 
-                <!-- Cajón "Opciones del viaje" (secciones 18-19 del documento):
-                     pasajeros, cajuela y forma de pago — nada de esto bloquea el
-                     camino principal, valores por defecto para casi todos. -->
+                <!-- Preferencias secundarias. Pago y personas permanecen en la
+                     tarjeta principal para no repetir información. -->
                 <BottomSheet :show="showRideOptions" @close="showRideOptions = false">
                     <div class="p-4 sm:p-6 space-y-4">
-                        <h3 class="text-lg font-medium text-arka-text">Opciones del viaje</h3>
-
-                        <div class="flex items-center gap-3">
-                            <InputLabel for="passenger_count" value="Pasajeros" class="shrink-0" />
-                            <TextInput
-                                id="passenger_count"
-                                type="number"
-                                min="1"
-                                max="8"
-                                class="w-24"
-                                v-model.number="passengerCount"
-                            />
-                        </div>
+                        <h3 class="text-lg font-medium text-arka-text">Equipaje y preferencias</h3>
 
                         <label class="flex items-center gap-2">
                             <input type="checkbox" v-model="needsTrunk" class="text-arka-primary rounded" />

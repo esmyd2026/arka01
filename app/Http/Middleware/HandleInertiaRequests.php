@@ -9,6 +9,7 @@ use App\Models\RideRequest;
 use App\Models\SiteSetting;
 use App\Models\TrustCircleConnection;
 use App\Models\User;
+use App\Services\Driver\DriverAccessResolver;
 use App\Services\PlanLimits;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -22,7 +23,10 @@ class HandleInertiaRequests extends Middleware
      */
     protected $rootView = 'app';
 
-    public function __construct(private readonly PlanLimits $planLimits) {}
+    public function __construct(
+        private readonly PlanLimits $planLimits,
+        private readonly DriverAccessResolver $driverAccessResolver,
+    ) {}
 
     /**
      * Determine the current asset version.
@@ -156,6 +160,13 @@ class HandleInertiaRequests extends Middleware
                 'cooperative' => $user?->isDriver()
                     ? CooperativeDriverMembership::activeCooperativeFor($user->id)?->only(['id', 'public_id', 'name'])
                     : null,
+                // Pedido explícito del usuario: capacidades del conductor
+                // centralizadas en un solo lugar ("no duplicar la lógica de
+                // negocio en múltiples componentes") — acceso cooperativa
+                // (cubierto por su cooperativa) vs. acceso profesional (plan
+                // pagado propio, habilita clientes/flotas privadas). Ver
+                // App\Services\Driver\DriverAccessResolver.
+                'driverAccess' => $user?->isDriver() ? $this->driverAccessResolver->for($user) : null,
             ],
             // Pedido explícito del usuario ("permiteme en el modulo de
             // sistema de habilitar o no estas opciones del menu"): rutas de

@@ -22,7 +22,7 @@ class DriverStatsFinder
     /**
      * @return array{totals: array, statusBreakdown: array, dailyEarnings: Collection, gamification: array, history: LengthAwarePaginator}
      */
-    public function forDriver(User $driver, ?Carbon $from, ?Carbon $to, string $status, int $page): array
+    public function forDriver(User $driver, ?Carbon $from, ?Carbon $to, string $status, int $page, int $cooperativePage = 1): array
     {
         $userId = $driver->id;
 
@@ -116,6 +116,33 @@ class DriverStatsFinder
                 'cooperative_name' => $cooperative->name,
                 'balance' => CooperativeWalletEntry::balanceFor($cooperative->id, $userId),
             ] : null,
+            // Trazabilidad de las carreras de cooperativa (pedido explícito
+            // del usuario: "el conductor debería tener la trazabilidad de
+            // las carreras de cooperativas en sus indicadores") — mismas
+            // columnas que ya usa Cooperative/Wallet.vue y
+            // Cooperative/DriverShow.vue del lado de la cooperativa (ver
+            // Ride::cooperativeDriverPay()), acá desde el punto de vista del
+            // propio conductor. Null si no pertenece a ninguna cooperativa.
+            'cooperativeRideHistory' => $cooperative ? Ride::query()
+                ->where('driver_user_id', $userId)
+                ->whereHas('rideRequest', fn ($query) => $query->where('cooperative_id', $cooperative->id))
+                ->with(['client:id,name', 'walletEntry'])
+                ->latest('completed_at')
+                ->paginate(15, ['*'], 'coop_page', $cooperativePage)
+                ->through(fn (Ride $ride) => [
+                    'id' => $ride->id,
+                    'client' => $ride->client?->name ?? 'Cliente',
+                    'origin' => $ride->origin_address,
+                    'destination' => $ride->destination_address,
+                    'distance_km' => $ride->distance_km !== null ? (float) $ride->distance_km : null,
+                    'payment_method' => $ride->payment_method,
+                    'price' => $ride->chargedTotal(),
+                    'driver_pay' => $ride->cooperativeDriverPay(),
+                    'driver_owes' => $ride->walletEntry?->direction === 'driver_owes_cooperative' ? (float) $ride->walletEntry->amount : 0.0,
+                    'cooperative_owes' => $ride->walletEntry?->direction === 'cooperative_owes_driver' ? (float) $ride->walletEntry->amount : 0.0,
+                    'status' => $ride->status,
+                    'date' => ($ride->completed_at ?? $ride->cancelled_at ?? $ride->created_at)?->toIso8601String(),
+                ]) : null,
             'history' => $history,
         ];
     }

@@ -105,6 +105,11 @@ class PlanController extends Controller
             'verified_badge' => ['boolean'],
             'van_trips_enabled' => ['boolean'],
             'express_enabled' => ['boolean'],
+            // Pedido explícito del usuario: habilita que los conductores de
+            // este plan acepten solicitudes de MÁS de una cooperativa a la
+            // vez (por defecto solo pueden estar afiliados a una) — ver
+            // CooperativeDriverResponder::respond().
+            'multi_cooperative_enabled' => ['boolean'],
             'max_fleets' => ['nullable', 'integer', 'min:0'],
             'max_drivers_per_fleet' => ['nullable', 'integer', 'min:0'],
             'max_cooperatives' => ['nullable', 'integer', 'min:0'],
@@ -118,6 +123,7 @@ class PlanController extends Controller
         $validated['priority_listing'] ??= false;
         $validated['verified_badge'] ??= false;
         $validated['van_trips_enabled'] ??= false;
+        $validated['multi_cooperative_enabled'] ??= false;
         // A diferencia de las demás (premium, arrancan apagadas), Expresos ya
         // era una función abierta antes de este flag — un plan nuevo sin
         // especificarlo explícitamente arranca CON el módulo habilitado.

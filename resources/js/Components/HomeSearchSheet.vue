@@ -32,6 +32,9 @@ const props = defineProps({
     // aunque acá no se use para nada más que eso.
     originLat: { type: Number, default: null },
     originLng: { type: Number, default: null },
+    // Prioriza calles y avenidas cercanas a la ubicación real del cliente.
+    // Es una preferencia, no un límite: todavía puede buscar en todo Ecuador.
+    searchCenter: { type: Object, default: null },
     // Variante móvil compacta: el mapa conserva el protagonismo, Programar
     // se integra con los accesos rápidos y solo Recientes tiene scroll.
     compact: { type: Boolean, default: false },
@@ -165,6 +168,7 @@ function saveAddress() {
             <AddressAutocomplete
                 :model-value="modelValue"
                 :favorites="frequentPlaces"
+                :city-bias="searchCenter"
                 placeholder="Buscar destino"
                 flat
                 @update:model-value="$emit('update:modelValue', $event)"
@@ -172,6 +176,9 @@ function saveAddress() {
                 @selection-loading="$emit('destination-loading', $event)"
                 @focus="recentsExpanded = true"
             />
+            <p class="mt-1.5 px-1 text-[10px] leading-relaxed text-arka-base/40">
+                Consejo: escribe la avenida o calle principal y la transversal. Después podrás ajustar el punto arrastrándolo en el mapa.
+            </p>
         </div>
     </div>
 

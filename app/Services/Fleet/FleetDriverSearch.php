@@ -8,6 +8,7 @@ use App\Models\Fleet;
 use App\Models\Review;
 use App\Models\Ride;
 use App\Models\User;
+use App\Services\Driver\DriverAccessResolver;
 use App\Services\Trust\TrustIndexCalculator;
 use Illuminate\Support\Collection;
 
@@ -20,7 +21,10 @@ use Illuminate\Support\Collection;
  */
 class FleetDriverSearch
 {
-    public function __construct(private readonly TrustIndexCalculator $trustIndex) {}
+    public function __construct(
+        private readonly TrustIndexCalculator $trustIndex,
+        private readonly DriverAccessResolver $driverAccess,
+    ) {}
 
     /**
      * @return Collection<int, array>
@@ -65,7 +69,7 @@ class FleetDriverSearch
             ->groupBy('driver_user_id')
             ->pluck('rides_count', 'driver_user_id');
 
-        return $drivers->map(function (DriverProfile $driver) use ($activeDriverIds, $pendingDriverIds, $ratings, $rideCounts, $viewer) {
+        return $drivers->map(function (DriverProfile $driver) use ($fleet, $activeDriverIds, $pendingDriverIds, $ratings, $rideCounts, $viewer) {
             $rating = $ratings->get($driver->user_id);
             $averageRating = $rating ? round((float) $rating->avg_rating, 1) : null;
             $reviewCount = $rating->review_count ?? 0;
@@ -89,6 +93,13 @@ class FleetDriverSearch
                 'status' => match (true) {
                     $activeDriverIds->contains($driver->user_id) => 'member',
                     $pendingDriverIds->contains($driver->user_id) => 'pending',
+                    // Pedido explícito del usuario: si ya tiene carreras (o
+                    // el cliente ya tiene) con la cooperativa a la que este
+                    // conductor está afiliado, sigue apareciendo en la
+                    // búsqueda — pero sin el botón "Invitar", que antes
+                    // fallaba recién al tocarlo (ver
+                    // DriverAccessResolver::ensureDriverCanBePrivatelyLinked()).
+                    ! $this->driverAccess->canBePrivatelyLinked($driver->user_id, $fleet) => 'cooperative_locked',
                     default => 'not_invited',
                 },
             ];

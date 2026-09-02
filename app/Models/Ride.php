@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Ride extends Model
@@ -36,6 +38,16 @@ class Ride extends Model
         'pickup_fare_charged',
         'payment_method',
         'transfer_payment_notified_at',
+        'payment_status',
+        'payment_proof_path',
+        'payment_proof_mime',
+        'payment_proof_original_size',
+        'payment_proof_stored_size',
+        'payment_proof_uploaded_at',
+        'payment_confirmed_at',
+        'payment_confirmed_by_user_id',
+        'payment_rejected_at',
+        'payment_rejection_reason',
         'notes',
         'round_trip',
         'rate_per_km_snapshot',
@@ -71,6 +83,9 @@ class Ride extends Model
         'pickup_fare_charged' => 'boolean',
         'round_trip' => 'boolean',
         'transfer_payment_notified_at' => 'datetime',
+        'payment_proof_uploaded_at' => 'datetime',
+        'payment_confirmed_at' => 'datetime',
+        'payment_rejected_at' => 'datetime',
         'rate_per_km_snapshot' => 'decimal:2',
         'price' => 'decimal:2',
         'stops_price' => 'decimal:2',
@@ -92,7 +107,18 @@ class Ride extends Model
         static::creating(function (Ride $ride) {
             $ride->public_id ??= (string) Str::uuid();
         });
+
+        // El archivo está fuera de la base de datos. Si una carrera se borra
+        // mediante Eloquent, elimínelo también para no dejar peso huérfano.
+        static::deleted(function (Ride $ride) {
+            if ($ride->payment_proof_path) {
+                Storage::disk('local')->delete($ride->payment_proof_path);
+            }
+        });
     }
+
+    /** El comprobante vive en almacenamiento privado; nunca se serializa. */
+    protected $hidden = ['payment_proof_path'];
 
     /**
      * true si esta carrera viene de una solicitud PROGRAMADA que un
@@ -133,6 +159,11 @@ class Ride extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'driver_user_id');
+    }
+
+    public function paymentConfirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'payment_confirmed_by_user_id');
     }
 
     public function originSector(): BelongsTo
@@ -184,6 +215,41 @@ class Ride extends Model
     public static function chargedTotalSql(): string
     {
         return 'COALESCE(settled_price, price + COALESCE(stops_price, 0))';
+    }
+
+    /**
+     * Un solo movimiento de billetera por carrera de cooperativa completada
+     * (ver RideLifecycle::recordCooperativeWalletEntry()) — nunca más de uno.
+     */
+    public function walletEntry(): HasOne
+    {
+        return $this->hasOne(CooperativeWalletEntry::class);
+    }
+
+    /**
+     * Cuánto le correspondía en realidad al conductor por esta carrera de
+     * cooperativa (pedido explícito del usuario: la tabla de trazabilidad
+     * del equipo necesita esta columna, separada de lo que el cliente pagó).
+     * El monto guardado en `walletEntry` es la DIFERENCIA que cambió de
+     * manos de más, no el pago del conductor — se reconstruye a partir de
+     * ella: en efectivo el conductor se quedó con todo y le debe el
+     * excedente (su pago real es `chargedTotal() - amount`); por
+     * transferencia la cooperativa se quedó con todo y el monto adeudado ES
+     * directamente su pago real. Sin movimiento registrado (la cooperativa
+     * no tenía sus tarifas configuradas en ese momento) no hubo reparto:
+     * el conductor se quedó con el total cobrado.
+     */
+    public function cooperativeDriverPay(): float
+    {
+        $entry = $this->relationLoaded('walletEntry') ? $this->walletEntry : $this->walletEntry()->first();
+
+        if (! $entry) {
+            return $this->chargedTotal();
+        }
+
+        return $entry->direction === 'cooperative_owes_driver'
+            ? (float) $entry->amount
+            : round($this->chargedTotal() - (float) $entry->amount, 2);
     }
 
     /**

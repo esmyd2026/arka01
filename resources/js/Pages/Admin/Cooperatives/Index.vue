@@ -21,8 +21,27 @@ function search() { router.get(route('admin.cooperatives.index'), { q: q.value |
                 <PrimaryButton>Filtrar</PrimaryButton>
             </form>
             <div class="overflow-x-auto rounded-arka bg-arka-card shadow-lg">
-                <table class="min-w-full text-sm"><thead class="bg-arka-base/60 text-left text-xs uppercase text-arka-text-muted"><tr><th class="p-4">Cooperativa</th><th class="p-4">Estado</th><th class="p-4">Capacidad</th><th class="p-4">Documentos</th><th class="p-4"></th></tr></thead>
-                    <tbody class="divide-y divide-arka-text-muted/10"><tr v-for="item in cooperatives.data" :key="item.id"><td class="p-4"><p class="font-medium text-arka-text">{{ item.name || 'Registro incompleto' }}</p><p class="text-xs text-arka-text-muted">{{ item.ruc || 'Sin RUC' }} · {{ item.city?.name || 'Sin ciudad' }}</p></td><td class="p-4 text-arka-text-muted">{{ item.status }}</td><td class="p-4 text-arka-text-muted">{{ item.active_driver_memberships_count }} vinculados · {{ item.declared_unit_count }} unidades</td><td class="p-4 text-arka-text-muted">{{ item.documents_count }}</td><td class="p-4 text-right"><Link :href="route('admin.cooperatives.show', item.id)" class="font-medium text-arka-primary">Revisar →</Link></td></tr></tbody>
+                <!-- Pedido explícito del usuario: "dame mas datos en esta pantalla...
+                     si es publica o no, cuantos clientes tienen" — antes solo se veía
+                     vinculados/unidades/documentos, sin nada de visibilidad, clientes
+                     ni plan vigente. -->
+                <table class="min-w-full text-sm"><thead class="bg-arka-base/60 text-left text-xs uppercase text-arka-text-muted"><tr><th class="p-4">Cooperativa</th><th class="p-4">Estado</th><th class="p-4">Plan</th><th class="p-4">Capacidad</th><th class="p-4">Clientes</th><th class="p-4">Visibilidad</th><th class="p-4">Documentos</th><th class="p-4"></th></tr></thead>
+                    <tbody class="divide-y divide-arka-text-muted/10"><tr v-for="item in cooperatives.data" :key="item.id">
+                        <td class="p-4"><p class="font-medium text-arka-text">{{ item.name || 'Registro incompleto' }}</p><p class="text-xs text-arka-text-muted">{{ item.ruc || 'Sin RUC' }} · {{ item.city?.name || 'Sin ciudad' }}</p></td>
+                        <td class="p-4 text-arka-text-muted">{{ item.status }}</td>
+                        <td class="p-4 text-arka-text-muted">
+                            {{ item.plan_name || 'Gratis' }}
+                            <span v-if="item.subscription_status && item.subscription_status !== 'active'" class="block text-xs text-arka-danger">{{ item.subscription_status }}</span>
+                        </td>
+                        <td class="p-4 text-arka-text-muted">{{ item.active_driver_memberships_count }} vinculados · {{ item.declared_unit_count }} unidades</td>
+                        <td class="p-4 text-arka-text-muted">{{ item.client_links_count }}</td>
+                        <td class="p-4">
+                            <span class="mr-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" :class="item.is_public ? 'bg-arka-warning/15 text-arka-warning' : 'bg-arka-text-muted/15 text-arka-text-muted'">{{ item.is_public ? 'Pública' : 'Solo su red' }}</span>
+                            <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide" :class="item.show_fleet_publicly ? 'bg-arka-primary/15 text-arka-primary' : 'bg-arka-text-muted/15 text-arka-text-muted'">{{ item.show_fleet_publicly ? 'Flota visible' : 'Flota oculta' }}</span>
+                        </td>
+                        <td class="p-4 text-arka-text-muted">{{ item.documents_count }}</td>
+                        <td class="p-4 text-right"><Link :href="route('admin.cooperatives.show', item.id)" class="font-medium text-arka-primary">Revisar →</Link></td>
+                    </tr></tbody>
                 </table>
                 <p v-if="!cooperatives.data.length" class="p-8 text-center text-arka-text-muted">No hay resultados.</p>
             </div>

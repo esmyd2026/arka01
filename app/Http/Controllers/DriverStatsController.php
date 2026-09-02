@@ -36,6 +36,7 @@ class DriverStatsController extends Controller
             $request->date('to'),
             $request->string('status')->toString(),
             (int) $request->input('page', 1),
+            (int) $request->input('coop_page', 1),
         );
 
         return Inertia::render('Driver/Stats', [
@@ -45,6 +46,7 @@ class DriverStatsController extends Controller
             'dailyEarnings' => $data['dailyEarnings'],
             'gamification' => $data['gamification'],
             'cooperativeWallet' => $data['cooperativeWallet'],
+            'cooperativeRideHistory' => $data['cooperativeRideHistory']?->withQueryString(),
             'history' => $data['history']->withQueryString(),
         ]);
     }

@@ -63,4 +63,24 @@ class CooperativeDriverMembership extends Model
             ->with('cooperative:id,public_id,name,logo_path')
             ->first()?->cooperative;
     }
+
+    /**
+     * TODAS las membresías activas del conductor (pedido explícito del
+     * usuario: un plan puede habilitarle afiliarse a más de una cooperativa
+     * a la vez, ver PlanLimits::forDriver()['multi_cooperative_enabled'] y
+     * CooperativeDriverResponder::respond()). Para el caso normal (una sola
+     * activa) devuelve una colección de un elemento — seguir usando
+     * activeCooperativeFor() donde solo importa "la" cooperativa principal.
+     *
+     * @return \Illuminate\Support\Collection<int, CooperativeDriverMembership>
+     */
+    public static function activeMembershipsFor(int $driverUserId): \Illuminate\Support\Collection
+    {
+        return self::query()
+            ->where('driver_user_id', $driverUserId)
+            ->where('status', 'accepted')
+            ->whereNull('ended_at')
+            ->with('cooperative:id,public_id,name,logo_path')
+            ->get();
+    }
 }

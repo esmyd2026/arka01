@@ -27,7 +27,7 @@ class PlanLimits
      * puede tener y si aparece en el directorio público / con prioridad /
      * con insignia de verificado (sección 7.2).
      *
-     * @return array{plan_code: string, plan_name: string, plan_sort_order: int, max_clients: int|null, public_visibility: bool, priority_listing: bool, verified_badge: bool, van_trips_enabled: bool, express_enabled: bool, subscription_status: string|null, expires_at: string|null}
+     * @return array{plan_code: string, plan_name: string, plan_sort_order: int, max_clients: int|null, public_visibility: bool, priority_listing: bool, verified_badge: bool, van_trips_enabled: bool, express_enabled: bool, multi_cooperative_enabled: bool, subscription_status: string|null, expires_at: string|null}
      */
     public function forDriver(User $user): array
     {
@@ -53,6 +53,12 @@ class PlanLimits
             // habilitarlo o no por plan) — ver ExpressRouteController::available()
             // y ExpressApplicationController::store().
             'express_enabled' => (bool) $plan->express_enabled,
+            // Pedido explícito del usuario: por defecto un conductor solo
+            // puede estar afiliado a UNA cooperativa activa a la vez — este
+            // flag, prendido a mano por el admin en un plan puntual, le
+            // permite aceptar solicitudes de más de una (ver
+            // CooperativeDriverResponder::respond()).
+            'multi_cooperative_enabled' => (bool) $plan->multi_cooperative_enabled,
             // Pedido explícito del usuario: mostrar estado y vencimiento de la
             // suscripción — antes no se veía en ningún lado. null = plan
             // Gratis (no hay una suscripción de verdad detrás, no vence nunca).

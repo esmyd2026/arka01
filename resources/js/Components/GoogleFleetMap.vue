@@ -26,9 +26,17 @@ const props = defineProps({
     minimalStyle: { type: Boolean, default: false },
     originMarkerStyle: { type: String, default: 'pin' }, // 'pin' | 'dot'
     destinationMarkerStyle: { type: String, default: 'pin' }, // 'pin' | 'dot'
+    // Halo de color detrás del vehículo (pedido explícito del usuario: "que
+    // se distinga el color del vehículo de acuerdo a su estado" en el mapa
+    // operativo de la cooperativa) — opt-in, usa `marker.color` que cada
+    // pantalla ya arma según su propio criterio de estado. Sin esto el
+    // acento de `arkaVehicleSvg` es demasiado sutil para leerse de un
+    // vistazo en un mapa con varias unidades.
+    vehicleStatusRing: { type: Boolean, default: false },
+    draggableMarkerIds: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(['map-click', 'user-panned']);
+const emit = defineEmits(['map-click', 'user-panned', 'marker-drag-start', 'marker-drag-end']);
 const mapEl = ref(null);
 let map = null;
 let routeLine = null;
@@ -126,7 +134,7 @@ function markerIcon(marker) {
     if (props.minimalStyle) {
         // Inicio y seguimiento en carrera comparten exactamente el mismo
         // vehículo. Si hay rumbo gira la misma silueta, no la reemplaza.
-        const url = svgUrl(arkaVehicleSvg(marker.rotation ?? 0, marker.color ?? '#19B982'));
+        const url = svgUrl(arkaVehicleSvg(marker.rotation ?? 0, marker.color ?? '#19B982', props.vehicleStatusRing ? (marker.color ?? '#94a3b8') : null));
         return { url, scaledSize: new google.maps.Size(34, 34), anchor: new google.maps.Point(17, 17) };
     }
     return { url: svgUrl(carSvg(marker.color ?? '#34d399', marker.rotation ?? 0)), scaledSize: new google.maps.Size(32, 32), anchor: new google.maps.Point(16, 16) };
@@ -147,14 +155,29 @@ function syncMarkersInstant(valid) {
     renderedMarkers = [];
 
     valid.forEach((item) => {
-        renderedMarkers.push(new google.maps.Marker({
+        const draggable = props.draggableMarkerIds.includes(item.id);
+        const googleMarker = new google.maps.Marker({
             map,
             position: { lat: Number(item.lat), lng: Number(item.lng) },
             title: item.label ?? '',
             icon: markerIcon(item),
-            clickable: !props.clickable || !['origin', 'destination'].includes(item.id),
+            clickable: draggable || !props.clickable || !['origin', 'destination'].includes(item.id),
+            draggable,
+            crossOnDrag: false,
+            zIndex: draggable ? 20 : undefined,
             optimized: false,
-        }));
+        });
+
+        if (draggable) {
+            googleMarker.addListener('dragstart', () => emit('marker-drag-start', { id: item.id }));
+            googleMarker.addListener('dragend', (event) => emit('marker-drag-end', {
+                id: item.id,
+                lat: event.latLng.lat(),
+                lng: event.latLng.lng(),
+            }));
+        }
+
+        renderedMarkers.push(googleMarker);
     });
 }
 
@@ -230,17 +253,34 @@ function syncMarkersAnimated(valid) {
         const state = animatedMarkers.get(item.id);
 
         if (!state) {
+            const draggable = props.draggableMarkerIds.includes(item.id);
             const marker = new google.maps.Marker({
                 map,
                 position: { lat, lng },
                 title: item.label ?? '',
                 icon: markerIcon(item),
-                clickable: !props.clickable || !['origin', 'destination'].includes(item.id),
+                clickable: draggable || !props.clickable || !['origin', 'destination'].includes(item.id),
+                draggable,
+                crossOnDrag: false,
+                zIndex: draggable ? 20 : undefined,
                 optimized: false,
             });
-            animatedMarkers.set(item.id, { marker, lat, lng, rotation: Number(item.rotation ?? 0), raf: null });
+            const markerState = { marker, lat, lng, rotation: Number(item.rotation ?? 0), raf: null };
+
+            if (draggable) {
+                marker.addListener('dragstart', () => emit('marker-drag-start', { id: item.id }));
+                marker.addListener('dragend', (event) => {
+                    markerState.lat = event.latLng.lat();
+                    markerState.lng = event.latLng.lng();
+                    emit('marker-drag-end', { id: item.id, lat: markerState.lat, lng: markerState.lng });
+                });
+            }
+
+            animatedMarkers.set(item.id, markerState);
             return;
         }
+
+        state.marker.setDraggable(props.draggableMarkerIds.includes(item.id));
 
         if (Math.abs(state.lat - lat) > 1e-9 || Math.abs(state.lng - lng) > 1e-9) {
             animateMarkerTo(state, item);

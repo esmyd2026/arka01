@@ -1327,6 +1327,21 @@ class RideRequestFlowTest extends TestCase
         ]);
     }
 
+    public function test_request_sync_reports_the_active_ride_for_tracking_fallback(): void
+    {
+        [$client, $driver] = $this->clientWithFleetDriver();
+        $ride = Ride::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'in_progress',
+        ]);
+
+        $this->actingAs($client)
+            ->getJson(route('rides.sync-requests'))
+            ->assertOk()
+            ->assertJsonPath('active_ride_id', $ride->id);
+    }
+
     public function test_driver_can_accept_and_a_ride_is_created_with_the_right_price(): void
     {
         [$client, $driver] = $this->clientWithFleetDriver();
@@ -1345,9 +1360,12 @@ class RideRequestFlowTest extends TestCase
             'current_offered_price' => $expectedPrice,
         ]);
 
-        $this->actingAs($driver)
+        $response = $this->actingAs($driver)
             ->post(route('ride-requests.accept', $rideRequest))
             ->assertRedirect();
+
+        $ride = Ride::query()->where('ride_request_id', $rideRequest->id)->firstOrFail();
+        $response->assertRedirect(route('rides.show', $ride));
 
         $this->assertDatabaseHas('ride_requests', [
             'id' => $rideRequest->id,

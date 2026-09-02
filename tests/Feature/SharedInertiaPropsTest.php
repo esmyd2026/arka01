@@ -163,6 +163,45 @@ class SharedInertiaPropsTest extends TestCase
     }
 
     /**
+     * Pedido explícito del usuario: capacidades del conductor centralizadas
+     * en un solo prop compartido, para no duplicar la lógica en cada
+     * pantalla — ver App\Services\Driver\DriverAccessResolver.
+     */
+    public function test_driver_access_is_shared_for_a_cooperative_only_driver(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Norte']);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id, 'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id, 'status' => 'accepted', 'responded_at' => now(),
+        ]);
+
+        $response = $this->actingAs($driver)->get(route('driver.profile.edit'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('auth.driverAccess.type', 'cooperative')
+            ->where('auth.driverAccess.cooperative_access', true)
+            ->where('auth.driverAccess.professional_access', false)
+            // Corrección explícita del usuario: la afiliación a una
+            // cooperativa no le resta capacidad privada al plan gratis del
+            // conductor — sigue teniendo la que ese plan ya trae.
+            ->where('auth.driverAccess.private_clients.can_add', true)
+            ->has('auth.driverAccess.private_clients.limit')
+        );
+    }
+
+    public function test_driver_access_is_null_for_a_client(): void
+    {
+        $client = User::factory()->create();
+
+        $response = $this->actingAs($client)->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page->where('auth.driverAccess', null));
+    }
+
+    /**
      * Pedido explícito del usuario: "permiteme en el modulo de sistema de
      * habilitar o no estas opciones del menu" — la lista de rutas apagadas
      * se comparte para que AuthenticatedLayout.vue filtre `quickLinks` en

@@ -26,12 +26,6 @@ class DriverInitiatedFleetInvitationTest extends TestCase
 {
     use RefreshDatabase;
 
-    /**
-     * Pedido explícito del usuario ("manejar la privacidad... limitemos la
-     * búsqueda por código nada más, porque chocarían con millones de
-     * personas"): ya no se puede buscar por nombre/teléfono/usuario, solo
-     * por código de socio.
-     */
     public function test_driver_can_search_clients_by_member_code(): void
     {
         $driver = User::factory()->create();
@@ -46,17 +40,26 @@ class DriverInitiatedFleetInvitationTest extends TestCase
         $response->assertJsonPath('clients.0.status', 'not_invited');
     }
 
-    public function test_searching_a_client_by_name_or_username_finds_nothing(): void
+    /**
+     * Corrección explícita del usuario sobre una restricción anterior
+     * ("puedes habilitar para que busque por nombre y usuario tambien"):
+     * vuelve a admitir nombre y usuario, con el mismo criterio que ya usaba
+     * FleetDriverSearch del otro lado.
+     */
+    public function test_driver_can_search_clients_by_name_or_username(): void
     {
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create();
         $client = User::factory()->create(['name' => 'María Torres']);
 
         $byName = $this->actingAs($driver)->getJson(route('driver.clients.search', ['q' => 'María']));
-        $byName->assertJsonCount(0, 'clients');
+        $byName->assertJsonPath('clients.0.user_id', $client->id);
 
         $byUsername = $this->actingAs($driver)->getJson(route('driver.clients.search', ['q' => $client->username]));
-        $byUsername->assertJsonCount(0, 'clients');
+        $byUsername->assertJsonPath('clients.0.user_id', $client->id);
+
+        $byAtUsername = $this->actingAs($driver)->getJson(route('driver.clients.search', ['q' => '@'.$client->username]));
+        $byAtUsername->assertJsonPath('clients.0.user_id', $client->id);
     }
 
     /**

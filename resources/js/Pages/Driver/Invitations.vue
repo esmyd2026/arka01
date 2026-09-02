@@ -241,18 +241,17 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         invite primero.
                     </p>
 
-                    <!-- Pedido explícito del usuario ("manejar la privacidad...
-                         limitemos la búsqueda por código nada más, porque
-                         chocarían con millones de personas"): antes buscaba
-                         también por nombre, y con una base grande de
-                         usuarios eso da resultados ambiguos entre
-                         desconocidos con el mismo nombre. -->
-                    <InputLabel value="Código de socio" class="mt-4" />
+                    <!-- Pedido explícito del usuario ("puedes habilitar para
+                         que busque por nombre y usuario tambien"): vuelve a
+                         admitir nombre/apellido/usuario además del código de
+                         socio, con el mismo criterio que ya usaba la
+                         búsqueda de conductores del lado del cliente. -->
+                    <InputLabel value="Nombre, usuario o código de socio" class="mt-4" />
                     <TextInput
                         v-model="searchTerm"
                         type="text"
                         class="mt-1 block w-full"
-                        placeholder="Ej: 512"
+                        placeholder="Ej: Juan Pérez, @jperez o 512"
                         @input="runSearch"
                     />
 
@@ -287,6 +286,17 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             <span v-else-if="client.status === 'pending'" class="text-sm text-arka-lime sm:shrink-0">
                                 Solicitud enviada
                             </span>
+                            <!-- Pedido explícito del usuario ("asi mismo con luis que
+                                 si le aparece que le diga este cliente pertenece a tu
+                                 flota de cooperativa"): mismo criterio que del lado
+                                 del cliente — aparece en la búsqueda, pero sin botón
+                                 y con el motivo real en vez de un error al tocarlo. -->
+                            <span
+                                v-else-if="client.status === 'cooperative_locked'"
+                                class="max-w-[14rem] text-right text-xs text-arka-text-muted sm:shrink-0"
+                            >
+                                Este cliente pertenece a su flota de cooperativa
+                            </span>
                             <span v-else class="text-sm text-arka-text-muted sm:shrink-0"> Ya es su cliente </span>
                         </li>
                     </ul>
@@ -302,8 +312,14 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                 <!-- Invitaciones pendientes de responder -->
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-2">Invitaciones recibidas</h3>
+                    <!-- Pedido explícito del usuario: el mensaje no menciona una
+                         cantidad específica adentro del texto — el número real ya
+                         se ve arriba, en el encabezado ("X de Y clientes"),
+                         siempre tomado del plan vigente, nunca hardcodeado acá. -->
                     <p v-if="atLimit" class="mb-4 text-sm text-arka-warning">
-                        Llegó al límite de clientes de confianza de su plan. Suba de plan para poder aceptar más.
+                        Alcanzó la capacidad de clientes incluida en su plan actual.
+                        <Link :href="route('driver.plan.edit')" class="font-semibold underline">Mejore su plan</Link>
+                        para ampliar su cartera privada y seguir agregando clientes.
                     </p>
 
                     <p v-if="!invitations.length" class="text-sm text-arka-text-muted">

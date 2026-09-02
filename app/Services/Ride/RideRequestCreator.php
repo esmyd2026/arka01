@@ -144,7 +144,12 @@ class RideRequestCreator
 
         if (! empty($validated['cooperative_id'])) {
             $cooperative = Cooperative::query()->findOrFail($validated['cooperative_id']);
-            $isLinked = ClientCooperative::query()
+            // Pedido explícito del usuario: una cooperativa marcada como
+            // pública por un admin (Cooperative.is_public) queda disponible
+            // para CUALQUIER cliente sin que la haya agregado a su red — el
+            // vínculo explícito (ClientCooperative) deja de ser obligatorio
+            // solo para esas.
+            $isLinked = $cooperative->is_public || ClientCooperative::query()
                 ->where('client_user_id', $client->id)
                 ->where('cooperative_id', $cooperative->id)
                 ->exists();
@@ -486,6 +491,7 @@ class RideRequestCreator
             $driverUserId, $dispatchPool, $offerCandidateIds, $currentOfferExpiresAt, $needsTrunk, $passengerCount, $requestStatus,
             $cooperative, $cooperativeCandidateIds, $cooperativeOfferExpiresAt, $cooperativeAssignmentStatus,
             $smartDispatchVersion, $smartDispatchSnapshot, $stopsPrice, $stopsData, $pickupSurcharge, $driverWasChosenByClient,
+            $ratePerKm,
         ) {
             $rideRequest = RideRequest::query()->create([
                 'fleet_id' => $fleet->id,
@@ -508,6 +514,7 @@ class RideRequestCreator
                 'destination_address' => $validated['destination_address'] ?? null,
                 'destination_sector_id' => $validated['destination_sector_id'] ?? null,
                 'distance_km' => $distanceKm,
+                'rate_per_km' => $ratePerKm,
                 'pickup_distance_km' => $pickupSurcharge['distance_km'],
                 'pickup_fare' => $pickupSurcharge['fare'],
                 'payment_method' => $validated['payment_method'] ?? 'efectivo',

@@ -97,6 +97,26 @@ const isClient = usePage().props.auth.isClient;
 // página completa (sección 3.5: notificación instantánea de solicitudes).
 const incoming = ref([...props.incomingRequestsAsDriver]);
 const myPending = ref([...props.pendingRequestsAsClient]);
+let openingActiveRide = false;
+
+function openActiveRide(rideId) {
+    if (!rideId || openingActiveRide) return;
+    openingActiveRide = true;
+    router.visit(route('rides.show', rideId), {
+        preserveScroll: false,
+        preserveState: false,
+        onFinish: () => (openingActiveRide = false),
+    });
+}
+
+// La pantalla Carreras es un puente cuando existe un viaje inmediato. Tanto
+// cliente como conductor pasan al seguimiento; no deben descubrir un enlace
+// "Ver seguimiento" después de aceptar o de que les acepten la solicitud.
+watch(
+    () => props.activeRides[0]?.id,
+    (rideId) => openActiveRide(rideId),
+    { immediate: true },
+);
 const activeImmediateRequest = computed(() => myPending.value.find((request) => !request.is_scheduled && ['pending', 'negotiating', 'waiting'].includes(request.status)) ?? null);
 const activeImmediateStops = computed(() =>
     [...(activeImmediateRequest.value?.stops ?? [])]
@@ -151,6 +171,10 @@ async function syncActiveRequests() {
         const { data } = await window.axios.get(route('rides.sync-requests'));
         const nextIncoming = data.incoming_requests_as_driver ?? [];
         const nextPending = data.pending_requests_as_client ?? [];
+        if (data.active_ride_id) {
+            openActiveRide(data.active_ride_id);
+            return;
+        }
         const currentIncomingIds = new Set(incoming.value.map((request) => request.id));
         const currentPendingStatuses = new Map(myPending.value.map((request) => [request.id, request.status]));
 
@@ -364,7 +388,8 @@ function acceptRequest(id) {
     if (processingRequestId.value) return;
     processingRequestId.value = id;
     router.post(route('ride-requests.accept', id), {}, {
-        preserveScroll: true,
+        preserveScroll: false,
+        preserveState: false,
         onSuccess: () => {
             incoming.value = incoming.value.filter((r) => r.id !== id);
             window.dispatchEvent(new CustomEvent('arka:ride-request-answered', { detail: { id } }));
@@ -418,9 +443,12 @@ function cancelRequest(id) {
 // "Buscando su conductor". initialDestination hace que Request.vue abra
 // directamente la elección de conductor, no el buscador de destino.
 function retryRequest(request, category = 'fleet') {
+    const retryCategory = request.cooperative_id ? 'cooperative' : category;
+
     router.visit(route('ride-requests.create', {
         flota: request.fleet_id,
-        categoria: category,
+        categoria: retryCategory,
+        cooperativa: request.cooperative_id || undefined,
         origin_lat: request.origin_lat,
         origin_lng: request.origin_lng,
         origin_address: request.origin_address,
@@ -727,13 +755,20 @@ function confirmRaiseOffer(id) {
                         <li v-for="r in incoming" :key="r.id" class="overflow-hidden rounded-2xl border border-arka-text-muted/15 bg-arka-base/35 shadow-lg">
                             <div class="flex items-center justify-between gap-3 border-b border-arka-text-muted/10 bg-arka-primary/10 px-4 py-3">
                                 <div>
-                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">Carrera disponible</p>
+                                    <!-- Origen de la solicitud (pedido explícito del usuario): que
+                                         quede claro si viene de la cooperativa o es directa — un
+                                         conductor puede tener ambas modalidades activas a la vez. -->
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">
+                                        {{ r.is_cooperative_request ? (r.cooperative_name ?? 'Cooperativa') : 'Solicitud directa' }}
+                                    </p>
                                     <!-- Bug real reportado por el usuario ("revisa si le llega al
                                          conductor igual"): current_offered_price es solo el tramo
                                          final — sin sumar stops_price, el conductor veía menos de
                                          lo que en realidad le corresponde por todo el recorrido. -->
                                     <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.driver_total_offered_price ?? r.total_offered_price ?? r.current_offered_price).toFixed(2) }}</p>
-                                    <p v-if="r.is_cooperative_request" class="mt-1 text-[11px] font-medium text-arka-primary">Pago de la cooperativa</p>
+                                    <p class="mt-1 text-[11px] font-medium text-arka-primary">
+                                        {{ r.is_cooperative_request ? 'Carrera asignada por tu cooperativa' : 'Cliente privado' }}
+                                    </p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-sm font-semibold text-arka-text">{{ Number(r.distance_km).toFixed(1) }} km</p>

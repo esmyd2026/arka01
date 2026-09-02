@@ -11,6 +11,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import TextInput from '@/Components/TextInput.vue';
 import BottomSheet from '@/Components/BottomSheet.vue';
+import RidePaymentSheet from '@/Components/RidePaymentSheet.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -35,6 +36,7 @@ const props = defineProps({
     transferAccounts: { type: Array, default: () => [] },
     transferRecipient: { type: String, default: '' },
     transferGoesToCooperative: { type: Boolean, default: false },
+    paymentProofUrl: { type: String, default: null },
 });
 
 // Posición en vivo del conductor durante el viaje: reutiliza el mismo canal
@@ -420,17 +422,29 @@ onMounted(() => {
         });
     }
 
+    // La confirmación de efectivo o del comprobante debe reflejarse en la
+    // otra pantalla sin que el cliente tenga que recargar manualmente.
+    rideChannel.listen('.ride.payment.updated', (e) => {
+        if (e.ride_id !== props.ride.id) return;
+        playUpdateChime();
+        showStatusToast(e.payment_status === 'confirmed' ? '✅ El pago fue confirmado.' : 'Se actualizó el estado del pago.');
+        router.reload({ only: ['ride', 'paymentProofUrl'], preserveScroll: true, preserveState: true });
+    });
+
     // Respaldo cuando WebSocket se corta, el teléfono cambia de red o la
     // pestaña estuvo suspendida. El evento sigue siendo inmediato; este
-    // sondeo evita que el cliente quede indefinidamente con estado viejo.
-    if (['scheduled', 'in_progress'].includes(props.ride.status)) {
+    // sondeo también cubre un cobro pendiente en una carrera completada.
+    const needsStatePolling = () => ['scheduled', 'in_progress'].includes(props.ride.status)
+        || (props.transferGoesToCooperative && props.ride.status === 'completed' && props.ride.payment_status !== 'confirmed');
+
+    if (needsStatePolling()) {
         rideStatePoller = window.setInterval(() => {
-            if (!['scheduled', 'in_progress'].includes(props.ride.status)) {
+            if (!needsStatePolling()) {
                 window.clearInterval(rideStatePoller);
                 rideStatePoller = null;
                 return;
             }
-            router.reload({ only: ['ride'], preserveScroll: true, preserveState: true });
+            router.reload({ only: ['ride', 'paymentProofUrl'], preserveScroll: true, preserveState: true });
         }, 5000);
     }
 });
@@ -1180,21 +1194,24 @@ const clientOptionsView = ref('chat');
 // cliente decide cuándo verlas, no se le impone un modal automático apenas
 // entra a la pantalla.
 const showBankAccounts = ref(false);
-const notifyingTransfer = ref(false);
-const transferNotificationError = ref('');
+const confirmingCash = ref(false);
+const cashPaymentError = ref('');
+const paymentStatus = computed(() => props.ride.payment_status ?? 'pending');
+const paymentStatusMeta = computed(() => ({
+    pending: { label: props.ride.payment_method === 'efectivo' ? 'Pendiente de confirmar' : 'Falta comprobante', classes: 'border-arka-warning/30 bg-arka-warning/10 text-arka-warning' },
+    proof_submitted: { label: 'Comprobante en revisión', classes: 'border-sky-400/30 bg-sky-400/10 text-sky-300' },
+    confirmed: { label: 'Pagada', classes: 'border-arka-primary/30 bg-arka-primary/10 text-arka-primary' },
+    rejected: { label: 'Comprobante rechazado', classes: 'border-arka-danger/30 bg-arka-danger/10 text-arka-danger' },
+}[paymentStatus.value] ?? { label: 'Pago pendiente', classes: 'border-arka-warning/30 bg-arka-warning/10 text-arka-warning' }));
 
-function notifyTransferPayment() {
-    if (notifyingTransfer.value || props.ride.transfer_payment_notified_at) return;
-    notifyingTransfer.value = true;
-    transferNotificationError.value = '';
-    router.post(route('rides.transfer-payment.notify', props.ride.public_id), {}, {
+function confirmCashPayment() {
+    if (confirmingCash.value) return;
+    confirmingCash.value = true;
+    cashPaymentError.value = '';
+    router.post(route('rides.cash-payment.confirm', props.ride.id), {}, {
         preserveScroll: true,
-        onError: (errors) => {
-            transferNotificationError.value = errors.payment ?? 'No pudimos informar el pago. Inténtelo nuevamente.';
-        },
-        onFinish: () => {
-            notifyingTransfer.value = false;
-        },
+        onError: (errors) => { cashPaymentError.value = errors.payment ?? 'No se pudo confirmar el efectivo.'; },
+        onFinish: () => { confirmingCash.value = false; },
     });
 }
 
@@ -1798,48 +1815,6 @@ function submitReview() {
                             </button>
                             <p v-else class="px-3 py-3 text-sm text-arka-primary-bright">Alerta enviada a sus contactos de confianza.</p>
                         </div>
-                    </template>
-                </div>
-            </BottomSheet>
-
-            <!-- La cuenta principal aparece primero. En cooperativas el pago
-                 va a la organización, no directamente al conductor. -->
-            <BottomSheet :show="showBankAccounts" @close="showBankAccounts = false">
-                <div class="p-4 space-y-4">
-                    <h3 class="text-lg font-semibold text-arka-text">Cuenta para transferir</h3>
-                    <p class="text-sm text-arka-text-muted">Pago a {{ transferRecipient }}.</p>
-                    <p v-if="transferGoesToCooperative" class="rounded-xl border border-arka-primary/20 bg-arka-primary/10 px-3 py-2 text-xs text-arka-text-muted">
-                        La cooperativa recibe el total y liquida internamente el valor correspondiente al conductor.
-                    </p>
-
-                    <div
-                        v-for="account in transferAccounts"
-                        :key="account.id"
-                        class="rounded-xl border p-4"
-                        :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-text-muted/15'"
-                    >
-                        <p class="flex items-center gap-1.5 font-semibold text-arka-text">
-                            <span v-if="account.is_favorite" class="text-arka-primary" aria-label="Favorita">★</span>
-                            {{ account.bank_name }}
-                        </p>
-                        <dl class="mt-2 space-y-1 text-sm">
-                            <div class="flex justify-between gap-3"><dt class="text-arka-text-muted">Titular</dt><dd class="text-right font-medium text-arka-text">{{ account.account_holder_name }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-arka-text-muted">Tipo</dt><dd class="text-arka-text">{{ account.account_type === 'ahorros' ? 'Ahorros' : 'Corriente' }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-arka-text-muted">Número</dt><dd class="font-medium text-arka-text">{{ account.account_number }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-arka-text-muted">Cédula</dt><dd class="text-arka-text">{{ account.identity_number }}</dd></div>
-                        </dl>
-                    </div>
-
-                    <template v-if="transferGoesToCooperative && !isDriver">
-                        <p v-if="transferNotificationError" class="rounded-xl border border-arka-danger/30 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">
-                            {{ transferNotificationError }}
-                        </p>
-                        <div v-if="ride.transfer_payment_notified_at" class="rounded-xl border border-arka-primary/30 bg-arka-primary/10 px-4 py-3 text-sm font-medium text-arka-primary-bright">
-                            ✓ Pago informado a la cooperativa. Ellos revisarán el ingreso en su cuenta.
-                        </div>
-                        <PrimaryButton v-else class="w-full justify-center" :disabled="notifyingTransfer" @click="notifyTransferPayment">
-                            {{ notifyingTransfer ? 'Informando…' : 'Ya transferí · Notificar a la cooperativa' }}
-                        </PrimaryButton>
                     </template>
                 </div>
             </BottomSheet>
@@ -2763,8 +2738,15 @@ function submitReview() {
                             <span class="text-arka-text-muted">Tarifa por km</span>
                             <span class="text-arka-text">${{ ride.rate_per_km_snapshot }}</span>
                         </div>
-                        <p class="pt-1 text-[11px] leading-relaxed text-arka-text-muted/80">
-                            El total suma los tramos mostrados arriba. Cada tramo conserva el margen operativo, la tarifa mínima y el recargo horario que correspondían al solicitar.
+                        <!-- Solo tiene sentido si arriba se mostró un desglose por
+                             parada (bloque de la línea 2703) — sin paradas no hay
+                             "tramos mostrados arriba" de qué hablar. -->
+                        <p v-if="ride.stops?.length" class="pt-1 flex items-start gap-1.5 text-[11px] leading-relaxed text-arka-text-muted/80">
+                            <svg class="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 11v5M12 8v.01" />
+                            </svg>
+                            <span>El total suma los tramos mostrados arriba. Cada tramo conserva el margen operativo, la tarifa mínima y el recargo horario que correspondían al solicitar.</span>
                         </p>
                         <div v-if="durationLabel" class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Duración</span>
@@ -2774,6 +2756,55 @@ function submitReview() {
                             <span class="text-arka-text-muted">Tiempo de espera</span>
                             <span class="text-arka-text">{{ waitLabel }}</span>
                         </div>
+                    </div>
+
+                    <!-- Confirmación real del pago en carreras de cooperativa:
+                         transferencia la valida la organización; efectivo lo
+                         confirma el conductor que recibió el dinero. -->
+                    <div v-if="transferGoesToCooperative" class="border-t border-arka-text-muted/10 pt-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-arka-text-muted">Estado del pago</p>
+                                <p class="mt-1 text-sm text-arka-text">
+                                    {{ ride.payment_method === 'transferencia' ? 'Pago recibido por la cooperativa' : 'Pago recibido por el conductor' }}
+                                </p>
+                            </div>
+                            <span class="shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold" :class="paymentStatusMeta.classes">
+                                {{ paymentStatusMeta.label }}
+                            </span>
+                        </div>
+
+                        <template v-if="ride.payment_method === 'transferencia'">
+                            <p v-if="isDriver" class="mt-3 rounded-xl bg-arka-base/50 px-3 py-2.5 text-xs leading-relaxed text-arka-text-muted">
+                                La carrera fue por transferencia. Se marcará como pagada cuando {{ transferRecipient }} confirme el comprobante del cliente.
+                            </p>
+                            <template v-else>
+                                <p v-if="paymentStatus === 'rejected'" class="mt-3 rounded-xl border border-arka-danger/30 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">
+                                    {{ ride.payment_rejection_reason }}
+                                </p>
+                                <button
+                                    v-if="transferAccounts.length"
+                                    type="button"
+                                    class="mt-3 flex w-full items-center justify-between gap-3 rounded-xl border border-arka-primary/25 bg-arka-primary/10 px-3 py-3 text-left"
+                                    @click="showBankAccounts = true"
+                                >
+                                    <span class="text-sm font-semibold text-arka-primary">{{ ['pending', 'rejected'].includes(paymentStatus) ? 'Ver cuentas y adjuntar comprobante' : 'Ver cuentas y comprobante' }}</span>
+                                    <span class="text-arka-primary">→</span>
+                                </button>
+                                <p v-else class="mt-3 rounded-xl border border-arka-warning/25 bg-arka-warning/10 px-3 py-2 text-xs text-arka-warning">La cooperativa todavía no registra cuentas bancarias.</p>
+                            </template>
+                        </template>
+
+                        <template v-else>
+                            <p v-if="!isDriver" class="mt-3 text-xs text-arka-text-muted">El conductor confirmará cuando reciba el efectivo.</p>
+                            <template v-else-if="paymentStatus === 'pending'">
+                                <p v-if="cashPaymentError" class="mt-3 text-sm text-arka-danger">{{ cashPaymentError }}</p>
+                                <PrimaryButton class="mt-3 w-full justify-center" :disabled="confirmingCash" @click="confirmCashPayment">
+                                    {{ confirmingCash ? 'Confirmando…' : 'Confirmar que recibí el efectivo' }}
+                                </PrimaryButton>
+                            </template>
+                            <p v-else-if="paymentStatus === 'confirmed'" class="mt-3 text-xs font-medium text-arka-primary">Efectivo confirmado y reportado a la cooperativa.</p>
+                        </template>
                     </div>
                 </div>
 
@@ -3058,5 +3089,19 @@ function submitReview() {
                 </div>
             </div>
         </div>
+
+        <!-- Único panel de pago para todas las etapas. Antes estaba dentro
+             de la rama "en curso" y por eso el botón del recibo completado
+             cambiaba el estado, pero no tenía ningún panel que abrir. -->
+        <RidePaymentSheet
+            :show="showBankAccounts"
+            :ride="ride"
+            :accounts="transferAccounts"
+            :recipient="transferRecipient"
+            :goes-to-cooperative="transferGoesToCooperative"
+            :is-driver="isDriver"
+            :payment-proof-url="paymentProofUrl"
+            @close="showBankAccounts = false"
+        />
     </AuthenticatedLayout>
 </template>

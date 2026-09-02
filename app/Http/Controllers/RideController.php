@@ -41,7 +41,7 @@ class RideController extends Controller
      */
     private function pendingRequestsForClient(int $userId): Collection
     {
-        return RideRequest::query()
+        $active = RideRequest::query()
             ->where('client_user_id', $userId)
             ->whereIn('status', ['pending', 'negotiating', 'waiting'])
             ->with([
@@ -55,13 +55,49 @@ class RideController extends Controller
             ])
             ->latest()
             ->get();
+
+        if ($active->isNotEmpty()) {
+            return $active;
+        }
+
+        // Si la última búsqueda agotó sus candidatos, la tarjeta con
+        // "Pedir de nuevo" debe sobrevivir a una recarga y a la
+        // reconciliación periódica del frontend. Antes solo existía en el
+        // estado local unos segundos después del evento WebSocket y luego
+        // desaparecía, dejando al cliente sin una acción clara.
+        $retryable = RideRequest::query()
+            ->where('client_user_id', $userId)
+            ->whereIn('status', ['expired', 'declined'])
+            ->where('requested_at', '>=', now()->subDay())
+            ->with([
+                'driver',
+                'negotiatingDriver',
+                'originSector',
+                'destinationSector',
+                'stops' => fn ($query) => $query->orderBy('sequence'),
+            ])
+            ->latest()
+            ->first();
+
+        return $retryable ? collect([$retryable]) : collect();
     }
 
     public function syncRequests(Request $request): JsonResponse
     {
+        $activeRideId = Ride::query()
+            ->where(fn ($query) => $query
+                ->where('client_user_id', $request->user()->id)
+                ->orWhere('driver_user_id', $request->user()->id))
+            ->where('status', 'in_progress')
+            ->latest()
+            ->value('id');
+
         return response()->json([
             'pending_requests_as_client' => $this->pendingRequestsForClient($request->user()->id),
             'incoming_requests_as_driver' => $this->incomingRideRequestFinder->forDriver($request->user()),
+            // Respaldo si el WebSocket de aceptación se perdió al cambiar de
+            // red o al despertar el teléfono: Carreras abre el seguimiento.
+            'active_ride_id' => $activeRideId,
         ]);
     }
 
@@ -247,6 +283,9 @@ class RideController extends Controller
             'driverBankAccounts' => $ride->rideRequest?->cooperative_id ? [] : $transferAccounts,
             'transferRecipient' => $ride->rideRequest?->cooperative?->name ?? $ride->driver->full_name,
             'transferGoesToCooperative' => $ride->rideRequest?->cooperative_id !== null,
+            'paymentProofUrl' => $ride->payment_proof_path
+                ? route('rides.payment-proof.show', $ride)
+                : null,
             'myReview' => $reviews->get($userId),
             'theirReview' => $reviews->get($otherUserId),
             'ratingReasons' => RatingReason::query()

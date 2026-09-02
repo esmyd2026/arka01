@@ -1,9 +1,10 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
+import { isAudioUnlocked, playIncomingRideAlert, unlockAudioContext } from '@/Utils/liveAlert';
 
 const props = defineProps({ cooperative: { type: Object, required: true }, stats: { type: Object, required: true }, requests: { type: Array, required: true }, drivers: { type: Array, required: true } });
 const page = usePage();
@@ -14,6 +15,52 @@ const openDispatchCards = reactive({});
 const assigningRequests = reactive({});
 const clock = ref(Date.now());
 const dispatchHelpOpen = ref(false);
+const incomingAlert = ref(null);
+let incomingAlertTimer = null;
+const knownRequestIds = new Set(props.requests.map((request) => Number(request.id)));
+
+// Bug reportado por el usuario ("no está llegando el sonido al panel de la
+// cooperativa cuando le llega una carrera"): la solicitud SÍ llega (la lista
+// y el aviso visual se actualizan), pero si en toda la sesión todavía no
+// hubo ni un clic/toque real, el navegador mantiene el audio bloqueado por
+// su política de autoplay y el sonido falla en silencio — nada en pantalla
+// avisa que quedó así. Un operador de despacho suele solo dejar esta
+// pantalla abierta esperando, sin tocar nada hasta que le toque asignar, así
+// que acá se avisa de entrada en vez de que se entere recién cuando ya se le
+// pasó una carrera. Se revisa cada 2s solo mientras siga bloqueado —
+// resume() de audioCtx es asíncrono, por eso no alcanza con revisar una vez.
+const soundUnlocked = ref(isAudioUnlocked());
+let soundCheckTimer = null;
+function enableSound() {
+    unlockAudioContext();
+    soundUnlocked.value = isAudioUnlocked();
+}
+
+function alertIncomingRequest(requestId) {
+    const id = Number(requestId);
+    if (!id || knownRequestIds.has(id)) return;
+
+    knownRequestIds.add(id);
+    activeView.value = 'dispatch';
+    playIncomingRideAlert();
+    incomingAlert.value = `Nueva solicitud #${id} para asignar`;
+    window.clearTimeout(incomingAlertTimer);
+    incomingAlertTimer = window.setTimeout(() => { incomingAlert.value = null; }, 10000);
+}
+
+function testDispatchSound() {
+    // Este clic es un gesto válido para la política de reproducción del
+    // navegador; deja el audio habilitado y reproduce el mismo aviso real.
+    unlockAudioContext();
+    playIncomingRideAlert();
+}
+
+// Respaldo del WebSocket: si Reverb no entregó el evento pero el refresco de
+// 15 segundos sí trajo una solicitud nueva, la central también debe sonar.
+watch(
+    () => props.requests.map((request) => Number(request.id)),
+    (ids) => ids.forEach(alertIncomingRequest),
+);
 
 function assign(request) {
     const driverUserId = selectedDrivers[request.id];
@@ -123,17 +170,28 @@ const toggleAutomatic = () => router.patch(route('cooperative.dispatch-settings.
 onMounted(() => {
     refreshTimer = window.setInterval(refresh, 15000);
     clockTimer = window.setInterval(() => { clock.value = Date.now(); }, 1000);
+    if (!soundUnlocked.value) {
+        soundCheckTimer = window.setInterval(() => {
+            soundUnlocked.value = isAudioUnlocked();
+            if (soundUnlocked.value) window.clearInterval(soundCheckTimer);
+        }, 2000);
+    }
     const userId = page.props.auth?.user?.id;
     if (userId) {
         cooperativeChannel = `App.Models.User.${userId}`;
-        window.Echo?.private(cooperativeChannel).listen('.cooperative-ride.updated', refresh);
+        window.Echo?.private(cooperativeChannel).listen('.cooperative-ride.updated', (event) => {
+            if (event.action === 'created') alertIncomingRequest(event.ride_request_id);
+            refresh();
+        });
     }
     document.addEventListener('visibilitychange', refresh);
 });
 onBeforeUnmount(() => {
     window.clearInterval(refreshTimer);
     window.clearInterval(clockTimer);
+    window.clearInterval(soundCheckTimer);
     document.removeEventListener('visibilitychange', refresh);
+    window.clearTimeout(incomingAlertTimer);
     if (cooperativeChannel) window.Echo?.leave(cooperativeChannel);
 });
 </script>
@@ -142,13 +200,28 @@ onBeforeUnmount(() => {
     <Head title="Panel de cooperativa" />
     <AuthenticatedLayout>
         <template #header><h2 class="text-xl font-semibold text-arka-text">{{ cooperative.name || 'Panel de cooperativa' }}</h2></template>
+        <div v-if="incomingAlert" class="fixed inset-x-4 top-4 z-50 mx-auto max-w-md rounded-2xl border border-arka-primary/40 bg-arka-card p-4 shadow-2xl sm:left-auto sm:right-4 sm:mx-0">
+            <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-arka-primary">Atención de despacho</p>
+            <div class="mt-1 flex items-center justify-between gap-3"><p class="font-semibold text-arka-text">{{ incomingAlert }}</p><button type="button" class="text-arka-text-muted" aria-label="Cerrar aviso" @click="incomingAlert = null">✕</button></div>
+        </div>
+
         <div class="py-8 sm:py-12">
             <div class="mx-auto max-w-6xl space-y-6 px-4 sm:px-6">
+                <!-- Pedido explícito del usuario ("no está llegando el sonido al
+                     panel de la cooperativa cuando le llega una carrera"): la
+                     política de autoplay del navegador bloquea el audio hasta
+                     que haya un clic real en la sesión — sin este aviso, un
+                     operador que solo deja la pantalla abierta esperando nunca
+                     se entera de que el aviso sonoro está apagado. -->
+                <div v-if="!soundUnlocked" class="flex flex-wrap items-center justify-between gap-3 rounded-arka border border-arka-danger/30 bg-arka-danger/10 p-4 text-sm text-arka-danger">
+                    <span>🔇 El sonido de "nueva solicitud" todavía no está activo en este navegador — hace falta un clic para habilitarlo.</span>
+                    <button type="button" class="rounded-full bg-arka-danger px-4 py-1.5 font-semibold text-white" @click="enableSound">Activar sonido</button>
+                </div>
                 <div v-if="cooperative.status !== 'approved'" class="rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-4 text-sm text-arka-warning">
                     La cooperativa aún no puede operar. Estado: <strong>{{ cooperative.status }}</strong>.
                     <Link :href="route('cooperative.profile.edit')" class="ml-1 underline">Revisar perfil y documentos</Link>
                 </div>
-                <nav class="grid grid-cols-2 gap-2 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-2 shadow-lg">
+                <nav class="grid grid-cols-3 gap-2 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-2 shadow-lg">
                     <button type="button" class="relative rounded-xl px-4 py-3 text-left transition sm:px-5" :class="activeView === 'dispatch' ? 'bg-arka-primary text-arka-base shadow' : 'text-arka-text-muted hover:bg-arka-primary/5 hover:text-arka-text'" @click="activeView = 'dispatch'">
                         <span class="block text-xs font-semibold uppercase tracking-[0.12em]">Atención inmediata</span>
                         <span class="mt-0.5 block text-sm font-bold sm:text-base">Asignar carreras</span>
@@ -158,12 +231,17 @@ onBeforeUnmount(() => {
                         <span class="block text-xs font-semibold uppercase tracking-[0.12em]">Supervisión</span>
                         <span class="mt-0.5 block text-sm font-bold sm:text-base">Mapa y operación</span>
                     </button>
+                    <Link :href="route('cooperative.wallet')" class="relative rounded-xl px-4 py-3 text-left text-arka-text-muted transition hover:bg-arka-primary/5 hover:text-arka-text sm:px-5">
+                        <span class="block text-xs font-semibold uppercase tracking-[0.12em]">Finanzas</span>
+                        <span class="mt-0.5 block text-sm font-bold sm:text-base">Pagos y comprobantes</span>
+                        <span v-if="stats.paymentsToReview" class="absolute right-3 top-3 grid h-6 min-w-6 place-items-center rounded-full bg-sky-400 px-1.5 text-xs font-bold text-arka-base">{{ stats.paymentsToReview }}</span>
+                    </Link>
                 </nav>
 
                 <template v-if="activeView === 'operations'">
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
                     <div v-for="(value, key) in stats" :key="key" class="rounded-arka bg-arka-card p-4 shadow-lg">
-                        <p class="text-xs uppercase text-arka-text-muted">{{ { clients: 'Clientes vinculados', drivers: 'Conductores', available: 'Disponibles', pendingDrivers: 'Por aceptar', pendingRequests: 'Solicitudes', scheduledRequests: 'Programadas', activeRequests: 'Activas' }[key] }}</p>
+                        <p class="text-xs uppercase text-arka-text-muted">{{ { clients: 'Clientes vinculados', drivers: 'Conductores', available: 'Disponibles', pendingDrivers: 'Por aceptar', pendingRequests: 'Solicitudes', scheduledRequests: 'Programadas', activeRequests: 'Activas', paymentsToReview: 'Pagos por revisar' }[key] }}</p>
                         <p class="mt-2 text-2xl font-bold text-arka-text">{{ value }}</p>
                     </div>
                 </div>
@@ -210,7 +288,17 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div v-if="cooperative.stand_lat == null || cooperative.stand_lng == null" class="mx-5 mb-3 rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">Falta ubicar la base. <Link :href="route('cooperative.profile.edit')" class="font-semibold underline">Marcar ahora</Link></div>
-                        <FleetMap :markers="mapMarkers" :dark="false" :minimal-style="true" height="360px" />
+                        <!-- Halo de color por estado (pedido explícito del usuario: "que se
+                             distinga el color del vehículo de acuerdo a su estado") — mismo
+                             `color` que ya arma `mapMarkers` (in_ride/available/inactive),
+                             ahora también visible en el propio ícono del vehículo, no solo
+                             en la lista de abajo. -->
+                        <FleetMap :markers="mapMarkers" :dark="false" :minimal-style="true" vehicle-status-ring height="360px" />
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-arka-text-muted/10 px-4 py-2.5 text-[11px] text-arka-text-muted sm:px-5">
+                            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background:#34d399"></span>Disponible</span>
+                            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background:#38bdf8"></span>En carrera</span>
+                            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background:#94a3b8"></span>Inactivo</span>
+                        </div>
                         <div class="border-t border-arka-text-muted/10 p-4 sm:p-5">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div><h4 class="font-semibold text-arka-text">Estado de las unidades</h4><p class="text-xs text-arka-text-muted">Actualización automática cada 15 segundos</p></div>
@@ -249,9 +337,12 @@ onBeforeUnmount(() => {
                 </template>
 
                 <section v-if="activeView === 'dispatch'" class="rounded-arka bg-arka-card shadow-lg">
-                    <div class="flex items-center justify-between border-b border-arka-text-muted/10 p-5">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-arka-text-muted/10 p-5">
                         <div><p class="text-xs font-semibold uppercase tracking-[0.15em] text-arka-primary">Central de despacho</p><h3 class="mt-1 text-lg font-semibold text-arka-text">Solicitudes pendientes</h3></div>
-                        <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary">{{ stats.pendingRequests }} por atender</span>
+                        <div class="flex items-center gap-2">
+                            <button type="button" class="rounded-full border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary transition hover:bg-arka-primary/10" @click="testDispatchSound">Probar sonido</button>
+                            <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary">{{ stats.pendingRequests }} por atender</span>
+                        </div>
                     </div>
                     <p v-if="!requests.length" class="p-6 text-sm text-arka-text-muted">No hay solicitudes pendientes.</p>
                     <div v-else class="space-y-4 p-3 sm:p-5">

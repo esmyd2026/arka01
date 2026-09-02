@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { reactive } from 'vue';
 
 // Pedido explícito del usuario ("la cooperativa ve la trazabilidad de las
 // carreras, cuánto hizo su equipo y cuánto le deben o cuánto ella le debe a
@@ -11,12 +12,37 @@ const props = defineProps({
     earnings: { type: Object, required: true },
     walletTotal: { type: Number, required: true },
     walletByDriver: { type: Array, required: true },
+    paymentStats: { type: Object, required: true },
+    paymentReviews: { type: Array, required: true },
     rides: { type: Object, required: true },
 });
 
 const money = (value) => new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(value || 0);
 const date = (value) => value ? new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progress: 'En curso', scheduled: 'Programada' };
+const paymentStatusLabel = { pending: 'Pendiente', proof_submitted: 'Por revisar', confirmed: 'Pagada', rejected: 'Rechazada' };
+const rejectionReasons = reactive({});
+const processing = reactive({});
+
+function confirmTransfer(rideId) {
+    processing[rideId] = true;
+    router.post(route('cooperative.payments.transfer.confirm', rideId), {}, {
+        preserveScroll: true,
+        onFinish: () => { processing[rideId] = false; },
+    });
+}
+
+function rejectTransfer(rideId) {
+    const reason = rejectionReasons[rideId]?.trim();
+    if (!reason) return;
+    processing[rideId] = true;
+    router.post(route('cooperative.payments.transfer.reject', rideId), { reason }, {
+        preserveScroll: true,
+        onFinish: () => { processing[rideId] = false; },
+    });
+}
+
+const size = (bytes) => bytes ? `${(Number(bytes) / 1024).toFixed(0)} KB` : '—';
 </script>
 
 <template>
@@ -53,6 +79,47 @@ const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progre
                 </article>
             </section>
 
+            <!-- Bandeja financiera: los comprobantes no se mezclan con el
+                 despacho operativo. La cooperativa toma una decisión y esa
+                 confirmación actualiza inmediatamente al conductor. -->
+            <section class="rounded-2xl bg-arka-card">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-arka-text-muted/10 p-5">
+                    <div>
+                        <p class="text-xs uppercase tracking-widest text-arka-primary">Pagos de carreras</p>
+                        <h2 class="mt-1 font-semibold text-arka-text">Comprobantes por revisar</h2>
+                    </div>
+                    <div class="flex flex-wrap gap-2 text-xs">
+                        <span class="rounded-full bg-sky-400/10 px-3 py-1.5 font-semibold text-sky-300">{{ paymentStats.proofs_to_review }} por revisar</span>
+                        <span class="rounded-full bg-amber-400/10 px-3 py-1.5 font-semibold text-amber-300">{{ paymentStats.cash_to_confirm }} efectivo pendiente</span>
+                        <span class="rounded-full bg-arka-primary/10 px-3 py-1.5 font-semibold text-arka-primary">{{ paymentStats.confirmed }} pagadas</span>
+                    </div>
+                </div>
+
+                <p v-if="!paymentReviews.length" class="p-6 text-sm text-arka-text-muted">No hay comprobantes pendientes de revisión.</p>
+                <div v-else class="grid gap-3 p-4 lg:grid-cols-2">
+                    <article v-for="payment in paymentReviews" :key="payment.id" class="rounded-xl border border-arka-text-muted/15 bg-arka-base/35 p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="font-semibold text-arka-text">Carrera #{{ payment.id }} · {{ money(payment.amount) }}</p>
+                                <p class="mt-1 text-xs text-arka-text-muted">Cliente: {{ payment.client }}</p>
+                                <p class="text-xs text-arka-text-muted">Conductor: {{ payment.driver }}</p>
+                            </div>
+                            <span class="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold text-sky-300">Por revisar</span>
+                        </div>
+                        <div class="mt-3 flex items-center justify-between gap-3 rounded-lg bg-black/10 px-3 py-2 text-xs text-arka-text-muted">
+                            <span>Optimizado: {{ size(payment.stored_size) }}</span>
+                            <span v-if="payment.original_size">Original: {{ size(payment.original_size) }}</span>
+                        </div>
+                        <a :href="payment.proof_url" target="_blank" class="mt-3 flex w-full items-center justify-center rounded-xl border border-arka-primary/30 px-3 py-2.5 text-sm font-semibold text-arka-primary hover:bg-arka-primary/10">Ver comprobante completo</a>
+                        <input v-model="rejectionReasons[payment.id]" type="text" maxlength="500" placeholder="Motivo si necesita rechazarlo" class="mt-3 block w-full rounded-xl border-arka-text-muted/20 bg-arka-base text-sm text-arka-text placeholder:text-arka-text-muted/60 focus:border-arka-primary focus:ring-arka-primary" />
+                        <div class="mt-3 grid grid-cols-2 gap-2">
+                            <button type="button" class="rounded-xl border border-arka-danger/30 px-3 py-2.5 text-sm font-semibold text-arka-danger disabled:opacity-40" :disabled="processing[payment.id] || !rejectionReasons[payment.id]?.trim()" @click="rejectTransfer(payment.id)">Rechazar</button>
+                            <button type="button" class="rounded-xl bg-arka-primary px-3 py-2.5 text-sm font-bold text-arka-base disabled:opacity-40" :disabled="processing[payment.id]" @click="confirmTransfer(payment.id)">Confirmar pago</button>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
             <!-- Cuánto le deben o cuánto ella le debe a su equipo (pedido
                  explícito del usuario) — total agregado primero, desglose
                  por conductor debajo cuando hay algo pendiente. Mismo signo
@@ -82,30 +149,63 @@ const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progre
                 </div>
             </section>
 
-            <!-- Trazabilidad de las carreras (pedido explícito del
-                 usuario) — historial completo del equipo, no solo el de un
-                 conductor a la vez. -->
+            <!-- Trazabilidad de las carreras (pedido explícito del usuario:
+                 "que sea una tabla" con cliente, origen, destino, cobrado al
+                 cliente, pagado al conductor, tipo de pago, y cuánto debe
+                 cada lado) — historial completo del equipo en una sola
+                 tabla, no tarjetas sueltas por carrera. -->
             <section class="rounded-2xl bg-arka-card">
                 <div class="border-b border-arka-text-muted/10 p-5">
                     <p class="text-xs uppercase tracking-widest text-arka-primary">Trazabilidad</p>
                     <h2 class="mt-1 font-semibold text-arka-text">Carreras de todo el equipo</h2>
                 </div>
                 <p v-if="!rides.data.length" class="p-6 text-sm text-arka-text-muted">Su equipo todavía no registra carreras con la cooperativa.</p>
-                <div v-else class="divide-y divide-arka-text-muted/10">
-                    <article v-for="ride in rides.data" :key="ride.id" class="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <p class="font-semibold text-arka-text">{{ ride.driver }} → {{ ride.client }}</p>
-                                <span
-                                    class="rounded-full px-2 py-0.5 text-[11px]"
-                                    :class="ride.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : ride.status === 'cancelled' ? 'bg-rose-400/10 text-rose-300' : 'bg-sky-400/10 text-sky-300'"
-                                >{{ statusLabel[ride.status] || ride.status }}</span>
-                            </div>
-                            <p class="mt-1 truncate text-sm text-arka-text-muted">{{ ride.origin }} → {{ ride.destination }}</p>
-                            <p class="mt-1 text-xs text-arka-text-muted">{{ date(ride.date) }} · {{ ride.distance_km != null ? `${ride.distance_km.toFixed(1)} km` : '' }} · {{ ride.payment_method }}</p>
-                        </div>
-                        <p class="text-lg font-bold" :class="ride.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-primary'">{{ money(ride.price) }}</p>
-                    </article>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[1240px] border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-arka-text-muted/10 text-left text-xs uppercase tracking-wide text-arka-text-muted">
+                                <th class="px-4 py-3 font-medium">Fecha</th>
+                                <th class="px-4 py-3 font-medium">Conductor</th>
+                                <th class="px-4 py-3 font-medium">Cliente</th>
+                                <th class="px-4 py-3 font-medium">Origen</th>
+                                <th class="px-4 py-3 font-medium">Destino</th>
+                                <th class="px-4 py-3 text-right font-medium">Km</th>
+                                <th class="px-4 py-3 text-right font-medium">$/km</th>
+                                <th class="px-4 py-3 font-medium">Pago</th>
+                                <th class="px-4 py-3 font-medium">Estado del pago</th>
+                                <th class="px-4 py-3 text-right font-medium">Cobrado al cliente</th>
+                                <th class="px-4 py-3 text-right font-medium">Pagado al conductor</th>
+                                <th class="px-4 py-3 text-right font-medium">Debe el conductor</th>
+                                <th class="px-4 py-3 text-right font-medium">Le debemos al conductor</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-arka-text-muted/10 [font-variant-numeric:tabular-nums]">
+                            <tr v-for="ride in rides.data" :key="ride.id" class="align-top">
+                                <td class="whitespace-nowrap px-4 py-3 text-xs text-arka-text-muted">
+                                    {{ date(ride.date) }}
+                                    <span
+                                        class="mt-1 block w-fit rounded-full px-2 py-0.5 text-[10px]"
+                                        :class="ride.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : ride.status === 'cancelled' ? 'bg-rose-400/10 text-rose-300' : 'bg-sky-400/10 text-sky-300'"
+                                    >{{ statusLabel[ride.status] || ride.status }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-arka-text">{{ ride.driver }}</td>
+                                <td class="px-4 py-3 text-arka-text">{{ ride.client }}</td>
+                                <td class="max-w-[220px] truncate px-4 py-3 text-arka-text-muted" :title="ride.origin">{{ ride.origin }}</td>
+                                <td class="max-w-[220px] truncate px-4 py-3 text-arka-text-muted" :title="ride.destination">{{ ride.destination }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-arka-text-muted">{{ ride.distance_km != null ? `${ride.distance_km.toFixed(1)} km` : '—' }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-arka-text-muted">{{ ride.rate_per_km != null ? money(ride.rate_per_km) : '—' }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-arka-text-muted capitalize">{{ ride.payment_method }}</td>
+                                <td class="whitespace-nowrap px-4 py-3">
+                                    <span class="rounded-full px-2 py-1 text-[11px] font-semibold" :class="ride.payment_status === 'confirmed' ? 'bg-arka-primary/10 text-arka-primary' : ride.payment_status === 'proof_submitted' ? 'bg-sky-400/10 text-sky-300' : ride.payment_status === 'rejected' ? 'bg-arka-danger/10 text-arka-danger' : 'bg-amber-400/10 text-amber-300'">{{ paymentStatusLabel[ride.payment_status] || 'Pendiente' }}</span>
+                                    <a v-if="ride.payment_proof_url" :href="ride.payment_proof_url" target="_blank" class="mt-1 block text-[11px] text-arka-primary hover:underline">Ver comprobante</a>
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right font-semibold" :class="ride.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-text'">{{ money(ride.price) }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-arka-text">{{ money(ride.driver_pay) }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right" :class="ride.driver_owes > 0 ? 'font-semibold text-amber-300' : 'text-arka-text-muted'">{{ ride.driver_owes > 0 ? money(ride.driver_owes) : '—' }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right" :class="ride.cooperative_owes > 0 ? 'font-semibold text-emerald-300' : 'text-arka-text-muted'">{{ ride.cooperative_owes > 0 ? money(ride.cooperative_owes) : '—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <div v-if="rides.links.length > 3" class="flex flex-wrap gap-2 border-t border-arka-text-muted/10 p-4">
                     <Link v-for="link in rides.links" :key="link.label" :href="link.url || '#'" v-html="link.label" class="rounded-lg px-3 py-1.5 text-xs" :class="link.active ? 'bg-arka-primary text-black' : 'bg-black/10 text-arka-text-muted'" />

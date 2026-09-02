@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\CooperativeRideUpdated;
 use App\Jobs\FallbackCooperativeAssignment;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
@@ -16,6 +17,7 @@ use Database\Seeders\DemoDataSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -233,6 +235,68 @@ class CooperativeModuleTest extends TestCase
         $this->assertNotSame('approved', $cooperative->fresh()->status);
     }
 
+    public function test_an_admin_can_mark_a_cooperative_as_public(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Norte']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->actingAs($admin)
+            ->patch(route('admin.cooperatives.public-visibility', $cooperative), ['is_public' => true])
+            ->assertRedirect();
+
+        $this->assertTrue($cooperative->fresh()->is_public);
+    }
+
+    /**
+     * Pedido explícito del usuario: la pantalla admin de cooperativas
+     * ("Gestión de cooperativas") no mostraba si eran públicas, si su flota
+     * era visible, ni cuántos clientes tenían — ver
+     * Admin\CooperativeController::index() y Admin/Cooperatives/Index.vue.
+     */
+    public function test_the_admin_index_lists_visibility_client_count_and_plan(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $cooperativeOwner = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeOwner->id,
+            'name' => 'Coop Norte',
+            'is_public' => true,
+            'show_fleet_publicly' => true,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $client = User::factory()->create();
+        ClientCooperative::query()->create(['client_user_id' => $client->id, 'cooperative_id' => $cooperative->id]);
+
+        $plan = SubscriptionPlan::query()->where('owner_type', 'cooperative')->orderBy('sort_order')->firstOrFail();
+        Subscription::factory()->for($cooperativeOwner)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
+
+        $response = $this->actingAs($admin)->get(route('admin.cooperatives.index'));
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('cooperatives.data.0.is_public', true)
+            ->where('cooperatives.data.0.show_fleet_publicly', true)
+            ->where('cooperatives.data.0.client_links_count', 1)
+            ->where('cooperatives.data.0.plan_name', $plan->name)
+        );
+    }
+
+    public function test_a_regular_user_cannot_mark_a_cooperative_as_public(): void
+    {
+        $user = User::factory()->create();
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Norte']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->actingAs($user)
+            ->patch(route('admin.cooperatives.public-visibility', $cooperative), ['is_public' => true])
+            ->assertForbidden();
+
+        $this->assertFalse($cooperative->fresh()->is_public);
+    }
+
     public function test_a_client_can_request_a_ride_from_an_attached_cooperative(): void
     {
         Bus::fake();
@@ -311,6 +375,7 @@ class CooperativeModuleTest extends TestCase
     {
         Bus::fake();
         Notification::fake();
+        Event::fake([CooperativeRideUpdated::class]);
 
         $client = User::factory()->create();
         $cooperativeUser = User::factory()->create();
@@ -345,6 +410,79 @@ class CooperativeModuleTest extends TestCase
             FallbackCooperativeAssignment::class,
             fn (FallbackCooperativeAssignment $job) => $job->rideRequestId === $rideRequest->id,
         );
+
+        // Reproduciendo el reporte del usuario ("no está llegando el sonido
+        // al panel de la cooperativa cuando le llega una carrera"): si este
+        // evento nunca se dispara, o su canal no resuelve al user_id de la
+        // cooperativa, Cooperative/Dashboard.vue jamás recibe el WebSocket
+        // que dispara playIncomingRideAlert().
+        Event::assertDispatched(CooperativeRideUpdated::class, function (CooperativeRideUpdated $event) use ($rideRequest, $cooperativeUser) {
+            $channels = $event->broadcastOn();
+            return $event->rideRequest->id === $rideRequest->id
+                && $event->action === 'created'
+                && count($channels) === 1
+                && $channels[0]->name === "private-App.Models.User.{$cooperativeUser->id}";
+        });
+    }
+
+    /**
+     * El respaldo que vence el modo manual sustituye al operador, por lo que
+     * debe usar las mismas unidades que este podía seleccionar en el panel.
+     * La regla de plan pago continúa aplicando al modo 100% automático, pero
+     * no puede provocar que una unidad afiliada y libre termine cancelando
+     * una carrera que el operador dejó vencer.
+     */
+    public function test_manual_timeout_assigns_an_available_affiliated_driver_instead_of_expiring_the_request(): void
+    {
+        Notification::fake();
+        Bus::fake();
+
+        $client = User::factory()->create();
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create([
+            'user_id' => $cooperativeUser->id,
+            'name' => 'Coop con respaldo',
+            'automatic_assignment_enabled' => false,
+            'response_timeout_seconds' => 30,
+        ]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'driver_type' => 'public_transport',
+            'is_available' => true,
+            'current_lat' => -2.1700,
+            'current_lng' => -79.9000,
+            'passenger_capacity' => 4,
+        ]);
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $rideRequest = RideRequest::factory()->create([
+            'client_user_id' => $client->id,
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => null,
+            'status' => 'pending',
+            'cooperative_assignment_status' => 'awaiting_operator',
+            'origin_lat' => -2.1701,
+            'origin_lng' => -79.9001,
+            'passenger_count' => 1,
+            'needs_trunk' => false,
+        ]);
+
+        (new FallbackCooperativeAssignment($rideRequest->id))->handle();
+
+        $rideRequest->refresh();
+        $this->assertSame('pending', $rideRequest->status);
+        $this->assertSame($driver->id, $rideRequest->driver_user_id);
+        $this->assertSame('cooperative', $rideRequest->dispatch_pool);
+        $this->assertSame('awaiting_driver', $rideRequest->cooperative_assignment_status);
+        $this->assertNotNull($rideRequest->current_offer_expires_at);
     }
 
     public function test_a_client_cannot_request_from_an_unattached_cooperative(): void
@@ -363,6 +501,86 @@ class CooperativeModuleTest extends TestCase
         ])->assertSessionHasErrors('cooperative_id');
 
         $this->assertDatabaseCount('ride_requests', 0);
+    }
+
+    /**
+     * Pedido explícito del usuario: un admin puede marcar una cooperativa
+     * como pública (Cooperative.is_public) para que aparezca en "Elige tu
+     * conductor" de CUALQUIER cliente, sin que la haya agregado a su red
+     * (ClientCooperative) — ver RideRequestController::create().
+     */
+    public function test_a_public_cooperative_is_listed_to_a_client_who_never_added_it(): void
+    {
+        $client = User::factory()->create();
+        $cooperativeUser = User::factory()->create();
+        $publicCooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Pública', 'is_public' => true]);
+        $publicCooperative->forceFill(['status' => 'approved'])->save();
+
+        $otherUser = User::factory()->create();
+        $privateCooperative = Cooperative::query()->create(['user_id' => $otherUser->id, 'name' => 'Coop Privada']);
+        $privateCooperative->forceFill(['status' => 'approved'])->save();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('cooperatives.0.id', $publicCooperative->id)
+            ->where('cooperatives.0.is_public', true)
+            ->has('cooperatives', 1)
+        );
+    }
+
+    /**
+     * Pedido explícito del usuario: "la que tiene que estar seleccionada por
+     * defecto tiene que ser al de su flota" — el listado debe distinguir con
+     * is_added la cooperativa que el cliente agregó a su propia red de la
+     * que solo aparece por ser pública, para que el front la priorice al
+     * recomendar aunque la pública gane en precio o cercanía.
+     */
+    public function test_a_client_added_cooperative_is_flagged_apart_from_a_public_one(): void
+    {
+        $client = User::factory()->create();
+
+        $addedOwner = User::factory()->create();
+        $addedCooperative = Cooperative::query()->create(['user_id' => $addedOwner->id, 'name' => 'Coop De Mi Red']);
+        $addedCooperative->forceFill(['status' => 'approved'])->save();
+        ClientCooperative::query()->create(['client_user_id' => $client->id, 'cooperative_id' => $addedCooperative->id]);
+
+        $publicOwner = User::factory()->create();
+        $publicCooperative = Cooperative::query()->create(['user_id' => $publicOwner->id, 'name' => 'Coop Pública', 'is_public' => true]);
+        $publicCooperative->forceFill(['status' => 'approved'])->save();
+
+        $response = $this->actingAs($client)->get(route('ride-requests.create'));
+
+        $response->assertInertia(function ($page) use ($addedCooperative, $publicCooperative) {
+            $cooperatives = collect($page->toArray()['props']['cooperatives'])->keyBy('id');
+            $this->assertTrue($cooperatives[$addedCooperative->id]['is_added']);
+            $this->assertFalse($cooperatives[$publicCooperative->id]['is_added']);
+        });
+    }
+
+    /**
+     * Misma corrección: la validación al ENVIAR la solicitud (no solo el
+     * listado) también tiene que aceptar una cooperativa pública sin
+     * vínculo explícito — si no, el cliente la vería en la lista pero el
+     * envío fallaría igual.
+     */
+    public function test_a_client_can_request_a_ride_from_a_public_cooperative_without_adding_it(): void
+    {
+        $client = User::factory()->create();
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Pública', 'is_public' => true]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->actingAs($client)->post(route('ride-requests.store'), [
+            'cooperative_id' => $cooperative->id,
+            'origin_lat' => -2.17,
+            'origin_lng' => -79.90,
+            'destination_lat' => -2.18,
+            'destination_lng' => -79.91,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('ride_requests', ['cooperative_id' => $cooperative->id, 'client_user_id' => $client->id]);
+        $this->assertDatabaseMissing('client_cooperatives', ['client_user_id' => $client->id, 'cooperative_id' => $cooperative->id]);
     }
 
     /**

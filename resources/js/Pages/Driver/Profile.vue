@@ -88,6 +88,11 @@ const props = defineProps({
     reviewCount: { type: Number, required: true },
 });
 
+// "Mi cooperativa" (pedido explícito del usuario): mismo prop compartido
+// globalmente por HandleInertiaRequests, no uno propio de esta pantalla —
+// ver App\Services\Driver\DriverAccessResolver.
+const driverAccess = usePage().props.auth.driverAccess;
+
 // Pedido explícito del usuario: el recuadro de tarifa en Inicio
 // (Dashboard.vue) enlaza acá con "#rate_per_km" — sin esto, la pantalla se
 // abría siempre desde arriba y había que buscar el campo a mano.
@@ -1389,6 +1394,30 @@ const VERIFICATION_LABELS = {
                                 para
                                 <span class="px-1 rounded" :class="tierColorClass(nextPublicTier.color_key)">{{ tierLabel(nextPublicTier) }}</span>
                                 y poder aparecer en el directorio público.
+                            </p>
+                        </div>
+
+                        <!-- "Mi cooperativa" (pedido explícito del usuario):
+                             estado, desde cuándo, y que el acceso está
+                             cubierto por la cooperativa — nunca mezclado con
+                             el acceso profesional (plan pagado), que se
+                             muestra aparte si también lo tiene. Un plan con
+                             "multi_cooperative_enabled" puede dejarlo afiliado
+                             a más de una a la vez — se listan todas, no solo
+                             la primera. -->
+                        <div v-if="driverAccess?.cooperatives?.length" class="space-y-2">
+                            <div v-for="cooperative in driverAccess.cooperatives" :key="cooperative.id" class="p-3 rounded-arka bg-arka-base/60">
+                                <p class="text-xs uppercase tracking-wider text-arka-text-muted">Mi cooperativa</p>
+                                <p class="mt-1 text-sm font-medium text-arka-text">{{ cooperative.name }}</p>
+                                <p class="mt-1 text-xs text-arka-text-muted">
+                                    Estado: Activo · Acceso cubierto por la cooperativa
+                                    <span v-if="cooperative.member_since">
+                                        · Desde {{ new Date(cooperative.member_since).toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' }) }}
+                                    </span>
+                                </p>
+                            </div>
+                            <p v-if="driverAccess.professional_access" class="text-xs font-medium text-arka-primary">
+                                Acceso profesional: Activo
                             </p>
                         </div>
 

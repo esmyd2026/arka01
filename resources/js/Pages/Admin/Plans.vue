@@ -45,6 +45,10 @@ const blankForm = (ownerType) => ({
     // arrancan apagadas), Expresos ya era abierto — un plan nuevo arranca
     // con el módulo habilitado, coherente con el default del backend.
     express_enabled: true,
+    // Pedido explícito del usuario: por defecto un conductor solo puede
+    // estar afiliado a UNA cooperativa activa — este flag habilita que los
+    // conductores de este plan acepten solicitudes de más de una.
+    multi_cooperative_enabled: false,
     max_fleets: '',
     max_drivers_per_fleet: '',
     max_cooperatives: '',
@@ -71,6 +75,7 @@ function startEdit(plan) {
     form.verified_badge = plan.verified_badge;
     form.van_trips_enabled = plan.van_trips_enabled;
     form.express_enabled = plan.express_enabled;
+    form.multi_cooperative_enabled = plan.multi_cooperative_enabled;
     form.max_fleets = plan.max_fleets ?? '';
     form.max_drivers_per_fleet = plan.max_drivers_per_fleet ?? '';
     form.max_cooperatives = plan.max_cooperatives ?? '';
@@ -145,6 +150,7 @@ async function destroyPlan(plan) {
                                                 <span v-if="plan.verified_badge"> · insignia</span>
                                                 <span v-if="plan.van_trips_enabled"> · Rutas y Turismo</span>
                                                 <span v-if="!plan.express_enabled" class="text-arka-warning"> · sin Expresos</span>
+                                                <span v-if="plan.multi_cooperative_enabled" class="text-arka-primary-bright"> · multi-cooperativa</span>
                                                 <span v-if="plan.estimated_monthly_rides" class="text-arka-lime">
                                                     · ~{{ plan.estimated_monthly_rides }} carreras/mes (~${{ projectedEarnings(plan.estimated_monthly_rides) }})
                                                 </span>
@@ -247,6 +253,9 @@ async function destroyPlan(plan) {
                                         <label class="flex items-center gap-2 text-sm text-arka-text">
                                             <Checkbox v-model:checked="form.express_enabled" /> Expresos (rutas fijas y recurrentes)
                                         </label>
+                                        <label class="flex items-center gap-2 text-sm text-arka-text">
+                                            <Checkbox v-model:checked="form.multi_cooperative_enabled" /> Puede afiliarse a más de una cooperativa
+                                        </label>
                                     </div>
 
                                     <label class="flex items-center gap-2 text-sm text-arka-text">
@@ -332,6 +341,9 @@ async function destroyPlan(plan) {
                                     </label>
                                     <label class="flex items-center gap-2 text-sm text-arka-text">
                                         <Checkbox v-model:checked="form.express_enabled" /> Expresos (rutas fijas y recurrentes)
+                                    </label>
+                                    <label class="flex items-center gap-2 text-sm text-arka-text">
+                                        <Checkbox v-model:checked="form.multi_cooperative_enabled" /> Puede afiliarse a más de una cooperativa
                                     </label>
                                 </div>
 

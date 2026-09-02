@@ -22,6 +22,14 @@ function reviewDocument(document, status) {
 function toggleWhatsApp() {
     router.patch(route('admin.cooperatives.whatsapp', props.cooperative.id), { enabled: !props.cooperative.whatsapp_ride_actions_enabled }, { preserveScroll: true });
 }
+
+// Pedido explícito del usuario: "yo le colocaría ese check para que puedan
+// aparecer a cualquier cliente sin necesidad de que lo agregue" — aparece
+// en "Elige tu conductor" de cualquier cliente con la insignia "Pública",
+// sin pasar por su lista de cooperativas agregadas.
+function togglePublicVisibility() {
+    router.patch(route('admin.cooperatives.public-visibility', props.cooperative.id), { is_public: !props.cooperative.is_public }, { preserveScroll: true });
+}
 </script>
 
 <template>
@@ -42,6 +50,15 @@ function toggleWhatsApp() {
                     <div><h2 class="text-lg font-semibold text-arka-text">Carreras por WhatsApp</h2><p class="mt-1 text-sm text-arka-text-muted">Controla aceptar, rechazar y comunicarse desde WhatsApp para todos los conductores asociados.</p></div>
                     <button type="button" class="rounded-arka border px-4 py-2 text-sm font-semibold" :class="cooperative.whatsapp_ride_actions_enabled ? 'border-arka-primary text-arka-primary' : 'border-arka-text-muted/30 text-arka-text-muted'" @click="toggleWhatsApp">
                         {{ cooperative.whatsapp_ride_actions_enabled ? 'Operación habilitada' : 'Solo notificaciones' }}
+                    </button>
+                </div>
+            </section>
+
+            <section class="rounded-arka bg-arka-card p-6 shadow-xl">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div><h2 class="text-lg font-semibold text-arka-text">Visibilidad pública</h2><p class="mt-1 text-sm text-arka-text-muted">Con esto activo, aparece en "Elige tu conductor" de cualquier cliente, con la insignia "Pública" — sin que el cliente la haya agregado antes.</p></div>
+                    <button type="button" class="rounded-arka border px-4 py-2 text-sm font-semibold" :class="cooperative.is_public ? 'border-arka-primary text-arka-primary' : 'border-arka-text-muted/30 text-arka-text-muted'" @click="togglePublicVisibility">
+                        {{ cooperative.is_public ? 'Pública' : 'Solo su red' }}
                     </button>
                 </div>
             </section>

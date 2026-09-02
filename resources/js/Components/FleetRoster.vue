@@ -280,6 +280,18 @@ onBeforeUnmount(() => {
                     <span v-else-if="driver.status === 'pending'" class="text-sm text-arka-lime">
                         Invitación enviada
                     </span>
+                    <!-- Pedido explícito del usuario ("deberia aparecer luis
+                         pero no el boton de invitar en ese caso"): antes el
+                         botón "Invitar" aparecía igual y fallaba recién al
+                         tocarlo — ahora directamente no se ofrece, con el
+                         motivo real en vez de un error genérico. -->
+                    <span
+                        v-else-if="driver.status === 'cooperative_locked'"
+                        class="max-w-[12rem] text-right text-xs text-arka-text-muted"
+                        title="Este conductor ya tiene una relación con su cooperativa — esa cartera es de la cooperativa, no se puede agregar a esta flota privada."
+                    >
+                        Ya pertenece a una cooperativa suya
+                    </span>
                     <span v-else class="text-sm text-arka-text-muted"> Ya está en su flota </span>
                 </li>
             </ul>

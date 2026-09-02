@@ -25,9 +25,15 @@ defineProps({
     minimalStyle: { type: Boolean, default: false },
     originMarkerStyle: { type: String, default: 'pin' },
     destinationMarkerStyle: { type: String, default: 'pin' },
+    // Ver GoogleFleetMap.vue — solo tiene efecto ahí, Leaflet lo ignora.
+    vehicleStatusRing: { type: Boolean, default: false },
+    // Puntos que el usuario puede ajustar arrastrando. Se mantiene vacío por
+    // defecto para no volver movibles los marcadores de seguimiento, flotas
+    // o administración que reutilizan este componente.
+    draggableMarkerIds: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(['map-click', 'user-panned']);
+const emit = defineEmits(['map-click', 'user-panned', 'marker-drag-start', 'marker-drag-end']);
 const implementation = ref(null);
 const mapRef = ref(null);
 
@@ -43,6 +49,6 @@ defineExpose({
 
 <template>
     <div v-if="!implementation" class="grid w-full place-items-center bg-arka-card text-xs text-arka-text-muted" :class="rounded ? 'rounded-arka' : ''" :style="{ height }">Cargando mapa…</div>
-    <GoogleFleetMap v-else-if="implementation === 'google'" ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" @user-panned="emit('user-panned')" />
-    <LeafletFleetMap v-else ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" @user-panned="emit('user-panned')" />
+    <GoogleFleetMap v-else-if="implementation === 'google'" ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" @user-panned="emit('user-panned')" @marker-drag-start="emit('marker-drag-start', $event)" @marker-drag-end="emit('marker-drag-end', $event)" />
+    <LeafletFleetMap v-else ref="mapRef" v-bind="$props" @map-click="emit('map-click', $event)" @user-panned="emit('user-panned')" @marker-drag-start="emit('marker-drag-start', $event)" @marker-drag-end="emit('marker-drag-end', $event)" />
 </template>

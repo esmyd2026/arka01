@@ -89,7 +89,16 @@ class RideRequestResponder
                 ]);
             }
 
-            $ratePerKm = User::find($driverId)?->driverProfile?->rate_per_km ?? 0;
+            // Bug real reportado por el usuario (la trazabilidad de la
+            // cooperativa mostraba una tarifa por km que no era la
+            // configurada para esa carrera): antes se releía acá la tarifa
+            // ACTUAL del perfil del conductor, que para una carrera de
+            // cooperativa nunca fue la que de verdad se usó para cotizar
+            // (ver RideRequestCreator::create()), y que además puede haber
+            // cambiado desde que se pidió. `rate_per_km` en la solicitud ya
+            // es esa tarifa real, congelada al momento de cotizar — se copia
+            // tal cual, sin recalcular nada.
+            $ratePerKm = (float) ($locked->rate_per_km ?? User::find($driverId)?->driverProfile?->rate_per_km ?? 0);
 
             // Cargo por trayecto de recogida (pedido explícito del usuario):
             // ya viene incluido en `current_offered_price` desde que se creó
