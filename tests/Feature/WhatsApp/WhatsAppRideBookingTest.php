@@ -130,6 +130,70 @@ class WhatsAppRideBookingTest extends TestCase
         // importante aquí es que el canal creó la misma solicitud real.
     }
 
+    public function test_an_unavailable_selection_keeps_the_trip_and_offers_retry_or_other_options(): void
+    {
+        WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.fake']]], 200)]);
+
+        $client = User::factory()->create([
+            'phone' => '+593991111155',
+            'whatsapp_privacy_accepted_at' => now(),
+        ]);
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'is_available' => false,
+            'current_lat' => -2.138,
+            'current_lng' => -79.895,
+            'passenger_capacity' => 4,
+        ]);
+        FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
+
+        ChatbotConversation::query()->create([
+            'phone' => $client->phone,
+            'user_id' => $client->id,
+            'pending_intent' => 'WA_BOOKING_CONFIRM',
+            'context' => [
+                'origin' => ['lat' => -2.137, 'lng' => -79.894, 'address' => 'Alborada'],
+                'destination' => ['lat' => -2.167, 'lng' => -79.900, 'address' => 'Centro'],
+                'passenger_count' => 8,
+                'is_scheduled' => false,
+                'driver_user_id' => $driver->id,
+                'driver_name' => $driver->full_name,
+                'dispatch_pool' => 'fleet',
+            ],
+        ]);
+
+        $engine = app(ChatbotEngine::class);
+        $engine->respondTo($client->phone, $client, 'wa_booking_confirm');
+
+        $conversation = ChatbotConversation::forPhone($client->phone)->fresh();
+        $this->assertSame('WA_BOOKING_RECOVERY', $conversation->pending_intent);
+        $this->assertSame('Alborada', $conversation->context['origin']['address']);
+        $this->assertSame('Centro', $conversation->context['destination']['address']);
+
+        $recoveryMessage = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn ($request) => ($request['interactive']['action']['buttons'][0]['reply']['id'] ?? null) === 'wa_booking_retry');
+
+        $this->assertNotNull($recoveryMessage);
+        $this->assertSame(
+            ['wa_booking_retry', 'wa_booking_alternatives', 'wa_booking_recovery_cancel'],
+            collect($recoveryMessage['interactive']['action']['buttons'])->pluck('reply.id')->all()
+        );
+
+        $engine->respondTo($client->phone, $client, 'wa_booking_alternatives');
+
+        $this->assertSame('WA_BOOKING_SELECT', ChatbotConversation::forPhone($client->phone)->fresh()->pending_intent);
+        $optionsMessage = collect(Http::recorded())
+            ->map(fn (array $pair) => $pair[0])
+            ->last(fn ($request) => ($request['interactive']['type'] ?? null) === 'list');
+        $optionIds = collect($optionsMessage['interactive']['action']['sections'][0]['rows'] ?? [])->pluck('id');
+        $this->assertTrue($optionIds->contains('wa_select_public'));
+    }
+
     /**
      * Pedido explícito del usuario, con captura real de WhatsApp: escribió
      * "Coronel y Calicuchima" y el bot no lo entendió sin dar ninguna
@@ -490,7 +554,7 @@ class WhatsAppRideBookingTest extends TestCase
         $this->assertTrue($requester->fresh()->isDriver());
     }
 
-    public function test_a_client_without_a_fleet_and_no_nearby_cooperative_candidates_gets_a_clear_message(): void
+    public function test_a_client_without_private_options_can_continue_with_the_public_directory(): void
     {
         WhatsAppSetting::current()->update(['client_ride_booking_enabled' => true]);
         $client = User::factory()->create([
@@ -510,7 +574,10 @@ class WhatsAppRideBookingTest extends TestCase
         ]);
         $engine->respondTo($client->phone, $client, '1');
 
-        $this->assertNull(ChatbotConversation::forPhone($client->phone)->pending_intent);
+        $conversation = ChatbotConversation::forPhone($client->phone)->fresh();
+        $this->assertSame('WA_BOOKING_SELECT', $conversation->pending_intent);
+        $this->assertSame('Origen', $conversation->context['origin']['address']);
+        $this->assertSame('Destino', $conversation->context['destination']['address']);
         $this->assertDatabaseCount('ride_requests', 0);
     }
 

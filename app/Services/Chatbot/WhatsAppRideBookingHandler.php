@@ -359,6 +359,38 @@ class WhatsAppRideBookingHandler
             return $this->createRide($phone, $user, $conversation, $context);
         }
 
+        // Si la opción elegida no pudo recibir la carrera, conservamos todos
+        // los datos del recorrido. El cliente puede reintentar exactamente
+        // igual o volver únicamente al selector de quién le atenderá.
+        if ($state === 'WA_BOOKING_RECOVERY') {
+            if ($text === 'wa_booking_retry') {
+                return $this->createRide($phone, $user, $conversation, $context);
+            }
+
+            if ($text === 'wa_booking_alternatives') {
+                unset(
+                    $context['driver_user_id'],
+                    $context['driver_name'],
+                    $context['cooperative_id'],
+                    $context['cooperative_name'],
+                    $context['dispatch_pool']
+                );
+
+                return $this->askWhoAttends($phone, $user, $conversation, $context);
+            }
+
+            if ($text === 'wa_booking_recovery_cancel') {
+                $this->clear($conversation);
+                WhatsAppFreeformSender::sendText($phone, 'Entendido. No se creó ninguna solicitud. Cuando la necesite, escriba “pedir carrera”.');
+
+                return true;
+            }
+
+            WhatsAppFreeformSender::sendText($phone, 'Toque una de las opciones para continuar con su solicitud.');
+
+            return true;
+        }
+
         return true;
     }
 
@@ -557,15 +589,6 @@ class WhatsAppRideBookingHandler
             ->take(4)
             ->values();
 
-        if ($fleetDrivers->isEmpty() && $cooperatives->isEmpty()) {
-            $this->clear($conversation);
-            // Mismo mensaje que la pantalla web ("Elige tu conductor") para
-            // este mismo caso vacío — ver Ride/Request.vue.
-            WhatsAppFreeformSender::sendText($phone, 'Todavía no tiene conductores agregados a su flota ni cooperativas en su red. Puede agregarlos desde Arka01, o escribir "pedir carrera" de nuevo para elegir del directorio público.');
-
-            return true;
-        }
-
         $rows = [];
         $driverNames = [];
         foreach ($fleetDrivers as $driver) {
@@ -678,14 +701,43 @@ class WhatsAppRideBookingHandler
             NotifyWhatsAppStillSearchingForDriver::dispatch($rideRequest->id)->delay(now()->addSeconds(30));
             $this->offerFullRegistrationIfFirstGuestRide($phone, $user);
         } catch (ValidationException $e) {
-            $this->clear($conversation);
-            WhatsAppFreeformSender::sendText($phone, 'No pudimos crear la solicitud: '.collect($e->errors())->flatten()->first());
+            $reason = (string) collect($e->errors())->flatten()->first();
+            $this->offerBookingRecovery($phone, $conversation, $context, $reason);
         } catch (Throwable $e) {
             report($e);
-            WhatsAppFreeformSender::sendText($phone, 'No pudimos crear la solicitud. Sus datos no se perdieron; intente confirmar nuevamente o use Arka01.');
+            $this->offerBookingRecovery(
+                $phone,
+                $conversation,
+                $context,
+                'No pudimos procesar la opción elegida en este momento.'
+            );
         }
 
         return true;
+    }
+
+    /**
+     * Evita que un fallo de disponibilidad deje al cliente sin salida. El
+     * recorrido permanece en la conversación y se ofrecen acciones nativas
+     * de WhatsApp, sin pedir nuevamente origen y destino.
+     */
+    private function offerBookingRecovery(
+        string $phone,
+        ChatbotConversation $conversation,
+        array $context,
+        string $reason
+    ): void {
+        $this->setState($conversation, 'WA_BOOKING_RECOVERY', $context);
+
+        WhatsAppFreeformSender::sendButtons(
+            $phone,
+            "No pudimos crear la solicitud: {$reason}\n\nSus datos siguen guardados. Puede intentar nuevamente con la misma opción o buscar entre las demás alternativas disponibles.",
+            [
+                ['id' => 'wa_booking_retry', 'title' => 'Volver a intentar'],
+                ['id' => 'wa_booking_alternatives', 'title' => 'Otras opciones'],
+                ['id' => 'wa_booking_recovery_cancel', 'title' => 'Cancelar'],
+            ],
+        );
     }
 
     /**
