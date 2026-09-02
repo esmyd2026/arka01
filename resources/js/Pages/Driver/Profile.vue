@@ -184,11 +184,15 @@ const form = useForm({
     vehicle_color: props.driverProfile?.vehicle_color ?? '',
     vehicle_type: props.driverProfile?.vehicle_type ?? '',
     vehicle_plate: props.driverProfile?.vehicle_plate ?? '',
-    vehicle_year: props.driverProfile?.vehicle_year ?? '',
+    // Pedido explícito del usuario: precargados con los valores más comunes
+    // (año actual del catálogo, sedán de 4 pasajeros con cajuela) para que un
+    // conductor nuevo no tenga que completar todo desde cero — los puede
+    // corregir antes de guardar si su vehículo es distinto.
+    vehicle_year: props.driverProfile?.vehicle_year ?? 2025,
     // Pedido explícito del usuario: para que un cliente pueda filtrar
     // conductores por cantidad de pasajeros y cajuela al pedir una carrera.
-    passenger_capacity: props.driverProfile?.passenger_capacity ?? '',
-    has_trunk: props.driverProfile?.has_trunk ?? false,
+    passenger_capacity: props.driverProfile?.passenger_capacity ?? 4,
+    has_trunk: props.driverProfile?.has_trunk ?? true,
     vehicle_amenities: props.driverProfile?.vehicle_amenities ?? [],
     // Pedido explícito del usuario: precargado en 0.35 para que un
     // conductor nuevo no tenga que adivinar una tarifa — puede cambiarla
@@ -847,6 +851,7 @@ const VERIFICATION_LABELS = {
                                     class="mt-1 block w-full"
                                     v-model="form.vehicle_model"
                                     :disabled="vehicleFieldLocked('vehicle_model')"
+                                    placeholder="Ej: Aveo, Sail, Grand Vitara, Yaris, Accent, Rio"
                                 />
                                 <InputError class="mt-2" :message="form.errors.vehicle_model" />
                             </div>
@@ -1055,6 +1060,7 @@ const VERIFICATION_LABELS = {
                                         id="profile_photo"
                                         type="file"
                                         accept="image/*"
+                                        capture="user"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base"
                                         @input="form.profile_photo = $event.target.files[0]"
                                     />
@@ -1073,6 +1079,7 @@ const VERIFICATION_LABELS = {
                                         id="identity_document"
                                         type="file"
                                         accept="image/*,application/pdf"
+                                        capture="environment"
                                         :disabled="driverProfile?.verification_status === 'pending'"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base disabled:opacity-50"
                                         @input="form.identity_document = $event.target.files[0]"
@@ -1092,6 +1099,7 @@ const VERIFICATION_LABELS = {
                                         id="license_photo"
                                         type="file"
                                         accept="image/*,application/pdf"
+                                        capture="environment"
                                         :disabled="driverProfile?.verification_status === 'pending'"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
                                         @input="form.license_photo = $event.target.files[0]"
@@ -1115,6 +1123,7 @@ const VERIFICATION_LABELS = {
                                         id="vehicle_registration"
                                         type="file"
                                         accept="image/*,application/pdf"
+                                        capture="environment"
                                         :disabled="driverProfile?.verification_status === 'pending'"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
                                         @input="form.vehicle_registration = $event.target.files[0]"
@@ -1138,6 +1147,7 @@ const VERIFICATION_LABELS = {
                                         id="vehicle_photo"
                                         type="file"
                                         accept="image/*"
+                                        capture="environment"
                                         class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
                                         @input="form.vehicle_photo = $event.target.files[0]"
                                     />

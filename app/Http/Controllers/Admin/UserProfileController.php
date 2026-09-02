@@ -39,7 +39,7 @@ class UserProfileController extends Controller
 
     public function show(User $user): Response
     {
-        $user->load(['driverProfile.verifier', 'driverProfile.activatedBy', 'city']);
+        $user->load(['driverProfile.verifier', 'driverProfile.activatedBy', 'driverProfile.requiresDocumentsSetBy', 'city']);
 
         $rating = round((float) $user->reviewsReceived()->avg('rating'), 1);
         $reviewCount = $user->reviewsReceived()->count();
@@ -420,6 +420,73 @@ class UserProfileController extends Controller
         ]);
 
         return back()->with('status', 'Activación manual revocada — vuelve a exigírsele información completa.');
+    }
+
+    /**
+     * Exige documentos a UN conductor puntual (pedido explícito del
+     * usuario: "en el admin colocame un boton a cada conductor para cuando
+     * yo decida para ese conductor en especifico bloquear el activar su
+     * disponibilidad porque le falta un documento") — al revés de
+     * forceActivate() de arriba: aunque el interruptor global
+     * (DriverVerificationRequirementRegistry) tenga los documentos
+     * apagados para el resto, este conductor puntual sigue necesitando
+     * subir cédula/licencia/matrícula antes de poder conectarse. La nota es
+     * opcional (a diferencia de forceActivate): esto no salta un requisito
+     * de seguridad, lo refuerza, así que no hace falta justificarlo.
+     */
+    public function requireDocuments(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->driverProfile, 404);
+
+        $validated = $request->validate(['note' => ['nullable', 'string', 'max:500']]);
+
+        $user->driverProfile->forceFill([
+            'admin_requires_documents_at' => now(),
+            'admin_requires_documents_by' => $request->user()->id,
+            'admin_requires_documents_note' => $validated['note'] ?? null,
+        ])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.require_documents',
+            module: 'usuarios',
+            newValue: ['user_id' => $user->id, 'note' => $validated['note'] ?? null],
+        );
+
+        Log::info('Un admin exigió documentos puntuales a un conductor.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id,
+        ]);
+
+        return back()->with('status', 'Este conductor ahora necesita subir sus documentos antes de poder conectarse.');
+    }
+
+    /**
+     * Deshace la exigencia puntual de documentos — vuelve a depender solo
+     * del interruptor global (DriverVerificationRequirementRegistry) como
+     * cualquier otro conductor.
+     */
+    public function revokeRequireDocuments(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->driverProfile, 404);
+
+        $user->driverProfile->forceFill([
+            'admin_requires_documents_at' => null,
+            'admin_requires_documents_by' => null,
+            'admin_requires_documents_note' => null,
+        ])->save();
+
+        AdminAuditLogger::log(
+            adminUserId: $request->user()->id,
+            action: 'driver.require_documents.revoke',
+            module: 'usuarios',
+            oldValue: ['user_id' => $user->id],
+        );
+
+        Log::info('Se quitó la exigencia puntual de documentos a un conductor.', [
+            'admin_id' => $request->user()->id, 'user_id' => $user->id,
+        ]);
+
+        return back()->with('status', 'Ya no se le exigen documentos puntuales a este conductor.');
     }
 
     /**

@@ -460,6 +460,22 @@ class DriverProfileUpdater
             $profile->forceFill(['deactivated_at' => null])->save();
         }
 
+        // Pedido explícito del usuario: con los documentos ahora opcionales
+        // (ver DriverVerificationRequirementRegistry), un conductor puede
+        // llegar a "información completa" sin haber subido nunca un
+        // archivo — el bloque de arriba (que pone 'pending') solo reacciona
+        // a $reviewedDocuments/foto de perfil/cambios en el vehículo, así
+        // que este caso quedaría sin pasar a revisión nunca. No pisa un
+        // 'approved' ya aprobado ni repite un 'pending' que ya estaba en
+        // cola.
+        if (! in_array($profile->verification_status, ['approved', 'pending'], true)
+            && $profile->hasCompleteRegistrationInformation()) {
+            $profile->forceFill([
+                'verification_status' => 'pending',
+                'verification_rejection_reason' => null,
+            ])->save();
+        }
+
         $isReadyForReview = $profile->verification_status === 'pending'
             && $profile->hasCompleteRegistrationInformation();
 

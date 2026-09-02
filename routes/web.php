@@ -301,7 +301,12 @@ Route::middleware('auth')->group(function () {
     // DriverProfileController::licensePhoto()).
     Route::get('/driver/profile/{user}/licencia', [DriverProfileController::class, 'licensePhoto'])->name('driver-profile.license-photo');
     Route::get('/driver/profile/{user}/documentos/{type}', [DriverProfileController::class, 'document'])
-        ->whereIn('type', ['identity', 'license', 'police-record'])
+        // Bug real: 'vehicle-registration' faltaba acá — DriverProfile::
+        // getVehicleRegistrationUrlAttribute() sí generaba el link (route()
+        // no valida whereIn al generar, solo al hacer match de una request
+        // entrante), pero al hacer clic la matrícula siempre daba 404, tanto
+        // para el conductor como para un admin.
+        ->whereIn('type', ['identity', 'license', 'police-record', 'vehicle-registration'])
         ->name('driver-profile.document');
     // Pasar de conductor a cliente y volver (pedido explícito del usuario) —
     // ver DriverProfileController::deactivate()/reactivate().
@@ -583,6 +588,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // usuario) — ver Admin\UserProfileController::forceActivate().
     Route::post('/usuarios/{user}/activar-conductor', [AdminUserProfileController::class, 'forceActivate'])->name('users.force-activate-driver');
     Route::delete('/usuarios/{user}/activar-conductor', [AdminUserProfileController::class, 'revokeForceActivate'])->name('users.revoke-force-activate-driver');
+    // Exigir documentos a UN conductor puntual, al revés de lo de arriba
+    // (pedido explícito del usuario) — ver
+    // Admin\UserProfileController::requireDocuments().
+    Route::post('/usuarios/{user}/exigir-documentos', [AdminUserProfileController::class, 'requireDocuments'])->name('users.require-driver-documents');
+    Route::delete('/usuarios/{user}/exigir-documentos', [AdminUserProfileController::class, 'revokeRequireDocuments'])->name('users.revoke-require-driver-documents');
     // Pedido explícito del usuario: "como hago para pasar yo a un cliente
     // como conductor" — ver Admin\UserProfileController::convertToDriver().
     Route::post('/usuarios/{user}/convertir-en-conductor', [AdminUserProfileController::class, 'convertToDriver'])->name('users.convert-to-driver');

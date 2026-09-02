@@ -100,6 +100,25 @@ async function revokeForceActivate() {
     router.delete(route('admin.users.revoke-force-activate-driver', props.profileUser.id), { preserveScroll: true });
 }
 
+// Exigir documentos a UN conductor puntual (pedido explícito del usuario:
+// "para cuando yo decida para ese conductor en especifico bloquear el
+// activar su disponibilidad porque le falta un documento") — al revés de
+// forceActivate() de arriba: los documentos están opcionales globalmente
+// (DriverVerificationRequirementRegistry), pero este conductor puntual
+// vuelve a necesitarlos. Ver Admin\UserProfileController::requireDocuments().
+const requireDocumentsForm = useForm({ note: '' });
+function requireDriverDocuments() {
+    requireDocumentsForm.post(route('admin.users.require-driver-documents', props.profileUser.id), {
+        preserveScroll: true,
+        onSuccess: () => requireDocumentsForm.reset(),
+    });
+}
+
+async function revokeRequireDocuments() {
+    if (!(await confirmDialog(`¿Quitarle a ${props.profileUser.name} la exigencia puntual de documentos?`))) return;
+    router.delete(route('admin.users.revoke-require-driver-documents', props.profileUser.id), { preserveScroll: true });
+}
+
 // Pedido explícito del usuario: "como hago para pasar yo a un cliente como
 // conductor" — crea el perfil de conductor ya activado, sin que la persona
 // tenga que completarlo ella misma (ver Admin\UserProfileController::convertToDriver()).
@@ -335,6 +354,33 @@ function formatMessageTime(value) {
                         <SecondaryButton type="submit" :disabled="activationForm.processing">Activar igual</SecondaryButton>
                     </form>
 
+                    <!-- Exigir documentos puntuales (pedido explícito del usuario):
+                         al revés del bloque de arriba — los documentos ya son
+                         opcionales para todos, pero acá se le vuelven a exigir a
+                         ESTE conductor antes de dejarlo conectarse (ver
+                         Admin\UserProfileController::requireDocuments()). -->
+                    <div v-if="profileUser.driver_profile.admin_requires_documents_at" class="p-3 rounded-arka bg-arka-danger/10 border border-arka-danger/30 space-y-2">
+                        <p class="text-sm text-arka-danger">
+                            🔒 Documentos exigidos a mano el {{ new Date(profileUser.driver_profile.admin_requires_documents_at).toLocaleDateString('es-EC', { dateStyle: 'medium' }) }}
+                            por {{ profileUser.driver_profile.requires_documents_set_by?.name ?? 'un admin' }} — no puede conectarse hasta que suba lo que falte.
+                        </p>
+                        <p v-if="profileUser.driver_profile.admin_requires_documents_note" class="text-sm text-arka-text-muted">
+                            Motivo: {{ profileUser.driver_profile.admin_requires_documents_note }}
+                        </p>
+                        <SecondaryButton @click="revokeRequireDocuments">Quitar exigencia de documentos</SecondaryButton>
+                    </div>
+                    <form v-else @submit.prevent="requireDriverDocuments" class="p-3 rounded-arka border border-arka-text-muted/15 space-y-2">
+                        <InputLabel for="require_documents_note" value="Exigirle documentos a este conductor en particular antes de dejarlo conectarse" />
+                        <TextInput
+                            id="require_documents_note"
+                            class="w-full"
+                            v-model="requireDocumentsForm.note"
+                            placeholder="Motivo (opcional, ej: matrícula vencida, dato dudoso)"
+                        />
+                        <InputError :message="requireDocumentsForm.errors.note" />
+                        <SecondaryButton type="submit" :disabled="requireDocumentsForm.processing">Exigir documentos</SecondaryButton>
+                    </form>
+
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         <dt class="text-arka-text-muted">Vehículo</dt>
                         <dd class="text-arka-text">
@@ -386,8 +432,20 @@ function formatMessageTime(value) {
                         <span v-if="pointsForm.recentlySuccessful" class="text-xs text-arka-primary-bright">¡Listo!</span>
                     </form>
 
+                    <!-- Bug real: esta ficha solo mostraba licencia y foto del
+                         vehículo — cédula y matrícula no tenían ningún enlace
+                         acá, un admin no podía verlas sin ir a la cola de
+                         /admin/verificaciones. Ahora se listan los 4. -->
                     <div class="grid grid-cols-2 gap-3">
+                        <div v-if="profileUser.driver_profile.identity_document_url">
+                            <p class="text-xs text-arka-text-muted mb-1">Cédula</p>
+                            <a :href="profileUser.driver_profile.identity_document_url" target="_blank" class="text-sm font-medium text-arka-primary-bright hover:underline">Ver documento ↗</a>
+                        </div>
                         <img v-if="profileUser.driver_profile.license_photo_url" :src="profileUser.driver_profile.license_photo_url" alt="Licencia" class="h-32 w-full object-cover rounded-arka" />
+                        <div v-if="profileUser.driver_profile.vehicle_registration_url">
+                            <p class="text-xs text-arka-text-muted mb-1">Matrícula del vehículo</p>
+                            <a :href="profileUser.driver_profile.vehicle_registration_url" target="_blank" class="text-sm font-medium text-arka-primary-bright hover:underline">Ver documento ↗</a>
+                        </div>
                         <img v-if="profileUser.driver_profile.vehicle_photo_url" :src="profileUser.driver_profile.vehicle_photo_url" alt="Vehículo" class="h-32 w-full object-cover rounded-arka" />
                     </div>
 

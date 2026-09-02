@@ -95,6 +95,7 @@ class DriverProfile extends Model
         'vehicle_amenities' => 'array',
         'whatsapp_ride_actions_enabled' => 'boolean',
         'admin_activated_at' => 'datetime',
+        'admin_requires_documents_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -344,6 +345,17 @@ class DriverProfile extends Model
     }
 
     /**
+     * Admin que le exigió documentos puntuales a este conductor, al
+     * contrario de activatedBy() de arriba (pedido explícito del usuario) —
+     * ver missingRegistrationInformation() y
+     * Admin\UserProfileController::requireDocuments().
+     */
+    public function requiresDocumentsSetBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_requires_documents_by');
+    }
+
+    /**
      * Cuántas flotas activas integra este conductor ahora mismo (sus "clientes
      * de confianza" vigentes). Se usa contra el límite del plan Gratis del
      * conductor (sección 7.2 / config/arka.php) antes de aceptar una invitación nueva.
@@ -516,12 +528,18 @@ class DriverProfile extends Model
             $missing->push(['key' => 'payment_method', 'label' => 'al menos una forma de pago', 'section' => 'work']);
         }
 
+        // Pedido explícito del usuario: con los documentos ya opcionales
+        // para todos (interruptor global de arriba), un admin puede
+        // exigírselos igual a UN conductor puntual — ver
+        // Admin\UserProfileController::requireDocuments().
+        $requiredForThisDriver = $this->admin_requires_documents_at !== null;
+
         foreach ([
             'identity_document' => ['identity_document_path', 'foto de cédula'],
             'license_photo' => ['license_photo_path', 'foto de licencia'],
             'vehicle_registration' => ['vehicle_registration_path', 'matrícula del vehículo'],
         ] as $requirement => [$field, $label]) {
-            if (DriverVerificationRequirementRegistry::isRequired($requirement) && ! filled($this->{$field})) {
+            if ((DriverVerificationRequirementRegistry::isRequired($requirement) || $requiredForThisDriver) && ! filled($this->{$field})) {
                 $missing->push(['key' => $requirement, 'label' => $label, 'section' => 'verification']);
             }
         }
