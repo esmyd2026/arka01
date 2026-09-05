@@ -49,8 +49,14 @@ class HandleInertiaRequests extends Middleware
             ? blank($user->last_name) || blank($user->city_id) || blank($user->phone) || ! $user->phone_verified_at
             : false;
         $pendingRideRequests = $user?->isDriver() ? RideRequest::pendingIncomingFor($user->id)->count() : 0;
+        // Bug real reportado por el usuario (403 en producción): sin el
+        // filtro de initiated_by, este contador (y la lista de "Invitaciones
+        // recibidas" en Driver/Invitations.vue, ver DriverClientFinder::
+        // myClients()) incluía solicitudes que el propio conductor le mandó
+        // a un cliente — a esas quien debe responder es el cliente, nunca el
+        // conductor (FleetInvitationPolicy::respond()).
         $pendingFleetInvitations = $user?->isDriver()
-            ? FleetInvitation::query()->where('driver_user_id', $user->id)->where('status', 'pending')->count()
+            ? FleetInvitation::query()->where('driver_user_id', $user->id)->where('status', 'pending')->where('initiated_by', '!=', 'driver')->count()
             : 0;
         $pendingClientFleetRequests = $user?->isClient()
             ? FleetInvitation::query()

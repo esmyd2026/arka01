@@ -149,9 +149,16 @@ class DashboardController extends Controller
                 // ya estaba parado en "Mis clientes de confianza") — con este
                 // número, la tarjeta "Mis clientes" puede mostrar el mismo
                 // tipo de badge que ya tiene "Solicitudes".
+                // Bug real reportado por el usuario (403 en producción): sin
+                // el filtro de initiated_by, este conteo (y "Mis clientes de
+                // confianza", ver DriverClientFinder::myClients()) incluía
+                // solicitudes que el propio conductor le mandó a un cliente
+                // — a esas quien debe responder es el cliente, nunca el
+                // conductor (FleetInvitationPolicy::respond()).
                 'pending_invitations' => FleetInvitation::query()
                     ->where('driver_user_id', $userId)
                     ->where('status', 'pending')
+                    ->where('initiated_by', '!=', 'driver')
                     ->count(),
                 // Pedido explícito del usuario: mostrar en Inicio, de un
                 // vistazo, la tarifa que el conductor tiene declarada — con

@@ -41,6 +41,18 @@ class DriverClientFinder
         $pendingInvitations = FleetInvitation::query()
             ->where('driver_user_id', $userId)
             ->where('status', 'pending')
+            // Bug real reportado por el usuario (403 en producción): esta
+            // consulta no distinguía quién inició la invitación, así que acá
+            // también aparecía una solicitud que el propio conductor le
+            // mandó a un cliente (initiated_by = 'driver') — a esa quien
+            // debe responder es el cliente (ver FleetInvitation::
+            // respondingPartyId()), nunca el conductor. Mostrarla acá con
+            // los botones "Aceptar"/"Rechazar" activos dejaba al conductor
+            // tocar una acción que la policy (FleetInvitationPolicy::respond())
+            // siempre le iba a rechazar con 403. Esas solicitudes salientes
+            // ya se muestran, sin botón, como "Solicitud enviada" en el
+            // buscador de más abajo (ver searchClients()).
+            ->where('initiated_by', '!=', 'driver')
             // 'inviter' (pedido explícito del usuario, "Recomendar mi
             // flota"): permite mostrar "Recomendado por X" cuando quien
             // invitó no es el dueño de la flota.

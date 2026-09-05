@@ -198,6 +198,36 @@ class DriverInitiatedFleetInvitationTest extends TestCase
             ->assertForbidden();
     }
 
+    /**
+     * Bug real reportado por el usuario (403 en producción, con captura):
+     * "Mis clientes de confianza" mostraba esta solicitud en "Invitaciones
+     * recibidas" con los botones Aceptar/Rechazar activos — el conductor los
+     * tocaba y el backend le respondía 403 (correcto, ver el test de
+     * arriba), pero la pantalla nunca debió ofrecerle esa acción. Cubre
+     * tanto la pantalla web (Driver/Invitations.vue) como los contadores que
+     * avisan de la invitación en Inicio y en la barra de notificaciones.
+     */
+    public function test_a_driver_initiated_request_does_not_show_as_a_received_invitation(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $client = User::factory()->create();
+
+        $this->actingAs($driver)->post(route('fleet-invitations.request'), ['client_user_id' => $client->id]);
+
+        $this->actingAs($driver)->get(route('driver.invitations.index'))->assertInertia(
+            fn ($page) => $page->where('pendingInvitations', [])
+        );
+
+        $this->actingAs($driver)->get(route('dashboard'))->assertInertia(
+            fn ($page) => $page->where('driverStats.pending_invitations', 0)
+        );
+
+        $this->actingAs($driver)->get(route('dashboard'))->assertInertia(
+            fn ($page) => $page->where('auth.pendingFleetInvitationsCount', 0)
+        );
+    }
+
     public function test_driver_can_cancel_their_own_pending_request(): void
     {
         $driver = User::factory()->create();
