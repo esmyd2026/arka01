@@ -227,6 +227,12 @@ Route::middleware('auth')->group(function () {
 
     // Recorrido guiado por rol, una sola vez (pedido explícito del usuario).
     Route::post('/onboarding/completar', [OnboardingController::class, 'complete'])->name('onboarding.complete');
+    // Tutoriales guiados con Driver.js, anclados a controles reales de la
+    // pantalla (pedido explícito del usuario) — ver
+    // Utils/rideRequestTour.js y Utils/fleetTour.js.
+    Route::post('/onboarding/tour-pedir-carrera', [OnboardingController::class, 'completeRideRequestTour'])->name('onboarding.ride-request-tour.complete');
+    Route::post('/onboarding/tour-flota', [OnboardingController::class, 'completeFleetTour'])->name('onboarding.fleet-tour.complete');
+    Route::post('/onboarding/tour-perfil-conductor', [OnboardingController::class, 'completeDriverProfileTour'])->name('onboarding.driver-profile-tour.complete');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -240,11 +246,6 @@ Route::middleware('auth')->group(function () {
 
     // Perfil y documentos privados de la cuenta Cooperativa. El registro
     // crea la cuenta base; este formulario completa la postulación legal.
-    // Pedido explícito del usuario: "las cooperativas deberian ser como los
-    // conductores, si no me llenan todo no pueden ir a mas ningun lado
-    // hasta que yo les verifique y les apruebe" — estas 4 rutas son
-    // justamente las que necesita para completar y enviar su postulación,
-    // así que quedan siempre accesibles sin el gate de abajo.
     Route::middleware('cooperative')->group(function () {
         Route::get('/cooperativa/perfil', [CooperativeProfileController::class, 'edit'])->name('cooperative.profile.edit');
         Route::post('/cooperativa/perfil', [CooperativeProfileController::class, 'update'])->name('cooperative.profile.update');
@@ -252,11 +253,17 @@ Route::middleware('auth')->group(function () {
         Route::post('/cooperativa/perfil/logo', [CooperativeProfileController::class, 'updateLogo'])->name('cooperative.profile.logo.update');
     });
 
-    // El resto del panel de la cooperativa (despacho, conductores, billetera,
-    // clientes, pagos) queda bloqueado hasta que un admin la apruebe — antes
-    // solo se le avisaba con un banner en el dashboard, pero nada se lo
-    // impedía de verdad (ver App\Http\Middleware\EnsureCooperativeIsApproved).
-    Route::middleware(['cooperative', 'cooperative_approved'])->group(function () {
+    // Pedido explícito del usuario: revirtió la decisión anterior de
+    // bloquear TODO el panel hasta la aprobación de un admin ("no le
+    // bloquees las pestañas para que pueda ver todo... y su perfil sí
+    // estará en revisión cuando mande esos datos") — mismo criterio que ya
+    // se usa con los conductores: sin bloqueo de navegación, pero sí gates
+    // funcionales puntuales en Cooperative::isApproved() (directorio
+    // público, vincular conductores, recibir carreras — ver
+    // CooperativeDirectoryFinder, CooperativeDriverController::linkDriver(),
+    // RideRequestCreator). App\Http\Middleware\EnsureCooperativeIsApproved
+    // queda sin usar por ahora; no se borró por si hace falta reactivarlo.
+    Route::middleware('cooperative')->group(function () {
         Route::get('/cooperativa', [CooperativeDashboardController::class, 'index'])->name('cooperative.dashboard');
         Route::patch('/cooperativa/configuracion-despacho', [CooperativeDashboardController::class, 'updateDispatchSettings'])->name('cooperative.dispatch-settings.update');
         Route::get('/cooperativa/conductores', [CooperativeDriverController::class, 'index'])->name('cooperative.drivers.index');

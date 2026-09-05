@@ -895,6 +895,23 @@ onBeforeUnmount(() => {
                                     >
                                         Ver mi perfil público
                                     </DropdownLink>
+                                    <!-- Pedido explícito del usuario ("puede colocar en una
+                                         opción el activar tour para revisar cuando desee"):
+                                         los tutoriales de Driver.js están anclados a
+                                         controles reales de cada pantalla, así que no se
+                                         pueden lanzar desde acá mismo — el link navega a la
+                                         pantalla correspondiente con `?tour=1`, que fuerza el
+                                         disparo aunque ya lo haya visto antes (ver el
+                                         onMounted de Ride/Request.vue y Fleet/List.vue). -->
+                                    <DropdownLink v-if="showClientNav" :href="route('dashboard') + '?tour=1'">
+                                        Tutorial: pedir carrera
+                                    </DropdownLink>
+                                    <DropdownLink v-if="showClientNav" :href="route('fleet.index') + '?tour=1'">
+                                        Tutorial: mi flota
+                                    </DropdownLink>
+                                    <DropdownLink v-if="showDriverNav" :href="route('driver.profile.edit') + '?tour=1'">
+                                        Tutorial: completar perfil
+                                    </DropdownLink>
                                     <button
                                         type="button"
                                         @click="activatePushNotifications"

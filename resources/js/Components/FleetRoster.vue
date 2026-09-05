@@ -12,6 +12,8 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierLabel } from '@/Utils/tierBadge';
 import { openWhatsAppChooser } from '@/Utils/whatsapp';
+import { startGuidedTour } from '@/Utils/guidedTour';
+import { fleetTourSteps } from '@/Utils/fleetTour';
 
 // Roster completo de UNA flota: buscador para invitar, conductores activos e
 // invitaciones pendientes — pedido explícito del usuario ("que no vaya un
@@ -204,6 +206,22 @@ function onFleetInvitationCreated(e) {
     });
 }
 
+// Tutorial guiado con Driver.js (pedido explícito del usuario): explica que
+// acá se agregan conductores de confianza a la flota, para poder pedirles
+// carreras directamente — buscándolos por nombre o usuario. El disparo
+// automático la primera vez vive en Fleet/List.vue (una sola vez por
+// pantalla, en la primera flota) — acá solo queda el botón manual "Ver
+// tutorial" para poder repetirlo, por flota, cuando el cliente quiera.
+function startFleetTour() {
+    startGuidedTour(fleetTourSteps(props.fleet.id), {
+        onFinish: () => {
+            if (!usePage().props.auth.user.fleet_tour_seen_at) {
+                router.post(route('onboarding.fleet-tour.complete'), {}, { preserveScroll: true, preserveState: true });
+            }
+        },
+    });
+}
+
 onMounted(() => {
     personalChannel = window.Echo.private(`App.Models.User.${userId}`);
     personalChannel.listen('.fleet-invitation.created', onFleetInvitationCreated);
@@ -217,14 +235,22 @@ onBeforeUnmount(() => {
 <template>
     <div class="space-y-6">
         <!-- Buscador para invitar conductores -->
-        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
-            <!-- Pedido explícito del usuario: buscar por nombre, apellido,
-                 usuario o código — cada resultado ya muestra foto, código y
-                 calificación, así que varios homónimos no se confunden entre
-                 sí (ver FleetController::searchDrivers()). El teléfono sigue
-                 sin mostrarse en los resultados, eso no cambió. -->
-            <InputLabel value="Buscar conductor por nombre, apellido, usuario o código" />
+        <div :id="`fleet-search-card-${fleet.id}`" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
+            <div class="flex items-start justify-between gap-3">
+                <!-- Pedido explícito del usuario: buscar por nombre, apellido,
+                     usuario o código — cada resultado ya muestra foto, código y
+                     calificación, así que varios homónimos no se confunden entre
+                     sí (ver FleetController::searchDrivers()). El teléfono sigue
+                     sin mostrarse en los resultados, eso no cambió. -->
+                <InputLabel value="Buscar conductor por nombre, apellido, usuario o código" />
+                <!-- Pedido explícito del usuario: volver a ver el tutorial de
+                     esta pantalla cuando quiera, no solo la primera vez. -->
+                <button type="button" class="shrink-0 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright" @click="startFleetTour">
+                    Ver tutorial
+                </button>
+            </div>
             <TextInput
+                :id="`fleet-driver-search-${fleet.id}`"
                 v-model="searchTerm"
                 type="text"
                 class="mt-1 block w-full"

@@ -420,9 +420,19 @@ function uploadLogo(event) {
 
                 <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
                     <h3 class="text-lg font-semibold text-arka-text">Documentación legal</h3>
-                    <p class="mt-1 text-sm text-arka-text-muted">Archivos PDF privados, visibles únicamente para la cooperativa y administración.</p>
+                    <p class="mt-1 text-sm text-arka-text-muted">
+                        Por ahora no son obligatorios para enviar su cooperativa a revisión — puede completarlos
+                        más adelante cuando administración se los pida.
+                    </p>
 
-                    <div class="mt-5 grid gap-5 sm:grid-cols-2">
+                    <!-- Pedido explícito del usuario ("siento que es mucho, eso lo
+                         puedo manejar luego"): RUC, nombramiento del representante,
+                         documento habilitante y permiso de funcionamiento ya no son
+                         obligatorios para mandar a revisión (ver
+                         CooperativeProfileController::submitForReview()) y se
+                         ocultan acá para no pesarle el arranque — el backend los
+                         sigue aceptando igual si algún día se reactivan. -->
+                    <div v-if="false" class="mt-5 grid gap-5 sm:grid-cols-2">
                         <div v-for="(label, type) in requiredDocuments" :key="type" class="rounded-arka border border-arka-text-muted/15 p-4">
                             <InputLabel :value="label" />
                             <p v-if="documentByType(type)" class="mt-1 text-xs text-arka-primary-bright">
@@ -437,12 +447,13 @@ function uploadLogo(event) {
                             />
                             <InputError class="mt-1" :message="form.errors[`${type}_document`]" />
                         </div>
+                    </div>
 
-                        <!-- Pedido explícito del usuario: seguro que proteja al
-                             representante/dueño, a los conductores afiliados y a los
-                             vehículos — autodeclarado con un checkbox, sin documento
-                             adjunto (a diferencia de los 4 de arriba). Se exige marcado
-                             recién al enviar a validación, ver submitForReview(). -->
+                    <!-- Seguro autodeclarado (sin archivo, ya no obligatorio para
+                         enviar a revisión) y documentos extra opcionales — estos dos
+                         sí siguen visibles, no pesan el arranque como los 4 de
+                         arriba. -->
+                    <div class="mt-5 grid gap-5 sm:grid-cols-2">
                         <div class="rounded-arka border border-arka-text-muted/15 p-4 sm:col-span-2">
                             <label class="flex items-start gap-2">
                                 <Checkbox v-model:checked="form.has_insurance" class="mt-0.5" />

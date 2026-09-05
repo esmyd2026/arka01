@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Events\CooperativeRideUpdated;
 use App\Jobs\FallbackCooperativeAssignment;
+use App\Models\City;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
@@ -163,14 +164,15 @@ class CooperativeModuleTest extends TestCase
     }
 
     /**
-     * Pedido explícito del usuario: "la cooperativas deberian ser como los
-     * conductores si no me llenan todo no pueden ir a mas ningun lado hasta
-     * que yo les verifique y les apruebe" — antes del gate, una cooperativa
-     * 'pending' podía navegar libremente a su panel, conductores, billetera,
-     * etc.; solo un banner en el dashboard avisaba que "aún no puede
-     * operar", pero nada se lo impedía de verdad.
+     * Pedido explícito del usuario ("no le bloquees las pestañas para que
+     * pueda ver todo"): revierte la decisión anterior de bloquear TODO el
+     * panel hasta la aprobación de un admin — igual que un conductor, una
+     * cooperativa 'pending' ahora navega libremente; lo que sigue exigiendo
+     * aprobación real es vincular conductores
+     * (CooperativeDriverController::linkDriver()) y aparecer en el
+     * directorio público/recibir carreras (Cooperative::isApproved()).
      */
-    public function test_an_unapproved_cooperative_is_redirected_away_from_its_panel(): void
+    public function test_an_unapproved_cooperative_can_still_reach_its_panel(): void
     {
         $user = User::factory()->create();
         Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Pendiente']);
@@ -181,8 +183,7 @@ class CooperativeModuleTest extends TestCase
             'cooperative.wallet',
             'cooperative.clients.index',
         ] as $routeName) {
-            $this->actingAs($user)->get(route($routeName))
-                ->assertRedirect(route('cooperative.profile.edit'));
+            $this->actingAs($user)->get(route($routeName))->assertOk();
         }
     }
 
@@ -231,54 +232,40 @@ class CooperativeModuleTest extends TestCase
     }
 
     /**
-     * Documentos legales de más los datos obligatorios que ya exige
-     * submitForReview() — deja la cooperativa lista para enviar a
-     * validación salvo por lo que el test decida omitir (ej. el seguro).
+     * Pedido explícito del usuario ("siento que es mucho, eso lo puedo
+     * manejar luego"): ya no exige RUC/nombramiento/habilitante/permiso
+     * (documentos) ni el seguro declarado para mandar a validación — solo
+     * nombre, RUC (el número), dirección/coordenadas del stand y ciudad
+     * (ver CooperativeProfileController::submitForReview()).
      */
-    private function completeCooperativeDocuments(Cooperative $cooperative): void
-    {
-        foreach (['ruc' => 'RUC', 'legal_appointment' => 'Nombramiento', 'operating_authorization' => 'Habilitante', 'operating_permit' => 'Permiso'] as $type => $label) {
-            $cooperative->documents()->create([
-                'type' => $type, 'label' => $label, 'path' => "cooperative-documents/{$cooperative->id}/{$type}.pdf",
-                'original_name' => "{$type}.pdf", 'mime_type' => 'application/pdf', 'size_bytes' => 1024, 'status' => 'pending',
-            ]);
-        }
-    }
-
-    /**
-     * Pedido explícito del usuario: la cooperativa declara con un checkbox
-     * si cuenta con un seguro que proteja al representante, a los
-     * conductores y a los vehículos — se exige recién al enviar a
-     * validación, no en cada guardado parcial.
-     */
-    public function test_submitting_for_review_requires_declaring_insurance(): void
+    public function test_submitting_for_review_no_longer_requires_documents_or_insurance(): void
     {
         $user = User::factory()->create();
+        $city = City::query()->create(['name' => 'Guayaquil']);
         $cooperative = Cooperative::query()->create([
-            'user_id' => $user->id, 'name' => 'Coop Sur', 'legal_name' => 'Coop Sur S.A.', 'ruc' => '1234567890001',
-            'main_address' => 'Av. Principal', 'stand_lat' => -2.17, 'stand_lng' => -79.92, 'city_id' => null,
-            'province' => 'Guayas', 'phone' => '0999999999', 'email' => 'coop@example.com', 'legal_representative' => 'Juan Pérez',
-            'geographic_coverage' => 'Guayaquil', 'operating_hours' => '24 horas',
+            'user_id' => $user->id, 'name' => 'Coop Sur', 'ruc' => '1234567890001',
+            'main_address' => 'Av. Principal', 'stand_lat' => -2.17, 'stand_lng' => -79.92,
+            'city_id' => $city->id,
         ]);
-        $this->completeCooperativeDocuments($cooperative);
 
         $this->actingAs($user)->post(route('cooperative.profile.submit-review'))
-            ->assertSessionHasErrors('has_insurance');
+            ->assertSessionHasNoErrors();
 
-        $this->assertNull($cooperative->fresh()->submitted_at);
+        $cooperative->refresh();
+        $this->assertSame('pending', $cooperative->status);
+        $this->assertNotNull($cooperative->submitted_at);
     }
 
-    public function test_an_admin_cannot_approve_a_cooperative_without_declared_insurance(): void
+    public function test_an_admin_can_approve_a_cooperative_without_documents_or_insurance(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);
         $user = User::factory()->create();
         $cooperative = Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Norte']);
-        $this->completeCooperativeDocuments($cooperative);
 
         $this->actingAs($admin)->post(route('admin.cooperatives.approve', $cooperative))
-            ->assertSessionHasErrors('cooperative');
+            ->assertSessionHasNoErrors();
 
-        $this->assertNotSame('approved', $cooperative->fresh()->status);
+        $this->assertSame('approved', $cooperative->fresh()->status);
     }
 
     public function test_an_admin_can_mark_a_cooperative_as_public(): void

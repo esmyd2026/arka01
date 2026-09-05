@@ -13,13 +13,14 @@ import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import ArkaRouteLoader from '@/Components/ArkaRouteLoader.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { distanceKm } from '@/Utils/haversine';
 import { fetchOsrmRoute, fetchOsrmMultiRoute } from '@/Utils/osrmRoute';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import { etaMinutes } from '@/Utils/eta';
 import { roundUpToDime } from '@/Utils/currency';
+import { startGuidedTour, RIDE_TOUR_RESUME_KEY } from '@/Utils/guidedTour';
 
 const props = defineProps({
     fleet: { type: Object, required: true },
@@ -262,6 +263,88 @@ const showRideOptions = ref(false);
 // (initialDestination), esta pantalla arranca directo en "Elige tu
 // conductor" — el paso 'destination' no tiene nada que agregar en ese caso.
 const step = ref(props.initialDestination ? 'driver' : 'destination');
+
+// Tutorial guiado con Driver.js (pedido explícito del usuario): recorre los
+// 4 controles reales de "¿A dónde vamos?" — destino, forma de pago, agregar
+// parada e invertir origen/destino. Solo tiene sentido con el paso
+// 'destination' activo (ahí es donde viven esos 4 elementos en el DOM); si
+// llegó con un destino ya elegido (paso 'driver' de entrada), no se dispara
+// solo, pero el botón "Ver tutorial" del encabezado lo sigue ofreciendo para
+// cuando el cliente vuelva a este paso.
+function rideRequestTourSteps() {
+    return [
+        {
+            element: '#ride-request-tour-header',
+            popover: {
+                title: '¿A dónde vamos?',
+                description: 'Acá armas tu carrera: elige desde dónde sales y a dónde vas, y sigue los pasos.',
+            },
+        },
+        {
+            element: '#destination_address',
+            popover: {
+                title: 'Tu destino',
+                description: 'Escribe la dirección o elige una de las sugerencias para fijarla en el mapa.',
+            },
+        },
+        {
+            element: '#payment-method-selector',
+            popover: {
+                title: 'Forma de pago',
+                description: 'Elige si vas a pagar en efectivo o por transferencia antes de pedir la carrera.',
+            },
+        },
+        {
+            element: '#add-stop-button',
+            popover: {
+                title: '¿Necesitas parar en el camino?',
+                description: 'Agrega hasta 4 paradas entre tu origen y tu destino — cada una se cobra por separado.',
+            },
+        },
+        {
+            element: '#swap-origin-destination',
+            popover: {
+                title: '¿Te equivocaste de lado?',
+                description: 'Este botón invierte el origen y el destino sin tener que volver a escribirlos.',
+            },
+        },
+    ];
+}
+
+function startRideRequestTour() {
+    startGuidedTour(rideRequestTourSteps(), {
+        onFinish: () => {
+            if (!usePage().props.auth.user.ride_request_tour_seen_at) {
+                router.post(route('onboarding.ride-request-tour.complete'), {}, { preserveScroll: true, preserveState: true });
+            }
+        },
+    });
+}
+
+onMounted(() => {
+    // Pedido explícito del usuario: "colocar en una opción el activar tour
+    // para revisar cuando desee" — el link del menú de cuenta (Authenticated
+    // Layout.vue) manda acá con `?tour=1`, que fuerza el tour aunque ya
+    // esté marcado como visto.
+    const forceTour = new URLSearchParams(window.location.search).has('tour');
+    // El primer paso del tour vive en el Dashboard ("¿A dónde vamos?") — si
+    // viene de ahí (tocó "Siguiente"), sigue acá aunque ya esté marcado
+    // como visto (el Dashboard ya lo marcó al mostrar su propio paso).
+    const resumingFromDashboard = sessionStorage.getItem(RIDE_TOUR_RESUME_KEY) === '1';
+    if (resumingFromDashboard) sessionStorage.removeItem(RIDE_TOUR_RESUME_KEY);
+
+    // Mismo bug real de la colisión con el tour general de bienvenida (ver
+    // Dashboard.vue): si llegó derecho acá (sin pasar por el Dashboard) en
+    // una cuenta que nunca vio esa guía general, espera a que la vea
+    // primero — `resumingFromDashboard` ya implica que la vio, porque el
+    // paso del Dashboard exige lo mismo antes de dispararse solo.
+    if (step.value === 'destination'
+        && usePage().props.auth.isClient
+        && (forceTour || resumingFromDashboard
+            || (!usePage().props.auth.user.ride_request_tour_seen_at && usePage().props.auth.user.onboarding_completed_at))) {
+        startRideRequestTour();
+    }
+});
 // Si ya viene con un conductor puntual elegido (ej. desde "Conductores que
 // quizás conozcas"), la categoría correspondiente arranca ya elegida —
 // mismo criterio que ya resolvía `sourceMode` más arriba para ese mismo
@@ -1594,7 +1677,7 @@ function submit() {
                 <template v-if="step === 'destination'">
                 <ArkaRouteLoader :show="destinationLoading" :title="destinationLoadingTitle" />
                 <div class="flex flex-col overflow-hidden rounded-[26px] border border-white/70 bg-[#f4f7f5] shadow-[0_24px_70px_rgba(1,12,7,0.30)] ring-1 ring-arka-primary/[0.06]">
-                <div class="order-1 flex items-center justify-between gap-4 bg-white/95 px-4 py-3.5 sm:px-5">
+                <div id="ride-request-tour-header" class="order-1 flex items-center justify-between gap-4 bg-white/95 px-4 py-3.5 sm:px-5">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.14em] text-arka-primary">
                             {{ whenMode === 'scheduled' ? 'Viaje programado' : 'Nueva carrera' }}
@@ -1604,11 +1687,22 @@ function submit() {
                         </h1>
                         <p class="mt-0.5 text-xs text-arka-base/45">Revisa el punto de partida y el destino.</p>
                     </div>
-                    <button type="button" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-arka-base/[0.06] bg-[#f6f8f7] text-arka-base/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
-                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
-                        </svg>
-                    </button>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <!-- Pedido explícito del usuario: volver a ver el tutorial de
+                             esta pantalla cuando quiera, no solo la primera vez. -->
+                        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-arka-base/[0.06] bg-[#f6f8f7] text-arka-base/55 shadow-sm" aria-label="Ver tutorial de pedir carrera" title="Ver tutorial" @click="startRideRequestTour">
+                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.09 9a3 3 0 1 1 5.83 1c0 2-3 2-3 4" />
+                                <path stroke-linecap="round" d="M12 17h.01" />
+                                <circle cx="12" cy="12" r="9" />
+                            </svg>
+                        </button>
+                        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-arka-base/[0.06] bg-[#f6f8f7] text-arka-base/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
+                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <!-- Selector de flota: solo aparece si el cliente tiene más de una
                      (sección 7.3, plan Multi-flota). -->
@@ -1728,7 +1822,7 @@ function submit() {
                      junto a "¿Cuándo viajas?", el mismo tipo de decisión
                      temprana. `order-5`, mismo valor que el bloque de arriba
                      — entre los dos solo importa el orden real del DOM. -->
-                <div class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-base/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
+                <div id="payment-method-selector" class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-base/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
                     <p class="text-xs font-semibold text-arka-base/55">Forma de pago</p>
 
                     <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
@@ -1856,6 +1950,7 @@ function submit() {
                         </p>
                     </div>
                     <button
+                        id="add-stop-button"
                         v-if="stops.length < MAX_STOPS"
                         type="button"
                         class="pl-7 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright"
@@ -2119,6 +2214,7 @@ function submit() {
                                      con un ícono, sin tener que volver a escribir las dos
                                      direcciones de nuevo. -->
                                 <button
+                                    id="swap-origin-destination"
                                     type="button"
                                     class="grid h-8 w-8 place-items-center rounded-full border border-black/[0.06] text-arka-base/50 transition hover:bg-[#F5F7F6] hover:text-arka-base"
                                     aria-label="Invertir recoger y destino"

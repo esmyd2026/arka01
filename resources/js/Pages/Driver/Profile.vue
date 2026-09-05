@@ -20,6 +20,7 @@ import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import { canInstallApp, installApp } from '@/pwaInstall';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { startGuidedTour } from '@/Utils/guidedTour';
 
 // Pedido explícito del usuario: mostrar una lista de colores para elegir en
 // vez de obligar a escribirlo a mano (evita variantes como "blanco"/"Blanco
@@ -299,6 +300,81 @@ const activeProfileSection = ref(!props.driverProfile || !vehicleInfoComplete.va
 const toggleProfileSection = (section) => {
     activeProfileSection.value = activeProfileSection.value === section ? null : section;
 };
+
+// Tutorial guiado con Driver.js (pedido explícito del usuario): recorre las
+// secciones colapsables 2 (vehículo), 5 (tarifa/forma de pago) y 3
+// (documentos) más el botón de guardar. Cada sección usa `v-show`, así que
+// solo la que tiene `activeProfileSection` como valor actual queda visible
+// en el DOM — por eso cada paso que cruza de sección pisa `onNextClick`/
+// `onPrevClick` para abrir la sección correcta ANTES de avanzar/retroceder
+// (si no, Driver.js intentaría resaltar un elemento con display:none).
+function driverProfileTourSteps(tourRef) {
+    const goTo = (section, direction) => () => {
+        activeProfileSection.value = section;
+        nextTick(() => (direction === 'next' ? tourRef.value.moveNext() : tourRef.value.movePrevious()));
+    };
+
+    return [
+        {
+            element: '#driver-vehicle-settings',
+            popover: {
+                title: 'Datos de tu vehículo',
+                description: 'Acá completas marca, modelo, placa y el resto de los datos de tu auto — son los que un cliente ve para reconocerte.',
+                onNextClick: goTo('work', 'next'),
+            },
+        },
+        {
+            element: '#driver-work-settings',
+            popover: {
+                title: 'Tarifa y forma de pago',
+                description: 'Define cuánto cobras por kilómetro y qué formas de pago aceptas.',
+                onPrevClick: goTo('vehicle', 'prev'),
+                onNextClick: goTo('verification', 'next'),
+            },
+        },
+        {
+            element: '#driver-verification-settings',
+            popover: {
+                title: 'Documentos (opcionales por ahora)',
+                description: 'Ya no son obligatorios para mandar tu perfil a revisión — los puedes subir después si administración te los pide.',
+                onPrevClick: goTo('work', 'prev'),
+            },
+        },
+        {
+            element: '#driver-profile-submit',
+            popover: {
+                title: 'Guardar y enviar a revisión',
+                description: 'Con estos datos ya puedes guardar — tu perfil queda pendiente de aprobación y te avisamos cuando puedas conectarte.',
+            },
+        },
+    ];
+}
+
+function startDriverProfileTour() {
+    const tourRef = { value: null };
+    activeProfileSection.value = 'vehicle';
+    tourRef.value = startGuidedTour(driverProfileTourSteps(tourRef), {
+        onFinish: () => {
+            if (!usePage().props.auth.user.driver_profile_tour_seen_at) {
+                router.post(route('onboarding.driver-profile-tour.complete'), {}, { preserveScroll: true, preserveState: true });
+            }
+        },
+    });
+}
+
+onMounted(() => {
+    const forceTour = new URLSearchParams(window.location.search).has('tour');
+    // Bug real encontrado al probar: el tour general de bienvenida
+    // (OnboardingTour.vue, disparado desde AuthenticatedLayout.vue) y este
+    // se mostraban los dos a la vez en una cuenta que nunca vio ninguno,
+    // superpuestos en pantalla. Mientras esa guía general siga pendiente,
+    // este tour espera — se dispara solo la próxima vez que entre a esta
+    // pantalla, ya sin choque. El botón manual "Ver tutorial" (`?tour=1`)
+    // no espera: es una acción explícita del conductor.
+    if (forceTour || (!usePage().props.auth.user.driver_profile_tour_seen_at && usePage().props.auth.user.onboarding_completed_at)) {
+        nextTick(() => startDriverProfileTour());
+    }
+});
 
 const completedStatusCount = computed(() => statusItems.value.filter((item) => item.ok).length);
 
@@ -1366,7 +1442,7 @@ const VERIFICATION_LABELS = {
                             <InputError class="mt-2" :message="form.errors.pickup_surcharge_enabled" />
                         </div>
 
-                        <div>
+                        <div id="payment-methods">
                             <InputLabel value="Métodos de pago que acepta" />
                             <div class="mt-2 flex flex-wrap gap-3">
                                 <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
@@ -1548,7 +1624,7 @@ const VERIFICATION_LABELS = {
                             </div>
                         </section>
 
-                        <div class="sticky bottom-20 z-20 flex items-center gap-4 rounded-2xl border border-arka-primary/20 bg-arka-card/95 p-3 shadow-xl backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+                        <div id="driver-profile-submit" class="sticky bottom-20 z-20 flex items-center gap-4 rounded-2xl border border-arka-primary/20 bg-arka-card/95 p-3 shadow-xl backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
                             <PrimaryButton class="min-h-11 flex-1 justify-center sm:flex-none" :disabled="form.processing">
                                 {{ driverProfile ? 'Guardar cambios' : 'Activar perfil de conductor' }}
                             </PrimaryButton>

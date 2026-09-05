@@ -1,6 +1,10 @@
 /* Leaflet necesita su propio CSS para que el mapa y los controles se vean bien.
    Tiene que ir antes que cualquier otra regla (regla del propio CSS para @import). */
 @import 'leaflet/dist/leaflet.css';
+/* Driver.js (tutoriales guiados, pedido explícito del usuario) — mismo
+   criterio que Leaflet: el CSS de la librería primero, el ajuste al tema
+   oscuro de Arka01 va en .arka-tour-popover más abajo. */
+@import 'driver.js/dist/driver.css';
 
 @tailwind base;
 @tailwind components;
@@ -37,4 +41,51 @@
         background-repeat: no-repeat;
         background-size: 100% 100%;
     }
+}
+
+/* Tutoriales guiados con Driver.js (pedido explícito del usuario) — Driver.js
+   inyecta su popover directo en document.body, fuera del árbol de Vue, así
+   que no le llegan las clases de Tailwind: se ajusta a mano con los mismos
+   hex de la paleta arka.* de tailwind.config.js. Ver Utils/guidedTour.js. */
+.arka-tour-popover {
+    background: #121b17; /* arka-card */
+    color: #e7f4ee; /* arka-text */
+    border: 1px solid rgba(52, 211, 153, 0.25); /* arka-primary al 25% */
+    border-radius: 12px; /* arka */
+}
+.arka-tour-popover .driver-popover-title {
+    color: #e7f4ee; /* arka-text */
+    font-weight: 600;
+}
+.arka-tour-popover .driver-popover-description {
+    color: #93ada2; /* arka-text-muted */
+}
+.arka-tour-popover .driver-popover-progress-text {
+    color: #93ada2; /* arka-text-muted */
+}
+.arka-tour-popover .driver-popover-footer button {
+    background: #34d399; /* arka-primary */
+    color: #0a0f0c; /* arka-base */
+    text-shadow: none;
+    border: none;
+    border-radius: 999px;
+    font-weight: 600;
+    padding: 6px 14px;
+}
+.arka-tour-popover .driver-popover-footer button:hover {
+    background: #6ee7b7; /* arka-primary-bright */
+}
+.arka-tour-popover .driver-popover-footer .driver-popover-prev-btn {
+    background: transparent;
+    color: #93ada2; /* arka-text-muted */
+}
+.arka-tour-popover .driver-popover-footer .driver-popover-prev-btn:hover {
+    color: #e7f4ee; /* arka-text */
+    background: transparent;
+}
+.arka-tour-popover .driver-popover-close-btn {
+    color: #93ada2; /* arka-text-muted */
+}
+.arka-tour-popover .driver-popover-arrow {
+    display: none;
 }

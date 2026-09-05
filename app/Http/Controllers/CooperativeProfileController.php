@@ -154,26 +154,24 @@ class CooperativeProfileController extends Controller
         $cooperative = $request->user()->cooperative()->with('documents')->firstOrFail();
         abort_if($cooperative->status === 'in_review', 422, 'La documentación ya está en revisión.');
 
+        // Pedido explícito del usuario: bajar la fricción para arrancar —
+        // antes esto exigía datos legales completos (razón social,
+        // provincia, teléfono, email, representante, cobertura, horario,
+        // seguro) Y los 4 documentos de self::REQUIRED_DOCUMENTS antes de
+        // poder mandar a revisión. Ahora solo lo mínimo para ubicar a la
+        // cooperativa: nombre, RUC, dirección/coordenadas del stand, ciudad
+        // y cantidad de conductores (este último ya es obligatorio desde
+        // update(), ver arriba). El resto se sigue pudiendo completar
+        // después — un admin ya puede aprobarla igual (ver
+        // Admin\CooperativeController::approve()).
         Validator::make($cooperative->toArray(), [
-            'name' => ['required', 'string', 'max:150'], 'legal_name' => ['required', 'string', 'max:200'],
-            'ruc' => ['required', 'digits:13'], 'main_address' => ['required', 'string'],
-            'stand_lat' => ['required', 'numeric'], 'stand_lng' => ['required', 'numeric'],
-            'city_id' => ['required'], 'province' => ['required'], 'phone' => ['required'],
-            'email' => ['required', 'email'], 'legal_representative' => ['required'],
-            'geographic_coverage' => ['required'], 'operating_hours' => ['required'],
-            // Pedido explícito del usuario: recién al enviar a validación se
-            // exige tenerlo marcado — mismo criterio que los documentos
-            // obligatorios de más abajo.
-            'has_insurance' => ['accepted'],
-        ], [
-            'has_insurance.accepted' => 'Falta declarar que cuenta con un seguro que proteja al representante, a los conductores y a los vehículos.',
+            'name' => ['required', 'string', 'max:150'],
+            'ruc' => ['required', 'digits:13'],
+            'main_address' => ['required', 'string'],
+            'stand_lat' => ['required', 'numeric'],
+            'stand_lng' => ['required', 'numeric'],
+            'city_id' => ['required'],
         ])->validate();
-
-        foreach (self::REQUIRED_DOCUMENTS as $type => $label) {
-            if (! $cooperative->documents->contains('type', $type)) {
-                throw ValidationException::withMessages(["{$type}_document" => "Falta cargar: {$label}."]);
-            }
-        }
 
         $cooperative->forceFill([
             'status' => 'pending', 'submitted_at' => now(), 'reviewed_at' => null,

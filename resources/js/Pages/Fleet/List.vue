@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -8,7 +8,9 @@ import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import FleetRoster from '@/Components/FleetRoster.vue';
 import ReferFleetModal from '@/Components/ReferFleetModal.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { startGuidedTour } from '@/Utils/guidedTour';
+import { fleetTourSteps } from '@/Utils/fleetTour';
 
 // Pedido explícito del usuario ("que no vaya un paso más... que ahí ya salga
 // su flota, y los botones de agregar los acomodes por ahí"): antes cada
@@ -90,6 +92,34 @@ function toggleCooperative(cooperative) {
 // nunca más de uno a la vez.
 const referModalFleetId = ref(null);
 const referModalFleet = computed(() => props.fleets.find((f) => f.fleet.id === referModalFleetId.value)?.fleet ?? null);
+
+// Tutorial guiado con Driver.js (pedido explícito del usuario): se dispara
+// UNA sola vez, en esta pantalla (no en Components/FleetRoster.vue, que se
+// monta una vez POR CADA flota — dispararlo ahí correría el tour tantas
+// veces como flotas tenga el cliente). Apunta siempre a la primera flota de
+// la lista; con la sola flota del plan Gratis (el caso más común) es la
+// única que existe.
+onMounted(() => {
+    // Pedido explícito del usuario: "colocar en una opción el activar tour
+    // para revisar cuando desee" — el link del menú de cuenta (Authenticated
+    // Layout.vue) manda acá con `?tour=1`, que fuerza el tour aunque ya
+    // esté marcado como visto.
+    const forceTour = new URLSearchParams(window.location.search).has('tour');
+    // Bug real encontrado al probar: en una cuenta que nunca vio el tour
+    // general de bienvenida (OnboardingTour.vue), los dos aparecían a la
+    // vez, superpuestos. Mientras esa guía general siga pendiente, este
+    // espera a la próxima visita — `forceTour` no espera, es explícito.
+    if (props.fleets.length > 0 && usePage().props.auth.isClient
+        && (forceTour || (!usePage().props.auth.user.fleet_tour_seen_at && usePage().props.auth.user.onboarding_completed_at))) {
+        startGuidedTour(fleetTourSteps(props.fleets[0].fleet.id), {
+            onFinish: () => {
+                if (!usePage().props.auth.user.fleet_tour_seen_at) {
+                    router.post(route('onboarding.fleet-tour.complete'), {}, { preserveScroll: true, preserveState: true });
+                }
+            },
+        });
+    }
+});
 </script>
 
 <template>

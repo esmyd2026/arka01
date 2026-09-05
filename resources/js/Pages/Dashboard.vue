@@ -15,6 +15,7 @@ import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
 import { etaMinutes } from '@/Utils/eta';
 import { saveClientLocation } from '@/Utils/sessionLocation';
+import { startGuidedTour, RIDE_TOUR_RESUME_KEY } from '@/Utils/guidedTour';
 
 const props = defineProps({
     driverStats: { type: Object, default: null },
@@ -389,6 +390,49 @@ onMounted(() => {
             }
         }
     });
+});
+
+// Tutorial guiado con Driver.js (pedido explícito del usuario: "iniciaría
+// con el tour desde donde vamos"): primer paso del tour de pedir carrera —
+// el resto (destino, forma de pago, paradas, invertir) sigue en
+// Ride/Request.vue apenas se navega ahí (ver RIDE_TOUR_RESUME_KEY en
+// Utils/guidedTour.js). Se marca "visto" apenas se muestra este primer
+// paso, sin importar cómo se cierre — si el cliente sigue de largo (nunca
+// interactuó con el buscador), no tiene sentido seguir insistiendo con el
+// tour cada vez que entra a Inicio.
+onMounted(() => {
+    const forceTour = new URLSearchParams(window.location.search).has('tour');
+    // Bug real encontrado al probar: en una cuenta que nunca vio el tour
+    // general de bienvenida (OnboardingTour.vue, disparado desde
+    // AuthenticatedLayout.vue), los dos aparecían a la vez, superpuestos.
+    // Mientras esa guía general siga pendiente, este espera a la próxima
+    // visita — `forceTour` (el link del menú) no espera, es explícito.
+    if (usePage().props.auth.isClient
+        && document.getElementById('home-search-anchor')
+        && (forceTour || (!usePage().props.auth.user.ride_request_tour_seen_at && usePage().props.auth.user.onboarding_completed_at))) {
+        let tourInstance = null;
+        tourInstance = startGuidedTour([
+            {
+                element: '#home-search-anchor',
+                popover: {
+                    title: '¿A dónde vamos?',
+                    description: 'Así arrancas a pedir una carrera: busca tu destino acá. Seguimos con el resto de los pasos apenas lo hagas.',
+                    doneBtnText: 'Siguiente',
+                    onNextClick: () => {
+                        sessionStorage.setItem(RIDE_TOUR_RESUME_KEY, '1');
+                        tourInstance.destroy();
+                        router.visit(route('ride-requests.create'));
+                    },
+                },
+            },
+        ], {
+            onFinish: () => {
+                if (!usePage().props.auth.user.ride_request_tour_seen_at) {
+                    router.post(route('onboarding.ride-request-tour.complete'), {}, { preserveScroll: true, preserveState: true });
+                }
+            },
+        });
+    }
 });
 
 onBeforeUnmount(() => {

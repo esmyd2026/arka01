@@ -159,7 +159,7 @@ function saveAddress() {
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col" :class="compact ? 'gap-3' : 'gap-5'">
-    <div>
+    <div id="home-search-anchor">
         <h2 :class="compact ? 'text-xl leading-tight font-bold mb-0.5' : 'text-2xl font-bold mb-0'" class="tracking-tight text-arka-base">¿A dónde vamos?</h2>
         <!-- Pedido explícito del usuario: reducir a un detalle discreto, no
              una segunda línea que compita con el título. -->

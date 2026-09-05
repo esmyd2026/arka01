@@ -17,8 +17,6 @@ use Inertia\Response;
 
 class CooperativeController extends Controller
 {
-    private const REQUIRED_DOCUMENTS = ['ruc', 'legal_appointment', 'operating_authorization', 'operating_permit'];
-
     public function __construct(private readonly PlanLimits $planLimits) {}
 
     public function index(Request $request): Response
@@ -87,22 +85,15 @@ class CooperativeController extends Controller
 
     public function approve(Request $request, Cooperative $cooperative): RedirectResponse
     {
-        $documentTypes = $cooperative->documents()->pluck('type');
-        $missing = collect(self::REQUIRED_DOCUMENTS)->reject(fn ($type) => $documentTypes->contains($type));
-        if ($missing->isNotEmpty()) {
-            throw ValidationException::withMessages(['cooperative' => 'No se puede aprobar: faltan documentos obligatorios.']);
-        }
-
+        // Pedido explícito del usuario: bajar la fricción para arrancar —
+        // ya no se exige tener los 4 documentos legales ni el seguro
+        // declarado para aprobar (ver CooperativeProfileController::
+        // submitForReview(), que tampoco los exige para enviar a revisión).
+        // Sigue sin poder aprobarse mientras exista un documento que un
+        // admin ya rechazó explícitamente: eso sí es un problema activo,
+        // documento haya sido obligatorio o no.
         if ($cooperative->documents()->where('status', 'rejected')->exists()) {
             throw ValidationException::withMessages(['cooperative' => 'No se puede aprobar mientras exista documentación rechazada.']);
-        }
-
-        // Pedido explícito del usuario: seguro que proteja al
-        // representante/dueño, a los conductores y a los vehículos —
-        // autodeclarado, sin documento adjunto, pero igual bloquea la
-        // aprobación si no está marcado (mismo criterio que los documentos).
-        if (! $cooperative->has_insurance) {
-            throw ValidationException::withMessages(['cooperative' => 'No se puede aprobar: falta declarar que cuenta con un seguro que proteja al representante, a los conductores y a los vehículos.']);
         }
 
         $cooperative->documents()->where('status', 'pending')->update([
