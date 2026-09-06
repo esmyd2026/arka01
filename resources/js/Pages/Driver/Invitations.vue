@@ -124,14 +124,42 @@ onBeforeUnmount(() => {
     personalChannel?.stopListening('.fleet-invitation.created', handleFleetInvitationCreated);
 });
 
+// Bug real reportado por el usuario ("le da aceptar y no le deja, no le
+// lanza error ni le dice nada"): antes esto sacaba la invitación de la
+// lista de inmediato, sin esperar la respuesta del servidor — si el backend
+// la rechazaba (ej. llegó al cupo de clientes de su plan, o alguien ya la
+// respondió desde otra pestaña), la tarjeta igual desaparecía como si se
+// hubiera aceptado, pero el cliente nunca quedaba agregado y no había
+// ningún aviso de que algo había fallado. Ahora la tarjeta solo se quita
+// tras un onSuccess real, y un error de verdad se muestra (ver
+// FleetInvitationManager::accept()/reject(), que ya mandan el motivo en
+// errors.invitation).
+const invitationActionError = ref(null);
+
 const accept = (invitationId) => {
-    router.post(route('driver.invitations.accept', invitationId), {}, { preserveScroll: true });
-    invitations.value = invitations.value.filter((i) => i.id !== invitationId);
+    invitationActionError.value = null;
+    router.post(route('driver.invitations.accept', invitationId), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            invitations.value = invitations.value.filter((i) => i.id !== invitationId);
+        },
+        onError: (errors) => {
+            invitationActionError.value = errors.invitation ?? 'No se pudo aceptar la solicitud. Intente de nuevo.';
+        },
+    });
 };
 
 const reject = (invitationId) => {
-    router.post(route('driver.invitations.reject', invitationId), {}, { preserveScroll: true });
-    invitations.value = invitations.value.filter((i) => i.id !== invitationId);
+    invitationActionError.value = null;
+    router.post(route('driver.invitations.reject', invitationId), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            invitations.value = invitations.value.filter((i) => i.id !== invitationId);
+        },
+        onError: (errors) => {
+            invitationActionError.value = errors.invitation ?? 'No se pudo rechazar la solicitud. Intente de nuevo.';
+        },
+    });
 };
 
 const leave = async (memberId) => {
@@ -320,6 +348,10 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         Alcanzó la capacidad de clientes incluida en su plan actual.
                         <Link :href="route('driver.plan.edit')" class="font-semibold underline">Mejore su plan</Link>
                         para ampliar su cartera privada y seguir agregando clientes.
+                    </p>
+
+                    <p v-if="invitationActionError" class="mb-4 text-sm text-arka-danger">
+                        {{ invitationActionError }}
                     </p>
 
                     <p v-if="!invitations.length" class="text-sm text-arka-text-muted">

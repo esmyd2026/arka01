@@ -470,6 +470,15 @@ const submit = () => {
                     />
                     <InputError class="mt-2" :message="form.errors.password_confirmation" />
                 </div>
+
+                <!-- Bug real reportado por el usuario: un registro por link de
+                     referido con un `ref` inválido fallaba la validación del
+                     backend, pero como este campo no tenía ningún InputError
+                     en ningún paso, la persona quedaba trabada acá sin ver
+                     nunca por qué — solo parecía que "no lo dejaba
+                     continuar". `ref` viaja oculto (ver arriba), así que
+                     este mensaje solo aparece si de verdad hay un error ahí. -->
+                <InputError class="mt-2" :message="form.errors.ref" />
             </div>
 
             <div class="flex items-center justify-between mt-6">

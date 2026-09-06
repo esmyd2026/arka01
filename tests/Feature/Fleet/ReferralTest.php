@@ -32,6 +32,51 @@ class ReferralTest extends TestCase
         );
     }
 
+    /**
+     * Bug real reportado por el usuario: Referral/Show.vue mandaba
+     * `driver.user_id` (el id interno, un entero) como `ref` al registro,
+     * pero RegisteredUserController exige un UUID (public_id) — todo
+     * registro por este link fallaba en silencio, sin ningún error visible,
+     * dejando a la persona trabada en el último paso del formulario
+     * (contraseña). El prop correcto para armar ese link es `public_id`.
+     */
+    public function test_the_landing_page_exposes_the_drivers_public_id_for_the_registration_link(): void
+    {
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->get(route('referrals.show', $profile->invite_code));
+
+        $response->assertInertia(fn ($page) => $page->where('driver.public_id', $driver->public_id));
+    }
+
+    /**
+     * Reproduce el bug de punta a punta: registrarse con el `ref` que
+     * Referral/Show.vue realmente manda (el public_id del conductor) tiene
+     * que funcionar sin errores de validación.
+     */
+    public function test_registering_with_the_drivers_public_id_as_ref_succeeds(): void
+    {
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+
+        $response = $this->post(route('register'), [
+            'account_type' => 'cliente',
+            'first_name' => 'Ana',
+            'last_name' => 'Cliente',
+            'email' => 'ana.cliente@example.com',
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+            'ref' => $driver->public_id,
+        ]);
+
+        $response->assertSessionDoesntHaveErrors();
+        $this->assertAuthenticated();
+        $this->assertDatabaseHas('users', ['email' => 'ana.cliente@example.com']);
+    }
+
     public function test_a_logged_in_client_can_send_the_invitation_from_the_referral_link(): void
     {
         $client = User::factory()->create();

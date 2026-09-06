@@ -42,6 +42,14 @@ class ReferralController extends Controller
         return Inertia::render('Referral/Show', [
             'driver' => [
                 'user_id' => $driverProfile->user_id,
+                // Bug real reportado por el usuario: el registro por este
+                // link quedaba trabado en la contraseña sin ningún error
+                // visible — Referral/Show.vue mandaba este mismo user_id
+                // (entero interno) como `ref` al registro, pero
+                // RegisteredUserController exige que `ref` sea un UUID
+                // (public_id). Se agrega acá para que el frontend use el
+                // campo correcto.
+                'public_id' => $driverProfile->user->public_id,
                 'name' => $driverProfile->user->name,
                 'avatar_url' => $driverProfile->user->avatar_url,
                 'vehicle_make' => $driverProfile->vehicle_make,

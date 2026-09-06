@@ -90,12 +90,18 @@ function invite() {
                 <div class="space-y-2">
                     <!-- tipo=cliente: quien llega hasta acá ya mostró la
                          intención (agregar un conductor a su flota), no hace
-                         falta volver a preguntarle. ref=driver.user_id: para
+                         falta volver a preguntarle. ref=driver.public_id: para
                          la trazabilidad de referidos (pedido explícito del
                          usuario) y para que, apenas se registre, lo volvamos
                          acá mismo a completar el paso — ver
-                         RegisteredUserController::store(). -->
-                    <Link :href="route('register', { tipo: 'cliente', ref: driver.user_id })" class="block">
+                         RegisteredUserController::store(). Bug real
+                         reportado por el usuario: acá mandaba driver.user_id
+                         (el id interno, un entero) — RegisteredUserController
+                         exige que `ref` sea un UUID (public_id), así que todo
+                         registro por este link fallaba la validación y
+                         dejaba a la persona trabada en el paso de la
+                         contraseña sin ningún error visible. -->
+                    <Link :href="route('register', { tipo: 'cliente', ref: driver.public_id })" class="block">
                         <PrimaryButton class="w-full justify-center">Crear cuenta y agregarlo</PrimaryButton>
                     </Link>
                     <Link :href="route('login')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
