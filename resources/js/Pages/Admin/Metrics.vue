@@ -108,6 +108,29 @@ defineProps({
                             <span class="flex items-center gap-1.5"><i class="h-2 w-2 rounded-sm bg-arka-primary/30"></i>Vieron el CTA</span>
                             <span class="flex items-center gap-1.5"><i class="h-2 w-2 rounded-sm bg-arka-primary"></i>Hicieron clic</span>
                         </div>
+
+                        <!-- Pedido explícito del usuario: el gráfico de arriba solo
+                             deja ver alturas relativas — acá el número exacto de
+                             cada día, mismos datos (landingCta.daily), sin tocar
+                             el controlador. -->
+                        <div class="mt-4 overflow-x-auto">
+                            <table class="w-full min-w-[420px] text-left text-xs">
+                                <thead>
+                                    <tr class="text-arka-text-muted">
+                                        <th class="pb-1.5 pr-3 font-medium">Día</th>
+                                        <th class="pb-1.5 pr-3 font-medium">Vieron el CTA</th>
+                                        <th class="pb-1.5 font-medium">Hicieron clic</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-arka-text-muted/10">
+                                    <tr v-for="day in landingCta.daily" :key="day.date">
+                                        <td class="py-1.5 pr-3 text-arka-text-muted">{{ day.label }}</td>
+                                        <td class="py-1.5 pr-3 font-semibold text-arka-text">{{ day.impressions }}</td>
+                                        <td class="py-1.5 font-semibold text-arka-text">{{ day.clicks }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
 
