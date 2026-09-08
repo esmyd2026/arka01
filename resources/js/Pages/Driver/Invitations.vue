@@ -132,9 +132,18 @@ onBeforeUnmount(() => {
 // hubiera aceptado, pero el cliente nunca quedaba agregado y no había
 // ningún aviso de que algo había fallado. Ahora la tarjeta solo se quita
 // tras un onSuccess real, y un error de verdad se muestra (ver
-// FleetInvitationManager::accept()/reject(), que ya mandan el motivo en
-// errors.invitation).
+// FleetInvitationManager::accept()/reject(), que mandan el motivo bajo
+// errors.invitation — cupo del plan, invitación ya no pendiente — o bajo
+// errors.driver_user_id cuando lo rechaza DriverAccessResolver::
+// ensureDriverCanBePrivatelyLinked() (regla anticaptura de cooperativas).
+// Bug real reportado por el usuario: acá solo se leía errors.invitation,
+// así que ese segundo caso mostraba el mensaje genérico en vez del motivo
+// real — se toma el primer mensaje que venga, sea cual sea la clave.
 const invitationActionError = ref(null);
+
+function firstErrorMessage(errors) {
+    return Object.values(errors)[0] ?? null;
+}
 
 const accept = (invitationId) => {
     invitationActionError.value = null;
@@ -144,7 +153,7 @@ const accept = (invitationId) => {
             invitations.value = invitations.value.filter((i) => i.id !== invitationId);
         },
         onError: (errors) => {
-            invitationActionError.value = errors.invitation ?? 'No se pudo aceptar la solicitud. Intente de nuevo.';
+            invitationActionError.value = firstErrorMessage(errors) ?? 'No se pudo aceptar la solicitud. Intente de nuevo.';
         },
     });
 };
@@ -157,7 +166,7 @@ const reject = (invitationId) => {
             invitations.value = invitations.value.filter((i) => i.id !== invitationId);
         },
         onError: (errors) => {
-            invitationActionError.value = errors.invitation ?? 'No se pudo rechazar la solicitud. Intente de nuevo.';
+            invitationActionError.value = firstErrorMessage(errors) ?? 'No se pudo rechazar la solicitud. Intente de nuevo.';
         },
     });
 };
