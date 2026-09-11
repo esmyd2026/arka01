@@ -170,6 +170,33 @@ class ChatbotWebhookTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'ya está verificado'));
     }
 
+    /**
+     * Bug real reportado por el usuario: escribió "no me llegó el código"
+     * teniendo un ticket de soporte abierto por ese mismo motivo (ver
+     * LoginSupportController), y el bot se quedó completamente mudo —
+     * humanIsHandling() se lo tragaba en silencio antes de llegar siquiera a
+     * reconocer la intención. Reenviar un código es mecánico, tiene que
+     * funcionar SIEMPRE, incluso con un ticket en curso.
+     */
+    public function test_no_me_llego_el_codigo_bypasses_an_open_support_ticket(): void
+    {
+        $this->enableWhatsApp();
+        $user = User::factory()->create(['phone' => '+593991234567', 'phone_verified_at' => null]);
+        SupportTicket::query()->create(['user_id' => $user->id, 'status' => 'esperando_usuario']);
+
+        $this->sendInbound('593991234567', 'no me llegó el código');
+
+        $this->assertNotNull($user->fresh()->phone_verification_code);
+        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'text');
+
+        // El mensaje NO se sumó al ticket humano — se resolvió como reenvío
+        // de código, sin pasar por humanIsHandling().
+        $this->assertFalse(
+            SupportTicket::where('user_id', $user->id)->first()->messages()
+                ->where('body', 'like', '%no me llegó el código%')->exists()
+        );
+    }
+
     public function test_hablar_con_soporte_creates_a_support_ticket_with_context(): void
     {
         $this->enableWhatsApp();

@@ -105,6 +105,19 @@ class ChatbotEngine
             return;
         }
 
+        // Pedido explícito del usuario (caso real: escribió "no me llegó el
+        // código" con un ticket de soporte abierto por el MISMO motivo, y el
+        // bot se quedó completamente mudo): reenviar un código de
+        // verificación/login es una acción mecánica, no una conversación —
+        // tiene que funcionar SIEMPRE, incluso con un humano atendiendo un
+        // ticket, porque justo ese es el peor momento para silenciarla. Va
+        // ANTES de humanIsHandling() a propósito.
+        if ($user && $this->detector->matchesKeywordsOf($rawText, 'CODIGO_NO_RECIBIDO')) {
+            WhatsAppFreeformSender::sendText($phoneE164, $this->resendHandler->handle($user));
+
+            return;
+        }
+
         // Pedido explícito del usuario ("ayudame a ver la trazabilidad...
         // y tomar control humana"): si ya hay un admin atendiendo el
         // ticket de este usuario, el bot se calla del todo — el mensaje se

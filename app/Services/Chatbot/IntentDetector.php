@@ -38,6 +38,37 @@ class IntentDetector
         return $this->matchByKeywords($normalized, $role);
     }
 
+    /**
+     * Chequeo puntual contra un solo intent por su código, sin pasar por
+     * matchByKeywords() completo (que compara contra TODOS los intents
+     * activos y aplica el umbral de confianza/ambigüedad). Pedido explícito
+     * del usuario: "no me llegó el código" tiene que reconocerse ANTES de
+     * humanIsHandling() (ver ChatbotEngine::process()) — reenviar un código
+     * es una acción mecánica que no necesita, ni se beneficia de, esperar a
+     * que un humano la atienda.
+     */
+    public function matchesKeywordsOf(string $rawMessage, string $intentCode): bool
+    {
+        $normalized = MessageNormalizer::normalize($rawMessage);
+        if ($normalized === '') {
+            return false;
+        }
+
+        $intent = ChatbotIntent::query()->where('code', $intentCode)->where('is_active', true)->with('keywords')->first();
+
+        if (! $intent) {
+            return false;
+        }
+
+        foreach ($intent->keywords as $keyword) {
+            if ($keyword->phrase !== '' && str_contains($normalized, $keyword->phrase)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function matchFromContext(string $rawMessage, string $normalized, ?ChatbotConversation $conversation): ?IntentMatch
     {
         if (! $conversation || $conversation->pending_intent !== 'AWAITING_MENU_CHOICE') {
