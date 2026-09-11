@@ -125,10 +125,49 @@ class ChatbotWebhookTest extends TestCase
 
         $this->sendInbound('593991234567', 'no me llegó el código');
 
-        // El mismo mecanismo que Auth\PhoneVerificationController::resend()
-        // — no uno paralelo: un código nuevo quedó emitido de verdad.
+        // Un código nuevo quedó emitido de verdad, mandado como texto libre
+        // (no por plantilla — esa es justo la que puede estar fallando, ver
+        // ResendVerificationCodeHandler) porque escribirle al bot ya abrió
+        // la ventana de 24h.
         $this->assertNotNull($user->fresh()->phone_verification_code);
-        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'template');
+        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'text');
+    }
+
+    /**
+     * Pedido explícito del usuario: el mismo "no me llegó el código" tiene
+     * que servir también para el login sin contraseña (User::login_code,
+     * ver PhoneLoginController) — no solo para la verificación del registro
+     * rápido — mientras sea la misma cuenta la que está tratando de entrar
+     * (se resuelve siempre por el número que escribió, nunca por un dato
+     * que la persona ponga en el chat).
+     */
+    public function test_no_me_llego_el_codigo_also_resends_a_pending_login_code(): void
+    {
+        $this->enableWhatsApp();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+        $user->issueLoginCode();
+        $originalLoginCode = $user->login_code;
+
+        $this->sendInbound('593991234567', 'no me llegó el código');
+
+        $this->assertNotNull($user->fresh()->login_code);
+        $this->assertNotSame($originalLoginCode, $user->fresh()->login_code);
+        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'text');
+    }
+
+    public function test_no_me_llego_el_codigo_with_nothing_pending_does_not_issue_any_code(): void
+    {
+        $this->enableWhatsApp();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $this->sendInbound('593991234567', 'no me llegó el código');
+
+        // El bot igual contesta (avisando que no hay nada pendiente) — lo
+        // que importa acá es que NO se emitió ningún código nuevo, a
+        // diferencia de los dos casos de arriba.
+        $this->assertNull($user->fresh()->login_code);
+        $this->assertNull($user->fresh()->phone_verification_code);
+        Http::assertSent(fn ($request) => str_contains($request['text']['body'] ?? '', 'ya está verificado'));
     }
 
     public function test_hablar_con_soporte_creates_a_support_ticket_with_context(): void
@@ -429,7 +468,7 @@ class ChatbotWebhookTest extends TestCase
         // test_no_me_llego_el_codigo_triggers_the_real_resend_flow — acá lo
         // que importa es que se disparó por el ID exacto del botón/fila,
         // no por texto libre reconocido por palabras clave.
-        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'template');
+        Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'text');
     }
 
     /**

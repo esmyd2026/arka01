@@ -65,6 +65,27 @@ class AdminClientControllerTest extends TestCase
         );
     }
 
+    /**
+     * Pedido explícito del usuario: buscar también por teléfono, con o sin
+     * el "+" del código de país y con o sin el 0 inicial local — mismo
+     * criterio de normalización que User::findByLoginIdentifier().
+     */
+    public function test_the_list_can_be_searched_by_phone(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $match = User::factory()->create(['phone' => '+593988492339']);
+        User::factory()->create(['phone' => '+593991234567']);
+
+        $withPlus = $this->actingAs($admin)->get(route('admin.clients.index', ['q' => '+593988492339']));
+        $withPlus->assertInertia(fn ($page) => $page->has('clients.data', 1)->where('clients.data.0.id', $match->id));
+
+        $withoutCountryCode = $this->actingAs($admin)->get(route('admin.clients.index', ['q' => '988492339']));
+        $withoutCountryCode->assertInertia(fn ($page) => $page->has('clients.data', 1)->where('clients.data.0.id', $match->id));
+
+        $withLeadingZero = $this->actingAs($admin)->get(route('admin.clients.index', ['q' => '0988492339']));
+        $withLeadingZero->assertInertia(fn ($page) => $page->has('clients.data', 1)->where('clients.data.0.id', $match->id));
+    }
+
     public function test_the_list_is_paginated_at_twenty_per_page(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);

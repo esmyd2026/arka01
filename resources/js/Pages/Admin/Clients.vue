@@ -40,7 +40,7 @@ function formatDate(value) {
 
                     <form @submit.prevent="applyFilters" class="flex flex-wrap items-end gap-3">
                         <div class="flex-1 min-w-[160px]">
-                            <TextInput v-model="form.q" placeholder="Nombre o correo" class="w-full" />
+                            <TextInput v-model="form.q" placeholder="Nombre, correo o teléfono" class="w-full" />
                         </div>
                         <select v-model="form.city_id" class="rounded-arka border-arka-text-muted/30 bg-arka-card text-arka-text text-sm">
                             <option value="">Todas las ciudades</option>

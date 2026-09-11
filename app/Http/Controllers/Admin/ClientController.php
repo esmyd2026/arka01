@@ -30,9 +30,28 @@ class ClientController extends Controller
             ->where('role', 'cliente')
             ->with('city')
             ->when($request->filled('q'), function ($query) use ($request) {
-                $term = $request->string('q');
-                $query->where(fn ($query) => $query->where('name', 'like', "%{$term}%")
-                    ->orWhere('email', 'like', "%{$term}%"));
+                $term = (string) $request->string('q');
+
+                // Pedido explícito del usuario: buscar también por teléfono.
+                // Mismo criterio de normalización que User::findByLoginIdentifier()
+                // (sin el "+" del código de país, sin el 0 inicial local) para
+                // que un admin pueda pegar el número tal cual se lo dice el
+                // cliente, con o sin esos prefijos.
+                $digits = preg_replace('/[\s-]/', '', $term);
+                $isPhoneShaped = preg_match('/^\+?\d{7,15}$/', $digits) === 1;
+
+                $query->where(function ($query) use ($term, $digits, $isPhoneShaped) {
+                    $query->where('name', 'like', "%{$term}%")
+                        ->orWhere('email', 'like', "%{$term}%");
+
+                    if ($isPhoneShaped) {
+                        $normalizedDigits = ltrim($digits, '+');
+                        $withoutTrunk = preg_replace('/^0/', '', $normalizedDigits);
+
+                        $query->orWhere('phone', 'like', '%'.$normalizedDigits)
+                            ->orWhere('phone', 'like', '%'.$withoutTrunk);
+                    }
+                });
             })
             ->when($request->filled('city_id'), fn ($query) => $query->where('city_id', $request->integer('city_id')))
             // Pedido explícito del usuario: ordenados por fecha de registro

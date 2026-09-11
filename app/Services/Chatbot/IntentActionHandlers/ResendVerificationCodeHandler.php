@@ -3,16 +3,29 @@
 namespace App\Services\Chatbot\IntentActionHandlers;
 
 use App\Models\User;
-use App\Services\WhatsAppVerificationSender;
+use App\Services\WhatsAppFreeformSender;
 
 /**
- * "No me llegó mi código" (pedido explícito del usuario, sección 7: "si
- * Arka01 ya tiene implementado un servicio para reenviar códigos, no crear
- * otro sistema paralelo"). Reutiliza EXACTAMENTE los mismos dos pasos que ya
- * usa Auth\PhoneVerificationController::resend(): `issuePhoneVerificationCode()`
- * (App\Models\User) y WhatsAppVerificationSender::sendCode() — ese servicio
- * ya registra el error técnico en Monitoreo si el envío falla, no hay que
- * duplicar ese log acá.
+ * "No me llegó mi código" (pedido explícito del usuario, caso real: la
+ * plantilla de verificación estaba mal configurada en Meta y el registro
+ * rápido/login por código quedaban sin salida). A diferencia de
+ * WhatsAppVerificationSender::sendCode() (que manda por PLANTILLA — la
+ * misma que puede estar fallando por nombre/idioma mal configurado, límite
+ * de Meta, etc.), esto manda el código como texto libre: solo es posible
+ * porque la persona ACABA de escribirle al bot, lo que abre la ventana de
+ * 24h (ver WhatsAppWebhookController::openWindowFor()) — mismo mecanismo
+ * que ya usa WhatsAppFreeformSender::sendSessionTakeoverCode(). El texto
+ * libre no depende de ninguna plantilla aprobada, así que este camino sigue
+ * funcionando aunque la plantilla esté rota.
+ *
+ * Cubre las dos situaciones donde puede haber un código pendiente:
+ * 1. Registro rápido / verificación de teléfono (User::phone_verification_code).
+ * 2. Login sin contraseña (User::login_code, ver PhoneLoginController).
+ *
+ * Seguridad: $user siempre se resuelve por el NÚMERO QUE ESCRIBIÓ
+ * (WhatsAppWebhookController::receive()), nunca por un dato que la persona
+ * escriba en el chat — así que el código de una cuenta solo puede llegarle
+ * al teléfono de esa misma cuenta, nunca a un tercero.
  */
 class ResendVerificationCodeHandler
 {
@@ -26,26 +39,53 @@ class ResendVerificationCodeHandler
             return 'Tu cuenta todavía no tiene un teléfono declarado — no hay ningún código pendiente para reenviar.';
         }
 
-        if ($user->phone_verified_at) {
-            return 'Tu número ya está verificado, no hace falta ningún código para eso. ¿Tenías otro problema? Cuéntame.';
+        if (! $user->phone_verified_at) {
+            return $this->resendVerificationCode($user);
         }
 
+        if ($user->login_code && $user->login_code_expires_at?->isFuture()) {
+            return $this->resendLoginCode($user);
+        }
+
+        return 'Tu número ya está verificado y no tienes ningún inicio de sesión pendiente. ¿Tenías otro problema? Cuéntame.';
+    }
+
+    private function resendVerificationCode(User $user): string
+    {
         $code = $user->issuePhoneVerificationCode();
-        $sent = WhatsAppVerificationSender::sendCode($user->phone, $code);
+        $sent = WhatsAppFreeformSender::sendText(
+            $user->phone,
+            "Tu código para verificar tu número en Arka01 es: {$code}\n\nVence en 10 minutos."
+        );
 
         if (! $sent) {
-            // Mismo criterio que PhoneVerificationController::resend(): si
-            // el envío falla de verdad, el teléfono queda auto-verificado
-            // en vez de trabar la cuenta.
+            // Mismo criterio que RegisterUser::execute() cuando el envío
+            // falla de verdad: no debería bloquear a nadie por una
+            // integración caída.
             $user->forceFill([
                 'phone_verified_at' => now(),
                 'phone_verification_code' => null,
                 'phone_verification_expires_at' => null,
             ])->save();
 
-            return 'No pudimos mandarte el código por WhatsApp en este momento, así que ya quedó verificado igual — puedes seguir usando la app sin problema.';
+            return 'No pudimos mandarte el código en este momento, así que ya quedó verificado igual — puedes seguir usando la app sin problema.';
         }
 
-        return 'Listo, te mandé un código nuevo por WhatsApp — puede tardar unos segundos en llegar.';
+        return 'Listo, te mandé un código nuevo por acá mismo.';
+    }
+
+    private function resendLoginCode(User $user): string
+    {
+        $code = $user->issueLoginCode();
+        $sent = WhatsAppFreeformSender::sendText(
+            $user->phone,
+            "Tu código para iniciar sesión en Arka01 es: {$code}\n\nVence en 10 minutos."
+        );
+
+        if (! $sent) {
+            return 'No pudimos mandarte el código en este momento — prueba iniciar sesión con tu contraseña, o escríbeme de nuevo en un rato.';
+        }
+
+        return 'Listo, te mandé un código nuevo por acá mismo — vuelve a la pantalla de inicio de sesión y escríbelo ahí.';
     }
 }
