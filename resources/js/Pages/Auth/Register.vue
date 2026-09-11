@@ -8,6 +8,20 @@ import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { buildResendCodeWhatsAppUrl } from '@/Utils/whatsapp';
+
+const props = defineProps({
+    // Pedido explícito del usuario: si el código no llega por la plantilla,
+    // escribirle al bot con "No me llegó el código" abre la ventana de 24h y
+    // se lo manda como texto libre — ver
+    // App\Services\Chatbot\IntentActionHandlers\ResendVerificationCodeHandler.
+    whatsappBusinessNumber: {
+        type: String,
+        default: null,
+    },
+});
+
+const resendCodeWhatsAppUrl = computed(() => buildResendCodeWhatsAppUrl(props.whatsappBusinessNumber));
 
 // Misma lista que RegisteredUserController::COUNTRY_CODES — es una lista fija
 // de indicativos telefónicos reales, no un catálogo de negocio que necesite
@@ -38,13 +52,28 @@ const validPreselection = ['cliente', 'conductor', 'cooperativa'].includes(prese
 // nadie lo escribe a mano (ver Referral/Show.vue, RegisteredUserController::store()).
 const referrerId = new URLSearchParams(window.location.search).get('ref');
 
+// Pedido explícito del usuario ("no debemos dejar sin opción al cliente...
+// debe ser dinámico"): si llegó desde el login porque no encontramos ninguna
+// cuenta con ese teléfono, no lo hace escribirlo de nuevo — Auth/Login.vue
+// manda el mismo número por acá (ver registerLink allá). Se sanea al vuelo
+// con el mismo criterio que sanitizePhoneLocal() de más abajo (sin el "593"
+// del código de país ni el 0 inicial), para que ya quede listo tal cual lo
+// esperaría escribir a mano.
+const prefilledPhoneParam = new URLSearchParams(window.location.search).get('telefono');
+let prefilledPhoneLocal = '';
+if (prefilledPhoneParam) {
+    let digits = prefilledPhoneParam.replace(/\D/g, '');
+    if (digits.startsWith('593') && digits.length > 9) digits = digits.slice(3);
+    prefilledPhoneLocal = digits;
+}
+
 const form = useForm({
     account_type: validPreselection,
     first_name: '',
     last_name: '',
     email: '',
     country_code: '+593',
-    phone_local: '',
+    phone_local: prefilledPhoneLocal,
     password: '',
     password_confirmation: '',
     ref: referrerId || null,
@@ -139,6 +168,11 @@ function sanitizePhoneLocal() {
 // a sanear contra el nuevo máximo — un número de 10 dígitos de otro país no
 // debería quedar cortado en 9 solo porque antes tenía elegido Ecuador.
 watch(() => form.country_code, sanitizePhoneLocal);
+
+// Termina de limpiar el precargado desde ?telefono= (ver prefilledPhoneLocal
+// arriba) — mismo criterio que cualquier otro número: sin el 0 inicial ni
+// más dígitos de los que corresponden.
+if (prefilledPhoneLocal) sanitizePhoneLocal();
 
 // Validación mínima del lado del cliente para habilitar "Siguiente" — la
 // validación real (unicidad de correo/teléfono, reglas completas) sigue
@@ -562,6 +596,24 @@ const submit = () => {
                     @keydown.enter.prevent="goNext"
                 />
                 <InputError class="mt-2" :message="quickCodeForm.errors.code" />
+
+                <!-- Pedido explícito del usuario: "usariamos las dos manera,
+                     principalmente la de la plantilla, pero si no funciona...
+                     que lo mande al whatsapp al bot con ese mensaje 'no me
+                     llego el codigo' y desde allí validemos y le mandemos el
+                     codigo" — escribirle al bot abre la ventana de 24h, así
+                     que ahí el código se manda como texto libre, sin
+                     depender de la plantilla que puede estar fallando (ver
+                     ResendVerificationCodeHandler). -->
+                <a
+                    v-if="resendCodeWhatsAppUrl"
+                    :href="resendCodeWhatsAppUrl"
+                    target="_blank"
+                    rel="noopener"
+                    class="mt-3 flex items-center justify-center gap-2 rounded-arka border border-arka-primary/30 bg-arka-primary/10 px-3 py-2.5 text-sm font-medium text-arka-primary-bright hover:bg-arka-primary/15"
+                >
+                    Escribirle al WhatsApp de Arka01: "No me llegó el código" →
+                </a>
 
                 <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
                     <button

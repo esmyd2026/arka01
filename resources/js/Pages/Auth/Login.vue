@@ -7,7 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { buildSessionRecoveryWhatsAppUrl } from '@/Utils/whatsapp';
+import { buildResendCodeWhatsAppUrl, buildSessionRecoveryWhatsAppUrl } from '@/Utils/whatsapp';
 
 const props = defineProps({
     canResetPassword: {
@@ -38,6 +38,11 @@ const props = defineProps({
 });
 
 const sessionRecoveryWhatsAppUrl = computed(() => buildSessionRecoveryWhatsAppUrl(props.whatsappBusinessNumber));
+// Pedido explícito del usuario: si el código por WhatsApp no llega,
+// escribirle al bot con "No me llegó el código" abre la ventana de 24h y se
+// lo manda como texto libre — ver
+// App\Services\Chatbot\IntentActionHandlers\ResendVerificationCodeHandler.
+const resendCodeWhatsAppUrl = computed(() => buildResendCodeWhatsAppUrl(props.whatsappBusinessNumber));
 
 // Encuesta corta (pedido explícito del usuario) — mismo criterio que el
 // banner del Home, ver Survey/Show.vue.
@@ -75,6 +80,17 @@ const showsSessionBlockedError = computed(
 // de LoginRequest::authenticate()), se ofrece el atajo a crear una en vez de
 // dejar a la persona en un callejón sin salida.
 const showsAccountNotFoundError = computed(() => (form.errors.login ?? '').startsWith('No encontramos una cuenta con ese dato'));
+
+// Pedido explícito del usuario: no basta con decir "cree una cuenta" — el
+// atajo tiene que ser DINÁMICO, sin hacerlo escribir el teléfono de nuevo
+// (mismo criterio que ya usa Auth/Register.vue al revés: cuando detecta que
+// el teléfono/correo ya tiene cuenta, ofrece "Iniciar sesión" de una). Si lo
+// que escribió tiene forma de teléfono, Auth/Register.vue ya sabe leer
+// "telefono" de la URL y arrancar con eso precargado.
+const registerLink = computed(() => route('register', {
+    ref: props.referrerId,
+    ...(looksLikePhone.value ? { telefono: form.login.trim() } : {}),
+}));
 
 // Login por código de WhatsApp (pedido explícito del usuario: "que
 // simplemente sea con el numero de telefono... y que cuando inicien
@@ -122,16 +138,24 @@ const supportStatus = ref('');
 const supportError = ref('');
 const supportSending = ref(false);
 const supportSent = ref(false);
+// Pedido explícito del usuario ("no debemos dejar sin opción al cliente si
+// no consiguió una cuenta"): si soporte tampoco encontró ninguna cuenta con
+// ese dato, no puede ser un callejón sin salida — se distingue de un error
+// de verdad (ej. falla de red) para ofrecer el atajo dinámico a crear cuenta
+// en vez de solo un texto en rojo.
+const supportAccountNotFound = ref(false);
 
 function openSupportForm() {
     supportFormOpen.value = true;
     supportStatus.value = '';
     supportError.value = '';
+    supportAccountNotFound.value = false;
 }
 
 async function sendSupportMessage() {
     supportSending.value = true;
     supportError.value = '';
+    supportAccountNotFound.value = false;
 
     try {
         const { data } = await window.axios.post(route('login-support.store'), {
@@ -144,6 +168,7 @@ async function sendSupportMessage() {
             supportSent.value = true;
         } else {
             supportError.value = data.message;
+            supportAccountNotFound.value = true;
         }
     } catch {
         supportError.value = 'No pudimos enviar su mensaje — intente de nuevo en un rato.';
@@ -258,7 +283,7 @@ async function confirmTakeover() {
                      hay forma de saber qué quiere ser, así que Auth/Register.vue
                      arranca en el primer paso y se lo pregunta. -->
                 <p v-if="showsAccountNotFoundError" class="mt-2 text-sm">
-                    <Link :href="route('register', { ref: referrerId })" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                    <Link :href="registerLink" class="text-arka-primary hover:text-arka-primary-bright font-medium">
                         Crear una cuenta →
                     </Link>
                 </p>
@@ -296,6 +321,22 @@ async function confirmTakeover() {
                     </div>
                     <p v-if="phoneLoginError" class="mt-2 text-xs text-arka-danger">{{ phoneLoginError }}</p>
 
+                    <!-- Pedido explícito del usuario: "usariamos las dos
+                         manera, principalmente la de la plantilla, pero si
+                         no funciona... que lo mande al whatsapp al bot con
+                         ese mensaje 'no me llego el codigo'" — escribirle al
+                         bot abre la ventana de 24h y el código se manda como
+                         texto libre, sin depender de la plantilla. -->
+                    <a
+                        v-if="resendCodeWhatsAppUrl"
+                        :href="resendCodeWhatsAppUrl"
+                        target="_blank"
+                        rel="noopener"
+                        class="mt-3 flex items-center justify-center gap-2 rounded-arka border border-arka-primary/30 bg-arka-primary/10 px-3 py-2 text-xs font-medium text-arka-primary-bright hover:bg-arka-primary/15"
+                    >
+                        Escribirle al WhatsApp de Arka01: "No me llegó el código" →
+                    </a>
+
                     <!-- Último recurso (pedido explícito del usuario, caso
                          real: "cuando pido el código no llega"): escribirle a
                          soporte sin tener que entrar primero. -->
@@ -323,6 +364,18 @@ async function confirmTakeover() {
                                 </SecondaryButton>
                             </div>
                             <p v-if="supportError" class="mt-2 text-xs text-arka-danger">{{ supportError }}</p>
+
+                            <!-- Pedido explícito del usuario: "no debemos
+                                 dejar sin opción al cliente si no consiguió
+                                 una cuenta" — si de verdad no existe ninguna
+                                 cuenta con este dato, el atajo dinámico a
+                                 crear una (con el teléfono ya precargado, ver
+                                 registerLink) en vez de un callejón sin salida. -->
+                            <p v-if="supportAccountNotFound" class="mt-2 text-sm">
+                                <Link :href="registerLink" class="text-arka-primary hover:text-arka-primary-bright font-medium">
+                                    Crear una cuenta →
+                                </Link>
+                            </p>
                         </div>
                     </template>
                     <p v-else class="mt-3 text-xs text-arka-primary-bright">{{ supportStatus }}</p>

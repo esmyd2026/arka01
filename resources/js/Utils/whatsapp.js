@@ -66,3 +66,20 @@ export function buildSessionRecoveryWhatsAppUrl(businessNumber) {
     if (!businessNumber) return null;
     return `https://wa.me/${businessNumber}?text=${encodeURIComponent('Necesito recuperar mi sesión')}`;
 }
+
+// Pedido explícito del usuario: "usariamos las dos manera, principalmente la
+// de la plantilla, pero si no funciona... que lo mande al whatsapp al bot
+// con ese mensaje 'no me llego el codigo' y desde allí validemos y le
+// mandemos el codigo" — a diferencia de buildSessionRecoveryWhatsAppUrl()
+// (que dispara un mensaje especial ANTES del chatbot normal), este mensaje
+// SÍ pasa por el motor de intenciones de siempre: ya existe la intención
+// "CODIGO_NO_RECIBIDO" con estas mismas palabras clave, resuelta por
+// App\Services\Chatbot\IntentActionHandlers\ResendVerificationCodeHandler —
+// que manda el código como texto libre (sin plantilla) porque escribirle al
+// bot ya abrió la ventana de 24h. Sirve igual para el código de
+// verificación del registro rápido y para el de login sin contraseña, ese
+// handler resuelve cuál de los dos corresponde.
+export function buildResendCodeWhatsAppUrl(businessNumber) {
+    if (!businessNumber) return null;
+    return `https://wa.me/${businessNumber}?text=${encodeURIComponent('No me llegó el código')}`;
+}

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\ReferralAttribution;
+use App\Services\WhatsAppConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,7 +28,14 @@ class RegisteredUserController extends Controller
     {
         $referralAttribution->remember($request);
 
-        return Inertia::render('Auth/Register');
+        return Inertia::render('Auth/Register', [
+            // Pedido explícito del usuario: si el código de registro rápido
+            // no llega (falla la plantilla de WhatsApp), escribirle al bot
+            // abre la ventana de 24h y permite mandarlo como texto libre —
+            // ver App\Services\Chatbot\IntentActionHandlers\ResendVerificationCodeHandler.
+            // Mismo dato que ya usa Auth/Login.vue para el mismo propósito.
+            'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
+        ]);
     }
 
     /**
