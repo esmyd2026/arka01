@@ -275,15 +275,33 @@ function submitFeedback() {
 
 <template>
     <Head title="Arka01 — Tu círculo. Tus viajes. Tu decisión.">
-        <link v-if="heroBackgroundUrl" rel="preload" as="image" :href="heroBackgroundUrl" fetchpriority="high" />
+        <link rel="preload" as="image" href="/img/imagen%20para%20movil%20inicio.png" media="(max-width: 767px)" fetchpriority="high" />
+        <link rel="preload" as="image" href="/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png" media="(min-width: 768px)" fetchpriority="high" />
     </Head>
 
     <div class="arka-app-background min-h-screen">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-            <!-- Barra superior: ayuda + cuenta, solo si ya tiene sesión iniciada. -->
-            <div class="flex justify-end items-center gap-3 mb-4">
+        <div class="welcome-page-shell max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+            <!-- Navegación pública: completa en escritorio y esencial en móvil. -->
+            <header v-if="!authUser" class="welcome-nav mb-4 flex items-center justify-center gap-4 rounded-2xl px-3 py-2.5 sm:justify-between sm:px-4">
+                <Link href="/" aria-label="Ir al inicio">
+                    <ApplicationLogo size="h-11 sm:h-10" />
+                </Link>
+
+                <nav class="hidden items-center gap-6 text-xs font-semibold text-arka-text-muted lg:flex" aria-label="Navegación principal">
+                    <a href="#inicio" class="text-arka-primary">Inicio</a>
+                    <a href="#como-funciona" class="transition hover:text-arka-primary">Cómo Funciona</a>
+                    <a href="#para-quienes" class="transition hover:text-arka-primary">¿Su Valor?</a>
+                    <a href="#contacto" class="transition hover:text-arka-primary">Contacto</a>
+                </nav>
+
+                <div class="hidden items-center gap-2 sm:flex">
+                    <Link v-if="canLogin" :href="route('login')" class="hidden min-h-9 items-center rounded-lg border border-arka-primary/35 px-3.5 text-xs font-semibold text-arka-primary transition hover:bg-arka-primary/10 sm:inline-flex">Iniciar sesión</Link>
+                    <Link v-if="canRegister" :href="route('register')" class="hidden min-h-9 items-center rounded-lg bg-arka-primary px-3.5 text-xs font-semibold text-white transition hover:bg-arka-primary-bright sm:inline-flex">Crear cuenta</Link>
+                </div>
+            </header>
+
+            <div v-else class="mb-4 flex items-center justify-end gap-3">
                 <Link
-                    v-if="authUser"
                     :href="route('dashboard')"
                     class="flex items-center gap-2 text-sm text-arka-text-muted hover:text-arka-text"
                 >
@@ -317,7 +335,8 @@ function submitFeedback() {
                  se vea. -->
             <div
                 v-else
-                class="welcome-hero relative isolate grid grid-cols-1 items-center gap-8 overflow-hidden rounded-[2rem] border border-arka-border bg-arka-card/45 px-4 py-6 shadow-[0_10px_32px_rgba(7,24,17,0.10)] sm:px-8 sm:py-9 lg:grid-cols-2"
+                id="inicio"
+                class="welcome-hero relative isolate grid grid-cols-1 items-center gap-6 overflow-hidden rounded-[2rem] border border-arka-primary/20 px-4 py-6 sm:px-8 sm:py-9 md:grid-cols-2 md:gap-8"
             >
                 <!-- Foto de fondo con fundido suave (pedido explícito del usuario:
                      "que no se vea tan brusco... lo hiciste en el login y me
@@ -325,21 +344,19 @@ function submitFeedback() {
                      imagen ya terminó de precargarse (ver heroBackgroundLoaded),
                      en vez de pintarse de golpe como antes. -->
                 <div
-                    v-if="heroBackgroundUrl"
-                    class="welcome-hero__image pointer-events-none absolute inset-0 -z-20 bg-cover bg-center transition-opacity duration-700 ease-out"
-                    :class="heroBackgroundLoaded ? 'opacity-100' : 'opacity-0'"
-                    :style="{ backgroundImage: `url('${heroBackgroundUrl}')` }"
+                    class="welcome-hero__image welcome-hero__image--mobile pointer-events-none absolute inset-0 -z-20 bg-cover md:hidden"
+                    :style="{ backgroundImage: `url('/img/imagen%20para%20movil%20inicio.png')` }"
                 />
-                <div v-if="heroBackgroundUrl" class="welcome-hero__veil pointer-events-none absolute inset-0 -z-10" />
-
-                <div class="welcome-hero__content rounded-[1.6rem] border border-arka-primary/25 bg-arka-card/[.86] p-5 text-center backdrop-blur-md sm:p-6 lg:text-start">
-                    <ApplicationLogo size="h-11 sm:h-14" />
-
-                    <p class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arka-primary/10 text-arka-primary-bright text-xs font-medium">
+                <div
+                    class="welcome-hero__image welcome-hero__image--desktop pointer-events-none absolute inset-0 -z-20 hidden bg-cover bg-center md:block"
+                    :style="{ backgroundImage: `url('/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png')` }"
+                />
+                <div class="welcome-hero__content p-5 text-center sm:p-6 md:text-start">
+                    <p class="inline-flex items-center gap-1.5 rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m12 3 8 3.5v5.2c0 4.4-3 7.6-8 9.3-5-1.7-8-4.9-8-9.3V6.5L12 3Z" />
                         </svg>
-                        Su círculo, sus viajes, su tranquilidad
+                        Tu círculo, tus viajes.
                     </p>
 
                     <!-- Pedido explícito del usuario ("quiero que el diseño
@@ -349,60 +366,61 @@ function submitFeedback() {
                          tarjeta de invitado de al lado) use "usted" —
                          avisado en la respuesta, por si preferís unificarlo
                          después. -->
-                    <h1 class="mt-4 text-4xl sm:text-5xl lg:text-6xl font-bold text-arka-text leading-[1.05]">
-                        Viaja con<br />
+                    <h1 class="welcome-hero__title mt-4 text-4xl font-extrabold leading-[1.03] tracking-[-0.035em] text-arka-text sm:text-5xl md:text-6xl">
+                        Viaja con
                         <span class="text-arka-primary">quienes</span> confías
                     </h1>
 
-                    <!-- 3 puntos exactos pedidos por el usuario, conectados
-                         con una línea vertical sólida — mismo patrón que la
-                         lista "Para Clientes" más abajo en #como-funciona,
-                         para que se lean como pasos de una misma experiencia
-                         y no como 3 datos sueltos. -->
-                    <ul class="mt-4 max-w-md mx-auto lg:mx-0">
-                        <li class="flex items-start gap-3 text-start">
-                            <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
-                                    <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.6-7-10.5A7 7 0 0 1 12 4a7 7 0 0 1 7 6.5C19 16.4 12 21 12 21Z" />
-                                        <circle cx="12" cy="10.5" r="2.3" stroke-linecap="round" stroke-linejoin="round" />
-                                    </svg>
-                                </span>
-                                <div class="w-0.5 flex-1 min-h-[0.75rem] bg-arka-primary/40 my-0.5 rounded-full"></div>
-                            </div>
-                            <p class="pt-1.5 text-sm font-semibold text-arka-text">Tranquilidad en cada viaje</p>
+                    <p class="mx-auto mt-3 max-w-md text-sm font-medium leading-5 text-arka-text-muted md:mx-0 md:text-base">
+                        Crea tu propia red de conductores y solicita tus viajes con mayor tranquilidad.
+                    </p>
+ <ul class="welcome-desktop-benefits mt-5 hidden max-w-lg grid-cols-3 gap-5 md:grid">
+
+    <li>
+                            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3"/><path stroke-linecap="round" d="M3 19a6 6 0 0 1 12 0M16 7.5a2.5 2.5 0 0 1 0 5M17 15c2 0 3.5 1.5 4 4"/></svg></span>
+                            <p>Tu gente<br>de confianza</p>
                         </li>
-                        <li class="flex items-start gap-3 text-start">
-                            <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
-                                    <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="9" cy="8" r="3" stroke-linecap="round" stroke-linejoin="round" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19a6.5 6.5 0 0 1 13 0" />
-                                        <circle cx="17" cy="8" r="2.4" stroke-linecap="round" stroke-linejoin="round" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.5 12.5c2.4 0 4.5 1.9 5 6.5" />
-                                    </svg>
-                                </span>
-                                <div class="w-0.5 flex-1 min-h-[0.75rem] bg-arka-primary/40 my-0.5 rounded-full"></div>
-                            </div>
-                            <p class="pt-1.5 text-sm font-semibold text-arka-text">Siempre cerca de los tuyos</p>
+                        <li>
+                            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="m12 3 7 3v5c0 4-2.6 7-7 9-4.4-2-7-5-7-9V6l7-3Z"/><path stroke-linecap="round" stroke-linejoin="round" d="m9 11 2 2 4-4"/></svg></span>
+                            <p>Más seguridad<br>en cada viaje</p>
                         </li>
-                        <li class="flex items-start gap-3 text-start">
-                            <div class="flex flex-col items-center self-stretch shrink-0">
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
-                                    <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" stroke-linecap="round" stroke-linejoin="round" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" />
-                                    </svg>
-                                </span>
-                            </div>
-                            <p class="pt-1.5 text-sm font-semibold text-arka-text">Una nueva forma de moverte</p>
+                        <li>
+                            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.6-7-10.5A7 7 0 0 1 12 4a7 7 0 0 1 7 6.5C19 16.4 12 21 12 21Z"/><circle cx="12" cy="10.5" r="2.2"/></svg></span>
+                            <p>Cobertura<br>en tu zona</p>
                         </li>
+                        <li></li>
                     </ul>
+
+                    <div class="welcome-desktop-actions mt-5 hidden max-w-md grid-cols-2 gap-3 md:grid">
+                        <Link
+                            v-if="canRegister"
+                            :href="route('register')"
+                            class="inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-arka-primary px-5 text-sm font-bold text-white"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9.5" cy="8.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0M18 8v6M15 11h6"/></svg>
+                            <span>Crear mi cuenta</span>
+                            <svg class="ms-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-5-5 5 5-5 5"/></svg>
+                        </Link>
+                        <Link
+                            v-if="canLogin"
+                            :href="route('login')"
+                            class="inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-arka-primary/55 bg-white/80 px-5 text-sm font-bold text-arka-primary"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5h-4M11 8.5 15 12l-4 3.5M15 12H4"/></svg>
+                            Iniciar sesión
+                        </Link>
+                    </div>
+
+          <!--           <a href="#solicitud-rapida" class="welcome-desktop-quick-link mt-3 hidden text-xs font-medium text-arka-text-muted md:inline-flex">
+                        ¿Solo quieres solicitar un viaje? <span class="ms-1 font-bold text-arka-primary">Prueba la solicitud rápida →</span>
+                    </a> -->
+
+
 
                     <!-- Encuesta corta (pedido explícito del usuario: "en la
                          raíz también") — mismo lado izquierdo que el resto
                          del bloque (hereda text-center lg:text-start). -->
-                    <p v-if="!surveyDone" class="mt-4">
+                    <p v-if="!surveyDone" class="welcome-survey-link mt-4">
                         <Link :href="route('survey.show')" class="text-sm font-medium text-arka-primary hover:text-arka-primary-bright">
                             Cuentanos tu experiencia con el transporte hoy (2 min) →
                         </Link>
@@ -414,19 +432,19 @@ function submitFeedback() {
                      columnas se apilan en móvil (fila propia del grid), y una
                      línea vertical centrada — con desvanecido en los extremos,
                      no un trazo duro — cuando van lado a lado en escritorio. -->
-                <div class="h-px w-full max-w-xs mx-auto bg-gradient-to-r from-transparent via-arka-primary/25 to-transparent lg:hidden"></div>
-                <div class="hidden lg:block absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-arka-primary/25 to-transparent"></div>
+                <div class="hidden"></div>
+                <div class="hidden"></div>
 
                 <!-- Acceso urgente sin correo: conserva la identidad visual de
                      la app y asigna la cooperativa más cercana al origen. -->
-                <div class="mx-auto w-full max-w-lg">
+                <div class="welcome-hero__journey mx-auto w-full max-w-lg">
                 <!-- Acciones principales antes del buscador: el visitante decide
                      primero si entra, se registra o conoce el funcionamiento. -->
-                <div class="mb-4 grid grid-cols-2 gap-2.5">
+                <div class="welcome-hero__actions mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:hidden">
                     <Link
                         v-if="canLogin"
                         :href="route('login')"
-                        class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/20 transition hover:-translate-y-0.5 hover:bg-arka-primary-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                        class="welcome-login-button order-2 group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/55 bg-[#0a221b]/80 px-4 py-3 text-sm font-bold text-white backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-[#0a221b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
                     >
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4M11 8.5 15 12l-4 3.5M15 12H4"/></svg>
                         Iniciar sesión
@@ -434,23 +452,49 @@ function submitFeedback() {
                     <Link
                         v-if="canRegister"
                         :href="route('register')"
-                        class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-arka-primary/45 bg-arka-card/80 px-4 py-3 text-sm font-bold uppercase tracking-wide text-arka-primary-bright transition hover:-translate-y-0.5 hover:border-arka-primary hover:bg-arka-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                        class="welcome-create-button order-1 group inline-flex min-h-12 items-center justify-between gap-2 rounded-xl bg-arka-primary px-5 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(20,125,88,0.24)] transition hover:-translate-y-0.5 hover:bg-arka-primary-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
                     >
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9.5" cy="8.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0M18 8v6M15 11h6"/></svg>
-                        Crear cuenta
+                        <span class="inline-flex items-center gap-2">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9.5" cy="8.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 20a6 6 0 0 1 12 0M18 8v6M15 11h6"/></svg>
+                            Crear mi cuenta
+                        </span>
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
                     </Link>
                     <a
                         href="#como-funciona"
-                        class="group col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-arka-border bg-arka-card/55 px-4 py-2.5 text-sm font-semibold text-arka-text-muted transition hover:border-arka-primary/35 hover:bg-arka-primary/[0.06] hover:text-arka-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                        class="welcome-how-button order-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/45 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary sm:col-span-2"
                     >
                         <span class="flex h-6 w-6 items-center justify-center rounded-full border border-arka-primary/30 text-arka-primary">
                             <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z"/></svg>
                         </span>
-                        Cómo funciona
+                        Cómo Funciona
                     </a>
                 </div>
 
-                <div class="relative overflow-visible rounded-[1.75rem] border border-arka-primary/30 bg-arka-card shadow-2xl">
+                <!-- Pedido explícito del usuario: la solicitud rápida como
+                     invitado solo funciona con una cooperativa asignada
+                     (ver GuestRideController::store(), exige
+                     cooperative_id) — sin ninguna disponible, el formulario
+                     era un callejón sin salida ("No hay cooperativas
+                     disponibles"), así que directamente no se ofrece. -->
+                <template v-if="guestCooperatives.length">
+                <div class="welcome-or-divider" aria-hidden="true">
+                    <span></span><p>o comienza ahora</p><span></span>
+                </div>
+
+                <button
+                    v-if="showingGuestRideForm"
+                    type="button"
+                    class="welcome-quick-backdrop"
+                    aria-label="Cerrar solicitud rápida"
+                    @click="showingGuestRideForm = false"
+                ></button>
+
+                <div
+                    id="solicitud-rapida"
+                    class="welcome-quick-card relative overflow-visible rounded-[1.75rem] border border-arka-primary/30 bg-arka-card shadow-2xl"
+                    :class="{ 'welcome-quick-card--expanded': showingGuestRideForm }"
+                >
                     <!-- Cabecera inspirada en un buscador de reservas: primero
                          explica la acción y después presenta el trayecto. -->
                     <button
@@ -467,8 +511,43 @@ function submitFeedback() {
                             <p class="mt-0.5 text-[11px] text-arka-text-muted">{{ showingGuestRideForm ? 'Defina su recorrido y consulte la tarifa.' : 'Toque para indicar su origen y destino.' }}</p>
                         </div>
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-arka-primary/15 text-arka-primary">
-                            <svg class="h-5 w-5 transition-transform duration-200" :class="showingGuestRideForm ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                            <svg v-if="showingGuestRideForm" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 15 6-6 6 6"/></svg>
+                            <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><path stroke-linecap="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
                         </span>
+                    </button>
+
+                    <button
+                        v-if="!showingGuestRideForm"
+                        type="button"
+                        class="welcome-quick-preview welcome-quick-preview--origin hidden md:flex"
+                        aria-label="Seleccionar origen y abrir solicitud rápida"
+                        aria-controls="guest-ride-form"
+                        @click="showingGuestRideForm = true"
+                    >
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s7-6.1 7-13A7 7 0 0 0 5 9c0 6.9 7 13 7 13Zm0-10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
+                        <span>Indica tu origen</span>
+                    </button>
+
+                    <button
+                        v-if="!showingGuestRideForm"
+                        type="button"
+                        class="welcome-quick-preview"
+                        aria-label="Seleccionar destino y abrir solicitud rápida"
+                        aria-controls="guest-ride-form"
+                        @click="showingGuestRideForm = true"
+                    >
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s7-6.1 7-13A7 7 0 0 0 5 9c0 6.9 7 13 7 13Zm0-10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
+                        <span>Selecciona tu destino</span>
+                        <svg class="ms-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
+                    </button>
+
+                    <button
+                        v-if="!showingGuestRideForm"
+                        type="button"
+                        class="welcome-quick-submit-preview hidden md:inline-flex"
+                        @click="showingGuestRideForm = true"
+                    >
+                        Buscar viaje
                     </button>
 
                     <div v-show="showingGuestRideForm" id="guest-ride-form" class="px-5 py-4 sm:px-6">
@@ -517,7 +596,7 @@ function submitFeedback() {
 
                         <div class="my-3 h-px bg-arka-text-muted/10"></div>
 
-                        <div v-if="guestCooperatives.length">
+                        <div>
                             <div class="mb-1.5 flex items-center gap-2">
                                 <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-arka-primary/10 text-arka-primary">
                                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="m12 3 7 3v5c0 4-2.6 7-7 9-4.4-2-7-5-7-9V6l7-3Z"/><path stroke-linecap="round" d="m9 11 2 2 4-4"/></svg>
@@ -531,9 +610,6 @@ function submitFeedback() {
                             <p v-if="assignedCooperative" class="mt-1.5 text-[10px] text-arka-primary">✓ {{ assignedCooperative.name }} seleccionada por cercanía. Puede cambiarla.</p>
                             <p v-if="guestForm.errors.cooperative_id" class="mt-1.5 text-xs text-arka-danger">{{ guestForm.errors.cooperative_id }}</p>
                         </div>
-                        <div v-else class="rounded-arka border border-arka-warning/30 bg-arka-warning/10 p-3 text-xs text-arka-warning">
-                            No hay cooperativas disponibles en este momento.
-                        </div>
 
                         <div class="mt-3 grid grid-cols-3 gap-2 border-y border-arka-border py-2 text-center">
                             <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full bg-arka-primary text-[9px] font-bold text-white">1</span><p class="text-[9px] text-arka-text-muted">Ruta</p></div>
@@ -541,13 +617,19 @@ function submitFeedback() {
                             <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full border border-arka-primary/40 text-[9px] font-bold text-arka-primary">3</span><p class="text-[9px] text-arka-text-muted">Confirmar</p></div>
                         </div>
 
-                        <button type="button" :disabled="!guestCooperatives.length" class="mt-3 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright disabled:cursor-not-allowed disabled:opacity-40" @click="continueAsGuest">
+                        <button type="button" class="mt-3 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright" @click="continueAsGuest">
                             Consultar tarifa
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6"/></svg>
                         </button>
                         <p class="mt-2 text-center text-[9px] leading-4 text-arka-text-muted">Nada se envía hasta que revise la tarifa y confirme.</p>
                     </div>
                 </div>
+                </template>
+
+                <a href="#como-funciona" class="welcome-mobile-how">
+                    <span>Cómo Funciona</span>
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                </a>
 
                 </div>
             </div>
@@ -741,7 +823,7 @@ function submitFeedback() {
             </div>
 
             <!-- ¿Por qué elegir Arka01? -->
-            <div class="mt-16">
+            <div id="para-quienes" class="mt-16 scroll-mt-24">
                 <h2 class="mx-auto mb-2 max-w-2xl text-center text-2xl font-semibold leading-tight text-arka-text sm:text-3xl">
                     Más que encontrar un viaje.
                     <span class="block text-arka-primary">Construye una red para los próximos.</span>
@@ -805,7 +887,7 @@ function submitFeedback() {
 
             <!-- Footer con redes sociales (pedido explícito del usuario) — mismo
                  componente que usan GuestLayout.vue y Survey/Show.vue. -->
-            <div class="mt-10 flex flex-col items-center gap-4">
+            <div id="contacto" class="mt-10 flex scroll-mt-24 flex-col items-center gap-4">
                 <SocialLinks />
                 <p class="text-center text-xs text-arka-text-muted">
                     <Link href="/terminos" class="hover:text-arka-primary-bright">Términos</Link>
@@ -958,36 +1040,628 @@ function submitFeedback() {
 </template>
 
 <style scoped>
+.welcome-nav {
+    border: 1px solid rgb(var(--arka-border) / .66);
+    background: rgb(var(--arka-card) / .90);
+    box-shadow: 0 6px 22px rgba(11, 54, 38, .06);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+}
+
+.welcome-hero {
+    min-height: min(720px, calc(100svh - 7rem));
+    background: #061a13;
+    box-shadow: 0 12px 34px rgba(6, 35, 24, .13);
+}
+
 .welcome-hero__image {
-    filter: saturate(1.04) contrast(1.07) brightness(.9);
+    /* La fotografía conserva sus negros y verdes originales. El contenido ya
+       está protegido por tarjetas propias, así que no necesita una capa clara. */
+    filter: saturate(1.08) contrast(1.06) brightness(1.02);
     transform: scale(1.01);
 }
 
-.welcome-hero__veil {
-    background:
-        linear-gradient(90deg, rgb(var(--arka-base) / .28) 0%, rgb(var(--arka-base) / .10) 55%, rgb(var(--arka-base) / .24) 100%),
-        linear-gradient(180deg, rgb(var(--arka-card) / .18) 0%, rgb(var(--arka-base) / .34) 100%);
+.welcome-hero__image--mobile {
+    background-position: center top;
+    filter: saturate(1.05) contrast(1.04) brightness(.98);
+    transform: none;
 }
 
 .welcome-hero__content {
-    box-shadow:
-        0 1px 2px rgb(var(--arka-ink) / .05),
-        0 7px 20px rgb(var(--arka-primary) / .07);
+    position: relative;
+    isolation: isolate;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+}
+
+.welcome-hero__journey {
+    position: relative;
+    z-index: 2;
+}
+
+.welcome-or-divider,
+.welcome-mobile-how {
+    display: none;
+}
+
+/* Bug real reportado por el usuario ("cuando le doy a dónde vamos se daña el
+   diseño"): al expandir la solicitud rápida en un ancho de escritorio, la
+   tarjeta perdía el layout especial de fila colapsada y crecía más alto que
+   el hero (que recorta con overflow-hidden para encuadrar la foto de fondo),
+   quedando cortada y superpuesta con la maqueta del teléfono. `position:
+   fixed` la saca del recorte del hero (no lo atrapa un overflow-hidden en un
+   ancestro) y la centra como un panel flotante — mismo tratamiento que ya
+   funcionaba bien en el celular, ahora sin restringirlo a esa pantalla. */
+.welcome-quick-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgba(1,18,13,.48);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+
+.welcome-quick-card--expanded {
+    /* Bug real reportado por el usuario ("quitale al modal ese espacio en
+       blanco allí"): con top Y bottom fijos, el modal siempre estiraba su
+       alto hasta el borde de la pantalla aunque el formulario fuera mucho
+       más corto — el hueco de sobra quedaba en blanco debajo del botón
+       "Consultar tarifa". `inset` + `margin: auto` centra un panel de alto
+       automático (se ajusta a su contenido) en vez de forzarlo a llenar el
+       viewport; `max-height` sigue ahí solo para activar el scroll interno
+       cuando el contenido (ej. la lista larga de cooperativas) sí es alta. */
+    position: fixed;
+    inset: max(.75rem, env(safe-area-inset-top)) .75rem max(.75rem, env(safe-area-inset-bottom));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    width: auto;
+    height: fit-content;
+    max-width: 24rem;
+    max-height: calc(100dvh - 1.5rem);
+    overflow: hidden;
+    margin: auto;
+    border-radius: 1.25rem;
+    box-shadow: 0 22px 60px rgba(0,18,13,.38);
+    overscroll-behavior: contain;
+}
+
+.welcome-quick-card--expanded > button:first-of-type {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex: 0 0 auto;
+    background: rgba(255,255,255,.98);
+}
+
+.welcome-quick-card--expanded #guest-ride-form {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+}
+
+/* Zona de luz integrada: no tiene borde, esquinas ni sombra de tarjeta. El
+   blanco desaparece gradualmente y deja que la fotografía continúe alrededor. */
+.welcome-hero__content::before {
+    position: absolute;
+    inset: -1rem -1.35rem;
+    z-index: -1;
+    content: '';
+    pointer-events: none;
+    background:
+        radial-gradient(
+            ellipse at 46% 44%,
+            rgba(255, 255, 255, .99) 0%,
+            rgba(243, 255, 249, .97) 38%,
+            rgba(218, 248, 234, .86) 59%,
+            rgba(87, 205, 155, .34) 78%,
+            transparent 94%
+        ),
+        radial-gradient(ellipse at 48% 52%, rgba(52, 211, 153, .28), transparent 76%);
+    filter: blur(8px);
+}
+
+.welcome-hero__title {
+    text-shadow:
+        0 1px 0 rgba(255, 255, 255, .72),
+        0 3px 12px rgba(5, 35, 23, .08);
 }
 
 :global(html.dark) .welcome-hero__image {
-    filter: saturate(1.1) contrast(1.08) brightness(.82);
+    filter: saturate(1.1) contrast(1.07) brightness(.96);
 }
 
-:global(html.dark) .welcome-hero__veil {
-    background:
-        linear-gradient(90deg, rgba(3, 10, 7, .34) 0%, rgba(3, 10, 7, .10) 55%, rgba(3, 10, 7, .28) 100%),
-        linear-gradient(180deg, rgba(3, 10, 7, .10) 0%, rgba(3, 10, 7, .36) 100%);
+:global(html.dark) .welcome-nav {
+    background: rgb(var(--arka-card) / .88);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
 }
 
 :global(html.dark) .welcome-hero__content {
-    box-shadow:
-        0 1px 2px rgba(0, 0, 0, .24),
-        0 8px 22px rgb(var(--arka-primary) / .055);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .16);
+}
+
+:global(html.dark) .welcome-hero__content::before {
+    background:
+        radial-gradient(
+            ellipse at 46% 44%,
+            rgba(18, 35, 27, .96) 0%,
+            rgba(15, 36, 27, .90) 45%,
+            rgba(25, 106, 76, .52) 68%,
+            rgba(52, 211, 153, .18) 82%,
+            transparent 94%
+        ),
+        radial-gradient(ellipse at 48% 52%, rgba(52, 211, 153, .22), transparent 76%);
+}
+
+:global(html.dark) .welcome-hero__title {
+    text-shadow: 0 3px 14px rgba(0, 0, 0, .34);
+}
+
+@media (min-width: 768px) {
+    .welcome-hero {
+        /* Pedido explícito del usuario ("la imagen de fondo... se ve como
+           muy cerca"): la foto es cuadrada (1254×1254) contra un hero mucho
+           más ancho que alto — con "cover" eso obliga a recortar casi la
+           mitad de su alto para llenar el ancho, mostrando solo una franja
+           muy acercada. Un hero un poco más alto deja ver más foto sin
+           recortar tanto, "alejándola" sin tocar el zoom/posición del
+           recorte. Pedido explícito del usuario ("quita un poco ese aire
+           para evitar que baje tanto en escritorio"): subirlo de una a
+           700px empujaba demasiado el resto de la página hacia abajo —
+           660px es un aumento más discreto sobre el valor original (620px). */
+        min-height: 660px;
+        grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+        grid-template-rows: 1fr auto;
+        padding: 2.6rem 2.5rem 1.15rem;
+        border-color: rgba(28, 163, 115, .22);
+        border-radius: 1.6rem;
+        background: #f4fcf8;
+        box-shadow: 0 18px 50px rgba(10, 82, 57, .10);
+    }
+
+    .welcome-hero::after {
+        position: absolute;
+        inset: 0;
+        z-index: -10;
+        content: '';
+        pointer-events: none;
+        background: linear-gradient(90deg, rgba(250,255,252,.99) 0%, rgba(247,255,251,.96) 31%, rgba(245,255,250,.76) 42%, rgba(245,255,250,.16) 56%, transparent 68%);
+    }
+
+    .welcome-hero__image--desktop {
+        background-position: center 53%;
+        filter: saturate(1.04) contrast(1.02) brightness(1.02);
+    }
+
+    .welcome-hero__content {
+        grid-column: 1;
+        z-index: 1;
+        max-width: 34rem;
+        padding: 0;
+    }
+
+    .welcome-hero__content::before {
+        inset: -1.3rem -3rem -1.3rem -1.5rem;
+        background: radial-gradient(ellipse at 34% 48%, rgba(255,255,255,.94) 0%, rgba(240,255,248,.72) 48%, transparent 79%);
+        filter: blur(10px);
+    }
+
+    .welcome-hero__content > p:first-child {
+        padding: .35rem .72rem;
+        border: 1px solid rgba(19,143,100,.12);
+        background: rgba(224,247,238,.82);
+        color: #087653;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+
+    .welcome-hero__title {
+        margin-top: 1.25rem;
+        color: #071b14;
+        font-size: clamp(3rem, 4.2vw, 4rem);
+        line-height: .98;
+        letter-spacing: -.04em;
+        text-shadow: 0 2px 14px rgba(255,255,255,.34);
+    }
+
+    .welcome-hero__title + p {
+        max-width: 28rem;
+        color: #40564e;
+        line-height: 1.45;
+    }
+
+    .welcome-desktop-actions > a {
+        border-radius: .7rem;
+        box-shadow: 0 8px 20px rgba(6,113,75,.12), inset 0 1px 0 rgba(255,255,255,.28);
+        transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease;
+    }
+
+    .welcome-desktop-actions > a:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(6,113,75,.18), inset 0 1px 0 rgba(255,255,255,.34);
+    }
+
+    .welcome-desktop-actions > a:last-child {
+        background: rgba(255,255,255,.84);
+        box-shadow: 0 6px 18px rgba(6,80,55,.07), inset 0 1px 0 rgba(255,255,255,.8);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+    }
+
+    .welcome-desktop-benefits > li {
+        display: grid;
+        grid-template-columns: 2.25rem 1fr;
+        align-items: center;
+        gap: .55rem;
+        min-width: 0;
+        color: #17372c;
+    }
+
+    .welcome-desktop-benefits > li > span {
+        display: flex;
+        width: 2.25rem;
+        height: 2.25rem;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(15,143,98,.18);
+        border-radius: 999px;
+        background: rgba(218,246,234,.88);
+        color: #07835b;
+        box-shadow: 0 5px 14px rgba(5,102,69,.09), inset 0 1px 0 rgba(255,255,255,.8);
+    }
+
+    .welcome-desktop-benefits svg {
+        width: 1.05rem;
+        height: 1.05rem;
+    }
+
+    .welcome-desktop-benefits p {
+        font-size: .68rem;
+        font-weight: 700;
+        line-height: .86rem;
+    }
+
+    .welcome-survey-link {
+        display: none;
+    }
+
+    .welcome-hero__journey {
+        grid-column: 1 / -1;
+        width: 100%;
+        max-width: none;
+        margin-top: 1.1rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) {
+        display: grid;
+        grid-template-columns: minmax(12.5rem, .85fr) minmax(12rem, 1fr) minmax(12rem, 1fr) 8.5rem;
+        align-items: center;
+        gap: .5rem;
+        padding: .55rem;
+        border: 1px solid rgba(14,139,96,.30);
+        border-radius: 1rem;
+        background: rgba(255,255,255,.94);
+        box-shadow: 0 12px 32px rgba(5,73,50,.15), inset 0 1px 0 rgba(255,255,255,.9);
+        -webkit-backdrop-filter: blur(14px);
+        backdrop-filter: blur(14px);
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type {
+        min-height: 3.1rem;
+        padding: .25rem .65rem;
+        border-radius: .7rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type > span {
+        display: none;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) h2 {
+        font-size: 1rem;
+        line-height: 1.1rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) h2 + p {
+        display: none;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) .welcome-quick-preview {
+        display: flex;
+        min-height: 3rem;
+        align-items: center;
+        gap: .6rem;
+        margin: 0;
+        padding: .7rem .85rem;
+        border: 1px solid rgba(29,109,81,.09);
+        border-radius: .65rem;
+        background: rgba(239,247,243,.88);
+        color: #60736c;
+        font-size: .72rem;
+        text-align: left;
+        transition: border-color .2s ease, background-color .2s ease;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) .welcome-quick-preview:hover {
+        border-color: rgba(13,143,97,.34);
+        background: rgba(226,246,237,.92);
+    }
+
+    .welcome-quick-submit-preview {
+        min-height: 3rem;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(44,211,151,.35);
+        border-radius: .65rem;
+        background: linear-gradient(135deg, #098a60, #06734f);
+        color: white;
+        font-size: .72rem;
+        font-weight: 800;
+        box-shadow: 0 7px 18px rgba(4,112,75,.20), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+
+    :global(html.dark) .welcome-hero::after {
+        background: linear-gradient(90deg, rgba(7,25,19,.98) 0%, rgba(8,29,22,.94) 34%, rgba(8,29,22,.66) 46%, rgba(8,29,22,.10) 62%, transparent 72%);
+    }
+
+    :global(html.dark) .welcome-hero__title,
+    :global(html.dark) .welcome-desktop-benefits > li {
+        color: #f2fff9;
+    }
+
+    :global(html.dark) .welcome-hero__title + p {
+        color: #c7d8d1;
+    }
+}
+
+@media (max-width: 639px) {
+    .welcome-page-shell {
+        position: relative;
+        width: 100%;
+        max-width: none;
+        padding: 0;
+    }
+
+    .welcome-nav {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 10;
+        width: 100%;
+        margin: 0;
+        padding-top: .85rem;
+        border-color: transparent;
+        background: transparent;
+        box-shadow: none;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+
+    .welcome-hero {
+        width: 100%;
+        min-height: 100svh;
+        margin-top: 0;
+        padding: 3.45rem 1.35rem 1rem;
+        gap: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        background: #03140f;
+    }
+
+    .welcome-hero__image--mobile {
+        background-position: center top;
+        background-size: 100% auto;
+        background-repeat: no-repeat;
+        background-color: #03140f;
+        filter: saturate(1.04) contrast(1.02) brightness(1.02);
+    }
+
+    .welcome-hero__content {
+        padding: 0;
+        text-shadow: none;
+    }
+
+    .welcome-hero__content::before {
+        top: -1rem;
+        right: -1rem;
+        bottom: auto;
+        left: -1rem;
+        height: 15rem;
+        background: linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,.06) 68%, transparent);
+        filter: blur(10px);
+    }
+
+    .welcome-hero__content > p:first-child {
+        position: relative;
+        margin-top: .05rem;
+        padding: 0;
+        border-radius: 0;
+        background: transparent;
+        color: #173128;
+        font-size: .72rem;
+        font-weight: 500;
+    }
+
+    .welcome-hero__content > p:first-child svg {
+        display: none;
+    }
+
+    .welcome-hero__content > p:first-child::after {
+        position: absolute;
+        left: 50%;
+        bottom: -.42rem;
+        width: 2.25rem;
+        height: 1px;
+        content: '';
+        background: #159067;
+        transform: translateX(-50%);
+    }
+
+    .welcome-hero__title {
+        margin-top: 1.05rem;
+        color: #081812;
+        font-size: clamp(2.08rem, 10.7vw, 2.7rem);
+        font-weight: 750;
+        line-height: 1;
+        letter-spacing: -.025em;
+        text-shadow: 0 1px 8px rgba(255,255,255,.34);
+    }
+
+    .welcome-hero__content > .welcome-hero__title + p {
+        max-width: 16rem;
+        margin-top: .55rem;
+        color: #40554e;
+        font-size: .76rem;
+        line-height: 1.05rem;
+    }
+
+    .welcome-survey-link {
+        display: none;
+    }
+
+    .welcome-hero__journey {
+        width: 100%;
+        max-width: none;
+    }
+
+    .welcome-hero__actions {
+        width: 100%;
+        max-width: 18.5rem;
+        margin: 0 auto .5rem;
+        gap: .48rem;
+    }
+
+    .welcome-create-button,
+    .welcome-login-button {
+        min-height: 3.15rem;
+        border-radius: 1rem;
+        font-size: .86rem;
+    }
+
+    .welcome-create-button {
+        position: relative;
+        justify-content: center;
+        border: 1px solid rgba(76,255,186,.30);
+        background:
+            radial-gradient(circle at 50% -35%, rgba(126,255,209,.52), transparent 58%),
+            linear-gradient(135deg, #08bd7b, #079b65);
+        box-shadow: 0 8px 24px rgba(0,112,73,.30), 0 0 18px rgba(28,215,149,.14), inset 0 1px 0 rgba(255,255,255,.28);
+    }
+
+    .welcome-create-button > svg:last-child {
+        position: absolute;
+        right: 1rem;
+    }
+
+    .welcome-login-button {
+        border-color: rgba(231,255,246,.66);
+        background: rgba(6,27,21,.72);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+
+    .welcome-how-button {
+        display: none;
+    }
+
+    .welcome-or-divider {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: .65rem;
+        width: 100%;
+        max-width: 17rem;
+        margin: .55rem auto .6rem;
+        color: rgba(255,255,255,.72);
+        font-size: .58rem;
+    }
+
+    .welcome-or-divider span {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.38));
+    }
+
+    .welcome-or-divider span:last-child {
+        background: linear-gradient(90deg, rgba(255,255,255,.38), transparent);
+    }
+
+    .welcome-quick-card {
+        width: 100%;
+        max-width: 18.75rem;
+        margin-inline: auto;
+        border-color: rgba(255,255,255,.70);
+        border-radius: 1.25rem;
+        background: rgba(255,255,255,.97);
+        box-shadow: 0 10px 28px rgba(0,27,19,.24);
+    }
+
+    .welcome-quick-card h2 {
+        color: #081812;
+    }
+
+    .welcome-quick-card p:not(.text-arka-primary) {
+        color: #53645e;
+    }
+
+    .welcome-quick-card > button {
+        padding: .75rem 1rem .35rem;
+        border-radius: 1.25rem;
+    }
+
+    .welcome-quick-card > button h2 {
+        font-size: 1.16rem;
+        line-height: 1.35rem;
+    }
+
+    .welcome-quick-preview {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        margin: .15rem .85rem .8rem;
+        padding: .65rem .75rem;
+        border: 1px solid rgb(var(--arka-border) / .55);
+        border-radius: .72rem;
+        background: rgb(var(--arka-base) / .72);
+        color: rgb(var(--arka-text-muted));
+        font-size: .7rem;
+        text-align: left;
+        transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+    }
+
+    .welcome-quick-preview:hover {
+        border-color: rgb(var(--arka-primary) / .42);
+        background: rgb(var(--arka-primary) / .08);
+    }
+
+    .welcome-quick-preview:focus-visible {
+        outline: 2px solid rgb(var(--arka-primary));
+        outline-offset: 2px;
+    }
+
+    .welcome-mobile-how {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .05rem;
+        width: 100%;
+        max-width: 18.5rem;
+        margin: .75rem auto 0;
+        color: rgba(255,255,255,.92);
+        font-size: .62rem;
+        font-weight: 700;
+        letter-spacing: .01em;
+    }
+
+    #como-funciona {
+        margin-top: 0;
+        padding: 2rem 1rem 0;
+    }
 }
 </style>

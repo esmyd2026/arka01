@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
                                     </span>
                                     <span><span class="block text-[10px] uppercase tracking-wider text-arka-text-muted">Asignación</span><span class="block text-xs font-bold" :class="cooperative.automatic_assignment_enabled ? 'text-arka-primary' : 'text-arka-text'">{{ cooperative.automatic_assignment_enabled ? 'Automática' : 'Manual' }}</span></span>
                                 </button>
-                                <button type="button" class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-arka-border text-sm font-bold text-arka-text-muted transition hover:border-arka-primary/50 hover:text-arka-primary" aria-label="¿Cómo funciona la asignación?" @click="dispatchHelpOpen = !dispatchHelpOpen">?</button>
+                                <button type="button" class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-arka-border text-sm font-bold text-arka-text-muted transition hover:border-arka-primary/50 hover:text-arka-primary" aria-label="¿Cómo Funciona la asignación?" @click="dispatchHelpOpen = !dispatchHelpOpen">?</button>
                             </div>
 
                             <div v-if="dispatchHelpOpen" class="absolute right-4 top-[5.5rem] z-20 w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-arka-primary/25 bg-arka-base p-4 text-xs leading-relaxed text-arka-text-muted shadow-2xl sm:right-5 sm:top-[4.75rem]">

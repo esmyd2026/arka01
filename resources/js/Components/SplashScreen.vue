@@ -46,7 +46,7 @@ onBeforeUnmount(() => clearTimeout(hideTimer));
         <div v-if="visible" class="startup-splash fixed inset-0 z-[9999] flex items-center justify-center px-8">
             <div class="startup-splash__halo">
                 <img
-                    src="/img/logo arka01 completo sin fondo.png"
+                    src="/img/logo-arka01.png"
                     alt="Arka01"
                     class="startup-splash__logo"
                 />

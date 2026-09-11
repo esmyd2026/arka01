@@ -22,12 +22,10 @@ defineProps({
 </script>
 
 <template>
-    <!-- El fondo (foto opcional + degradado) ya lo pinta GuestLayout.vue
-         detrás de todo, para que se vea igual en móvil y escritorio (pedido
-         explícito del usuario) — acá solo queda un resalte sutil propio del
-         panel, transparente, que deja pasar esa misma capa. -->
+    <!-- El fondo lo pinta GuestLayout.vue. Este panel no añade otra placa:
+         la marca y el contenido descansan directamente sobre la fotografía. -->
     <div
-        class="relative hidden flex-col justify-center gap-8 overflow-hidden border border-arka-border bg-arka-card/[.78] p-8 shadow-2xl backdrop-blur-md lg:m-6 lg:flex lg:w-[calc(50%_-_3rem)] lg:rounded-[2rem] xl:p-10"
+        class="auth-branding relative hidden flex-col justify-center gap-8 p-8 lg:m-6 lg:flex lg:w-[calc(50%_-_3rem)] xl:p-10"
     >
         <!-- Pedido explícito del usuario ("que la pantalla se ajuste a la
              dimensión del dispositivo, que no scrollee"): el isotipo estaba
@@ -35,11 +33,11 @@ defineProps({
              panel se pasaba de la altura real de la pantalla en monitores
              normales y forzaba scroll en toda la página. Achicado a un
              tamaño que sigue siendo protagonista sin desbordar. -->
-        <img src="/img/logo-arka01-icono.png" alt="Arka01" class="h-16 w-auto self-start" />
+        <img src="/img/logo-arka01.png" alt="Arka01" class="h-16 w-auto max-w-full self-start object-contain object-left drop-shadow-[0_5px_16px_rgba(0,0,0,0.32)]" />
 
         <div class="max-w-md">
-            <h2 class="text-3xl font-bold text-arka-text leading-tight">{{ title }}</h2>
-            <p class="mt-4 text-arka-text-muted">{{ subtitle }}</p>
+            <h2 class="text-3xl font-bold text-white leading-tight">{{ title }}</h2>
+            <p class="mt-4 text-white/80">{{ subtitle }}</p>
 
             <!-- Pedido explícito del usuario: "los tres puntos únelos así con
                  la línea que venimos haciendo" — mismo patrón de ícono +
@@ -50,13 +48,13 @@ defineProps({
                 <li v-for="(bullet, index) in bullets" :key="bullet" class="flex items-start gap-3">
                     <div class="flex flex-col items-center self-stretch shrink-0">
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 border border-arka-primary/40">
-                            <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="h-4 w-4 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7" />
                             </svg>
                         </span>
                         <div v-if="index < bullets.length - 1" class="w-0.5 flex-1 min-h-[0.75rem] bg-arka-primary/40 my-0.5 rounded-full"></div>
                     </div>
-                    <span class="pt-1.5 text-sm text-arka-text">{{ bullet }}</span>
+                    <span class="pt-1.5 text-sm font-medium text-white">{{ bullet }}</span>
                 </li>
             </ul>
 
@@ -66,6 +64,12 @@ defineProps({
             </div>
         </div>
 
-        <p class="text-xs text-arka-text-muted">Copyright © 2026 - <a href="https://arka01.com/" target="_blank" rel="noopener noreferrer">Arka01</a>, Reservados todos los derechos.</p>
+        <p class="text-xs text-white/70">Copyright © 2026 - <a href="https://arka01.com/" target="_blank" rel="noopener noreferrer">Arka01</a>, Reservados todos los derechos.</p>
     </div>
 </template>
+
+<style scoped>
+.auth-branding {
+    text-shadow: 0 2px 8px rgba(0, 0, 0, .58);
+}
+</style>

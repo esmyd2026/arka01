@@ -34,6 +34,12 @@ const props = defineProps({
 });
 
 const atLimit = props.maxFleets !== null && props.fleets.length >= props.maxFleets;
+// Pedido explícito del usuario ("quita eso y mejor coloca la cantidad de
+// conductores"): el badge del encabezado mostraba el plan y el cupo de
+// flotas (poco útil para el caso más común, plan Gratis con 1 de 1) — ahora
+// suma los conductores activos de todas sus flotas, mismo dato que ya
+// calcula FleetRoster.vue por flota (fleet.active_members).
+const totalDrivers = computed(() => props.fleets.reduce((sum, f) => sum + (f.fleet.active_members?.length ?? 0), 0));
 const showCreateForm = ref(false);
 const cooperativeSearch = ref('');
 const filteredCooperatives = computed(() => {
@@ -130,7 +136,7 @@ onMounted(() => {
             <div class="flex items-center justify-between">
                 <h2 class="font-semibold text-xl text-arka-text leading-tight">Mis flotas</h2>
                 <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary">
-                    Plan {{ planName }} · {{ fleets.length }} de {{ maxFleets ?? '∞' }} flotas
+                    {{ totalDrivers }} {{ totalDrivers === 1 ? 'conductor' : 'conductores' }} en total
                 </span>
             </div>
         </template>

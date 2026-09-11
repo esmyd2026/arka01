@@ -291,8 +291,13 @@ async function confirmTakeover() {
                 <!-- Login por código de WhatsApp (pedido explícito del
                      usuario): alternativa a la contraseña para cualquier
                      cuenta con teléfono verificado — solo tiene sentido
-                     ofrecerlo si lo que escribió tiene forma de teléfono. -->
-                <p v-if="looksLikePhone && phoneLoginStep === 'idle' && !showsSessionBlockedError" class="mt-2 text-sm">
+                     ofrecerlo si lo que escribió tiene forma de teléfono.
+                     Bug real reportado por el usuario: seguía apareciendo
+                     incluso cuando ya se confirmó que no existe ninguna
+                     cuenta con ese dato (showsAccountNotFoundError) — pedir
+                     un código ahí es un callejón sin salida, nunca llega
+                     nada porque no hay a quién mandárselo. -->
+                <p v-if="looksLikePhone && phoneLoginStep === 'idle' && !showsSessionBlockedError && !showsAccountNotFoundError" class="mt-2 text-sm">
                     <button
                         type="button"
                         class="text-arka-primary hover:text-arka-primary-bright font-medium underline"

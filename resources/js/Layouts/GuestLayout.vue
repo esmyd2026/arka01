@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import AuthBrandingPanel from '@/Components/AuthBrandingPanel.vue';
 import SocialLinks from '@/Components/SocialLinks.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
@@ -81,10 +80,10 @@ onMounted(() => {
         <div class="flex-1 flex flex-col justify-center items-center px-6 py-12">
             <div class="w-full" :class="maxWidthClass">
                 <Link href="/" class="lg:hidden flex justify-center mb-6">
-                    <ApplicationLogo size="h-10" />
+                    <img src="/img/logo-arka01.png" alt="Arka01" class="h-11 w-auto object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.28)]" />
                 </Link>
 
-                <div v-if="wrapContent" class="w-full overflow-hidden rounded-2xl border border-arka-border bg-arka-card px-6 py-5 shadow-[0_22px_65px_rgba(7,24,17,0.20)]">
+                <div v-if="wrapContent" class="w-full overflow-hidden rounded-2xl bg-arka-card px-6 py-5 shadow-none">
                     <slot />
                 </div>
                 <slot v-else />
@@ -93,7 +92,7 @@ onMounted(() => {
                      despliegue): enlaces a Términos y Privacidad, visibles
                      antes de registrarse. Redes sociales agregadas después,
                      mismo pedido explícito que en Welcome.vue y Survey/Show.vue. -->
-                <div class="mt-6 flex flex-col items-center gap-3 rounded-xl bg-arka-card/65 px-4 py-3 backdrop-blur-md">
+                <div class="auth-footer mt-6 flex flex-col items-center gap-3 px-4 py-3">
                     <SocialLinks v-if="showSocialLinks" size="sm" />
                     <p class="text-center text-xs text-arka-text-muted">
                         <Link :href="route('legal.terms')" class="hover:text-arka-primary-bright">Términos</Link>
@@ -108,23 +107,29 @@ onMounted(() => {
 
 <style scoped>
 .auth-background-photo {
-    filter: saturate(.92) contrast(1.06) brightness(.88);
+    filter: saturate(1.08) contrast(1.06) brightness(.88);
     transform: scale(1.015);
 }
 
 .auth-background-veil {
     background:
-        radial-gradient(circle at 18% 24%, rgb(var(--arka-primary) / .13), transparent 36%),
-        linear-gradient(145deg, rgb(var(--arka-base) / .48) 0%, rgb(var(--arka-base) / .60) 58%, rgb(var(--arka-base) / .72) 100%);
+        linear-gradient(145deg, rgba(3, 14, 9, .15) 0%, rgba(3, 14, 9, .08) 48%, rgba(3, 14, 9, .18) 100%);
+}
+
+.auth-footer {
+    color: rgba(255, 255, 255, .82);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .72);
+}
+
+.auth-footer :deep(.text-arka-text-muted) {
+    color: rgba(255, 255, 255, .82);
 }
 
 :global(html.dark) .auth-background-photo {
-    filter: saturate(1.05) contrast(1.08) brightness(.82);
+    filter: saturate(1.12) contrast(1.08) brightness(.80);
 }
 
 :global(html.dark) .auth-background-veil {
-    background:
-        radial-gradient(circle at 18% 24%, rgb(var(--arka-primary) / .10), transparent 36%),
-        linear-gradient(145deg, rgba(3, 10, 7, .22) 0%, rgba(3, 10, 7, .38) 58%, rgba(3, 10, 7, .55) 100%);
+    background: linear-gradient(145deg, rgba(3, 10, 7, .18) 0%, rgba(3, 10, 7, .10) 48%, rgba(3, 10, 7, .24) 100%);
 }
 </style>
