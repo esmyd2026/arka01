@@ -69,7 +69,7 @@ watch(() => props.banners.length, () => {
                 :key="banner.id"
                 type="button"
                 class="h-1.5 rounded-full transition-all"
-                :class="index === activeIndex ? 'w-4 bg-white' : 'w-1.5 bg-arka-surface0'"
+                :class="index === activeIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/45'"
                 :aria-label="`Ver anuncio ${index + 1}`"
                 @click="goTo(index)"
             />

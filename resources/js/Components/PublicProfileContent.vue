@@ -228,17 +228,21 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
     height: 4.5rem;
     place-items: center;
     border-radius: 9999px;
-    background: conic-gradient(rgb(52 211 153) var(--trust-score), rgb(148 163 184 / 0.14) 0deg);
+    background: conic-gradient(
+        rgb(var(--arka-primary)) var(--trust-score),
+        rgb(var(--arka-border) / 0.55) 0deg
+    );
+    box-shadow: 0 0 0 1px rgb(var(--arka-border) / 0.45);
 }
 
 .trust-score-ring__inner {
     display: flex;
     width: 3.75rem;
     height: 3.75rem;
-    align-items: baseline;
+    align-items: center;
     justify-content: center;
     border-radius: 9999px;
-    background: rgb(10 25 19);
-    padding-top: 1.25rem;
+    background: rgb(var(--arka-card));
+    box-shadow: inset 0 0 0 1px rgb(var(--arka-border) / 0.5);
 }
 </style>

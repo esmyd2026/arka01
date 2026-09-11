@@ -1305,7 +1305,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
 
                             <div
                                 v-if="locationLoading"
-                                class="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-arka-surface0 backdrop-blur-[1px]"
+                                class="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-arka-surface/80 backdrop-blur-[1px]"
                                 role="status"
                                 aria-live="polite"
                             >

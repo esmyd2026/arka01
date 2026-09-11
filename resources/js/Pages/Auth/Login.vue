@@ -265,7 +265,7 @@ async function confirmTakeover() {
                     <TextInput
                         id="login"
                         type="text"
-                        class="block min-h-12 w-full border-arka-primary/30 bg-[#17251f] ps-10 text-sm hover:border-arka-primary/40"
+                        class="block min-h-12 w-full border-arka-primary/30 bg-arka-card ps-10 text-sm hover:border-arka-primary/55"
                         v-model="form.login"
                         required
                         autofocus
@@ -459,7 +459,7 @@ async function confirmTakeover() {
                         id="password"
                         ref="passwordInput"
                         :type="showPassword ? 'text' : 'password'"
-                        class="block min-h-12 w-full border-arka-primary/30 bg-[#17251f] ps-10 pe-11 text-sm hover:border-arka-primary/40"
+                        class="block min-h-12 w-full border-arka-primary/30 bg-arka-card ps-10 pe-11 text-sm hover:border-arka-primary/55"
                         v-model="form.password"
                         required
                         autocomplete="current-password"

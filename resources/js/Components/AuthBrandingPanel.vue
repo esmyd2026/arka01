@@ -27,8 +27,7 @@ defineProps({
          explícito del usuario) — acá solo queda un resalte sutil propio del
          panel, transparente, que deja pasar esa misma capa. -->
     <div
-        class="relative hidden lg:flex lg:w-1/2 flex-col justify-center gap-8 p-8 xl:p-10 overflow-hidden"
-        style="background: radial-gradient(circle at 15% 15%, rgba(52, 211, 153, 0.12), transparent 45%)"
+        class="relative hidden flex-col justify-center gap-8 overflow-hidden border border-arka-border bg-arka-card/[.78] p-8 shadow-2xl backdrop-blur-md lg:m-6 lg:flex lg:w-[calc(50%_-_3rem)] lg:rounded-[2rem] xl:p-10"
     >
         <!-- Pedido explícito del usuario ("que la pantalla se ajuste a la
              dimensión del dispositivo, que no scrollee"): el isotipo estaba

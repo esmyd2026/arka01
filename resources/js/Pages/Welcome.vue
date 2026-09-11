@@ -317,7 +317,7 @@ function submitFeedback() {
                  se vea. -->
             <div
                 v-else
-                class="relative isolate grid grid-cols-1 lg:grid-cols-2 gap-8 items-center overflow-hidden rounded-[2rem] px-4 py-6 sm:px-8 sm:py-9"
+                class="welcome-hero relative isolate grid grid-cols-1 items-center gap-8 overflow-hidden rounded-[2rem] border border-arka-border bg-arka-card/45 px-4 py-6 shadow-[0_10px_32px_rgba(7,24,17,0.10)] sm:px-8 sm:py-9 lg:grid-cols-2"
             >
                 <!-- Foto de fondo con fundido suave (pedido explícito del usuario:
                      "que no se vea tan brusco... lo hiciste en el login y me
@@ -326,12 +326,13 @@ function submitFeedback() {
                      en vez de pintarse de golpe como antes. -->
                 <div
                     v-if="heroBackgroundUrl"
-                    class="pointer-events-none absolute inset-0 -z-10 bg-cover bg-top transition-opacity duration-700 ease-out"
+                    class="welcome-hero__image pointer-events-none absolute inset-0 -z-20 bg-cover bg-center transition-opacity duration-700 ease-out"
                     :class="heroBackgroundLoaded ? 'opacity-100' : 'opacity-0'"
-                    :style="{ backgroundImage: `linear-gradient(180deg, rgba(248,250,249,0.68) 0%, rgba(243,246,244,0.82) 60%, rgba(237,242,239,0.96) 100%), url('${heroBackgroundUrl}')` }"
+                    :style="{ backgroundImage: `url('${heroBackgroundUrl}')` }"
                 />
+                <div v-if="heroBackgroundUrl" class="welcome-hero__veil pointer-events-none absolute inset-0 -z-10" />
 
-                <div class="text-center lg:text-start">
+                <div class="welcome-hero__content rounded-[1.6rem] border border-arka-primary/25 bg-arka-card/[.86] p-5 text-center backdrop-blur-md sm:p-6 lg:text-start">
                     <ApplicationLogo size="h-11 sm:h-14" />
 
                     <p class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-arka-primary/10 text-arka-primary-bright text-xs font-medium">
@@ -955,3 +956,38 @@ function submitFeedback() {
         </Modal>
     </div>
 </template>
+
+<style scoped>
+.welcome-hero__image {
+    filter: saturate(1.04) contrast(1.07) brightness(.9);
+    transform: scale(1.01);
+}
+
+.welcome-hero__veil {
+    background:
+        linear-gradient(90deg, rgb(var(--arka-base) / .28) 0%, rgb(var(--arka-base) / .10) 55%, rgb(var(--arka-base) / .24) 100%),
+        linear-gradient(180deg, rgb(var(--arka-card) / .18) 0%, rgb(var(--arka-base) / .34) 100%);
+}
+
+.welcome-hero__content {
+    box-shadow:
+        0 1px 2px rgb(var(--arka-ink) / .05),
+        0 7px 20px rgb(var(--arka-primary) / .07);
+}
+
+:global(html.dark) .welcome-hero__image {
+    filter: saturate(1.1) contrast(1.08) brightness(.82);
+}
+
+:global(html.dark) .welcome-hero__veil {
+    background:
+        linear-gradient(90deg, rgba(3, 10, 7, .34) 0%, rgba(3, 10, 7, .10) 55%, rgba(3, 10, 7, .28) 100%),
+        linear-gradient(180deg, rgba(3, 10, 7, .10) 0%, rgba(3, 10, 7, .36) 100%);
+}
+
+:global(html.dark) .welcome-hero__content {
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, .24),
+        0 8px 22px rgb(var(--arka-primary) / .055);
+}
+</style>

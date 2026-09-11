@@ -38,6 +38,7 @@ export default {
                     ink: 'rgb(var(--arka-ink) / <alpha-value>)',
                     primary: 'rgb(var(--arka-primary) / <alpha-value>)',
                     'primary-bright': 'rgb(var(--arka-primary-bright) / <alpha-value>)',
+                    'on-primary': 'rgb(var(--arka-on-primary) / <alpha-value>)',
                     lime: 'rgb(var(--arka-lime) / <alpha-value>)',
                     text: 'rgb(var(--arka-text) / <alpha-value>)',
                     'text-muted': 'rgb(var(--arka-text-muted) / <alpha-value>)',

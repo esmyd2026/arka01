@@ -617,14 +617,18 @@ async function switchToClient() {
     height: 88px;
     place-items: center;
     border-radius: 50%;
-    background: conic-gradient(#147d58 var(--profile-trust-score), #d9e2dd 0);
+    background: conic-gradient(
+        rgb(var(--arka-primary)) var(--profile-trust-score),
+        rgb(var(--arka-border) / 0.55) 0
+    );
 }
 
 .profile-trust-ring::before {
     position: absolute;
     inset: 7px;
     border-radius: inherit;
-    background: #ffffff;
+    background: rgb(var(--arka-card));
+    box-shadow: inset 0 0 0 1px rgb(var(--arka-border) / 0.5);
     content: '';
 }
 
@@ -636,12 +640,12 @@ async function switchToClient() {
 }
 
 .profile-trust-ring strong {
-    color: #18231e;
+    color: rgb(var(--arka-text));
     font-size: 1.6rem;
 }
 
 .profile-trust-ring small {
-    color: #68756f;
+    color: rgb(var(--arka-text-muted));
     font-size: 0.65rem;
 }
 

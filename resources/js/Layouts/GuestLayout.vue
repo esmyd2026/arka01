@@ -62,21 +62,18 @@ onMounted(() => {
          móvil, donde alcanza con el logo chico arriba de la tarjeta) y el
          formulario a la derecha. -->
     <div class="relative isolate arka-app-background min-h-screen flex overflow-hidden">
-        <!-- Efecto duotono: la imagen va en escala de grises y el verde de
-             marca se mezcla con una capa clara — se ve
-             integrada, casi con relieve, funciona automáticamente con
-             cualquier foto que suba el admin (no depende de editarla antes). -->
+        <!-- La fotografía conserva sus verdes y detalles. Una sola capa
+             adaptable protege la lectura sin convertirla en una mancha gris. -->
         <div
             v-if="backgroundUrl"
             class="pointer-events-none absolute inset-0 -z-10 isolate overflow-hidden transition-opacity duration-700 ease-out"
             :class="backgroundLoaded ? 'opacity-100' : 'opacity-0'"
         >
             <div
-                class="absolute inset-0 bg-cover bg-center"
-                :style="{ backgroundImage: `url('${backgroundUrl}')`, filter: 'grayscale(1) contrast(0.9) brightness(1.12)' }"
+                class="auth-background-photo absolute inset-0 bg-cover bg-center"
+                :style="{ backgroundImage: `url('${backgroundUrl}')` }"
             />
-            <div class="absolute inset-0 mix-blend-color" style="background: linear-gradient(160deg, #dceee5 0%, #edf5f1 55%, #f3f6f4 100%)" />
-            <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(248,250,249,0.62) 0%, rgba(243,246,244,0.78) 55%, rgba(237,242,239,0.94) 100%)" />
+            <div class="auth-background-veil absolute inset-0" />
         </div>
 
         <AuthBrandingPanel v-if="showBrandingPanel" />
@@ -87,7 +84,7 @@ onMounted(() => {
                     <ApplicationLogo size="h-10" />
                 </Link>
 
-                <div v-if="wrapContent" class="w-full px-6 py-4 bg-arka-card shadow-md overflow-hidden rounded-arka">
+                <div v-if="wrapContent" class="w-full overflow-hidden rounded-2xl border border-arka-border bg-arka-card px-6 py-5 shadow-[0_22px_65px_rgba(7,24,17,0.20)]">
                     <slot />
                 </div>
                 <slot v-else />
@@ -96,7 +93,7 @@ onMounted(() => {
                      despliegue): enlaces a Términos y Privacidad, visibles
                      antes de registrarse. Redes sociales agregadas después,
                      mismo pedido explícito que en Welcome.vue y Survey/Show.vue. -->
-                <div class="mt-6 flex flex-col items-center gap-3">
+                <div class="mt-6 flex flex-col items-center gap-3 rounded-xl bg-arka-card/65 px-4 py-3 backdrop-blur-md">
                     <SocialLinks v-if="showSocialLinks" size="sm" />
                     <p class="text-center text-xs text-arka-text-muted">
                         <Link :href="route('legal.terms')" class="hover:text-arka-primary-bright">Términos</Link>
@@ -108,3 +105,26 @@ onMounted(() => {
         </div>
     </div>
 </template>
+
+<style scoped>
+.auth-background-photo {
+    filter: saturate(.92) contrast(1.06) brightness(.88);
+    transform: scale(1.015);
+}
+
+.auth-background-veil {
+    background:
+        radial-gradient(circle at 18% 24%, rgb(var(--arka-primary) / .13), transparent 36%),
+        linear-gradient(145deg, rgb(var(--arka-base) / .48) 0%, rgb(var(--arka-base) / .60) 58%, rgb(var(--arka-base) / .72) 100%);
+}
+
+:global(html.dark) .auth-background-photo {
+    filter: saturate(1.05) contrast(1.08) brightness(.82);
+}
+
+:global(html.dark) .auth-background-veil {
+    background:
+        radial-gradient(circle at 18% 24%, rgb(var(--arka-primary) / .10), transparent 36%),
+        linear-gradient(145deg, rgba(3, 10, 7, .22) 0%, rgba(3, 10, 7, .38) 58%, rgba(3, 10, 7, .55) 100%);
+}
+</style>

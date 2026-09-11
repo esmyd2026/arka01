@@ -275,7 +275,7 @@ onBeforeUnmount(() => {
                 <li
                     v-for="driver in searchResults"
                     :key="driver.user_id"
-                    class="flex items-center justify-between gap-4 rounded-xl border border-arka-border bg-arka-surface/75 p-3 transition hover:border-arka-primary/40 hover:bg-white"
+                    class="flex items-center justify-between gap-4 rounded-xl border border-arka-border bg-arka-surface/75 p-3 transition hover:border-arka-primary/40 hover:bg-arka-card"
                 >
                     <div class="flex items-center gap-3 min-w-0">
                         <UserAvatar :user="driver" size-class="h-11 w-11 text-sm shrink-0" />
@@ -366,7 +366,7 @@ onBeforeUnmount(() => {
                 <article
                     v-for="member in fleet.active_members"
                     :key="member.id"
-                    class="group relative overflow-hidden rounded-2xl border border-arka-border bg-arka-surface p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-arka-primary/45 hover:bg-white hover:shadow-lg hover:shadow-black/10"
+                    class="group relative overflow-hidden rounded-2xl border border-arka-border bg-arka-surface p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-arka-primary/45 hover:bg-arka-card hover:shadow-lg hover:shadow-black/10"
                 >
                     <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-arka-primary/45 to-transparent opacity-0 transition group-hover:opacity-100"></div>
 
@@ -432,7 +432,7 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <div v-if="memberStats[member.driver.id]" class="mt-4 grid grid-cols-3 divide-x divide-arka-border rounded-xl border border-arka-border bg-white py-2.5 text-center">
+                    <div v-if="memberStats[member.driver.id]" class="mt-4 grid grid-cols-3 divide-x divide-arka-border rounded-xl border border-arka-border bg-arka-card py-2.5 text-center">
                         <div class="px-1">
                             <p class="text-sm font-semibold text-arka-text">
                                 <template v-if="memberStats[member.driver.id].review_count > 0">
