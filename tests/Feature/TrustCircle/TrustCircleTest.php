@@ -158,7 +158,9 @@ class TrustCircleTest extends TestCase
 
         [$connection, $client, $friend] = $this->acceptedConnection();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Este test verifica el status 'pending' de la invitación en sí — la
+        // aprobación automática (default) no es lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
         $friendFleet = Fleet::factory()->for($friend, 'owner')->create();
         FleetMember::factory()->for($friendFleet)->for($driver, 'driver')->create(['added_by' => $friend->id]);
 

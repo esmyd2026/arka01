@@ -205,11 +205,11 @@ const form = useForm({
     // conductor lo apaga o prende desde acá — con esto en false, nunca se le
     // calcula ni se le muestra en ninguna solicitud (ver PriceCalculator).
     pickup_surcharge_enabled: props.driverProfile?.pickup_surcharge_enabled ?? true,
-    // Pedido explícito del usuario: apagado, cualquier cliente que lo
-    // agregue a su flota queda vinculado de una en vez de esperar que
-    // acepte — empieza en true (aprobación manual, comportamiento de
-    // siempre) para no sorprender a nadie con clientes agregados solos.
-    requires_fleet_invitation_approval: props.driverProfile?.requires_fleet_invitation_approval ?? true,
+    // Pedido explícito del usuario: apagado por defecto para todos —
+    // cualquier cliente que lo agregue a su flota queda vinculado de una,
+    // solo le llega un aviso con el detalle del cliente nuevo. Puede
+    // prenderlo si prefiere aceptar cada invitación a mano.
+    requires_fleet_invitation_approval: props.driverProfile?.requires_fleet_invitation_approval ?? false,
     accepts_cash: props.driverProfile?.accepts_cash ?? true,
     accepts_transfer: props.driverProfile?.accepts_transfer ?? false,
     has_insurance: props.driverProfile?.has_insurance ?? false,
@@ -1458,9 +1458,9 @@ const VERIFICATION_LABELS = {
                                 <span>
                                     <span class="block text-sm font-medium text-arka-text">Aprobar invitaciones de flota a mano</span>
                                     <span class="mt-0.5 block text-xs text-arka-text-muted">
-                                        Con esto activado (de siempre), cada cliente que quiera agregarlo a su flota necesita su
-                                        aceptación explícita. Si lo apaga, quedará agregado de una apenas un cliente lo agregue — solo
-                                        le llegará un aviso con el detalle de ese cliente nuevo.
+                                        Apagado por defecto: cualquier cliente que lo agregue a su flota queda vinculado de una —
+                                        solo le llega un aviso con el detalle de ese cliente nuevo. Actívelo si prefiere aceptar cada
+                                        invitación a mano antes de que quede agregado.
                                     </span>
                                 </span>
                             </label>

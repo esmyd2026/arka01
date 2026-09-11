@@ -81,7 +81,9 @@ class ReferralTest extends TestCase
     {
         $client = User::factory()->create();
         $driver = User::factory()->create();
-        $profile = DriverProfile::factory()->for($driver)->create();
+        // Este test verifica el status 'pending' de la invitación en sí — la
+        // aprobación automática (default) no es lo que se está probando acá.
+        $profile = DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
 
         $this->actingAs($client)->post(route('referrals.store', $profile->invite_code))
             ->assertRedirect();

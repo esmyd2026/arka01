@@ -73,10 +73,12 @@ class FleetReferralTest extends TestCase
 
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
+        // Este test ejercita el status 'pending' de la recomendación en sí —
+        // la aprobación automática (default) no es lo que se está probando acá.
         $driverOne = User::factory()->create();
-        DriverProfile::factory()->for($driverOne)->create();
+        DriverProfile::factory()->for($driverOne)->create(['requires_fleet_invitation_approval' => true]);
         $driverTwo = User::factory()->create();
-        DriverProfile::factory()->for($driverTwo)->create();
+        DriverProfile::factory()->for($driverTwo)->create(['requires_fleet_invitation_approval' => true]);
         FleetMember::factory()->for($fleet)->for($driverOne, 'driver')->create(['added_by' => $client->id]);
         FleetMember::factory()->for($fleet)->for($driverTwo, 'driver')->create(['added_by' => $client->id]);
 
@@ -219,7 +221,9 @@ class FleetReferralTest extends TestCase
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Cancela mientras sigue pendiente — la aprobación automática
+        // (default) no es lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
         FleetMember::factory()->for($fleet)->for($driver, 'driver')->create(['added_by' => $client->id]);
 
         $friend = User::factory()->create();

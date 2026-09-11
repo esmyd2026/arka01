@@ -155,7 +155,9 @@ class DriverDirectoryTest extends TestCase
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create(['is_public' => true]);
+        // Este test verifica el status 'pending' de la invitación en sí — la
+        // aprobación automática (default) no es lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['is_public' => true, 'requires_fleet_invitation_approval' => true]);
 
         // Mismo endpoint que "Mi Flota" (Fase 1) — el directorio no duplica lógica de invitación.
         $this->actingAs($client)

@@ -66,7 +66,10 @@ class RideFleetInviteTest extends TestCase
     {
         $client = User::factory()->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Aprobación manual activada a propósito: este test ejercita el
+        // status 'pending' de la invitación en sí, no la aprobación
+        // automática (default) — ver el test de abajo para ese caso.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
         $ride = $this->completedRideBetween($client, $driver);
 
         $fleet = Fleet::where('owner_user_id', $client->id)->firstOrFail();
@@ -80,6 +83,33 @@ class RideFleetInviteTest extends TestCase
             'driver_user_id' => $driver->id,
             'status' => 'pending',
         ]);
+    }
+
+    /**
+     * Pedido explícito del usuario: la aprobación manual viene desactivada
+     * por defecto — agregar desde acá deja al conductor como miembro de una,
+     * no como invitación pendiente.
+     */
+    public function test_adding_a_driver_with_default_settings_makes_them_a_member_right_away(): void
+    {
+        $client = User::factory()->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create();
+        $ride = $this->completedRideBetween($client, $driver);
+
+        $fleet = Fleet::where('owner_user_id', $client->id)->firstOrFail();
+
+        $this->actingAs($client)
+            ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('fleet_members', [
+            'fleet_id' => $fleet->id,
+            'driver_user_id' => $driver->id,
+        ]);
+
+        $response = $this->actingAs($client)->get(route('rides.show', $ride));
+        $response->assertInertia(fn ($page) => $page->where('fleetInvite.status', 'member'));
     }
 
     public function test_a_driver_already_in_the_fleet_shows_as_a_member(): void
@@ -105,7 +135,9 @@ class RideFleetInviteTest extends TestCase
     {
         $client = User::factory()->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Aprobación manual activada a propósito: por defecto esto quedaría
+        // 'member' de una, no 'pending' (ver el test de auto-aceptación).
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
         $ride = $this->completedRideBetween($client, $driver);
 
         $fleet = Fleet::where('owner_user_id', $client->id)->firstOrFail();

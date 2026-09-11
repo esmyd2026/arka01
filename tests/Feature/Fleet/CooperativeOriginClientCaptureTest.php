@@ -31,7 +31,10 @@ class CooperativeOriginClientCaptureTest extends TestCase
     private function driverWithPaidPlan(): User
     {
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Estos tests verifican el status/mensaje de la invitación en sí
+        // (pending, no bloqueada) — la aprobación automática (default desde
+        // el pedido del usuario) no es lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
         $plan = SubscriptionPlan::query()->where('owner_type', 'driver')->where('code', 'plus')->firstOrFail();
         Subscription::factory()->for($driver)->create(['subscription_plan_id' => $plan->id, 'status' => 'active']);
 

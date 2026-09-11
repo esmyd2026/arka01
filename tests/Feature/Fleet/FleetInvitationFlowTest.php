@@ -194,7 +194,10 @@ class FleetInvitationFlowTest extends TestCase
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Solo tiene sentido avisar en vivo si queda pendiente de responder
+        // (ver FleetInvitationCreator::create()) — con la aprobación
+        // automática (default) esto no se dispara, a propósito.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
 
         $this->actingAs($client)
             ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
@@ -209,7 +212,9 @@ class FleetInvitationFlowTest extends TestCase
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Este test ejercita el ciclo pendiente -> aceptar a mano — la
+        // aprobación automática (default) no es lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
 
         $this->actingAs($client)
             ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
@@ -244,7 +249,9 @@ class FleetInvitationFlowTest extends TestCase
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Este test ejercita el ciclo pendiente -> rechazar a mano — la
+        // aprobación automática (default) no es lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
 
         $this->actingAs($client)->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id]);
         $invitation = FleetInvitation::firstOrFail();
@@ -347,7 +354,10 @@ class FleetInvitationFlowTest extends TestCase
             ->update(['max_clients' => 1]);
 
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Este test ejercita el cupo en el momento de ACEPTAR a mano — la
+        // aprobación automática (default) ya lo bloquearía antes, en la
+        // creación misma (ver AutoAcceptFleetInvitationTest para ese caso).
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
 
         // Ya pertenece a una flota, así que está en el tope de su plan Gratis.
         $existingClient = User::factory()->create();

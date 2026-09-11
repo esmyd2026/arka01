@@ -15,41 +15,24 @@ use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
- * Pedido explícito del usuario: el conductor puede desactivar la aprobación
- * manual de invitaciones de flota desde su perfil
- * (DriverProfile::requires_fleet_invitation_approval) — con eso apagado,
+ * Pedido explícito del usuario: la aprobación manual de invitaciones de
+ * flota viene DESACTIVADA por defecto para todos los conductores ("te dije
+ * que a todos les pongas por default desactivado") — con eso apagado,
  * cualquier cliente que lo agregue queda vinculado de una, solo se le avisa.
+ * El conductor puede prenderla desde su perfil si prefiere aceptar cada
+ * invitación a mano (ver DriverProfile::requires_fleet_invitation_approval).
  */
 class AutoAcceptFleetInvitationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_by_default_an_invitation_still_needs_the_drivers_explicit_approval(): void
+    public function test_by_default_a_client_initiated_invitation_auto_accepts(): void
     {
         Notification::fake();
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create();
-
-        $this->actingAs($client)
-            ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
-            ->assertRedirect();
-
-        $invitation = FleetInvitation::firstOrFail();
-        $this->assertSame('pending', $invitation->status);
-        $this->assertDatabaseMissing('fleet_members', ['driver_user_id' => $driver->id]);
-        Notification::assertSentTo($driver, FleetInvitationPushNotification::class);
-        Notification::assertNotSentTo($driver, FleetInvitationAutoAcceptedPushNotification::class);
-    }
-
-    public function test_disabling_approval_auto_accepts_a_client_initiated_invitation(): void
-    {
-        Notification::fake();
-        $client = User::factory()->create();
-        $fleet = Fleet::factory()->for($client, 'owner')->create();
-        $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => false]);
 
         $this->actingAs($client)
             ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
@@ -68,6 +51,25 @@ class AutoAcceptFleetInvitationTest extends TestCase
 
         Notification::assertSentTo($driver, FleetInvitationAutoAcceptedPushNotification::class);
         Notification::assertNotSentTo($driver, FleetInvitationPushNotification::class);
+    }
+
+    public function test_a_driver_can_turn_manual_approval_back_on(): void
+    {
+        Notification::fake();
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
+
+        $this->actingAs($client)
+            ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
+            ->assertRedirect();
+
+        $invitation = FleetInvitation::firstOrFail();
+        $this->assertSame('pending', $invitation->status);
+        $this->assertDatabaseMissing('fleet_members', ['driver_user_id' => $driver->id]);
+        Notification::assertSentTo($driver, FleetInvitationPushNotification::class);
+        Notification::assertNotSentTo($driver, FleetInvitationAutoAcceptedPushNotification::class);
     }
 
     /**

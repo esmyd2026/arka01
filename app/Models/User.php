@@ -342,6 +342,21 @@ class User extends Authenticatable
     }
 
     /**
+     * false para los correos "de relleno" que arma la propia app cuando
+     * todavía no hay uno real (registro rápido por teléfono, cuentas creadas
+     * por WhatsApp/como invitado — ver QuickRegistrationController,
+     * WhatsAppRideBookingHandler, GuestRideController): mandar un código ahí
+     * no le llegaría a nadie. Único punto que conoce esos dos dominios, para
+     * no repetirlos sueltos en cada lugar que necesite este chequeo.
+     */
+    public function hasRealEmail(): bool
+    {
+        return filled($this->email)
+            && ! str_ends_with($this->email, '@guest.arka01.local')
+            && ! str_ends_with($this->email, '@sinemail.arka01.local');
+    }
+
+    /**
      * Ciudad donde vive (consideración de seguridad/UX agregada al alcance):
      * la solicitud de carrera arranca con esta ciudad por defecto.
      */

@@ -30,7 +30,10 @@ class CooperativeDriverPrivateClientCapacityTest extends TestCase
     private function cooperativeDriver(): User
     {
         $driver = User::factory()->create();
-        DriverProfile::factory()->for($driver)->create();
+        // Estos tests ejercitan el ciclo pendiente -> aceptar a mano — la
+        // aprobación automática (default desde el pedido del usuario) no es
+        // lo que se está probando acá.
+        DriverProfile::factory()->for($driver)->create(['requires_fleet_invitation_approval' => true]);
         $cooperativeUser = User::factory()->create();
         $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Central']);
         $cooperative->forceFill(['status' => 'approved'])->save();

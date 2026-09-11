@@ -112,6 +112,46 @@ function confirmPhoneLogin() {
     });
 }
 
+// Último recurso (pedido explícito del usuario, caso real: "cuando pido el
+// código no llega... la experiencia es muy mala") — escribirle a soporte sin
+// tener que entrar primero, desde acá mismo. Aparece junto al widget de
+// código, para cuando ni WhatsApp ni el respaldo por correo funcionaron.
+const supportFormOpen = ref(false);
+const supportMessage = ref('');
+const supportStatus = ref('');
+const supportError = ref('');
+const supportSending = ref(false);
+const supportSent = ref(false);
+
+function openSupportForm() {
+    supportFormOpen.value = true;
+    supportStatus.value = '';
+    supportError.value = '';
+}
+
+async function sendSupportMessage() {
+    supportSending.value = true;
+    supportError.value = '';
+
+    try {
+        const { data } = await window.axios.post(route('login-support.store'), {
+            login: form.login,
+            message: supportMessage.value,
+        });
+
+        if (data.ok) {
+            supportStatus.value = data.message;
+            supportSent.value = true;
+        } else {
+            supportError.value = data.message;
+        }
+    } catch {
+        supportError.value = 'No pudimos enviar su mensaje — intente de nuevo en un rato.';
+    } finally {
+        supportSending.value = false;
+    }
+}
+
 const takeoverStep = ref('idle'); // 'idle' | 'code-sent'
 const takeoverCode = ref('');
 const takeoverStatus = ref('');
@@ -255,6 +295,37 @@ async function confirmTakeover() {
                         </SecondaryButton>
                     </div>
                     <p v-if="phoneLoginError" class="mt-2 text-xs text-arka-danger">{{ phoneLoginError }}</p>
+
+                    <!-- Último recurso (pedido explícito del usuario, caso
+                         real: "cuando pido el código no llega"): escribirle a
+                         soporte sin tener que entrar primero. -->
+                    <template v-if="!supportSent">
+                        <button
+                            v-if="!supportFormOpen"
+                            type="button"
+                            class="mt-3 block text-xs text-arka-text-muted hover:text-arka-text underline"
+                            @click="openSupportForm"
+                        >
+                            ¿Tampoco le llegó por correo? Escribirle a soporte
+                        </button>
+
+                        <div v-else class="mt-3">
+                            <TextInput
+                                type="text"
+                                class="block w-full"
+                                v-model="supportMessage"
+                                placeholder="Cuéntenos qué le pasó — un admin lo va a revisar"
+                                maxlength="1000"
+                            />
+                            <div class="mt-2 flex items-center gap-2">
+                                <SecondaryButton :disabled="supportSending || !supportMessage.trim()" @click="sendSupportMessage">
+                                    {{ supportSending ? 'Enviando…' : 'Enviar a soporte' }}
+                                </SecondaryButton>
+                            </div>
+                            <p v-if="supportError" class="mt-2 text-xs text-arka-danger">{{ supportError }}</p>
+                        </div>
+                    </template>
+                    <p v-else class="mt-3 text-xs text-arka-primary-bright">{{ supportStatus }}</p>
                 </div>
 
                 <!-- Sesión única por cuenta (pedido explícito del usuario,

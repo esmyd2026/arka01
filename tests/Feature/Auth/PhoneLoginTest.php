@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Mail\PhoneLoginCodeMail;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -15,6 +17,11 @@ use Tests\TestCase;
  * cualquier cuenta con teléfono, no solo las del registro rápido. Mismo
  * criterio de respuesta genérica que SessionTakeoverTest: nunca delata si la
  * cuenta existe.
+ *
+ * Pedido explícito del usuario ("priorizar el teléfono pero si no que sea
+ * por email", caso real: "cuando pido el código no llega"): si WhatsApp no
+ * está configurado o el envío falla de verdad, se intenta por correo — solo
+ * si la cuenta tiene uno real (User::factory() ya da uno real por defecto).
  */
 class PhoneLoginTest extends TestCase
 {
@@ -99,6 +106,45 @@ class PhoneLoginTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com')
             && $request['to'] === '593991234567');
         $this->assertNotNull($user->fresh()->login_code);
+    }
+
+    public function test_without_whatsapp_configured_it_falls_back_to_the_accounts_real_email(): void
+    {
+        Mail::fake();
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $this->postJson(route('phone-login.request'), ['login' => $user->phone])->assertOk();
+
+        Mail::assertSent(PhoneLoginCodeMail::class, fn ($mail) => $mail->hasTo($user->email) && $mail->user->is($user));
+        $this->assertNotNull($user->fresh()->login_code);
+    }
+
+    public function test_when_the_whatsapp_send_actually_fails_it_falls_back_to_email(): void
+    {
+        Config::set('services.whatsapp.token', 'fake-token');
+        Config::set('services.whatsapp.phone_number_id', '123456');
+        Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Invalid token']], 401)]);
+        Mail::fake();
+
+        $user = User::factory()->create(['phone' => '+593991234567']);
+
+        $this->postJson(route('phone-login.request'), ['login' => $user->phone])->assertOk();
+
+        Mail::assertSent(PhoneLoginCodeMail::class);
+    }
+
+    public function test_without_whatsapp_and_without_a_real_email_nothing_is_sent(): void
+    {
+        Mail::fake();
+        $user = User::factory()->create([
+            'phone' => '+593991234567',
+            'email' => 'whatsapp+abc123@guest.arka01.local',
+        ]);
+
+        $this->postJson(route('phone-login.request'), ['login' => $user->phone])->assertOk();
+
+        Mail::assertNothingSent();
+        Http::assertNothingSent();
     }
 
     public function test_the_correct_code_logs_in_and_redirects_home(): void

@@ -7,7 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 
 // Misma lista que RegisteredUserController::COUNTRY_CODES — es una lista fija
 // de indicativos telefónicos reales, no un catálogo de negocio que necesite
@@ -154,7 +154,10 @@ const stepIsValid = computed(() => {
         case 'phone':
             return isValidPhoneLocal(form.phone_local, form.country_code);
         case 'code':
-            return quickCodeForm.code.length === 6;
+            return showPasswordFallback.value
+                ? fallbackPasswordChecks.value.length && fallbackPasswordChecks.value.mixedCase && fallbackPasswordChecks.value.number
+                    && fallbackPasswordForm.password === fallbackPasswordForm.password_confirmation
+                : quickCodeForm.code.length === 6;
         case 'password':
             return passwordChecks.value.length && passwordChecks.value.mixedCase && passwordChecks.value.number
                 && form.password === form.password_confirmation;
@@ -180,26 +183,26 @@ const encouragement = computed(() => {
 // aparte en vez de axios (ver App\Http\Controllers\Auth\QuickRegistrationController).
 const quickCodeForm = useForm({ phone: '', code: '' });
 const quickSending = ref(false);
+// Qué canal mandó el código de verdad (pedido explícito del usuario:
+// "priorizar el teléfono pero si no que sea por email") — solo cambia el
+// mensaje que se muestra, el botón de "no me llegó" sigue disponible sin
+// importar esto: un envío "exitoso" igual puede no llegar nunca de verdad.
+const quickSentVia = ref(null);
 
 async function requestQuickCode({ advance }) {
     quickSending.value = true;
-    form.clearErrors('phone_local', 'country_code');
+    form.clearErrors('phone_local', 'country_code', 'email');
     quickCodeForm.clearErrors('code');
 
     try {
         const { data } = await window.axios.post(route('quick-registration.send-code'), {
             country_code: form.country_code,
             phone_local: form.phone_local,
+            email: form.email || null,
         });
 
         quickCodeForm.phone = form.country_code + form.phone_local;
-
-        if (data.verified) {
-            // WhatsApp apagado o caído (ver QuickRegistrationController::bypassAndLogin()):
-            // ya quedó logueado del lado del backend, saltamos directo a completar el nombre.
-            router.visit(data.redirect);
-            return;
-        }
+        quickSentVia.value = data.sent_via;
 
         if (advance) currentStep.value++;
     } catch (error) {
@@ -207,8 +210,8 @@ async function requestQuickCode({ advance }) {
         const fields = Object.keys(errors);
         if (fields.length) {
             fields.forEach((field) => form.setError(field, errors[field][0]));
-            // Un error de teléfono solo se ve en el paso 'phone' — si esto
-            // pasó reenviando desde el paso 'code', hay que volver a mostrarlo.
+            // Un error de teléfono/correo solo se ve en el paso 'phone' — si
+            // esto pasó reenviando desde el paso 'code', hay que volver a mostrarlo.
             if (!advance) currentStep.value--;
         } else {
             // Sin campo puntual (ej. WhatsApp caído a nivel de red): el
@@ -227,6 +230,29 @@ function submitQuickCode() {
     quickCodeForm.post(route('quick-registration.verify'));
 }
 
+// Escape final (pedido explícito del usuario: "que le diga un botón no me
+// llegó el mensaje y que lo deje pasar igual pero que le pida una
+// contraseña") — reemplaza el código por una contraseña elegida ahí mismo,
+// en vez de dejarlo esperando un mensaje que puede no llegar nunca.
+const showPasswordFallback = ref(false);
+const fallbackPasswordForm = useForm({ phone: '', password: '', password_confirmation: '' });
+const fallbackPasswordChecks = computed(() => ({
+    length: fallbackPasswordForm.password.length >= 8,
+    mixedCase: /[a-z]/.test(fallbackPasswordForm.password) && /[A-Z]/.test(fallbackPasswordForm.password),
+    number: /\d/.test(fallbackPasswordForm.password),
+}));
+
+function openPasswordFallback() {
+    fallbackPasswordForm.phone = quickCodeForm.phone;
+    showPasswordFallback.value = true;
+}
+
+function submitPasswordFallback() {
+    fallbackPasswordForm.post(route('quick-registration.finish-without-code'), {
+        onFinish: () => fallbackPasswordForm.reset('password', 'password_confirmation'),
+    });
+}
+
 function goNext() {
     if (!stepIsValid.value) return;
 
@@ -238,7 +264,11 @@ function goNext() {
     }
 
     if (isQuickSignup.value && stepName === 'code') {
-        submitQuickCode();
+        if (showPasswordFallback.value) {
+            submitPasswordFallback();
+        } else {
+            submitQuickCode();
+        }
         return;
     }
 
@@ -489,14 +519,35 @@ const submit = () => {
                         Iniciar sesión →
                     </Link>
                 </p>
+
+                <!-- Pedido explícito del usuario ("priorizar el teléfono
+                     pero si no que sea por email"): opcional, solo como
+                     respaldo si el código por WhatsApp no llega. -->
+                <div v-if="isQuickSignup" class="mt-4">
+                    <InputLabel for="quick_email" value="Correo (opcional)" />
+                    <TextInput
+                        id="quick_email"
+                        type="email"
+                        class="mt-1 block w-full"
+                        v-model="form.email"
+                        autocomplete="email"
+                        placeholder="Por si el código no le llega por WhatsApp"
+                        @keydown.enter.prevent="goNext"
+                    />
+                    <InputError class="mt-2" :message="form.errors.email" />
+                </div>
             </div>
 
             <!-- Paso de código (solo registro rápido, pedido explícito del
                  usuario): el número ya quedó guardado en sendQuickCode(), acá
-                 solo falta confirmar el código que llegó por WhatsApp. -->
-            <div v-else-if="STEPS[currentStep] === 'code'">
-                <InputLabel for="quick_code" value="Escriba el código que le llegó por WhatsApp" />
-                <p class="mt-1 text-xs text-arka-text-muted">Lo enviamos al {{ quickCodeForm.phone }}.</p>
+                 solo falta confirmar el código. -->
+            <div v-else-if="STEPS[currentStep] === 'code' && !showPasswordFallback">
+                <InputLabel for="quick_code" :value="quickSentVia === 'email' ? 'Escriba el código que le llegó por correo' : 'Escriba el código que le llegó por WhatsApp'" />
+                <p class="mt-1 text-xs text-arka-text-muted">
+                    <template v-if="quickSentVia === 'email'">No pudimos mandarlo por WhatsApp — se lo enviamos a su correo.</template>
+                    <template v-else-if="quickSentVia === 'whatsapp'">Lo enviamos al {{ quickCodeForm.phone }}.</template>
+                    <template v-else>No pudimos enviarlo ni por WhatsApp ni por correo — puede intentar de nuevo o continuar con una contraseña.</template>
+                </p>
 
                 <TextInput
                     id="quick_code"
@@ -512,13 +563,96 @@ const submit = () => {
                 />
                 <InputError class="mt-2" :message="quickCodeForm.errors.code" />
 
+                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+                    <button
+                        type="button"
+                        class="text-xs text-arka-primary hover:text-arka-primary-bright underline disabled:opacity-50"
+                        :disabled="quickSending"
+                        @click="resendQuickCode"
+                    >
+                        {{ quickSending ? 'Enviando…' : 'Reenviar código' }}
+                    </button>
+
+                    <!-- Pedido explícito del usuario: "que le diga un botón
+                         no me llegó el mensaje y que lo deje pasar igual
+                         pero que le pida una contraseña" — visible siempre,
+                         un envío "exitoso" igual puede no llegar nunca. -->
+                    <button
+                        type="button"
+                        class="text-xs text-arka-text-muted hover:text-arka-text underline"
+                        @click="openPasswordFallback"
+                    >
+                        No me llegó ningún código
+                    </button>
+                </div>
+            </div>
+
+            <!-- Escape final (ver openPasswordFallback()): en vez de seguir
+                 esperando un código, elige una contraseña ahí mismo. -->
+            <div v-else-if="STEPS[currentStep] === 'code' && showPasswordFallback">
+                <InputLabel value="Elija una contraseña para continuar" />
+                <p class="mt-1 text-xs text-arka-text-muted">
+                    No pudimos confirmarle el teléfono por ahora — con esta contraseña puede entrar igual, y puede verificarlo más tarde desde su perfil.
+                </p>
+
+                <div class="relative mt-3">
+                    <TextInput
+                        :type="showPassword ? 'text' : 'password'"
+                        class="block w-full pr-10"
+                        v-model="fallbackPasswordForm.password"
+                        required
+                        autofocus
+                        autocomplete="new-password"
+                    />
+                    <button
+                        type="button"
+                        class="absolute inset-y-0 right-0 flex items-center px-3 text-arka-text-muted hover:text-arka-text focus:outline-none"
+                        :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                        tabindex="-1"
+                        @click="showPassword = !showPassword"
+                    >
+                        <svg v-if="showPassword" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.58 10.58a2 2 0 0 0 2.83 2.83M9.88 4.24A9.53 9.53 0 0 1 12 4c5 0 9 4 10 8-.32 1.13-.88 2.24-1.62 3.24M6.53 6.53C4.6 7.83 3.15 9.71 2 12c1 4 5 8 10 8 1.35 0 2.63-.28 3.78-.79" />
+                        </svg>
+                        <svg v-else class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8Z" />
+                            <circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                </div>
+
+                <ul v-if="fallbackPasswordForm.password.length" class="mt-2 space-y-1 text-xs">
+                    <li :class="fallbackPasswordChecks.length ? 'text-arka-primary-bright' : 'text-arka-text-muted'">
+                        {{ fallbackPasswordChecks.length ? '✓' : '·' }} Al menos 8 caracteres
+                    </li>
+                    <li :class="fallbackPasswordChecks.mixedCase ? 'text-arka-primary-bright' : 'text-arka-text-muted'">
+                        {{ fallbackPasswordChecks.mixedCase ? '✓' : '·' }} Mayúsculas y minúsculas
+                    </li>
+                    <li :class="fallbackPasswordChecks.number ? 'text-arka-primary-bright' : 'text-arka-text-muted'">
+                        {{ fallbackPasswordChecks.number ? '✓' : '·' }} Al menos un número
+                    </li>
+                </ul>
+                <InputError class="mt-2" :message="fallbackPasswordForm.errors.password" />
+
+                <div class="mt-3">
+                    <InputLabel value="Confirme la contraseña" />
+                    <TextInput
+                        :type="showPassword ? 'text' : 'password'"
+                        class="mt-1 block w-full"
+                        v-model="fallbackPasswordForm.password_confirmation"
+                        required
+                        autocomplete="new-password"
+                        @keydown.enter.prevent="goNext"
+                    />
+                    <InputError class="mt-2" :message="fallbackPasswordForm.errors.password_confirmation" />
+                </div>
+
                 <button
                     type="button"
-                    class="mt-3 text-xs text-arka-primary hover:text-arka-primary-bright underline disabled:opacity-50"
-                    :disabled="quickSending"
-                    @click="resendQuickCode"
+                    class="mt-3 text-xs text-arka-primary hover:text-arka-primary-bright underline"
+                    @click="showPasswordFallback = false"
                 >
-                    {{ quickSending ? 'Enviando…' : 'No me llegó, reenviar código' }}
+                    ← Prefiero intentar con el código de nuevo
                 </button>
             </div>
 
@@ -606,11 +740,14 @@ const submit = () => {
                 </Link>
 
                 <PrimaryButton
-                    :class="{ 'opacity-25': form.processing || quickSending || quickCodeForm.processing }"
-                    :disabled="!stepIsValid || form.processing || quickSending || quickCodeForm.processing"
+                    :class="{ 'opacity-25': form.processing || quickSending || quickCodeForm.processing || fallbackPasswordForm.processing }"
+                    :disabled="!stepIsValid || form.processing || quickSending || quickCodeForm.processing || fallbackPasswordForm.processing"
                 >
                     <template v-if="isQuickSignup && STEPS[currentStep] === 'phone'">
                         {{ quickSending ? 'Enviando…' : 'Enviar código →' }}
+                    </template>
+                    <template v-else-if="isQuickSignup && STEPS[currentStep] === 'code' && showPasswordFallback">
+                        {{ fallbackPasswordForm.processing ? 'Creando…' : 'Crear cuenta' }}
                     </template>
                     <template v-else-if="isQuickSignup && STEPS[currentStep] === 'code'">
                         {{ quickCodeForm.processing ? 'Confirmando…' : 'Confirmar' }}
@@ -622,7 +759,11 @@ const submit = () => {
             </div>
         </form>
 
-        <template v-if="currentStep === 0 && $page.props.googleLoginEnabled">
+        <!-- Pedido explícito del usuario: "mantengamos el de gmail por si al
+             inicio no lo vio" — visible en todo el registro rápido (no solo
+             en el primer paso), como alternativa siempre a mano si el
+             teléfono/correo no le funcionan. -->
+        <template v-if="(currentStep === 0 || isQuickSignup) && $page.props.googleLoginEnabled">
             <div class="mt-6 flex items-center gap-3">
                 <div class="flex-1 h-px bg-arka-text-muted/20" />
                 <span class="text-xs text-arka-text-muted">o</span>

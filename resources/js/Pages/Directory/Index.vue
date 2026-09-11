@@ -31,15 +31,16 @@ if (navigator.geolocation) {
 }
 
 function invite(driver) {
+    // Bug real reportado por el usuario: esto asumía 'pending' a mano, pero
+    // un conductor con la aprobación automática apagada
+    // (DriverProfile::requires_fleet_invitation_approval) queda vinculado de
+    // una — la respuesta 'pending' fija acá pisaba el estado real que ya
+    // trae la recarga de props que dispara este mismo POST (ver
+    // FleetInvitationController::store(), termina en back()).
     router.post(
         route('fleet.invitations.store', props.targetFleetId),
         { driver_user_id: driver.user_id },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                driver.status = 'pending';
-            },
-        }
+        { preserveScroll: true }
     );
 }
 </script>

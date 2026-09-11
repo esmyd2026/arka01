@@ -2,18 +2,26 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Mail\QuickRegistrationCodeMail;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
  * Registro rápido (pedido explícito del usuario, "que simplemente sea con
  * el numero de telefono... y que cuando inicien le permita actualizar su
- * nombre y apellido y listo") — SOLO cliente: teléfono -> código de WhatsApp
- * -> completar nombre. Mismo criterio de "WhatsApp configurado/no
- * configurado/configurado pero falla" que PhoneVerificationTest.
+ * nombre y apellido y listo") — SOLO cliente: teléfono -> código (WhatsApp,
+ * o por correo si dejó uno y WhatsApp no funcionó) -> completar nombre.
+ *
+ * Pedido explícito del usuario ("priorizar el teléfono pero si no que sea
+ * por email... y si falla el envío que le diga un botón no me llegó el
+ * mensaje y que lo deje pasar igual pero que le pida una contraseña"): ya no
+ * hay bypass automático cuando WhatsApp falla — el registro siempre llega al
+ * paso de código, con correo como respaldo automático y
+ * finishWithoutCode() como escape manual final.
  */
 class QuickRegistrationTest extends TestCase
 {
@@ -35,7 +43,7 @@ class QuickRegistrationTest extends TestCase
             'phone_local' => '991234567',
         ]);
 
-        $response->assertOk()->assertJson(['verified' => false]);
+        $response->assertOk()->assertJson(['sent_via' => 'whatsapp']);
         $this->assertGuest();
 
         $user = User::where('phone', '+593991234567')->firstOrFail();
@@ -47,41 +55,98 @@ class QuickRegistrationTest extends TestCase
     }
 
     /**
-     * Sin WhatsApp configurado no hay forma de esperar un código que nunca va
-     * a llegar (mismo criterio que RegisterUser::execute()) — se verifica
-     * solo y se loguea de una.
+     * Sin WhatsApp configurado y sin un correo real que dejar como respaldo,
+     * el registro sigue llegando al paso de código igual (para que el
+     * "no me llegó" / finishWithoutCode() sea explícito, no automático).
      */
-    public function test_without_whatsapp_configured_it_logs_in_right_away(): void
+    public function test_without_whatsapp_configured_and_no_real_email_no_channel_is_used(): void
     {
+        Mail::fake();
+
         $response = $this->postJson(route('quick-registration.send-code'), [
             'country_code' => '+593',
             'phone_local' => '991234567',
         ]);
 
-        $response->assertOk()->assertJson(['verified' => true]);
-        $this->assertAuthenticated();
+        $response->assertOk()->assertJson(['sent_via' => null]);
+        $this->assertGuest();
 
         $user = User::where('phone', '+593991234567')->firstOrFail();
-        $this->assertNotNull($user->phone_verified_at);
+        $this->assertNull($user->phone_verified_at);
+        Mail::assertNothingSent();
+    }
+
+    /**
+     * Pedido explícito del usuario ("priorizar el teléfono pero si no que
+     * sea por email"): si dejó un correo real y WhatsApp no está configurado,
+     * el código se manda por ahí en su lugar.
+     */
+    public function test_without_whatsapp_configured_but_with_a_real_email_it_sends_by_email(): void
+    {
+        Mail::fake();
+
+        $response = $this->postJson(route('quick-registration.send-code'), [
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'email' => 'cliente.real@example.com',
+        ]);
+
+        $response->assertOk()->assertJson(['sent_via' => 'email']);
+
+        $user = User::where('phone', '+593991234567')->firstOrFail();
+        $this->assertSame('cliente.real@example.com', $user->email);
+        Mail::assertSent(QuickRegistrationCodeMail::class, fn ($mail) => $mail->hasTo($user->email) && $mail->user->is($user));
     }
 
     /**
      * Mismo bug ya cubierto en PhoneVerificationTest: integración configurada
-     * pero el envío en sí falla de verdad — no debería trabar a nadie.
+     * pero el envío en sí falla de verdad — acá, en vez de dejarlo trabado o
+     * loguearlo sin ninguna prueba, se cae al respaldo por correo si tiene uno.
      */
-    public function test_when_the_whatsapp_send_actually_fails_it_logs_in_right_away(): void
+    public function test_when_the_whatsapp_send_actually_fails_it_falls_back_to_email(): void
     {
         Config::set('services.whatsapp.token', 'fake-token');
         Config::set('services.whatsapp.phone_number_id', '123456');
         Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => 'Invalid token']], 401)]);
+        Mail::fake();
 
         $response = $this->postJson(route('quick-registration.send-code'), [
             'country_code' => '+593',
             'phone_local' => '991234567',
+            'email' => 'cliente.real@example.com',
         ]);
 
-        $response->assertOk()->assertJson(['verified' => true]);
-        $this->assertAuthenticated();
+        $response->assertOk()->assertJson(['sent_via' => 'email']);
+        $this->assertGuest();
+        Mail::assertSent(QuickRegistrationCodeMail::class);
+    }
+
+    public function test_a_placeholder_email_is_never_used_as_a_fallback_channel(): void
+    {
+        Mail::fake();
+
+        // Sin 'email' en el payload, la cuenta queda con el correo de
+        // relleno (@sinemail.arka01.local) — jamás se le manda nada ahí.
+        $this->postJson(route('quick-registration.send-code'), [
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+        ]);
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_an_email_already_used_by_another_account_is_rejected(): void
+    {
+        User::factory()->create(['email' => 'ya@arka01.test']);
+
+        $response = $this->postJson(route('quick-registration.send-code'), [
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+            'email' => 'ya@arka01.test',
+        ]);
+
+        $response->assertJsonValidationErrors('email');
+        $this->assertDatabaseMissing('users', ['phone' => '+593991234567']);
     }
 
     public function test_a_phone_with_a_real_completed_account_is_rejected(): void
@@ -118,7 +183,7 @@ class QuickRegistrationTest extends TestCase
             'phone_local' => '991234567',
         ]);
 
-        $response->assertOk()->assertJson(['verified' => false]);
+        $response->assertOk()->assertJson(['sent_via' => 'whatsapp']);
         $this->assertDatabaseCount('users', 1);
         $this->assertSame($firstUserId, User::where('phone', '+593991234567')->firstOrFail()->id);
     }
@@ -201,5 +266,76 @@ class QuickRegistrationTest extends TestCase
 
         $response->assertRedirect();
         $response->assertLocation(route('dashboard'));
+    }
+
+    /**
+     * Pedido explícito del usuario: "que le diga un botón no me llegó el
+     * mensaje y que lo deje pasar igual pero que le pida una contraseña" —
+     * el escape final cuando ni WhatsApp ni correo funcionaron (o el código
+     * nunca llegó de verdad).
+     */
+    public function test_finishing_without_a_code_sets_a_password_verifies_the_phone_and_logs_in(): void
+    {
+        $this->postJson(route('quick-registration.send-code'), [
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+        ]);
+
+        $response = $this->post(route('quick-registration.finish-without-code'), [
+            'phone' => '+593991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertRedirect(route('complete-profile.show'));
+        $this->assertAuthenticated();
+
+        $user = User::where('phone', '+593991234567')->firstOrFail();
+        $this->assertNotNull($user->phone_verified_at);
+        $this->assertNotNull($user->password_set_at);
+    }
+
+    public function test_finishing_without_a_code_requires_a_valid_password(): void
+    {
+        $this->postJson(route('quick-registration.send-code'), [
+            'country_code' => '+593',
+            'phone_local' => '991234567',
+        ]);
+
+        $response = $this->post(route('quick-registration.finish-without-code'), [
+            'phone' => '+593991234567',
+            'password' => 'short',
+            'password_confirmation' => 'short',
+        ]);
+
+        $response->assertSessionHasErrors('password');
+        $this->assertGuest();
+        $this->assertNull(User::where('phone', '+593991234567')->firstOrFail()->phone_verified_at);
+    }
+
+    public function test_finishing_without_a_code_is_rejected_for_an_already_verified_account(): void
+    {
+        User::factory()->create(['phone' => '+593991234567']);
+
+        $response = $this->post(route('quick-registration.finish-without-code'), [
+            'phone' => '+593991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertSessionHasErrors('password');
+        $this->assertGuest();
+    }
+
+    public function test_finishing_without_a_code_is_rejected_for_an_unknown_phone(): void
+    {
+        $response = $this->post(route('quick-registration.finish-without-code'), [
+            'phone' => '+593991234567',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertSessionHasErrors('password');
+        $this->assertGuest();
     }
 }

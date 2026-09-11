@@ -60,6 +60,19 @@ const searching = ref(false);
 const lastSearchedTerm = ref('');
 let searchTimeout = null;
 
+async function fetchSearchResults(term) {
+    searching.value = true;
+    try {
+        const { data } = await window.axios.get(route('fleet.search-drivers', props.fleet.id), {
+            params: { q: term },
+        });
+        searchResults.value = data.drivers;
+        lastSearchedTerm.value = term;
+    } finally {
+        searching.value = false;
+    }
+}
+
 const runSearch = () => {
     clearTimeout(searchTimeout);
 
@@ -71,18 +84,7 @@ const runSearch = () => {
 
     // Debounce simple: espera 300ms sin tipeo antes de consultar al backend,
     // para no mandar una petición por cada tecla presionada.
-    searchTimeout = setTimeout(async () => {
-        searching.value = true;
-        try {
-            const { data } = await window.axios.get(route('fleet.search-drivers', props.fleet.id), {
-                params: { q: searchTerm.value },
-            });
-            searchResults.value = data.drivers;
-            lastSearchedTerm.value = searchTerm.value;
-        } finally {
-            searching.value = false;
-        }
-    }, 300);
+    searchTimeout = setTimeout(() => fetchSearchResults(searchTerm.value), 300);
 };
 
 // Bug real reportado por el usuario (con captura: "Compartir invitación"
@@ -137,7 +139,13 @@ const invite = (driver) => {
         {
             preserveScroll: true,
             onSuccess: () => {
-                driver.status = 'pending';
+                // Bug real reportado por el usuario: esto asumía 'pending' a
+                // mano, pero un conductor con la aprobación automática
+                // apagada (DriverProfile::requires_fleet_invitation_approval)
+                // queda vinculado de una — acá no hay ningún prop de Inertia
+                // que se recargue solo (searchResults es estado local propio
+                // de este buscador), así que se vuelve a pedir de verdad.
+                if (searchTerm.value.trim().length >= 2) fetchSearchResults(searchTerm.value);
             },
         }
     );

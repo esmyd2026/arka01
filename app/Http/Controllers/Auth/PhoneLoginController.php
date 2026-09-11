@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Exceptions\ActiveSessionExistsException;
 use App\Http\Controllers\Controller;
+use App\Mail\PhoneLoginCodeMail;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Services\WhatsAppVerificationSender;
@@ -12,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -29,6 +31,13 @@ use Illuminate\Validation\ValidationException;
  * código de un solo uso a ESE número ya es prueba suficiente de que es el
  * dueño — no hace falta haberlo verificado antes — así que ahora se manda
  * igual y, si no estaba verificado, login() lo deja verificado de una vez.
+ *
+ * Pedido explícito del usuario ("priorizar el teléfono pero si no que sea
+ * por email"): si WhatsApp no está configurado o el envío falla de verdad,
+ * se intenta por correo — solo si la cuenta tiene uno real (ver
+ * User::hasRealEmail()), nunca a los correos "de relleno" de cuentas creadas
+ * por WhatsApp/registro rápido. La respuesta al frontend es SIEMPRE la misma
+ * sin importar qué canal (o ninguno) haya funcionado — no delata nada.
  */
 class PhoneLoginController extends Controller
 {
@@ -40,15 +49,29 @@ class PhoneLoginController extends Controller
 
         $user = User::findByLoginIdentifier($validated['login']);
 
-        if ($user && ! $user->isLocked() && WhatsAppVerificationSender::enabled()) {
+        if ($user && ! $user->isLocked()) {
             $code = $user->issueLoginCode();
-            WhatsAppVerificationSender::sendCode($user->phone, $code);
+            $sentByWhatsApp = WhatsAppVerificationSender::enabled() && WhatsAppVerificationSender::sendCode($user->phone, $code);
 
-            Log::info('Código de login por WhatsApp solicitado.', ['user_id' => $user->id]);
+            if (! $sentByWhatsApp && $user->hasRealEmail()) {
+                try {
+                    Mail::to($user->email)->send(new PhoneLoginCodeMail($user, $code));
+                } catch (\Throwable $e) {
+                    Log::warning('No se pudo mandar el código de login por correo.', [
+                        'user_id' => $user->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            Log::info('Código de login solicitado.', [
+                'user_id' => $user->id,
+                'enviado_por_whatsapp' => $sentByWhatsApp,
+            ]);
         }
 
         return response()->json([
-            'message' => 'Si ese teléfono está registrado, le enviamos un código por WhatsApp.',
+            'message' => 'Si ese teléfono está registrado, le enviamos un código por WhatsApp o, si no pudimos, por correo.',
         ]);
     }
 

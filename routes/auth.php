@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\GuestAccountController;
+use App\Http\Controllers\Auth\LoginSupportController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -58,6 +59,15 @@ Route::middleware('guest')->group(function () {
         ->middleware('throttle:6,1,quick-registration.verify')
         ->name('quick-registration.verify');
 
+    // Escape final si ni el código por WhatsApp ni por correo funcionaron
+    // (pedido explícito del usuario: "que le diga un botón no me llegó el
+    // mensaje y que lo deje pasar igual pero que le pida una contraseña") —
+    // la contraseña que recién eligió reemplaza la prueba de que no se pudo
+    // mandar (ver QuickRegistrationController::finishWithoutCode()).
+    Route::post('crear-cuenta-rapida/sin-codigo', [QuickRegistrationController::class, 'finishWithoutCode'])
+        ->middleware('throttle:6,1,quick-registration.finish-without-code')
+        ->name('quick-registration.finish-without-code');
+
     // Login por código de WhatsApp (pedido explícito del usuario): alternativa
     // a la contraseña para cualquier cuenta con teléfono verificado, mismo
     // patrón que pedir/confirmar el código de liberación de sesión de arriba.
@@ -68,6 +78,13 @@ Route::middleware('guest')->group(function () {
     Route::post('login/codigo/confirmar', [PhoneLoginController::class, 'login'])
         ->middleware('throttle:6,1,phone-login.confirm')
         ->name('phone-login.confirm');
+
+    // Último recurso desde la pantalla de login (pedido explícito del
+    // usuario, caso real: "cuando pido el código no llega... la experiencia
+    // es muy mala"): escribirle a soporte sin tener que entrar primero.
+    Route::post('login/soporte', [LoginSupportController::class, 'store'])
+        ->middleware('throttle:3,1,login-support.store')
+        ->name('login-support.store');
 
     // Iniciar sesión con Google (Socialite/OAuth) — alternativa al usuario y
     // contraseña de siempre.
