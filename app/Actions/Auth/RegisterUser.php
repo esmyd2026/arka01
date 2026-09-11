@@ -93,7 +93,11 @@ class RegisterUser
 
         // A diferencia de una cuenta creada por Google (contraseña al azar
         // que nadie conoce), acá el usuario SÍ acaba de elegir la suya.
-        $user->forceFill(['password_set_at' => now()])->save();
+        // `profile_name_completed_at`: este registro ya trae nombre/apellido
+        // reales desde el arranque (a diferencia del registro rápido por
+        // teléfono, que los pide después) — nunca debe pasar por la
+        // pantalla de completar nombre (ver EnsureProfileNameIsComplete).
+        $user->forceFill(['password_set_at' => now(), 'profile_name_completed_at' => now()])->save();
 
         event(new Registered($user));
 

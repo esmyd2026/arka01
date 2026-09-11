@@ -36,6 +36,10 @@ class UserFactory extends Factory
             // entraron por Google) — mismo criterio que RegisteredUserController,
             // ya "conocen" su contraseña ('password').
             'password_set_at' => now(),
+            // Mismo criterio que arriba: ya tienen nombre real de fábrica,
+            // nunca deben quedar atrapados en la pantalla de completar
+            // nombre del registro rápido por teléfono (ver EnsureProfileNameIsComplete).
+            'profile_name_completed_at' => now(),
             'remember_token' => Str::random(10),
         ];
     }

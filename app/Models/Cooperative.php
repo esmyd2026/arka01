@@ -55,6 +55,12 @@ class Cooperative extends Model
         // tu conductor" de CUALQUIER cliente, sin que la haya agregado a su
         // lista (ver ClientCooperative) — ver RideRequestController::create().
         'is_public',
+        // Pedido explícito del usuario: apagado a mano por un admin desde
+        // /admin/cooperativas para renunciar, PARA ESTA cooperativa en
+        // particular, a la regla anticaptura — ver
+        // App\Services\Driver\DriverAccessResolver::ensureDriverCanBePrivatelyLinked().
+        // `true` (protección activa) es el comportamiento de siempre.
+        'anti_capture_enabled',
     ];
 
     protected $casts = [
@@ -67,6 +73,7 @@ class Cooperative extends Model
         'has_insurance' => 'boolean',
         'show_fleet_publicly' => 'boolean',
         'is_public' => 'boolean',
+        'anti_capture_enabled' => 'boolean',
         'manual_assignment_timeout_seconds' => 'integer',
         'declared_driver_count' => 'integer',
         'declared_unit_count' => 'integer',

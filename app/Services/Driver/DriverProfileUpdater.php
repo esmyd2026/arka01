@@ -134,6 +134,10 @@ class DriverProfileUpdater
             // calcula ni se le muestra en ninguna solicitud (ver
             // PriceCalculator::pickupSurchargeForDriver()).
             'pickup_surcharge_enabled' => ['boolean'],
+            // Pedido explícito del usuario: si lo apaga, cualquier cliente que
+            // lo agregue a su flota queda vinculado de una en vez de esperar
+            // su aceptación (ver App\Services\Fleet\FleetInvitationCreator::create()).
+            'requires_fleet_invitation_approval' => ['boolean'],
             'accepts_cash' => ['boolean'],
             'accepts_transfer' => ['boolean'],
             // Pedido explícito del usuario: seguro que lo proteja a él, a

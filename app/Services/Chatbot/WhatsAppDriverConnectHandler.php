@@ -201,7 +201,10 @@ class WhatsAppDriverConnectHandler
                 'role' => 'conductor',
                 'whatsapp_privacy_accepted_at' => now(),
             ]);
-            $created->forceFill(['phone_verified_at' => now()])->save();
+            // profile_name_completed_at: ya tenemos el nombre real (lo pidió
+            // el propio bot por chat), nunca debe pasar por la pantalla de
+            // completar nombre del registro rápido por WhatsApp.
+            $created->forceFill(['phone_verified_at' => now(), 'profile_name_completed_at' => now()])->save();
             $conversation->update(['user_id' => $created->id]);
 
             $this->clear($conversation);

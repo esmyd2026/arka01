@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Fleet;
+use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\RatingReason;
 use App\Models\Review;
@@ -9,6 +11,7 @@ use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\RideStop;
 use App\Notifications\CooperativeTransferPaymentNotified;
+use App\Services\Driver\DriverAccessResolver;
 use App\Services\Ride\IncomingRideRequestFinder;
 use App\Services\Ride\RideLifecycle;
 use App\Services\Ride\RideRescheduler;
@@ -30,6 +33,7 @@ class RideController extends Controller
         private readonly RideLifecycle $rideLifecycle,
         private readonly RideStopCompleter $rideStopCompleter,
         private readonly RideRescheduler $rideRescheduler,
+        private readonly DriverAccessResolver $driverAccess,
     ) {}
 
     /**
@@ -213,6 +217,44 @@ class RideController extends Controller
     }
 
     /**
+     * Pedido explícito del usuario: si un conductor de cooperativa o del
+     * directorio público le hizo una carrera a un cliente que todavía no lo
+     * tiene en su flota, que pueda agregarlo directo desde el detalle de la
+     * carrera — antes la única puerta de entrada era buscarlo a mano desde
+     * "Mi flota" o el directorio. Mismos estados que ya usan
+     * FleetDriverSearch::search()/DriverDirectoryFinder::myClients()
+     * (member/pending/cooperative_locked/not_invited), para que el botón se
+     * comporte igual en todos lados. Solo aplica del lado cliente y con la
+     * carrera ya completada — no tiene sentido agregarlo a mitad de viaje.
+     *
+     * @return array{status: string, fleet_id: int}|null
+     */
+    private function fleetInviteStatusForClient(Ride $ride, int $userId): ?array
+    {
+        if ($ride->client_user_id !== $userId || $ride->status !== 'completed') {
+            return null;
+        }
+
+        // Mismo criterio que DashboardController::index()/FleetController::index():
+        // la primera flota se crea sola al primer uso, para que el botón
+        // "Agregar" siempre tenga un id de flota real adónde invitar.
+        $fleet = Fleet::query()->where('owner_user_id', $userId)->orderBy('id')->first()
+            ?? Fleet::query()->create(['owner_user_id' => $userId, 'name' => 'Mi flota']);
+
+        if ($fleet->activeMembers()->where('driver_user_id', $ride->driver_user_id)->exists()) {
+            return ['status' => 'member', 'fleet_id' => $fleet->id];
+        }
+
+        if ($fleet->invitations()->where('driver_user_id', $ride->driver_user_id)->where('status', 'pending')->exists()) {
+            return ['status' => 'pending', 'fleet_id' => $fleet->id];
+        }
+
+        $status = $this->driverAccess->canBePrivatelyLinked($ride->driver_user_id, $fleet) ? 'not_invited' : 'cooperative_locked';
+
+        return ['status' => $status, 'fleet_id' => $fleet->id];
+    }
+
+    /**
      * Vista de una carrera puntual, con mapa en vivo mientras está en curso
      * (sección 8: reutiliza la misma infraestructura de ubicación en tiempo real).
      */
@@ -276,6 +318,7 @@ class RideController extends Controller
         return Inertia::render('Ride/Show', [
             'ride' => $ride,
             'isDriver' => $ride->driver_user_id === $userId,
+            'fleetInvite' => $this->fleetInviteStatusForClient($ride, $userId),
             'transferAccounts' => $transferAccounts,
             // Compatibilidad para clientes web/API anteriores; las nuevas
             // pantallas usan transferAccounts porque el destinatario también

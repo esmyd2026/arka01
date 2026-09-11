@@ -330,6 +330,44 @@ class CooperativeModuleTest extends TestCase
         $this->assertFalse($cooperative->fresh()->is_public);
     }
 
+    /**
+     * Pedido explícito del usuario: un admin puede apagar, para UNA
+     * cooperativa puntual, la regla anticaptura que le impide a sus
+     * conductores aceptar en su flota privada a un cliente que llegó por
+     * ella — ver App\Services\Driver\DriverAccessResolver::
+     * ensureDriverCanBePrivatelyLinked() y CooperativeOriginClientCaptureTest
+     * para el efecto real de este flag sobre el bloqueo.
+     */
+    public function test_an_admin_can_toggle_anti_capture_for_a_cooperative(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $user = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $user->id, 'name' => 'Coop Norte']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->assertTrue($cooperative->fresh()->anti_capture_enabled);
+
+        $this->actingAs($admin)
+            ->patch(route('admin.cooperatives.anti-capture', $cooperative), ['anti_capture_enabled' => false])
+            ->assertRedirect();
+
+        $this->assertFalse($cooperative->fresh()->anti_capture_enabled);
+    }
+
+    public function test_a_regular_user_cannot_toggle_anti_capture(): void
+    {
+        $user = User::factory()->create();
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Norte']);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+
+        $this->actingAs($user)
+            ->patch(route('admin.cooperatives.anti-capture', $cooperative), ['anti_capture_enabled' => false])
+            ->assertForbidden();
+
+        $this->assertTrue($cooperative->fresh()->anti_capture_enabled);
+    }
+
     public function test_a_client_can_request_a_ride_from_an_attached_cooperative(): void
     {
         Bus::fake();

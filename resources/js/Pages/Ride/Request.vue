@@ -1230,8 +1230,12 @@ function pickupFareEstimateFor(driver) {
     if (driver.distance == null || !driver.pickup_surcharge_enabled) return 0;
     if (driver.distance <= props.pickupSurchargeThresholdKm) return 0;
 
+    // Pedido explícito del usuario: solo se cobra el excedente sobre el
+    // umbral, no la distancia completa — los primeros km ya los cubre el
+    // padding fijo de siempre (ver PriceCalculator::pickupSurcharge()).
+    const chargeableKm = driver.distance - props.pickupSurchargeThresholdKm;
     const rate = Number(driver.rate_per_km ?? 0);
-    return Math.round(driver.distance * rate * (props.pickupSurchargePercent / 100) * 100) / 100;
+    return Math.round(chargeableKm * rate * (props.pickupSurchargePercent / 100) * 100) / 100;
 }
 
 // Precio estimado POR CONDUCTOR (rediseño UX, con mockup de referencia: cada

@@ -7,7 +7,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 
 // Misma lista que RegisteredUserController::COUNTRY_CODES — es una lista fija
 // de indicativos telefónicos reales, no un catálogo de negocio que necesite
@@ -86,7 +86,13 @@ const showsAccountExistsError = computed(
 // que vaya "registrando poco a poco" con feedback de progreso) — un dato por
 // pantalla, empezando por el tipo de cuenta porque cambia a dónde va apenas
 // termina (ver RegisteredUserController::store()).
-const STEPS = ['account_type', 'name', 'email', 'phone', 'password'];
+//
+// Registro rápido (pedido explícito del usuario, "que simplemente sea con
+// el numero de telefono"): SOLO para cliente — conductor/cooperativa siguen
+// el registro largo de siempre, sin tocarlo, porque necesitan datos que el
+// teléfono solo no cubre (ver QuickRegistrationController).
+const isQuickSignup = computed(() => form.account_type === 'cliente');
+const STEPS = computed(() => (isQuickSignup.value ? ['account_type', 'phone', 'code'] : ['account_type', 'name', 'email', 'phone', 'password']));
 const currentStep = ref(validPreselection ? 1 : 0);
 
 // Mismo ícono de "ojito" que ya usa Auth/Login.vue (pedido explícito del
@@ -94,7 +100,7 @@ const currentStep = ref(validPreselection ? 1 : 0);
 // mostrar una sí y la otra no cuando lo que se está comparando es que
 // coincidan.
 const showPassword = ref(false);
-const isLastStep = computed(() => currentStep.value === STEPS.length - 1);
+const isLastStep = computed(() => currentStep.value === STEPS.value.length - 1);
 
 // Feedback en vivo de qué le falta a la contraseña (más intuitivo que
 // enterarse recién al mandar el formulario) — mismas reglas que el backend
@@ -138,7 +144,7 @@ watch(() => form.country_code, sanitizePhoneLocal);
 // validación real (unicidad de correo/teléfono, reglas completas) sigue
 // siendo del backend al mandar el formulario en el último paso.
 const stepIsValid = computed(() => {
-    switch (STEPS[currentStep.value]) {
+    switch (STEPS.value[currentStep.value]) {
         case 'account_type':
             return form.account_type !== '';
         case 'name':
@@ -147,6 +153,8 @@ const stepIsValid = computed(() => {
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
         case 'phone':
             return isValidPhoneLocal(form.phone_local, form.country_code);
+        case 'code':
+            return quickCodeForm.code.length === 6;
         case 'password':
             return passwordChecks.value.length && passwordChecks.value.mixedCase && passwordChecks.value.number
                 && form.password === form.password_confirmation;
@@ -157,16 +165,83 @@ const stepIsValid = computed(() => {
 
 // Mensaje de aliento según cuánto falta (pedido explícito del usuario: "que
 // vaya diciendo ya casi terminamos").
-const progressPercent = computed(() => Math.round(((currentStep.value + 1) / STEPS.length) * 100));
+const progressPercent = computed(() => Math.round(((currentStep.value + 1) / STEPS.value.length) * 100));
 const encouragement = computed(() => {
     if (isLastStep.value) return '¡Ya casi terminamos! Un último paso.';
     if (currentStep.value === 0) return 'Empecemos por lo básico.';
     if (progressPercent.value >= 60) return 'Vas muy bien, seguí así.';
-    return `Paso ${currentStep.value + 1} de ${STEPS.length}.`;
+    return `Paso ${currentStep.value + 1} de ${STEPS.value.length}.`;
 });
+
+// Registro rápido (ver isQuickSignup arriba): teléfono -> código -> (ya
+// logueado) completar nombre. sendCode() es JSON (se queda en esta misma
+// pantalla, solo avanza de paso) — verifyCode() sí navega de verdad (loguea
+// y redirige a completar el perfil), por eso ese paso usa un form de Inertia
+// aparte en vez de axios (ver App\Http\Controllers\Auth\QuickRegistrationController).
+const quickCodeForm = useForm({ phone: '', code: '' });
+const quickSending = ref(false);
+
+async function requestQuickCode({ advance }) {
+    quickSending.value = true;
+    form.clearErrors('phone_local', 'country_code');
+    quickCodeForm.clearErrors('code');
+
+    try {
+        const { data } = await window.axios.post(route('quick-registration.send-code'), {
+            country_code: form.country_code,
+            phone_local: form.phone_local,
+        });
+
+        quickCodeForm.phone = form.country_code + form.phone_local;
+
+        if (data.verified) {
+            // WhatsApp apagado o caído (ver QuickRegistrationController::bypassAndLogin()):
+            // ya quedó logueado del lado del backend, saltamos directo a completar el nombre.
+            router.visit(data.redirect);
+            return;
+        }
+
+        if (advance) currentStep.value++;
+    } catch (error) {
+        const errors = error.response?.data?.errors ?? {};
+        const fields = Object.keys(errors);
+        if (fields.length) {
+            fields.forEach((field) => form.setError(field, errors[field][0]));
+            // Un error de teléfono solo se ve en el paso 'phone' — si esto
+            // pasó reenviando desde el paso 'code', hay que volver a mostrarlo.
+            if (!advance) currentStep.value--;
+        } else {
+            // Sin campo puntual (ej. WhatsApp caído a nivel de red): el
+            // mensaje tiene que verse en el paso donde está la persona ahora.
+            (advance ? form : quickCodeForm).setError(advance ? 'phone_local' : 'code', 'No pudimos enviar el código — intente de nuevo en un rato.');
+        }
+    } finally {
+        quickSending.value = false;
+    }
+}
+
+const sendQuickCode = () => requestQuickCode({ advance: true });
+const resendQuickCode = () => requestQuickCode({ advance: false });
+
+function submitQuickCode() {
+    quickCodeForm.post(route('quick-registration.verify'));
+}
 
 function goNext() {
     if (!stepIsValid.value) return;
+
+    const stepName = STEPS.value[currentStep.value];
+
+    if (isQuickSignup.value && stepName === 'phone') {
+        sendQuickCode();
+        return;
+    }
+
+    if (isQuickSignup.value && stepName === 'code') {
+        submitQuickCode();
+        return;
+    }
+
     if (isLastStep.value) {
         submit();
         return;
@@ -198,7 +273,7 @@ const submit = () => {
     form.post(route('register'), {
         onError: (errors) => {
             const erroredFields = Object.keys(errors);
-            const steps = erroredFields.map((field) => FIELD_STEP[field] ?? STEPS.length - 1);
+            const steps = erroredFields.map((field) => FIELD_STEP[field] ?? STEPS.value.length - 1);
             if (steps.length) currentStep.value = Math.min(...steps);
         },
         onFinish: () => form.reset('password', 'password_confirmation'),
@@ -360,6 +435,12 @@ const submit = () => {
                      internacional para poder mandar el mensaje. -->
                 <InputLabel for="phone_local" value="¿Cuál es su número de teléfono?" />
 
+                <!-- Registro rápido (pedido explícito del usuario): acá no se pide
+                     nada más — le mandamos un código por WhatsApp y con eso alcanza. -->
+                <p v-if="isQuickSignup" class="mt-1 text-xs text-arka-text-muted">
+                    Le vamos a enviar un código de un solo uso por WhatsApp para confirmarlo.
+                </p>
+
                 <!-- Bug real reportado por el usuario (con capturas): en móvil, el
                      selector de país con el nombre completo le quitaba casi todo
                      el ancho al campo del número, que quedaba aplastado en una
@@ -408,6 +489,37 @@ const submit = () => {
                         Iniciar sesión →
                     </Link>
                 </p>
+            </div>
+
+            <!-- Paso de código (solo registro rápido, pedido explícito del
+                 usuario): el número ya quedó guardado en sendQuickCode(), acá
+                 solo falta confirmar el código que llegó por WhatsApp. -->
+            <div v-else-if="STEPS[currentStep] === 'code'">
+                <InputLabel for="quick_code" value="Escriba el código que le llegó por WhatsApp" />
+                <p class="mt-1 text-xs text-arka-text-muted">Lo enviamos al {{ quickCodeForm.phone }}.</p>
+
+                <TextInput
+                    id="quick_code"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="6"
+                    class="mt-2 block w-full tracking-[0.3em] text-center text-lg"
+                    v-model="quickCodeForm.code"
+                    required
+                    autofocus
+                    placeholder="000000"
+                    @keydown.enter.prevent="goNext"
+                />
+                <InputError class="mt-2" :message="quickCodeForm.errors.code" />
+
+                <button
+                    type="button"
+                    class="mt-3 text-xs text-arka-primary hover:text-arka-primary-bright underline disabled:opacity-50"
+                    :disabled="quickSending"
+                    @click="resendQuickCode"
+                >
+                    {{ quickSending ? 'Enviando…' : 'No me llegó, reenviar código' }}
+                </button>
             </div>
 
             <!-- Paso 5: contraseña -->
@@ -494,10 +606,18 @@ const submit = () => {
                 </Link>
 
                 <PrimaryButton
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="!stepIsValid || form.processing"
+                    :class="{ 'opacity-25': form.processing || quickSending || quickCodeForm.processing }"
+                    :disabled="!stepIsValid || form.processing || quickSending || quickCodeForm.processing"
                 >
-                    {{ isLastStep ? 'Crear cuenta' : 'Siguiente →' }}
+                    <template v-if="isQuickSignup && STEPS[currentStep] === 'phone'">
+                        {{ quickSending ? 'Enviando…' : 'Enviar código →' }}
+                    </template>
+                    <template v-else-if="isQuickSignup && STEPS[currentStep] === 'code'">
+                        {{ quickCodeForm.processing ? 'Confirmando…' : 'Confirmar' }}
+                    </template>
+                    <template v-else>
+                        {{ isLastStep ? 'Crear cuenta' : 'Siguiente →' }}
+                    </template>
                 </PrimaryButton>
             </div>
         </form>

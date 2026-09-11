@@ -81,7 +81,9 @@ class GoogleAuthController extends Controller
             // email_verified_at no es mass-assignable a propósito (no debería
             // poder mandarse desde un formulario cualquiera), así que se marca
             // aparte: Google ya verificó ese correo por su cuenta.
-            $user->forceFill(['email_verified_at' => now()])->save();
+            // profile_name_completed_at: Google ya trae un nombre real, no
+            // pasa por la pantalla de completar nombre del registro rápido.
+            $user->forceFill(['email_verified_at' => now(), 'profile_name_completed_at' => now()])->save();
         }
 
         // Sin "recordarme" (ver App\Listeners\EnforceSingleActiveSession): la

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AccountTypeController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\CompleteProfileController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
@@ -10,7 +11,9 @@ use App\Http\Controllers\Auth\GuestAccountController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\PhoneLoginController;
 use App\Http\Controllers\Auth\PhoneVerificationController;
+use App\Http\Controllers\Auth\QuickRegistrationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\SessionTakeoverController;
 use App\Http\Controllers\Auth\VerifyEmailController;
@@ -43,6 +46,28 @@ Route::middleware('guest')->group(function () {
     Route::post('sesion/liberar/confirmar', [SessionTakeoverController::class, 'confirm'])
         ->middleware('throttle:6,1,session-takeover.confirm')
         ->name('session-takeover.confirm');
+
+    // Registro rápido (solo cliente, pedido explícito del usuario): teléfono
+    // -> código por WhatsApp -> nombre (ver QuickRegistrationController y
+    // CompleteProfileController, más abajo, dentro del grupo 'auth').
+    Route::post('crear-cuenta-rapida/codigo', [QuickRegistrationController::class, 'sendCode'])
+        ->middleware('throttle:3,1,quick-registration.send-code')
+        ->name('quick-registration.send-code');
+
+    Route::post('crear-cuenta-rapida/verificar', [QuickRegistrationController::class, 'verifyCode'])
+        ->middleware('throttle:6,1,quick-registration.verify')
+        ->name('quick-registration.verify');
+
+    // Login por código de WhatsApp (pedido explícito del usuario): alternativa
+    // a la contraseña para cualquier cuenta con teléfono verificado, mismo
+    // patrón que pedir/confirmar el código de liberación de sesión de arriba.
+    Route::post('login/codigo', [PhoneLoginController::class, 'sendCode'])
+        ->middleware('throttle:3,1,phone-login.request')
+        ->name('phone-login.request');
+
+    Route::post('login/codigo/confirmar', [PhoneLoginController::class, 'login'])
+        ->middleware('throttle:6,1,phone-login.confirm')
+        ->name('phone-login.confirm');
 
     // Iniciar sesión con Google (Socialite/OAuth) — alternativa al usuario y
     // contraseña de siempre.
@@ -128,4 +153,10 @@ Route::middleware('auth')->group(function () {
     // conductor — GoogleAuthController redirige acá antes de dejarla pasar
     // al resto de la app.
     Route::get('cuenta/tipo', [AccountTypeController::class, 'show'])->name('account-type.choose');
+
+    // Último paso del registro rápido por teléfono (ver QuickRegistrationController
+    // más arriba): la cuenta ya existe y ya está logueada, solo falta nombre y
+    // apellido.
+    Route::get('completar-perfil', [CompleteProfileController::class, 'show'])->name('complete-profile.show');
+    Route::post('completar-perfil', [CompleteProfileController::class, 'store'])->name('complete-profile.store');
 });

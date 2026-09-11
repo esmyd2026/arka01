@@ -147,25 +147,31 @@ class PriceCalculator
      * (Expreso, paradas, WhatsApp, tests). Bajo el umbral configurado
      * (`pricing_settings.pickup_surcharge_threshold_km`, editable desde
      * /admin/tarifas) ese padding fijo ya cubre el acercamiento y este
-     * método no agrega nada — solo sobre el umbral se calcula el cargo real:
-     * distancia_recogida × tarifa_del_conductor × porcentaje configurado
-     * (ejemplo del usuario: 8 km a $0.30/km × 55% = $1.32). Quien llama a
-     * esto decide si lo suma al precio final o no (ver
-     * App\Services\Ride\RideRequestResponder::accept(), el conductor elige
-     * cobrarlo o no al aceptar la solicitud).
+     * método no agrega nada — solo sobre el umbral se calcula un cargo, y
+     * SOLO por el excedente (pedido explícito del usuario: "que el cálculo
+     * cuando pase los dos km que esos dos no entren en el cálculo" — los
+     * primeros km del umbral ya están cubiertos por el padding fijo de
+     * arriba, cobrarlos de nuevo acá sería duplicarlos):
+     * (distancia_recogida − umbral) × tarifa_del_conductor × porcentaje
+     * configurado (ejemplo del usuario: conductor a 5 km, umbral 2 km →
+     * se cobran 3 km, no los 5). Quien llama a esto decide si lo suma al
+     * precio final o no (ver App\Services\Ride\RideRequestResponder::accept(),
+     * el conductor elige cobrarlo o no al aceptar la solicitud).
      *
      * @return array{distance_km: float, exceeds_threshold: bool, fare: float}
      */
     public static function pickupSurcharge(float $pickupDistanceKm, float $ratePerKm, ?PricingSetting $settings = null): array
     {
         $settings ??= PricingSetting::current();
-        $exceedsThreshold = $pickupDistanceKm > (float) $settings->pickup_surcharge_threshold_km;
+        $threshold = (float) $settings->pickup_surcharge_threshold_km;
+        $exceedsThreshold = $pickupDistanceKm > $threshold;
+        $chargeableKm = $exceedsThreshold ? $pickupDistanceKm - $threshold : 0.0;
 
         return [
             'distance_km' => round($pickupDistanceKm, 2),
             'exceeds_threshold' => $exceedsThreshold,
             'fare' => $exceedsThreshold
-                ? round($pickupDistanceKm * $ratePerKm * ($settings->pickup_surcharge_percent / 100), 2)
+                ? round($chargeableKm * $ratePerKm * ($settings->pickup_surcharge_percent / 100), 2)
                 : 0.0,
         ];
     }

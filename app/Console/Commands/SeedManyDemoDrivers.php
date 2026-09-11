@@ -124,6 +124,7 @@ class SeedManyDemoDrivers extends Command
             'password' => Hash::make(self::PASSWORD),
             'phone_verified_at' => now(),
             'email_verified_at' => now(),
+            'profile_name_completed_at' => now(),
         ]);
 
         // Estados variados (pedido explícito del usuario: "activos,

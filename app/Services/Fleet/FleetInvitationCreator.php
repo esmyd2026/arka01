@@ -3,8 +3,12 @@
 namespace App\Services\Fleet;
 
 use App\Events\FleetInvitationCreated;
+use App\Models\DriverProfile;
 use App\Models\Fleet;
 use App\Models\FleetInvitation;
+use App\Models\FleetMember;
+use App\Models\User;
+use App\Notifications\FleetInvitationAutoAcceptedPushNotification;
 use App\Notifications\FleetInvitationPushNotification;
 use App\Services\Driver\DriverAccessResolver;
 use App\Services\PlanLimits;
@@ -65,13 +69,39 @@ class FleetInvitationCreator
             ]);
         }
 
+        // Pedido explícito del usuario: el conductor puede apagar la
+        // aprobación manual desde su perfil (DriverProfile::
+        // requires_fleet_invitation_approval) — si lo hizo, y quien inicia
+        // esto no es el propio conductor (una solicitud DEL conductor sigue
+        // necesitando el sí explícito del cliente, es él quien responde acá:
+        // ver FleetInvitation::respondingPartyId()), queda vinculado de una,
+        // sin esperar respuesta.
+        $autoAccept = $initiatedBy !== 'driver'
+            && DriverProfile::where('user_id', $driverUserId)->value('requires_fleet_invitation_approval') === false;
+
+        if ($autoAccept) {
+            // Mismo cupo de clientes de confianza que FleetInvitationManager::accept()
+            // valida al aceptar a mano — acá se valida ANTES de crear nada
+            // porque "aceptar" ocurre en el mismo instante que se invita.
+            $driver = User::findOrFail($driverUserId);
+            $maxClients = $this->planLimits->forDriver($driver)['max_clients'];
+            $activeClientCount = FleetMember::query()->where('driver_user_id', $driverUserId)->whereNull('left_at')->count();
+
+            if ($maxClients !== null && $activeClientCount >= $maxClients) {
+                throw ValidationException::withMessages([
+                    'driver_user_id' => 'Ese conductor llegó al límite de clientes de confianza de su plan.',
+                ]);
+            }
+        }
+
         $invitation = FleetInvitation::query()->create([
             'fleet_id' => $fleet->id,
             'driver_user_id' => $driverUserId,
             'invited_by' => $invitedByUserId,
             'initiated_by' => $initiatedBy,
             'message' => $message,
-            'status' => 'pending',
+            'status' => $autoAccept ? 'accepted' : 'pending',
+            'responded_at' => $autoAccept ? now() : null,
         ]);
 
         Log::info('Invitación de flota enviada.', [
@@ -79,8 +109,24 @@ class FleetInvitationCreator
             'fleet_id' => $fleet->id,
             'driver_user_id' => $invitation->driver_user_id,
             'initiated_by' => $initiatedBy,
+            'auto_accepted' => $autoAccept,
         ]);
 
+        if ($autoAccept) {
+            FleetMember::query()->create([
+                'fleet_id' => $fleet->id,
+                'driver_user_id' => $driverUserId,
+                'added_by' => $fleet->owner_user_id,
+                'joined_at' => now(),
+            ]);
+
+            $invitation->driver->notify(new FleetInvitationAutoAcceptedPushNotification($invitation));
+
+            return $invitation;
+        }
+
+        // Solo tiene sentido avisar en vivo (WebSocket) cuando hay algo
+        // pendiente de responder — un auto-aceptado ya no lo está.
         broadcast(new FleetInvitationCreated($invitation))->toOthers();
 
         $recipient = $initiatedBy === 'driver' ? $fleet->owner : $invitation->driver;

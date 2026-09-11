@@ -70,17 +70,34 @@ class PriceCalculatorTest extends TestCase
     }
 
     /**
-     * Ejemplo exacto dado por el usuario: conductor a $0.30/km, 8 km hasta
-     * el cliente, 55% de recargo → 8 × 0.30 × 0.55 = $1.32.
+     * Bug real reportado por el usuario: esto cobraba la distancia
+     * COMPLETA de recogida una vez pasado el umbral (8 × 0.30 × 0.55 =
+     * $1.32), duplicando el cobro de los km del umbral que el padding fijo
+     * ya cubre. Corregido: solo se cobra el excedente sobre el umbral —
+     * (8 − 3) × 0.30 × 0.55 = $0.825.
      */
-    public function test_pickup_surcharge_matches_the_example_given_by_the_user(): void
+    public function test_pickup_surcharge_only_charges_the_distance_beyond_the_threshold(): void
     {
         PricingSetting::current()->update(['pickup_surcharge_threshold_km' => 3, 'pickup_surcharge_percent' => 55]);
 
         $result = PriceCalculator::pickupSurcharge(pickupDistanceKm: 8, ratePerKm: 0.30);
 
         $this->assertTrue($result['exceeds_threshold']);
-        $this->assertEqualsWithDelta(1.32, $result['fare'], 0.001);
+        $this->assertEqualsWithDelta(0.83, $result['fare'], 0.001);
+    }
+
+    /**
+     * Ejemplo exacto dado por el usuario: umbral bajado a 2 km, conductor a
+     * 5 km del pasajero → solo se cobran 3 km (5 − 2), no los 5 completos.
+     */
+    public function test_pickup_surcharge_matches_the_example_given_by_the_user(): void
+    {
+        PricingSetting::current()->update(['pickup_surcharge_threshold_km' => 2, 'pickup_surcharge_percent' => 55]);
+
+        $result = PriceCalculator::pickupSurcharge(pickupDistanceKm: 5, ratePerKm: 0.30);
+
+        $this->assertTrue($result['exceeds_threshold']);
+        $this->assertEqualsWithDelta(0.5, $result['fare'], 0.001);
     }
 
     /**

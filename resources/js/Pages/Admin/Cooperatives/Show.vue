@@ -30,6 +30,14 @@ function toggleWhatsApp() {
 function togglePublicVisibility() {
     router.patch(route('admin.cooperatives.public-visibility', props.cooperative.id), { is_public: !props.cooperative.is_public }, { preserveScroll: true });
 }
+
+// Pedido explícito del usuario: apagar, para esta cooperativa puntual, la
+// regla anticaptura que impide a sus conductores aceptar en su flota
+// privada a un cliente que llegó por ella (ver DriverAccessResolver::
+// ensureDriverCanBePrivatelyLinked()).
+function toggleAntiCapture() {
+    router.patch(route('admin.cooperatives.anti-capture', props.cooperative.id), { anti_capture_enabled: !props.cooperative.anti_capture_enabled }, { preserveScroll: true });
+}
 </script>
 
 <template>
@@ -59,6 +67,23 @@ function togglePublicVisibility() {
                     <div><h2 class="text-lg font-semibold text-arka-text">Visibilidad pública</h2><p class="mt-1 text-sm text-arka-text-muted">Con esto activo, aparece en "Elige tu conductor" de cualquier cliente, con la insignia "Pública" — sin que el cliente la haya agregado antes.</p></div>
                     <button type="button" class="rounded-arka border px-4 py-2 text-sm font-semibold" :class="cooperative.is_public ? 'border-arka-primary text-arka-primary' : 'border-arka-text-muted/30 text-arka-text-muted'" @click="togglePublicVisibility">
                         {{ cooperative.is_public ? 'Pública' : 'Solo su red' }}
+                    </button>
+                </div>
+            </section>
+
+            <section class="rounded-arka bg-arka-card p-6 shadow-xl">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-arka-text">Protección anticaptura</h2>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Con esto activo (lo normal), un conductor de esta cooperativa NO puede aceptar en su
+                            flota privada a un cliente que llegó por una carrera de esta cooperativa o que ya la
+                            tiene agregada — esa cartera sigue siendo de la cooperativa. Apagándolo, sus
+                            conductores quedan libres de aceptar a esos clientes de forma privada.
+                        </p>
+                    </div>
+                    <button type="button" class="shrink-0 rounded-arka border px-4 py-2 text-sm font-semibold" :class="cooperative.anti_capture_enabled ? 'border-arka-primary text-arka-primary' : 'border-arka-warning text-arka-warning'" @click="toggleAntiCapture">
+                        {{ cooperative.anti_capture_enabled ? 'Protección activa' : 'Protección desactivada' }}
                     </button>
                 </div>
             </section>

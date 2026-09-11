@@ -98,9 +98,13 @@ class GuestRideController extends Controller
 
             // El recorrido público ya explica lo esencial; evitamos que el
             // tutorial tape la confirmación de la carrera apenas ingresa.
+            // profile_name_completed_at: ya tenemos el nombre real (lo llenó
+            // el propio invitado en el formulario), nunca debe pasar por la
+            // pantalla de completar nombre del registro rápido por WhatsApp.
             $user->forceFill([
                 'email_verified_at' => now(),
                 'onboarding_completed_at' => now(),
+                'profile_name_completed_at' => now(),
             ])->save();
 
             Fleet::query()->create([

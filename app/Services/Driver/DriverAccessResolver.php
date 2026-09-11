@@ -3,6 +3,7 @@
 namespace App\Services\Driver;
 
 use App\Models\ClientCooperative;
+use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\Fleet;
 use App\Models\FleetMember;
@@ -183,21 +184,38 @@ class DriverAccessResolver
     {
         $clientUserId = $fleet->owner_user_id;
 
-        $cameFromCooperativeRide = RideRequest::query()
+        $cooperativeRide = RideRequest::query()
             ->where('client_user_id', $clientUserId)
             ->where('driver_user_id', $driverUserId)
             ->whereNotNull('cooperative_id')
-            ->exists();
+            ->latest('id')
+            ->first();
 
         $driverCooperativeIds = CooperativeDriverMembership::activeMembershipsFor($driverUserId)->pluck('cooperative_id');
 
-        $clientBelongsToDriversCooperative = $driverCooperativeIds->isNotEmpty()
-            && ClientCooperative::query()
+        $sharedCooperativeId = $driverCooperativeIds->isNotEmpty()
+            ? ClientCooperative::query()
                 ->where('client_user_id', $clientUserId)
                 ->whereIn('cooperative_id', $driverCooperativeIds)
-                ->exists();
+                ->value('cooperative_id')
+            : null;
+
+        $cameFromCooperativeRide = $cooperativeRide !== null;
+        $clientBelongsToDriversCooperative = $sharedCooperativeId !== null;
 
         if (! $cameFromCooperativeRide && ! $clientBelongsToDriversCooperative) {
+            return;
+        }
+
+        // Pedido explícito del usuario: un admin puede apagar esta
+        // protección PARA UNA cooperativa puntual (Cooperative::
+        // anti_capture_enabled, desde /admin/cooperativas) — si la
+        // cooperativa dueña de la relación renunció a ella, el conductor
+        // queda libre de aceptar a este cliente en su flota privada.
+        $relevantCooperativeId = $cooperativeRide?->cooperative_id ?? $sharedCooperativeId;
+        $cooperative = Cooperative::find($relevantCooperativeId);
+
+        if ($cooperative && ! $cooperative->anti_capture_enabled) {
             return;
         }
 

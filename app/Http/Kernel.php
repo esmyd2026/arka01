@@ -7,6 +7,7 @@ use App\Http\Middleware\EncryptCookies;
 use App\Http\Middleware\EnsureCooperativeIsApproved;
 use App\Http\Middleware\EnsureDriverOnboardingIsComplete;
 use App\Http\Middleware\EnsurePhoneIsVerified;
+use App\Http\Middleware\EnsureProfileNameIsComplete;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsCooperative;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -108,6 +109,7 @@ class Kernel extends HttpKernel
         'driver_onboarding' => EnsureDriverOnboardingIsComplete::class,
         'password.confirm' => RequirePassword::class,
         'phone_verified' => EnsurePhoneIsVerified::class,
+        'profile_name_complete' => EnsureProfileNameIsComplete::class,
         'precognitive' => HandlePrecognitiveRequests::class,
         'signed' => ValidateSignature::class,
         'throttle' => ThrottleRequests::class,

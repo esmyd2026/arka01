@@ -156,6 +156,23 @@ class CooperativeController extends Controller
             : 'Cooperativa ya no es pública: solo la ven los clientes que la agregaron.');
     }
 
+    /**
+     * Pedido explícito del usuario: apagar, PARA ESTA cooperativa puntual,
+     * la regla anticaptura que impide a sus conductores aceptar en su
+     * flota privada a un cliente que llegó por una carrera de cooperativa
+     * o que ya tiene agregada esta cooperativa (ver
+     * App\Services\Driver\DriverAccessResolver::ensureDriverCanBePrivatelyLinked()).
+     */
+    public function updateAntiCapture(Request $request, Cooperative $cooperative): RedirectResponse
+    {
+        $validated = $request->validate(['anti_capture_enabled' => ['required', 'boolean']]);
+        $cooperative->forceFill(['anti_capture_enabled' => $validated['anti_capture_enabled']])->save();
+
+        return back()->with('status', $validated['anti_capture_enabled']
+            ? 'Protección anticaptura reactivada para esta cooperativa.'
+            : 'Protección anticaptura desactivada: sus conductores ya pueden aceptar en su flota privada a clientes que llegaron por esta cooperativa.');
+    }
+
     public function reviewDocument(Request $request, CooperativeDocument $document): RedirectResponse
     {
         $validated = $request->validate([

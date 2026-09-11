@@ -6,7 +6,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { buildSessionRecoveryWhatsAppUrl } from '@/Utils/whatsapp';
 
 const props = defineProps({
@@ -75,6 +75,42 @@ const showsSessionBlockedError = computed(
 // de LoginRequest::authenticate()), se ofrece el atajo a crear una en vez de
 // dejar a la persona en un callejón sin salida.
 const showsAccountNotFoundError = computed(() => (form.errors.login ?? '').startsWith('No encontramos una cuenta con ese dato'));
+
+// Login por código de WhatsApp (pedido explícito del usuario: "que
+// simplemente sea con el numero de telefono... y que cuando inicien
+// sesion inicien con el numero tambien") — alternativa a la contraseña,
+// misma forma que el widget de liberar sesión de acá abajo. Solo aparece si
+// lo que escribió en "login" tiene forma de teléfono: no tendría sentido
+// ofrecer un código por WhatsApp para un usuario o correo.
+const looksLikePhone = computed(() => /^\+?\d{7,15}$/.test(form.login.trim().replace(/[\s-]/g, '')));
+const phoneLoginStep = ref('idle'); // 'idle' | 'code-sent'
+const phoneLoginCode = ref('');
+const phoneLoginStatus = ref('');
+const phoneLoginError = ref('');
+const phoneLoginSending = ref(false);
+
+async function requestPhoneLoginCode() {
+    phoneLoginSending.value = true;
+    phoneLoginError.value = '';
+
+    try {
+        const { data } = await window.axios.post(route('phone-login.request'), { login: form.login });
+        phoneLoginStatus.value = data.message;
+        phoneLoginStep.value = 'code-sent';
+    } catch {
+        phoneLoginError.value = 'No pudimos enviar el código — intente de nuevo en un rato.';
+    } finally {
+        phoneLoginSending.value = false;
+    }
+}
+
+function confirmPhoneLogin() {
+    router.post(route('phone-login.confirm'), { login: form.login, code: phoneLoginCode.value }, {
+        onError: (errors) => {
+            phoneLoginError.value = errors.code ?? 'Ese código no es válido o ya venció.';
+        },
+    });
+}
 
 const takeoverStep = ref('idle'); // 'idle' | 'code-sent'
 const takeoverCode = ref('');
@@ -187,6 +223,40 @@ async function confirmTakeover() {
                     </Link>
                 </p>
 
+                <!-- Login por código de WhatsApp (pedido explícito del
+                     usuario): alternativa a la contraseña para cualquier
+                     cuenta con teléfono verificado — solo tiene sentido
+                     ofrecerlo si lo que escribió tiene forma de teléfono. -->
+                <p v-if="looksLikePhone && phoneLoginStep === 'idle' && !showsSessionBlockedError" class="mt-2 text-sm">
+                    <button
+                        type="button"
+                        class="text-arka-primary hover:text-arka-primary-bright font-medium underline"
+                        :disabled="phoneLoginSending"
+                        @click="requestPhoneLoginCode"
+                    >
+                        {{ phoneLoginSending ? 'Enviando…' : 'Prefiero un código por WhatsApp' }}
+                    </button>
+                </p>
+
+                <div v-if="phoneLoginStep === 'code-sent'" class="mt-3 p-3 rounded-arka bg-arka-base/60 text-sm">
+                    <p class="text-arka-primary-bright">{{ phoneLoginStatus }}</p>
+                    <div class="mt-2 flex gap-2">
+                        <TextInput
+                            type="text"
+                            inputmode="numeric"
+                            maxlength="6"
+                            class="block w-32"
+                            v-model="phoneLoginCode"
+                            placeholder="Código"
+                            @keydown.enter.prevent="confirmPhoneLogin"
+                        />
+                        <SecondaryButton :disabled="phoneLoginCode.length !== 6" @click="confirmPhoneLogin">
+                            Confirmar
+                        </SecondaryButton>
+                    </div>
+                    <p v-if="phoneLoginError" class="mt-2 text-xs text-arka-danger">{{ phoneLoginError }}</p>
+                </div>
+
                 <!-- Sesión única por cuenta (pedido explícito del usuario,
                      caso real: "no sé dónde dejé loguiada mi sesión") — atajo
                      para cerrar esa otra sesión sin esperar a que venza sola. -->
@@ -251,7 +321,7 @@ async function confirmTakeover() {
                 </div>
             </div>
 
-            <div class="mt-5">
+            <div v-if="phoneLoginStep !== 'code-sent'" class="mt-5">
                 <InputLabel for="password" value="Contraseña" />
 
                 <div class="relative mt-1.5">
@@ -291,7 +361,7 @@ async function confirmTakeover() {
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
-            <div class="mt-3 flex justify-end">
+            <div v-if="phoneLoginStep !== 'code-sent'" class="mt-3 flex justify-end">
                 <Link
                     v-if="canResetPassword"
                     :href="route('password.request')"
@@ -302,6 +372,7 @@ async function confirmTakeover() {
             </div>
 
             <PrimaryButton
+                v-if="phoneLoginStep !== 'code-sent'"
                 class="mt-5 min-h-12 w-full justify-center text-sm shadow-lg shadow-arka-primary/15"
                 :class="{ 'opacity-50': form.processing }"
                 :disabled="form.processing"

@@ -37,6 +37,12 @@ const props = defineProps({
     transferRecipient: { type: String, default: '' },
     transferGoesToCooperative: { type: Boolean, default: false },
     paymentProofUrl: { type: String, default: null },
+    // Pedido explícito del usuario: si este conductor (de cooperativa o del
+    // directorio público) todavía no está en la flota del cliente, ofrecer
+    // agregarlo directo desde acá — null si no aplica (es el conductor
+    // viendo la pantalla, o la carrera todavía no terminó). Ver
+    // RideController::fleetInviteStatusForClient().
+    fleetInvite: { type: Object, default: null },
 });
 
 // Posición en vivo del conductor durante el viaje: reutiliza el mismo canal
@@ -1389,6 +1395,33 @@ watch(() => reviewForm.rating, (rating) => {
 
 function submitReview() {
     reviewForm.post(route('reviews.store', props.ride.id), { preserveScroll: true });
+}
+
+// Pedido explícito del usuario: agregar a la flota al conductor de una
+// carrera de cooperativa/directorio público, directo desde acá — mismo
+// endpoint y mismo payload que ya usa Directory/Index.vue, la regla
+// anticaptura y el cupo del plan los valida el backend igual que siempre.
+// Se recarga solo `fleetInvite` (en vez de asumir "pending" a mano) porque
+// el conductor puede tener la aprobación automática activada — ahí queda
+// "member" de una, no "pending" (ver DriverProfile::requires_fleet_invitation_approval).
+const addingToFleet = ref(false);
+const fleetInviteError = ref('');
+
+function addDriverToFleet() {
+    if (!props.fleetInvite || addingToFleet.value) return;
+
+    addingToFleet.value = true;
+    fleetInviteError.value = '';
+    router.post(
+        route('fleet.invitations.store', props.fleetInvite.fleet_id),
+        { driver_user_id: props.ride.driver_user_id },
+        {
+            preserveScroll: true,
+            onSuccess: () => router.reload({ only: ['fleetInvite'], preserveScroll: true }),
+            onError: (errors) => { fleetInviteError.value = errors.driver_user_id ?? 'No se pudo agregar — intente de nuevo.'; },
+            onFinish: () => { addingToFleet.value = false; },
+        }
+    );
 }
 </script>
 
@@ -3018,6 +3051,35 @@ function submitReview() {
                         <span class="block text-arka-text-muted">Motivo: {{ ride.completion_reason }}</span>
                         <span v-if="ride.completion_note" class="block text-arka-text-muted">"{{ ride.completion_note }}"</span>
                     </p>
+                </div>
+
+                <!-- Pedido explícito del usuario: si este conductor (llegó por
+                     cooperativa o por el directorio público) todavía no está en
+                     la flota del cliente, ofrecer agregarlo directo acá — antes
+                     había que ir a buscarlo a mano desde "Mi flota" o el
+                     directorio. -->
+                <div v-if="fleetInvite" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
+                    <div v-if="fleetInvite.status === 'not_invited'" class="flex items-center justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-medium text-arka-text">¿Le gustó cómo maneja {{ ride.driver.name }}?</p>
+                            <p class="text-xs text-arka-text-muted">Agréguelo a su flota de confianza para volver a pedirle a él directamente.</p>
+                        </div>
+                        <PrimaryButton class="shrink-0" :disabled="addingToFleet" @click="addDriverToFleet">
+                            {{ addingToFleet ? 'Agregando…' : 'Agregar a mi flota' }}
+                        </PrimaryButton>
+                    </div>
+                    <p v-if="fleetInvite.status === 'not_invited' && fleetInviteError" class="mt-2 text-xs text-arka-danger">{{ fleetInviteError }}</p>
+                    <p v-else-if="fleetInvite.status === 'pending'" class="text-sm text-arka-lime">
+                        Le mandamos la invitación a {{ ride.driver.name }} — queda a la espera de que la acepte.
+                    </p>
+                    <p v-else-if="fleetInvite.status === 'member'" class="text-sm text-arka-primary-bright">
+                        ✓ {{ ride.driver.name }} ya es parte de su flota de confianza.
+                    </p>
+                    <!-- 'cooperative_locked': a propósito no se muestra nada —
+                         mismo criterio que FleetDriverSearch::search(), no tiene
+                         sentido ofrecer un botón que el backend va a rechazar
+                         (la relación es de la cooperativa, ver
+                         DriverAccessResolver::ensureDriverCanBePrivatelyLinked()). -->
                 </div>
 
                 <!-- Calificar (sección 3.6): solo cuando la carrera terminó. Pedido

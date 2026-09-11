@@ -105,9 +105,11 @@ class User extends Authenticatable
         'phone_verified_at' => 'datetime',
         'phone_verification_expires_at' => 'datetime',
         'session_takeover_expires_at' => 'datetime',
+        'login_code_expires_at' => 'datetime',
         'locked_at' => 'datetime',
         'whatsapp_privacy_accepted_at' => 'datetime',
         'onboarding_completed_at' => 'datetime',
+        'profile_name_completed_at' => 'datetime',
         'ride_request_tour_seen_at' => 'datetime',
         'fleet_tour_seen_at' => 'datetime',
         'driver_profile_tour_seen_at' => 'datetime',
@@ -239,6 +241,51 @@ class User extends Authenticatable
         $this->forceFill([
             'session_takeover_code' => null,
             'session_takeover_expires_at' => null,
+        ])->save();
+
+        return true;
+    }
+
+    /**
+     * Login sin contraseña por WhatsApp (pedido explícito del usuario:
+     * "que simplemente sea con el numero de telefono y que eso le mande un
+     * token por whatsapp") — mismo patrón que issueSessionTakeoverCode(),
+     * en columnas propias: no tiene nada que ver con verificar el teléfono
+     * ni con liberar una sesión ajena, no debería pisar ni depender de esos
+     * estados. Solo tiene sentido para una cuenta con `phone_verified_at`
+     * — eso lo valida quien llama (App\Http\Controllers\Auth\PhoneLoginController),
+     * no este método.
+     */
+    public function issueLoginCode(): string
+    {
+        $code = (string) random_int(100000, 999999);
+
+        $this->forceFill([
+            'login_code' => Hash::make($code),
+            'login_code_expires_at' => now()->addMinutes(10),
+        ])->save();
+
+        return $code;
+    }
+
+    /**
+     * true si el código coincide y todavía no venció — limpia el código
+     * usado. A propósito NO loguea acá: quien llama decide cuándo hacer
+     * Auth::login() (mismo criterio que verifySessionTakeoverCode()).
+     */
+    public function verifyLoginCode(string $code): bool
+    {
+        if (! $this->login_code || ! $this->login_code_expires_at?->isFuture()) {
+            return false;
+        }
+
+        if (! Hash::check($code, $this->login_code)) {
+            return false;
+        }
+
+        $this->forceFill([
+            'login_code' => null,
+            'login_code_expires_at' => null,
         ])->save();
 
         return true;

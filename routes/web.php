@@ -196,7 +196,7 @@ Route::post('/whatsapp/ubicacion/{conversation}/{step}', [WhatsAppLocationPicker
     ->name('whatsapp.location-picker.store');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'phone_verified', 'driver_onboarding'])
+    ->middleware(['auth', 'verified', 'phone_verified', 'profile_name_complete', 'driver_onboarding'])
     ->name('dashboard');
 
 Route::post('/dashboard/ubicacion', [DashboardController::class, 'updateLocation'])
@@ -578,6 +578,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/cooperativas/{cooperative}/reactivar', [AdminCooperativeController::class, 'reactivate'])->name('cooperatives.reactivate');
     Route::patch('/cooperativas/{cooperative}/whatsapp', [AdminCooperativeController::class, 'updateWhatsApp'])->name('cooperatives.whatsapp');
     Route::patch('/cooperativas/{cooperative}/publica', [AdminCooperativeController::class, 'updatePublicVisibility'])->name('cooperatives.public-visibility');
+    Route::patch('/cooperativas/{cooperative}/anticaptura', [AdminCooperativeController::class, 'updateAntiCapture'])->name('cooperatives.anti-capture');
     Route::post('/cooperativas/documentos/{document}/revisar', [AdminCooperativeController::class, 'reviewDocument'])->name('cooperative-documents.review');
     // Perfil completo de un usuario (pedido explícito del usuario): toda la
     // información relevante de un conductor o cliente en una sola pantalla,

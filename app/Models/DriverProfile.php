@@ -71,6 +71,11 @@ class DriverProfile extends Model
         // ninguna solicitud. Ver App\Services\PriceCalculator::pickupSurchargeForDriver().
         'pickup_surcharge_enabled',
         'whatsapp_ride_actions_enabled',
+        // Pedido explícito del usuario: el conductor apaga esto desde su
+        // propio perfil para que las invitaciones de flota se auto-acepten en
+        // vez de esperar su respuesta — ver
+        // App\Services\Fleet\FleetInvitationCreator::create().
+        'requires_fleet_invitation_approval',
     ];
 
     protected $casts = [
@@ -87,6 +92,7 @@ class DriverProfile extends Model
         'location_updated_at' => 'datetime',
         'max_request_distance_km' => 'integer',
         'pickup_surcharge_enabled' => 'boolean',
+        'requires_fleet_invitation_approval' => 'boolean',
         'suspended_at' => 'datetime',
         'deactivated_at' => 'datetime',
         'passenger_capacity' => 'integer',
@@ -366,6 +372,17 @@ class DriverProfile extends Model
             ->where('driver_user_id', $this->user_id)
             ->whereNull('left_at')
             ->count();
+    }
+
+    /**
+     * true si una invitación de flota nueva necesita su respuesta explícita
+     * (comportamiento de siempre) — false si el conductor decidió que
+     * cualquier cliente que lo agregue quede vinculado de una, sin esperarlo
+     * (ver App\Services\Fleet\FleetInvitationCreator::create()).
+     */
+    public function requiresFleetInvitationApproval(): bool
+    {
+        return (bool) $this->requires_fleet_invitation_approval;
     }
 
     /**

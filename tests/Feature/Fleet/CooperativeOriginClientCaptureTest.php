@@ -98,6 +98,75 @@ class CooperativeOriginClientCaptureTest extends TestCase
         ]);
     }
 
+    /**
+     * Pedido explícito del usuario: un admin puede apagar la protección
+     * anticaptura PARA UNA cooperativa puntual (Cooperative::
+     * anti_capture_enabled, desde /admin/cooperativas) — con eso apagado,
+     * sus conductores quedan libres de aceptar en su flota privada a
+     * clientes que llegaron por una carrera de esa cooperativa.
+     */
+    public function test_disabling_anti_capture_lets_the_driver_recruit_a_client_met_through_a_cooperative_ride(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = $this->driverWithPaidPlan();
+
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Central', 'anti_capture_enabled' => false]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+        RideRequest::factory()->create([
+            'client_user_id' => $client->id,
+            'driver_user_id' => $driver->id,
+            'cooperative_id' => $cooperative->id,
+            'status' => 'accepted',
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('fleet_invitations', [
+            'fleet_id' => $fleet->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Mismo flag, para el otro disparador del bloqueo: el cliente ya tiene
+     * agregada la cooperativa a la que el conductor está afiliado.
+     */
+    public function test_disabling_anti_capture_lets_the_driver_recruit_a_client_already_in_his_cooperatives_network(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = $this->driverWithPaidPlan();
+
+        $cooperativeUser = User::factory()->create();
+        $cooperative = Cooperative::query()->create(['user_id' => $cooperativeUser->id, 'name' => 'Coop Amazonas', 'anti_capture_enabled' => false]);
+        $cooperative->forceFill(['status' => 'approved'])->save();
+        CooperativeDriverMembership::query()->create([
+            'cooperative_id' => $cooperative->id,
+            'driver_user_id' => $driver->id,
+            'invited_by_user_id' => $cooperativeUser->id,
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+        ClientCooperative::query()->create(['client_user_id' => $client->id, 'cooperative_id' => $cooperative->id]);
+
+        $this->actingAs($client)
+            ->post(route('fleet.invitations.store', $fleet), ['driver_user_id' => $driver->id])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('fleet_invitations', [
+            'fleet_id' => $fleet->id,
+            'driver_user_id' => $driver->id,
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_a_private_ride_with_no_cooperative_never_triggers_the_block(): void
     {
         $client = User::factory()->create();
