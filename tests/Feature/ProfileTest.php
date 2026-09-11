@@ -385,6 +385,29 @@ class ProfileTest extends TestCase
     }
 
     /**
+     * Bug real reportado por el usuario: entró por teléfono (registro
+     * rápido/login por código) y nunca puso una contraseña propia — el
+     * formulario de "eliminar cuenta" se la exigía igual, dejándolo sin
+     * forma de borrar su propia cuenta. `password_set_at` en null distingue
+     * este caso del de una cuenta con contraseña real.
+     */
+    public function test_user_without_an_own_password_can_delete_their_account_without_one(): void
+    {
+        $user = User::factory()->create(['password_set_at' => null]);
+
+        $response = $this
+            ->actingAs($user)
+            ->delete('/profile', []);
+
+        $response
+            ->assertSessionHasNoErrors()
+            ->assertRedirect('/');
+
+        $this->assertGuest();
+        $this->assertNull($user->fresh());
+    }
+
+    /**
      * Pedido explícito del usuario: "agreguemos un campo para que busquen
      * en la plataforma quien los recomendo que busquen por nombres o
      * usuario o codigo".

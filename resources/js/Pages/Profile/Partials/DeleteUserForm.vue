@@ -5,8 +5,13 @@ import InputLabel from '@/Components/InputLabel.vue';
 import Modal from '@/Components/Modal.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { useForm } from '@inertiajs/vue3';
-import { nextTick, ref } from 'vue';
+import { useForm, usePage } from '@inertiajs/vue3';
+import { computed, nextTick, ref } from 'vue';
+
+// Mismo criterio que UpdatePasswordForm.vue: quien entró por teléfono o por
+// Google tiene una contraseña al azar que no conoce — no tiene sentido
+// pedírsela para borrar su propia cuenta.
+const hasOwnPassword = computed(() => usePage().props.auth.user.password_set_at !== null);
 
 const confirmingUserDeletion = ref(false);
 const passwordInput = ref(null);
@@ -18,14 +23,16 @@ const form = useForm({
 const confirmUserDeletion = () => {
     confirmingUserDeletion.value = true;
 
-    nextTick(() => passwordInput.value.focus());
+    if (hasOwnPassword.value) {
+        nextTick(() => passwordInput.value.focus());
+    }
 };
 
 const deleteUser = () => {
     form.delete(route('profile.destroy'), {
         preserveScroll: true,
         onSuccess: () => closeModal(),
-        onError: () => passwordInput.value.focus(),
+        onError: () => passwordInput.value?.focus(),
         onFinish: () => form.reset(),
     });
 };
@@ -57,11 +64,17 @@ const closeModal = () => {
                 </h2>
 
                 <p class="mt-1 text-sm text-arka-text-muted">
-                    Una vez eliminada, todos los datos de su cuenta se borran para siempre. Ingrese su contraseña
-                    para confirmar que quiere eliminarla de forma definitiva.
+                    <template v-if="hasOwnPassword">
+                        Una vez eliminada, todos los datos de su cuenta se borran para siempre. Ingrese su
+                        contraseña para confirmar que quiere eliminarla de forma definitiva.
+                    </template>
+                    <template v-else>
+                        Una vez eliminada, todos los datos de su cuenta se borran para siempre. Confirme abajo que
+                        quiere eliminarla de forma definitiva.
+                    </template>
                 </p>
 
-                <div class="mt-6">
+                <div v-if="hasOwnPassword" class="mt-6">
                     <InputLabel for="password" value="Contraseña" class="sr-only" />
 
                     <TextInput

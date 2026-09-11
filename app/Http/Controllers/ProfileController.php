@@ -246,14 +246,24 @@ class ProfileController extends Controller
 
     /**
      * Delete the user's account.
+     *
+     * Bug real reportado por el usuario: quien entró por teléfono (registro
+     * rápido/login por código) o por Google tiene una contraseña al azar que
+     * nadie conoce — este formulario le exigía esa contraseña para poder
+     * borrar su propia cuenta, algo que jamás iba a poder escribir,
+     * dejándolo sin forma de salir. Mismo criterio que
+     * `PasswordController::update()`: `password_set_at` distingue "tiene una
+     * propia" (se la sigue pidiendo, como corresponde) de "nunca puso una"
+     * (el modal de confirmación ya es suficiente fricción).
      */
     public function destroy(Request $request): RedirectResponse
     {
-        $request->validate([
-            'password' => ['required', 'current_password'],
-        ]);
-
         $user = $request->user();
+        $hasOwnPassword = $user->password_set_at !== null;
+
+        $request->validate([
+            'password' => $hasOwnPassword ? ['required', 'current_password'] : ['sometimes'],
+        ]);
 
         Auth::logout();
 
