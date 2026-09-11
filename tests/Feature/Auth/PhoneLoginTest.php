@@ -12,9 +12,9 @@ use Tests\TestCase;
 
 /**
  * Login sin contraseña por WhatsApp (pedido explícito del usuario) — para
- * CUALQUIER cuenta con teléfono verificado, no solo las del registro rápido.
- * Mismo criterio de respuesta genérica que SessionTakeoverTest: nunca delata
- * si la cuenta existe, ni si tiene teléfono verificado.
+ * cualquier cuenta con teléfono, no solo las del registro rápido. Mismo
+ * criterio de respuesta genérica que SessionTakeoverTest: nunca delata si la
+ * cuenta existe.
  */
 class PhoneLoginTest extends TestCase
 {
@@ -48,15 +48,35 @@ class PhoneLoginTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_requesting_a_code_for_an_account_without_a_verified_phone_sends_nothing(): void
+    /**
+     * Bug real reportado por el usuario: antes esto exigía teléfono ya
+     * verificado — una cuenta que nunca pasó por esa verificación (registro
+     * viejo, creada por un admin, etc.) no tenía forma de recuperar acceso
+     * si además no recordaba su contraseña. Recibir y escribir bien un
+     * código de un solo uso a ESE número ya prueba que es el dueño.
+     */
+    public function test_requesting_a_code_for_an_account_with_an_unverified_phone_still_sends_it(): void
     {
         $this->enableWhatsApp();
         $user = User::factory()->unverifiedPhone()->create(['phone' => '+593991234567']);
 
         $this->postJson(route('phone-login.request'), ['login' => $user->email])->assertOk();
 
-        Http::assertNothingSent();
-        $this->assertNull($user->fresh()->login_code);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'graph.facebook.com')
+            && $request['to'] === '593991234567');
+        $this->assertNotNull($user->fresh()->login_code);
+    }
+
+    public function test_logging_in_with_the_code_verifies_a_previously_unverified_phone(): void
+    {
+        $user = User::factory()->unverifiedPhone()->create(['phone' => '+593991234567']);
+        $code = $user->issueLoginCode();
+
+        $this->post(route('phone-login.confirm'), ['login' => $user->phone, 'code' => $code])
+            ->assertRedirect();
+
+        $this->assertAuthenticatedAs($user->fresh());
+        $this->assertNotNull($user->fresh()->phone_verified_at);
     }
 
     public function test_requesting_a_code_for_a_locked_account_sends_nothing(): void

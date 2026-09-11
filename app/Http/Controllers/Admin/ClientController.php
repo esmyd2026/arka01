@@ -35,7 +35,10 @@ class ClientController extends Controller
                     ->orWhere('email', 'like', "%{$term}%"));
             })
             ->when($request->filled('city_id'), fn ($query) => $query->where('city_id', $request->integer('city_id')))
-            ->orderBy('name');
+            // Pedido explícito del usuario: ordenados por fecha de registro
+            // (los más nuevos primero), no alfabético — así el admin ve de
+            // entrada quién se acaba de sumar.
+            ->orderByDesc('created_at');
 
         $paginated = $query->paginate(20)->withQueryString();
 

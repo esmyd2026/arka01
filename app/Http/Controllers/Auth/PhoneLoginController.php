@@ -16,10 +16,19 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Login sin contraseña por WhatsApp (pedido explícito del usuario) — para
- * CUALQUIER cuenta con teléfono verificado, no solo las del registro rápido
+ * cualquier cuenta con teléfono cargado, no solo las del registro rápido
  * (QuickRegistrationController). Calco exacto del patrón de
  * SessionTakeoverController: respuesta genérica siempre igual, no delata si
- * la cuenta existe ni si tiene teléfono verificado.
+ * la cuenta existe.
+ *
+ * Bug real reportado por el usuario: antes esto exigía `phone_verified_at`
+ * — una cuenta que nunca pasó por la verificación (registro viejo, creada
+ * por un admin, etc.) no podía usar este atajo y el "no llegó ningún
+ * código" quedaba sin explicación, dejando a esa persona sin ninguna
+ * salida si además no recordaba su contraseña. Recibir y escribir bien un
+ * código de un solo uso a ESE número ya es prueba suficiente de que es el
+ * dueño — no hace falta haberlo verificado antes — así que ahora se manda
+ * igual y, si no estaba verificado, login() lo deja verificado de una vez.
  */
 class PhoneLoginController extends Controller
 {
@@ -31,7 +40,7 @@ class PhoneLoginController extends Controller
 
         $user = User::findByLoginIdentifier($validated['login']);
 
-        if ($user && $user->phone_verified_at && ! $user->isLocked() && WhatsAppVerificationSender::enabled()) {
+        if ($user && ! $user->isLocked() && WhatsAppVerificationSender::enabled()) {
             $code = $user->issueLoginCode();
             WhatsAppVerificationSender::sendCode($user->phone, $code);
 
@@ -39,7 +48,7 @@ class PhoneLoginController extends Controller
         }
 
         return response()->json([
-            'message' => 'Si esa cuenta tiene un teléfono verificado, le enviamos un código por WhatsApp.',
+            'message' => 'Si ese teléfono está registrado, le enviamos un código por WhatsApp.',
         ]);
     }
 
@@ -56,6 +65,10 @@ class PhoneLoginController extends Controller
             throw ValidationException::withMessages([
                 'code' => 'Ese código no es válido o ya venció.',
             ]);
+        }
+
+        if (! $user->phone_verified_at) {
+            $user->forceFill(['phone_verified_at' => now()])->save();
         }
 
         try {
