@@ -108,12 +108,12 @@ function toggleActive(banner) {
                 </p>
 
                 <div class="bg-arka-card shadow rounded-arka">
-                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                         <h3 class="text-lg font-medium text-arka-text">Banners</h3>
                         <PrimaryButton @click="startCreate">Nuevo banner</PrimaryButton>
                     </div>
 
-                    <div class="divide-y divide-arka-text-muted/10">
+                    <div class="divide-y divide-arka-border">
                         <div v-for="banner in banners" :key="banner.id" class="p-4 sm:p-6">
                             <div v-if="editingId !== banner.id" class="flex items-start gap-4">
                                 <img :src="banner.image_url" :alt="banner.title" class="h-16 w-28 object-cover rounded-arka shrink-0" />
@@ -170,7 +170,7 @@ function toggleActive(banner) {
                                     <input
                                         type="file"
                                         accept="image/*"
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white"
                                         @input="form.image = $event.target.files[0]"
                                     />
                                     <InputError class="mt-1" :message="form.errors.image" />
@@ -234,7 +234,7 @@ function toggleActive(banner) {
                                 <input
                                     type="file"
                                     accept="image/*"
-                                    class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                    class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white"
                                     required
                                     @input="form.image = $event.target.files[0]"
                                 />

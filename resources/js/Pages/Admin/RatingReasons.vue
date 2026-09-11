@@ -82,12 +82,12 @@ function toggleActive(reason) {
 
                 <template v-for="(list, direction) in { client_to_driver: clientToDriver, driver_to_client: driverToClient }" :key="direction">
                     <div class="bg-arka-card shadow rounded-arka">
-                        <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                        <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                             <h3 class="text-lg font-medium text-arka-text">{{ DIRECTION_LABEL[direction] }}</h3>
                             <PrimaryButton @click="startCreate(direction)">Nuevo motivo</PrimaryButton>
                         </div>
 
-                        <div class="divide-y divide-arka-text-muted/10">
+                        <div class="divide-y divide-arka-border">
                             <div v-for="reason in list" :key="reason.id" class="p-4 sm:p-6">
                                 <div v-if="editingId !== reason.id" class="flex items-center justify-between gap-4">
                                     <p class="text-arka-text">

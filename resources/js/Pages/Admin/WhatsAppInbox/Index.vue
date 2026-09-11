@@ -55,7 +55,7 @@ onBeforeUnmount(() => window.Echo.leave('admins'));
                     Todavía no le escribió nadie por WhatsApp.
                 </p>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="conversation in conversations.data" :key="conversation.id">
                         <Link :href="route('admin.whatsapp-inbox.show', conversation.id)" class="p-4 sm:p-6 flex items-center gap-4 hover:bg-arka-base/40">
                             <div class="min-w-0 flex-1">

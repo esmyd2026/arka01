@@ -219,7 +219,7 @@ async function confirmTakeover() {
             </div>
         </div>
 
-        <div v-if="status" class="mb-4 rounded-arka border border-arka-primary/20 bg-arka-primary/10 px-3 py-2.5 text-sm font-medium text-arka-primary-bright">
+        <div v-if="status" class="mb-4 rounded-arka border border-arka-primary/30 bg-arka-primary/10 px-3 py-2.5 text-sm font-medium text-arka-primary-bright">
             {{ status }}
         </div>
 
@@ -240,7 +240,7 @@ async function confirmTakeover() {
                     <TextInput
                         id="login"
                         type="text"
-                        class="block min-h-12 w-full border-arka-primary/20 bg-[#17251f] ps-10 text-sm hover:border-arka-primary/40"
+                        class="block min-h-12 w-full border-arka-primary/30 bg-[#17251f] ps-10 text-sm hover:border-arka-primary/40"
                         v-model="form.login"
                         required
                         autofocus
@@ -406,7 +406,7 @@ async function confirmTakeover() {
                         id="password"
                         ref="passwordInput"
                         :type="showPassword ? 'text' : 'password'"
-                        class="block min-h-12 w-full border-arka-primary/20 bg-[#17251f] ps-10 pe-11 text-sm hover:border-arka-primary/40"
+                        class="block min-h-12 w-full border-arka-primary/30 bg-[#17251f] ps-10 pe-11 text-sm hover:border-arka-primary/40"
                         v-model="form.password"
                         required
                         autocomplete="current-password"
@@ -490,7 +490,7 @@ async function confirmTakeover() {
              en el login... al lado izquierdo") — mismo criterio de
              localStorage que el banner del Home para no insistir a quien ya
              respondió. -->
-        <p v-if="!surveyDone" class="mt-5 border-t border-arka-text-muted/10 pt-4 text-center text-xs">
+        <p v-if="!surveyDone" class="mt-5 border-t border-arka-border pt-4 text-center text-xs">
             <Link :href="route('survey.show')" class="text-arka-primary hover:text-arka-primary-bright font-medium">
                 Cuentanos tu experiencia con Arka01 (2 min) →
             </Link>

@@ -2,8 +2,8 @@ import forms from '@tailwindcss/forms';
 
 /** @type {import('tailwindcss').Config} */
 export default {
-    // Modo oscuro fijo por clase: Arka01 siempre se ve en oscuro (sección 9.9 del alcance),
-    // no seguimos la preferencia del sistema operativo del usuario.
+    // El tema se controla con una clase en <html>; así cada cuenta puede conservar
+    // su preferencia sin duplicar estilos en cada pantalla.
     darkMode: 'class',
 
     content: [
@@ -28,27 +28,23 @@ export default {
                     'sans-serif',
                 ],
             },
-            // Paleta oficial de Arka01 (sección 9.9 del documento de alcance).
-            // Se usan nombres semánticos ("arka-...") en vez de tonos genéricos
-            // para que el significado de cada color quede claro en las clases.
+            // Los colores semánticos leen variables CSS para cambiar toda la
+            // aplicación entre claro y oscuro con un solo selector.
             colors: {
                 arka: {
-                    base: '#0a0f0c', // fondo general de la app
-                    card: '#121b17', // fondo de tarjetas y superficies elevadas
-                    primary: '#34d399', // verde menta: botones y acciones principales
-                    'primary-bright': '#6ee7b7', // menta claro: énfasis, links activos
-                    lime: '#a3e635', // lima: acento puntual (insignias, "nuevo", promociones)
-                    text: '#e7f4ee', // texto principal
-                    'text-muted': '#93ada2', // texto secundario
-                    warning: '#fbbf24',
-                    danger: '#f87171',
-                    // Blanco cálido (pedido explícito del usuario, con
-                    // bosquejo de referencia): SOLO para la tarjeta de
-                    // búsqueda de Inicio, que flota sobre el mapa oscuro —
-                    // un contraste puntual "cálido", no un cambio del tema
-                    // oscuro fijo de toda la app (sección 9.9, sigue vigente
-                    // en el resto de la interfaz).
-                    cream: '#FAF6EE',
+                    base: 'rgb(var(--arka-base) / <alpha-value>)',
+                    card: 'rgb(var(--arka-card) / <alpha-value>)',
+                    surface: 'rgb(var(--arka-surface) / <alpha-value>)',
+                    ink: 'rgb(var(--arka-ink) / <alpha-value>)',
+                    primary: 'rgb(var(--arka-primary) / <alpha-value>)',
+                    'primary-bright': 'rgb(var(--arka-primary-bright) / <alpha-value>)',
+                    lime: 'rgb(var(--arka-lime) / <alpha-value>)',
+                    text: 'rgb(var(--arka-text) / <alpha-value>)',
+                    'text-muted': 'rgb(var(--arka-text-muted) / <alpha-value>)',
+                    border: 'rgb(var(--arka-border) / <alpha-value>)',
+                    warning: 'rgb(var(--arka-warning) / <alpha-value>)',
+                    danger: 'rgb(var(--arka-danger) / <alpha-value>)',
+                    cream: 'rgb(var(--arka-cream) / <alpha-value>)',
                 },
             },
             // Radios consistentes en toda la interfaz (10-14px, sección 9.9).

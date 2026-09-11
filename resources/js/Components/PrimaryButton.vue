@@ -10,9 +10,9 @@ defineProps({
 </script>
 
 <template>
-    <!-- Botón principal: fondo verde menta (color de marca), texto oscuro para contraste -->
+    <!-- Botón principal: verde de marca profundo y texto blanco accesible. -->
     <button
-        class="inline-flex items-center bg-arka-primary border border-transparent rounded-arka font-semibold text-arka-base hover:bg-arka-primary-bright focus:bg-arka-primary-bright active:bg-arka-primary focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150 disabled:opacity-50"
+        class="inline-flex items-center bg-arka-primary border border-transparent rounded-arka font-semibold text-white hover:bg-arka-primary-bright focus:bg-arka-primary-bright active:bg-arka-primary focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base transition ease-in-out duration-150 disabled:opacity-50"
         :class="size === 'sm' ? 'px-2.5 py-1 text-[11px] tracking-wide' : 'px-4 py-2 text-xs uppercase tracking-widest'"
     >
         <slot />

@@ -68,14 +68,14 @@ function close() {
             ref="buttonEl"
             type="button"
             class="flex w-full items-center justify-between gap-2 rounded-arka border px-3 py-2 text-start focus:outline-none focus:ring-2 focus:ring-arka-primary"
-            :class="light ? 'border-arka-base/10 bg-white text-arka-base' : 'border-arka-text-muted/20 bg-arka-base text-arka-text'"
+            :class="light ? 'border-arka-ink/10 bg-white text-arka-ink' : 'border-arka-border bg-arka-base text-arka-text'"
             @click="toggle"
             @keydown.escape="close"
         >
-            <span :class="!selectedOption ? (light ? 'text-arka-base/40' : 'text-arka-text-muted') : ''" class="truncate">
+            <span :class="!selectedOption ? (light ? 'text-arka-ink/40' : 'text-arka-text-muted') : ''" class="truncate">
                 {{ selectedOption ? (selectedOption.shortLabel ?? selectedOption.label) : emptyLabel ?? placeholder }}
             </span>
-            <svg class="h-4 w-4 shrink-0 transition-transform" :class="[light ? 'text-arka-base/40' : 'text-arka-text-muted', { 'rotate-180': open }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="h-4 w-4 shrink-0 transition-transform" :class="[light ? 'text-arka-ink/40' : 'text-arka-text-muted', { 'rotate-180': open }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
             </svg>
         </button>
@@ -93,16 +93,16 @@ function close() {
         <div
             v-if="open"
             class="absolute z-50 mt-1 flex max-h-64 w-full min-w-56 max-w-[90vw] flex-col overflow-hidden rounded-arka border shadow-lg"
-            :class="light ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
+            :class="light ? 'border-arka-ink/10 bg-white' : 'border-arka-border bg-arka-card'"
         >
-            <div class="border-b p-2" :class="light ? 'border-arka-base/10' : 'border-arka-text-muted/10'">
+            <div class="border-b p-2" :class="light ? 'border-arka-ink/10' : 'border-arka-border'">
                 <input
                     ref="searchEl"
                     v-model="search"
                     type="text"
                     placeholder="Buscar…"
                     class="w-full rounded-arka border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-arka-primary"
-                    :class="light ? 'border-arka-base/10 bg-[#f7f8fa] text-arka-base placeholder:text-arka-base/40' : 'border-arka-text-muted/20 bg-arka-base text-arka-text placeholder:text-arka-text-muted'"
+                    :class="light ? 'border-arka-ink/10 bg-[#f7f8fa] text-arka-ink placeholder:text-arka-ink/40' : 'border-arka-border bg-arka-base text-arka-text placeholder:text-arka-text-muted'"
                     @keydown.escape="close"
                 />
             </div>
@@ -112,7 +112,7 @@ function close() {
                     <button
                         type="button"
                         class="w-full px-3 py-2 text-start text-sm"
-                        :class="modelValue === null ? 'text-arka-primary font-medium' : (light ? 'text-arka-base/50 hover:bg-arka-base/[0.04]' : 'text-arka-text-muted hover:bg-arka-base')"
+                        :class="modelValue === null ? 'text-arka-primary font-medium' : (light ? 'text-arka-ink/50 hover:bg-arka-base/[0.04]' : 'text-arka-text-muted hover:bg-arka-base')"
                         @click="select(null)"
                     >
                         {{ emptyLabel }}
@@ -122,13 +122,13 @@ function close() {
                     <button
                         type="button"
                         class="w-full px-3 py-2 text-start text-sm"
-                        :class="option.value === modelValue ? 'text-arka-primary font-medium' : (light ? 'text-arka-base hover:bg-arka-base/[0.04]' : 'text-arka-text hover:bg-arka-base')"
+                        :class="option.value === modelValue ? 'text-arka-primary font-medium' : (light ? 'text-arka-ink hover:bg-arka-base/[0.04]' : 'text-arka-text hover:bg-arka-base')"
                         @click="select(option.value)"
                     >
                         {{ option.label }}
                     </button>
                 </li>
-                <li v-if="!filteredOptions.length" class="px-3 py-2 text-sm" :class="light ? 'text-arka-base/45' : 'text-arka-text-muted'">
+                <li v-if="!filteredOptions.length" class="px-3 py-2 text-sm" :class="light ? 'text-arka-ink/45' : 'text-arka-text-muted'">
                     Sin resultados.
                 </li>
             </ul>

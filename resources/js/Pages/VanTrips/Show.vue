@@ -71,7 +71,7 @@ async function cancelTrip() {
                     <p class="text-sm text-arka-text-muted">{{ trip.travel_date }} · sale {{ trip.departure_time }}</p>
                     <p class="text-arka-text font-medium">${{ trip.price_per_seat }}/asiento · {{ seatsAvailable }} de {{ trip.total_seats }} libres</p>
                     <p v-if="trip.luggage_allowance" class="text-sm text-arka-text-muted">Equipaje: {{ trip.luggage_allowance }}</p>
-                    <p v-if="trip.description" class="text-sm text-arka-text-muted pt-2 border-t border-arka-text-muted/10">{{ trip.description }}</p>
+                    <p v-if="trip.description" class="text-sm text-arka-text-muted pt-2 border-t border-arka-border">{{ trip.description }}</p>
 
                     <div v-if="trip.included_services?.length" class="flex flex-wrap gap-1.5 pt-2">
                         <span v-for="(service, i) in trip.included_services" :key="i" class="px-2 py-0.5 rounded-full text-xs bg-arka-primary/10 text-arka-primary-bright">
@@ -104,7 +104,7 @@ async function cancelTrip() {
                 <!-- Reservas confirmadas (lado conductor) -->
                 <div v-if="isOwner && trip.reservations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-4">Pasajeros que reservaron</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="r in trip.reservations" :key="r.id" class="py-2.5 flex items-center justify-between text-sm">
                             <span class="text-arka-text">{{ r.client.name }}</span>
                             <span class="text-arka-text-muted">{{ r.seats_reserved }} asiento(s)</span>

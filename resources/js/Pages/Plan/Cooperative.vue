@@ -126,7 +126,7 @@ const talkToUsUrl = props.whatsappBusinessNumber
                 </p>
 
                 <!-- Catálogo -->
-                <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <div
                         v-for="plan in plans"
                         :key="plan.code"
@@ -218,7 +218,7 @@ const talkToUsUrl = props.whatsappBusinessNumber
                 <!-- Historial de activaciones (sección 9.6) -->
                 <div v-if="changes.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-4">Historial de activaciones</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="change in changes" :key="change.id" class="py-2 text-sm text-arka-text-muted">
                             {{ change.old_plan?.name ?? 'Gratis' }} &rarr; {{ change.new_plan.name }}
                         </li>

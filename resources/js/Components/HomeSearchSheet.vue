@@ -160,10 +160,10 @@ function saveAddress() {
 <template>
     <div class="flex min-h-0 flex-1 flex-col" :class="compact ? 'gap-3' : 'gap-5'">
     <div id="home-search-anchor">
-        <h2 :class="compact ? 'text-xl leading-tight font-bold mb-0.5' : 'text-2xl font-bold mb-0'" class="tracking-tight text-arka-base">¿A dónde vamos?</h2>
+        <h2 :class="compact ? 'text-xl leading-tight font-bold mb-0.5' : 'text-2xl font-bold mb-0'" class="tracking-tight text-arka-ink">¿A dónde vamos?</h2>
         <!-- Pedido explícito del usuario: reducir a un detalle discreto, no
              una segunda línea que compita con el título. -->
-        <p :class="compact ? 'text-xs text-[#929B97]' : 'text-[11px] text-arka-base/35'" class="leading-relaxed">Tu ubicación actual será el punto de partida.</p>
+        <p :class="compact ? 'text-xs text-[#929B97]' : 'text-[11px] text-arka-ink/35'" class="leading-relaxed">Tu ubicación actual será el punto de partida.</p>
         <div :class="compact ? 'mt-2.5' : 'mt-3'">
             <AddressAutocomplete
                 :model-value="modelValue"
@@ -176,7 +176,7 @@ function saveAddress() {
                 @selection-loading="$emit('destination-loading', $event)"
                 @focus="recentsExpanded = true"
             />
-            <p class="mt-1.5 px-1 text-[10px] leading-relaxed text-arka-base/40">
+            <p class="mt-1.5 px-1 text-[10px] leading-relaxed text-arka-ink/40">
                 Consejo: escribe la avenida o calle principal y la transversal. Después podrás ajustar el punto arrastrándolo en el mapa.
             </p>
         </div>
@@ -189,7 +189,7 @@ function saveAddress() {
     <div v-if="compact" class="flex items-center justify-between">
         <button
             type="button"
-            class="flex items-center gap-1 px-0.5 text-xs font-medium text-arka-base/45 transition hover:text-arka-primary"
+            class="flex items-center gap-1 px-0.5 text-xs font-medium text-arka-ink/45 transition hover:text-arka-primary"
             @click="openAddForm"
         >
             <span class="text-sm leading-none">＋</span>
@@ -221,7 +221,7 @@ function saveAddress() {
             v-for="savedRoute in savedChips"
             :key="savedRoute.id"
             type="button"
-            class="flex min-h-10 max-w-[10rem] flex-none items-center gap-2 rounded-full border border-arka-base/10 bg-white px-3.5 py-2 text-xs font-semibold text-arka-base shadow-sm transition hover:border-arka-primary/40 hover:shadow"
+            class="flex min-h-10 max-w-[10rem] flex-none items-center gap-2 rounded-full border border-arka-ink/10 bg-white px-3.5 py-2 text-xs font-semibold text-arka-ink shadow-sm transition hover:border-arka-primary/40 hover:shadow"
             @click="selectSavedRoute(savedRoute)"
         >
             <img v-if="iconForAlias(savedRoute.alias)" :src="iconForAlias(savedRoute.alias)" class="h-4 w-4 shrink-0" alt="" />
@@ -234,7 +234,7 @@ function saveAddress() {
              guardadas de al lado. -->
         <button
             type="button"
-            class="flex min-h-10 flex-none items-center gap-1 px-1.5 text-xs font-medium text-arka-base/45 transition hover:text-arka-primary"
+            class="flex min-h-10 flex-none items-center gap-1 px-1.5 text-xs font-medium text-arka-ink/45 transition hover:text-arka-primary"
             @click="openAddForm"
         >
             <span class="text-sm leading-none">＋</span>
@@ -250,7 +250,7 @@ function saveAddress() {
             v-for="savedRoute in savedChips"
             :key="savedRoute.id"
             type="button"
-            class="flex min-h-9 max-w-[10rem] flex-none items-center gap-2 rounded-full border border-arka-base/10 bg-white px-3 py-1.5 text-xs font-semibold text-arka-base shadow-sm transition hover:border-arka-primary/40 hover:shadow"
+            class="flex min-h-9 max-w-[10rem] flex-none items-center gap-2 rounded-full border border-arka-ink/10 bg-white px-3 py-1.5 text-xs font-semibold text-arka-ink shadow-sm transition hover:border-arka-primary/40 hover:shadow"
             @click="selectSavedRoute(savedRoute)"
         >
             <img v-if="iconForAlias(savedRoute.alias)" :src="iconForAlias(savedRoute.alias)" class="h-4 w-4 shrink-0" alt="" />
@@ -268,8 +268,8 @@ function saveAddress() {
         :class="compact ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 [scrollbar-width:thin]' : ''"
     >
         <div class="mb-1 flex items-center justify-between">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-arka-base/45">Recientes</p>
-            <span class="text-[11px] text-arka-base/35">Toca para repetir</span>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-arka-ink/45">Recientes</p>
+            <span class="text-[11px] text-arka-ink/35">Toca para repetir</span>
         </div>
         <button
             v-for="place in frequentPlaces.slice(0, compact ? 6 : 3)"
@@ -281,17 +281,17 @@ function saveAddress() {
             <!-- Reloj/historial en vez del pin de ubicación (pedido explícito
                  del usuario): comunica "algo que ya usaste", no "un lugar
                  nuevo por marcar". -->
-            <svg class="h-[18px] w-[18px] shrink-0 text-arka-base/35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="h-[18px] w-[18px] shrink-0 text-arka-ink/35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="8.5" stroke-linecap="round" stroke-linejoin="round" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4.3l2.8 1.7" />
             </svg>
             <span class="min-w-0 flex-1">
-                <span class="block truncate text-sm font-semibold text-arka-base">{{ splitAddress(place.address).title }}</span>
+                <span class="block truncate text-sm font-semibold text-arka-ink">{{ splitAddress(place.address).title }}</span>
                 <span v-if="splitAddress(place.address).subtitle" class="block truncate text-[12.5px] text-[#89938F]">
                     {{ splitAddress(place.address).subtitle }}
                 </span>
             </span>
-            <svg class="h-4 w-4 shrink-0 text-arka-base/20 transition group-hover:translate-x-0.5 group-hover:text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="h-4 w-4 shrink-0 text-arka-ink/20 transition group-hover:translate-x-0.5 group-hover:text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" />
             </svg>
         </button>
@@ -303,7 +303,7 @@ function saveAddress() {
     <Link
         v-if="canSchedule && !compact"
         :href="scheduleHref"
-        class="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-arka-base/10 bg-white text-sm font-semibold text-arka-base/70 shadow-sm transition hover:border-arka-primary/30 hover:text-arka-base"
+        class="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-arka-ink/10 bg-white text-sm font-semibold text-arka-ink/70 shadow-sm transition hover:border-arka-primary/30 hover:text-arka-ink"
     >
         <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -323,7 +323,7 @@ function saveAddress() {
                 <select
                     id="address_category"
                     v-model="category"
-                    class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary"
+                    class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary"
                 >
                     <option value="casa">Casa</option>
                     <option value="trabajo">Trabajo</option>

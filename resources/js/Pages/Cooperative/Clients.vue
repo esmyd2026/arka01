@@ -47,7 +47,7 @@ async function unlink(client) {
                         Todavía no hay clientes vinculados a esta cooperativa.
                     </p>
 
-                    <div v-else class="divide-y divide-arka-text-muted/10">
+                    <div v-else class="divide-y divide-arka-border">
                         <div v-for="client in clients" :key="client.link_id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
                             <UserAvatar :user="client" size-class="h-11 w-11 text-sm shrink-0" />
                             <div class="flex-1 min-w-0">

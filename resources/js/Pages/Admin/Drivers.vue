@@ -57,15 +57,15 @@ function toggleWhatsApp(driver) {
                      lista repetida de conectados pertenecen a Operación; acá
                      solo queda el dato necesario y un acceso directo. -->
                 <section class="grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-2xl border border-arka-primary/20 bg-arka-card p-4">
+                    <div class="rounded-2xl border border-arka-primary/30 bg-arka-card p-4">
                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-text-muted">Disponibles ahora</p>
                         <div class="mt-2 flex items-end justify-between gap-3"><strong class="text-3xl text-arka-primary-bright">{{ availableDrivers.length }}</strong><span class="mb-1 h-2.5 w-2.5 rounded-full bg-arka-primary"></span></div>
                     </div>
-                    <div class="rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4">
+                    <div class="rounded-2xl border border-arka-border bg-arka-card p-4">
                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-text-muted">Conductores registrados</p>
                         <strong class="mt-2 block text-3xl text-arka-text">{{ allDrivers.total }}</strong>
                     </div>
-                    <Link :href="route('admin.live-operations.index')" class="group flex items-center justify-between gap-3 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 hover:border-arka-primary/35">
+                    <Link :href="route('admin.live-operations.index')" class="group flex items-center justify-between gap-3 rounded-2xl border border-arka-border bg-arka-card p-4 hover:border-arka-primary/35">
                         <span><span class="block text-sm font-semibold text-arka-text">Ver operación en vivo</span><span class="mt-1 block text-xs text-arka-text-muted">Mapa y carreras activas</span></span><span class="text-xl text-arka-primary-bright group-hover:translate-x-1">→</span>
                     </Link>
                 </section>
@@ -73,8 +73,8 @@ function toggleWhatsApp(driver) {
                 <!-- Roster completo: bloquear/deshabilitar/desconectar (pedido
                      explícito del usuario), ahora paginado y filtrable por
                      nombre/correo, ciudad y estado. -->
-                <div class="space-y-4 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 shadow sm:p-6">
-                    <div class="flex flex-wrap items-end justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-primary-bright">Administración</p><h3 class="mt-1 text-lg font-semibold text-arka-text">Directorio de conductores</h3><p class="mt-1 text-xs text-arka-text-muted">Busque, revise el perfil o suspenda una cuenta. Las categorías se deciden durante la verificación.</p></div><Link :href="route('admin.driver-verifications.index')" class="rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold text-arka-base">Ir a verificaciones</Link></div>
+                <div class="space-y-4 rounded-2xl border border-arka-border bg-arka-card p-4 shadow sm:p-6">
+                    <div class="flex flex-wrap items-end justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-primary-bright">Administración</p><h3 class="mt-1 text-lg font-semibold text-arka-text">Directorio de conductores</h3><p class="mt-1 text-xs text-arka-text-muted">Busque, revise el perfil o suspenda una cuenta. Las categorías se deciden durante la verificación.</p></div><Link :href="route('admin.driver-verifications.index')" class="rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold text-white">Ir a verificaciones</Link></div>
 
                     <form @submit.prevent="applyFilters" class="flex flex-wrap items-end gap-3">
                         <div class="flex-1 min-w-[160px]">
@@ -96,7 +96,7 @@ function toggleWhatsApp(driver) {
                     <div class="hidden overflow-x-auto md:block">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">Conductor</th>
                                     <th class="py-2 pr-3">Vehículo</th>
                                     <th class="py-2 pr-3">Operación</th>
@@ -104,7 +104,7 @@ function toggleWhatsApp(driver) {
                                     <th class="py-2 text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="d in allDrivers.data" :key="d.user_id">
                                     <td class="py-3 pr-3">
                                         <Link :href="route('admin.users.show', d.user_id)" class="text-arka-text font-medium hover:text-arka-primary-bright">
@@ -129,7 +129,7 @@ function toggleWhatsApp(driver) {
                                         <p class="mt-2 text-[11px]">Actividad {{ formatDate(d.last_active_at) }}</p>
                                     </td>
                                     <td class="py-3 text-right">
-                                        <div class="flex justify-end gap-2"><Link :href="route('admin.users.show', d.user_id)" class="rounded-lg border border-arka-text-muted/20 px-2.5 py-1.5 text-xs font-medium text-arka-text">Ver perfil</Link><DangerButton v-if="!d.is_suspended" size="sm" @click="suspend(d)">Suspender</DangerButton><PrimaryButton v-else size="sm" @click="reactivate(d)">Reactivar</PrimaryButton></div>
+                                        <div class="flex justify-end gap-2"><Link :href="route('admin.users.show', d.user_id)" class="rounded-lg border border-arka-border px-2.5 py-1.5 text-xs font-medium text-arka-text">Ver perfil</Link><DangerButton v-if="!d.is_suspended" size="sm" @click="suspend(d)">Suspender</DangerButton><PrimaryButton v-else size="sm" @click="reactivate(d)">Reactivar</PrimaryButton></div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -137,10 +137,10 @@ function toggleWhatsApp(driver) {
                     </div>
 
                     <div class="space-y-2 md:hidden">
-                        <article v-for="d in allDrivers.data" :key="d.user_id" class="rounded-xl border border-arka-text-muted/10 bg-arka-base/40 p-3">
+                        <article v-for="d in allDrivers.data" :key="d.user_id" class="rounded-xl border border-arka-border bg-arka-base/40 p-3">
                             <div class="flex items-start justify-between gap-3"><div class="min-w-0"><Link :href="route('admin.users.show', d.user_id)" class="truncate font-semibold text-arka-text">{{ d.name }}</Link><p class="truncate text-xs text-arka-text-muted">{{ d.email }}</p></div><span class="shrink-0 rounded-full px-2 py-1 text-[10px]" :class="d.is_suspended ? 'bg-arka-danger/10 text-arka-danger' : d.is_available ? 'bg-arka-primary/10 text-arka-primary-bright' : 'bg-arka-card text-arka-text-muted'">{{ d.is_suspended ? 'Suspendido' : d.is_available ? 'Disponible' : 'Desconectado' }}</span></div>
                             <p class="mt-3 text-xs text-arka-text">{{ d.vehicle || 'Vehículo sin completar' }}</p><p class="mt-1 text-[11px] text-arka-text-muted">{{ d.completed_rides_count }} carreras · {{ d.verification_status || 'Verificación incompleta' }}</p>
-                            <div class="mt-3 flex gap-2"><Link :href="route('admin.users.show', d.user_id)" class="flex-1 rounded-lg border border-arka-text-muted/20 px-3 py-2 text-center text-xs font-medium text-arka-text">Ver perfil</Link><button v-if="!d.is_suspended" type="button" class="rounded-lg px-3 py-2 text-xs font-medium text-arka-danger" @click="suspend(d)">Suspender</button><button v-else type="button" class="rounded-lg px-3 py-2 text-xs font-medium text-arka-primary" @click="reactivate(d)">Reactivar</button></div>
+                            <div class="mt-3 flex gap-2"><Link :href="route('admin.users.show', d.user_id)" class="flex-1 rounded-lg border border-arka-border px-3 py-2 text-center text-xs font-medium text-arka-text">Ver perfil</Link><button v-if="!d.is_suspended" type="button" class="rounded-lg px-3 py-2 text-xs font-medium text-arka-danger" @click="suspend(d)">Suspender</button><button v-else type="button" class="rounded-lg px-3 py-2 text-xs font-medium text-arka-primary" @click="reactivate(d)">Reactivar</button></div>
                         </article>
                     </div>
 

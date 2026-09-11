@@ -86,7 +86,7 @@ const props = defineProps({
 // paso. Así, los espacios estructurales que existen entre la cabecera y la
 // página (por ejemplo, el área del aviso de permisos) no dejan ver una
 // franja negra distinta al degradado.
-const destinationBackground = 'radial-gradient(circle at 18% 0%, rgba(52, 211, 153, 0.18) 0%, transparent 32%), radial-gradient(circle at 90% 28%, rgba(110, 231, 183, 0.07) 0%, transparent 26%), linear-gradient(180deg, #10271d 0%, #0b1b14 52%, #07110d 100%)';
+const destinationBackground = 'radial-gradient(circle at 12% 0%, rgba(23, 139, 98, 0.10) 0%, transparent 30%), radial-gradient(circle at 92% 22%, rgba(52, 211, 153, 0.07) 0%, transparent 24%), linear-gradient(180deg, #f8faf9 0%, #f2f6f4 52%, #edf2ef 100%)';
 
 const cooperativeSearch = ref('');
 const filteredCooperatives = computed(() => {
@@ -1686,22 +1686,22 @@ function submit() {
                         <p class="text-xs font-semibold uppercase tracking-[0.14em] text-arka-primary">
                             {{ whenMode === 'scheduled' ? 'Viaje programado' : 'Nueva carrera' }}
                         </p>
-                        <h1 class="mt-0.5 text-[22px] font-bold tracking-tight text-arka-base">
+                        <h1 class="mt-0.5 text-[22px] font-bold tracking-tight text-arka-ink">
                             {{ whenMode === 'scheduled' ? 'Programa tu viaje' : '¿A dónde vamos?' }}
                         </h1>
-                        <p class="mt-0.5 text-xs text-arka-base/45">Revisa el punto de partida y el destino.</p>
+                        <p class="mt-0.5 text-xs text-arka-ink/45">Revisa el punto de partida y el destino.</p>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <!-- Pedido explícito del usuario: volver a ver el tutorial de
                              esta pantalla cuando quiera, no solo la primera vez. -->
-                        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-arka-base/[0.06] bg-[#f6f8f7] text-arka-base/55 shadow-sm" aria-label="Ver tutorial de pedir carrera" title="Ver tutorial" @click="startRideRequestTour">
+                        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-arka-ink/[0.06] bg-[#f6f8f7] text-arka-ink/55 shadow-sm" aria-label="Ver tutorial de pedir carrera" title="Ver tutorial" @click="startRideRequestTour">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.09 9a3 3 0 1 1 5.83 1c0 2-3 2-3 4" />
                                 <path stroke-linecap="round" d="M12 17h.01" />
                                 <circle cx="12" cy="12" r="9" />
                             </svg>
                         </button>
-                        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-arka-base/[0.06] bg-[#f6f8f7] text-arka-base/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
+                        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-arka-ink/[0.06] bg-[#f6f8f7] text-arka-ink/55 shadow-sm" aria-label="Volver al inicio" @click="router.visit(route('dashboard'))">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
                             </svg>
@@ -1710,7 +1710,7 @@ function submit() {
                 </div>
                 <!-- Selector de flota: solo aparece si el cliente tiene más de una
                      (sección 7.3, plan Multi-flota). -->
-                <div v-if="fleets.length > 1" class="order-6 mx-3 mt-3 rounded-2xl border border-arka-base/[0.05] bg-white p-4 shadow-sm sm:mx-4">
+                <div v-if="fleets.length > 1" class="order-6 mx-3 mt-3 rounded-2xl border border-arka-ink/[0.05] bg-white p-4 shadow-sm sm:mx-4">
                     <InputLabel value="Pedir carrera desde la flota" light />
                     <SearchableSelect
                         class="mt-1"
@@ -1721,21 +1721,21 @@ function submit() {
                     />
                 </div>
 
-                <div v-if="locationError" class="order-4 mx-3 mt-3 rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-3 text-sm text-arka-base/70 sm:mx-4">
+                <div v-if="locationError" class="order-4 mx-3 mt-3 rounded-2xl border border-arka-warning/25 bg-arka-warning/10 p-3 text-sm text-arka-ink/70 sm:mx-4">
                     {{ locationError }}
                 </div>
 
                 <!-- ¿Cuándo? (consideración agregada al alcance, pedido explícito del
                      usuario): "ahora mismo" por defecto, o programar fecha/hora — con
                      la opción de marcarla como ida y vuelta. -->
-                <div class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-base/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
-                    <p class="text-xs font-semibold text-arka-base/55">¿Cuándo viajas?</p>
+                <div class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-ink/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
+                    <p class="text-xs font-semibold text-arka-ink/55">¿Cuándo viajas?</p>
 
                     <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
                         <button
                             type="button"
                             class="px-3 py-2 rounded-full font-medium transition"
-                            :class="whenMode === 'now' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                            :class="whenMode === 'now' ? 'bg-white text-arka-ink shadow-sm' : 'text-arka-ink/45'"
                             @click="whenMode = 'now'"
                         >
                             Ahora mismo
@@ -1743,7 +1743,7 @@ function submit() {
                         <button
                             type="button"
                             class="px-3 py-2 rounded-full font-medium transition"
-                            :class="whenMode === 'scheduled' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                            :class="whenMode === 'scheduled' ? 'bg-white text-arka-ink shadow-sm' : 'text-arka-ink/45'"
                             @click="whenMode = 'scheduled'"
                         >
                             Programar viaje
@@ -1770,7 +1770,7 @@ function submit() {
                                     <select
                                         v-model="scheduledHour"
                                         aria-label="Hora"
-                                        class="w-full rounded-arka border-arka-base/10 bg-white text-arka-base shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                        class="w-full rounded-arka border-arka-ink/10 bg-white text-arka-ink shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                     >
                                         <option value="" disabled>Hora</option>
                                         <option v-for="hour in HOUR_OPTIONS" :key="hour" :value="hour">{{ hour }}</option>
@@ -1778,7 +1778,7 @@ function submit() {
                                     <select
                                         v-model="scheduledMinute"
                                         aria-label="Minutos"
-                                        class="w-full rounded-arka border-arka-base/10 bg-white text-arka-base shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                        class="w-full rounded-arka border-arka-ink/10 bg-white text-arka-ink shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                     >
                                         <option value="" disabled>Min.</option>
                                         <option v-for="minute in MINUTE_OPTIONS" :key="minute" :value="minute">{{ minute }}</option>
@@ -1786,7 +1786,7 @@ function submit() {
                                     <select
                                         v-model="scheduledPeriod"
                                         aria-label="A. m. o p. m."
-                                        class="w-full rounded-arka border-arka-base/10 bg-white text-arka-base shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                        class="w-full rounded-arka border-arka-ink/10 bg-white text-arka-ink shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                     >
                                         <option value="AM">a. m.</option>
                                         <option value="PM">p. m.</option>
@@ -1798,7 +1798,7 @@ function submit() {
 
                         <label class="flex items-center gap-2">
                             <input type="checkbox" v-model="roundTrip" class="text-arka-primary rounded" />
-                            <span class="text-sm font-medium text-arka-base/75">Es ida y vuelta</span>
+                            <span class="text-sm font-medium text-arka-ink/75">Es ida y vuelta</span>
                         </label>
 
                         <!-- Observación libre (pedido explícito del usuario): algo que el
@@ -1809,7 +1809,7 @@ function submit() {
                                 v-model="scheduledNotes"
                                 rows="2"
                                 maxlength="500"
-                                class="mt-1 block w-full rounded-arka border-arka-base/10 bg-white text-arka-base placeholder:text-arka-base/35 shadow-sm focus:border-arka-primary focus:ring-arka-primary"
+                                class="mt-1 block w-full rounded-arka border-arka-ink/10 bg-white text-arka-ink placeholder:text-arka-ink/35 shadow-sm focus:border-arka-primary focus:ring-arka-primary"
                                 placeholder="Ej: el portón es el azul, llamar al llegar…"
                             ></textarea>
                             <InputError class="mt-1" :message="form.errors.notes" />
@@ -1826,14 +1826,14 @@ function submit() {
                      junto a "¿Cuándo viajas?", el mismo tipo de decisión
                      temprana. `order-5`, mismo valor que el bloque de arriba
                      — entre los dos solo importa el orden real del DOM. -->
-                <div id="payment-method-selector" class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-base/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
-                    <p class="text-xs font-semibold text-arka-base/55">Forma de pago</p>
+                <div id="payment-method-selector" class="order-5 mx-3 mt-3 space-y-3 rounded-2xl border border-arka-ink/[0.05] bg-white p-3 shadow-sm sm:mx-4 sm:p-4">
+                    <p class="text-xs font-semibold text-arka-ink/55">Forma de pago</p>
 
                     <div class="grid grid-cols-2 gap-1 rounded-full bg-arka-base/[0.05] p-1 text-sm">
                         <button
                             type="button"
                             class="px-3 py-2 rounded-full font-medium transition"
-                            :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                            :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-ink shadow-sm' : 'text-arka-ink/45'"
                             @click="paymentMethod = 'efectivo'"
                         >
                             Efectivo
@@ -1841,7 +1841,7 @@ function submit() {
                         <button
                             type="button"
                             class="px-3 py-2 rounded-full font-medium transition"
-                            :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-base shadow-sm' : 'text-arka-base/45'"
+                            :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-ink shadow-sm' : 'text-arka-ink/45'"
                             @click="paymentMethod = 'transferencia'"
                         >
                             Transferencia
@@ -1853,11 +1853,11 @@ function submit() {
                      búsqueda... que sea más fácil pedir una carrera") — buscador con
                      Google Places como campo principal, con los lugares ya usados
                      antes como favoritos (ver AddressAutocomplete.vue). -->
-                <div class="order-3 relative z-10 mx-3 -mt-7 space-y-3 rounded-[22px] border border-arka-base/[0.05] bg-white p-4 shadow-[0_14px_35px_rgba(1,12,7,0.16)] sm:mx-4">
+                <div class="order-3 relative z-10 mx-3 -mt-7 space-y-3 rounded-[22px] border border-arka-ink/[0.05] bg-white p-4 shadow-[0_14px_35px_rgba(1,12,7,0.16)] sm:mx-4">
                     <div class="flex items-center justify-between gap-3">
                         <div>
-                            <h3 class="text-lg font-bold text-arka-base">Direcciones</h3>
-                            <p class="text-xs text-arka-base/40">Puede escribirlas o moverlas en el mapa.</p>
+                            <h3 class="text-lg font-bold text-arka-ink">Direcciones</h3>
+                            <p class="text-xs text-arka-ink/40">Puede escribirlas o moverlas en el mapa.</p>
                         </div>
                         <span class="shrink-0 rounded-full bg-[#ecfbf5] px-2.5 py-1 text-[11px] font-semibold text-arka-primary">Paso 1 de 3</span>
                     </div>
@@ -1868,9 +1868,9 @@ function submit() {
                         <div
                             v-for="saved in savedRoutes"
                             :key="saved.id"
-                            class="group flex shrink-0 items-center gap-1.5 rounded-full border border-arka-base/10 bg-[#f7f8fa] py-1.5 pl-3 pr-1.5 hover:border-arka-primary/50"
+                            class="group flex shrink-0 items-center gap-1.5 rounded-full border border-arka-ink/10 bg-[#f7f8fa] py-1.5 pl-3 pr-1.5 hover:border-arka-primary/50"
                         >
-                            <button type="button" class="text-sm text-arka-base" @click="useSavedRoute(saved)">
+                            <button type="button" class="text-sm text-arka-ink" @click="useSavedRoute(saved)">
                                 📍 {{ saved.alias || saved.origin_address || 'Ruta guardada' }}
                             </button>
                             <button
@@ -1988,7 +1988,7 @@ function submit() {
                     <div v-if="canSaveRoute" class="pt-1">
                         <label class="flex items-center gap-2">
                             <input type="checkbox" v-model="wantsToSaveRoute" class="text-arka-primary rounded" />
-                            <span class="text-sm text-arka-base/75">Guardar esta ruta en "Mis rutas"</span>
+                            <span class="text-sm text-arka-ink/75">Guardar esta ruta en "Mis rutas"</span>
                         </label>
                         <div v-if="wantsToSaveRoute" class="mt-2 flex gap-2">
                             <TextInput
@@ -2058,7 +2058,7 @@ function submit() {
 
                 <!-- Mapa: confirmación visual del recorrido, y una forma de ajustar el
                      destino a mano tocando el mapa (sección 9.3: Leaflet + OpenStreetMap). -->
-                <div class="order-2 relative min-h-[285px] overflow-hidden border-y border-arka-base/[0.05] bg-white">
+                <div class="order-2 relative min-h-[285px] overflow-hidden border-y border-arka-ink/[0.05] bg-white">
                     <FleetMap
                         :markers="mapMarkers"
                         :center="mapCenter ?? undefined"
@@ -2078,14 +2078,14 @@ function submit() {
                         @marker-drag-end="finishDraggingRouteMarker"
                     />
                     <div class="absolute right-3 top-3 z-[500] flex rounded-full border border-white/80 bg-white/90 p-1 shadow-lg backdrop-blur">
-                        <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'origin' ? 'bg-arka-primary text-arka-base shadow-sm' : 'text-arka-base/55'" @click="mapEditingPoint = 'origin'">
+                        <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'origin' ? 'bg-arka-primary text-white shadow-sm' : 'text-arka-ink/55'" @click="mapEditingPoint = 'origin'">
                             <span class="mr-1 inline-block h-2 w-2 rounded-full bg-current"></span> Origen
                         </button>
-                        <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'destination' ? 'bg-rose-500 text-white shadow-sm' : 'text-arka-base/55'" @click="mapEditingPoint = 'destination'">
+                        <button type="button" class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition" :class="mapEditingPoint === 'destination' ? 'bg-rose-500 text-white shadow-sm' : 'text-arka-ink/55'" @click="mapEditingPoint = 'destination'">
                             <span class="mr-1 inline-block h-2 w-2 rounded-sm bg-current"></span> Destino
                         </button>
                     </div>
-                    <div class="pointer-events-none absolute bottom-8 left-1/2 z-[500] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-arka-base/90 px-3.5 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
+                    <div class="pointer-events-none absolute bottom-8 left-1/2 z-[500] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-arka-ink/90 px-3.5 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
                         <svg class="h-3.5 w-3.5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 12h18m-3-3 3 3-3 3M9 6l3-3 3 3M6 9l-3 3 3 3M9 18l3 3 3-3" />
                         </svg>
@@ -2172,7 +2172,7 @@ function submit() {
                                         <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
                                         <div class="min-w-0 flex-1">
                                         <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-primary">Recoger en</p>
-                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-base">{{ originAddress || 'Mi ubicación' }}</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-ink">{{ originAddress || 'Mi ubicación' }}</p>
                                         </div>
                                     </div>
 
@@ -2182,7 +2182,7 @@ function submit() {
                                         <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white bg-amber-500 shadow-[0_0_0_2px_rgba(245,158,11,0.18)]"></span>
                                         <div class="min-w-0 flex-1">
                                         <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">Parada {{ index + 1 }}</p>
-                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-base">{{ stop.address || 'Parada marcada en el mapa' }}</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-ink">{{ stop.address || 'Parada marcada en el mapa' }}</p>
                                         </div>
                                     </div>
 
@@ -2190,7 +2190,7 @@ function submit() {
                                         <span class="relative mt-1 h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px] border-2 border-white bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.16)]"></span>
                                         <div class="min-w-0 flex-1">
                                         <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-500">Destino</p>
-                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-base">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
+                                        <p class="mt-0.5 truncate text-sm font-semibold text-arka-ink">{{ destinationAddress || 'Destino marcado en el mapa' }}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -2205,11 +2205,11 @@ function submit() {
                                      calculándose tramo por tramo tal cual, esto es
                                      solo para que el número que lee el cliente
                                      represente el viaje entero, no un pedazo. -->
-                                <p v-if="routeDistanceKm != null" class="ml-[26px] mt-2 flex items-center gap-1.5 text-xs text-arka-base/50">
+                                <p v-if="routeDistanceKm != null" class="ml-[26px] mt-2 flex items-center gap-1.5 text-xs text-arka-ink/50">
                                     <span class="inline-block h-1 w-1 rounded-full bg-arka-primary"></span>
                                     {{ totalTripDistanceKm.toFixed(1) }} km · {{ Math.round(totalTripDurationMin) }} min estimados
                                 </p>
-                                <p v-else-if="originLat != null && destinationLat != null" class="ml-[26px] mt-2 text-xs text-arka-base/50">
+                                <p v-else-if="originLat != null && destinationLat != null" class="ml-[26px] mt-2 text-xs text-arka-ink/50">
                                     Calculando recorrido…
                                 </p>
                             </div>
@@ -2220,7 +2220,7 @@ function submit() {
                                 <button
                                     id="swap-origin-destination"
                                     type="button"
-                                    class="grid h-8 w-8 place-items-center rounded-full border border-black/[0.06] text-arka-base/50 transition hover:bg-[#F5F7F6] hover:text-arka-base"
+                                    class="grid h-8 w-8 place-items-center rounded-full border border-black/[0.06] text-arka-ink/50 transition hover:bg-[#F5F7F6] hover:text-arka-ink"
                                     aria-label="Invertir recoger y destino"
                                     title="Invertir recoger y destino"
                                     :disabled="originLat == null || destinationLat == null"
@@ -2232,7 +2232,7 @@ function submit() {
                                 </button>
                                 <button
                                     type="button"
-                                    class="shrink-0 rounded-full border border-black/[0.06] px-3.5 py-2 text-xs font-semibold text-arka-base/70 transition hover:bg-[#F5F7F6] hover:text-arka-base"
+                                    class="shrink-0 rounded-full border border-black/[0.06] px-3.5 py-2 text-xs font-semibold text-arka-ink/70 transition hover:bg-[#F5F7F6] hover:text-arka-ink"
                                     @click="backToDestinationStep"
                                 >
                                     Cambiar
@@ -2243,14 +2243,14 @@ function submit() {
                         <!-- Decisiones principales del viaje siempre visibles. Se
                              ubican junto al recorrido porque aplican a cualquier
                              conductor o cooperativa que el cliente elija después. -->
-                        <div class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 border-t border-arka-base/[0.07] pt-3">
+                        <div class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 border-t border-arka-ink/[0.07] pt-3">
                             <div class="min-w-0">
-                                <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-base/45">Forma de pago</p>
+                                <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-ink/45">Forma de pago</p>
                                 <div class="grid grid-cols-2 gap-1 rounded-xl bg-[#F3F6F5] p-1 text-xs">
                                     <button
                                         type="button"
                                         class="flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 font-semibold transition"
-                                        :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-base shadow-sm ring-1 ring-black/[0.04]' : 'text-arka-base/45 hover:text-arka-base/70'"
+                                        :class="paymentMethod === 'efectivo' ? 'bg-white text-arka-ink shadow-sm ring-1 ring-black/[0.04]' : 'text-arka-ink/45 hover:text-arka-ink/70'"
                                         @click="paymentMethod = 'efectivo'"
                                     >
                                         <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -2263,7 +2263,7 @@ function submit() {
                                     <button
                                         type="button"
                                         class="flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 font-semibold transition"
-                                        :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-base shadow-sm ring-1 ring-black/[0.04]' : 'text-arka-base/45 hover:text-arka-base/70'"
+                                        :class="paymentMethod === 'transferencia' ? 'bg-white text-arka-ink shadow-sm ring-1 ring-black/[0.04]' : 'text-arka-ink/45 hover:text-arka-ink/70'"
                                         @click="paymentMethod = 'transferencia'"
                                     >
                                         <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -2276,11 +2276,11 @@ function submit() {
                             </div>
 
                             <div>
-                                <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-base/45">Personas</p>
+                                <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-arka-ink/45">Personas</p>
                                 <div class="flex h-10 items-center rounded-xl border border-black/[0.06] bg-[#F8FAF9] p-1">
                                     <button
                                         type="button"
-                                        class="grid h-8 w-8 place-items-center rounded-lg text-arka-base/55 transition hover:bg-white hover:text-arka-base disabled:cursor-not-allowed disabled:opacity-30"
+                                        class="grid h-8 w-8 place-items-center rounded-lg text-arka-ink/55 transition hover:bg-white hover:text-arka-ink disabled:cursor-not-allowed disabled:opacity-30"
                                         aria-label="Quitar una persona"
                                         :disabled="passengerCount <= 1"
                                         @click="passengerCount = Math.max(1, passengerCount - 1)"
@@ -2289,7 +2289,7 @@ function submit() {
                                             <path stroke-linecap="round" d="M5 12h14" />
                                         </svg>
                                     </button>
-                                    <span class="min-w-7 text-center text-sm font-bold tabular-nums text-arka-base">{{ passengerCount }}</span>
+                                    <span class="min-w-7 text-center text-sm font-bold tabular-nums text-arka-ink">{{ passengerCount }}</span>
                                     <button
                                         type="button"
                                         class="grid h-8 w-8 place-items-center rounded-lg text-arka-primary transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
@@ -2322,7 +2322,7 @@ function submit() {
                      igual criterio que HomeSearchSheet.vue. -->
                 <div class="p-4 sm:p-6 bg-gray-100 shadow rounded-arka space-y-3">
                     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
-                        <h3 class="text-lg font-medium text-arka-base">Elige tu conductor</h3>
+                        <h3 class="text-lg font-medium text-arka-ink">Elige tu conductor</h3>
 
                         <!-- Pedido explícito del usuario: que el botón de pedir esté
                              también acá arriba — con listas largas se perdía de vista
@@ -2358,7 +2358,7 @@ function submit() {
                             :key="category"
                             type="button"
                             class="w-full flex items-center gap-3 p-3 rounded-arka border transition text-start"
-                            :class="activeCategory === category ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white hover:border-arka-primary/40'"
+                            :class="activeCategory === category ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-ink/10 bg-white hover:border-arka-primary/40'"
                             @click="selectCategory(category)"
                         >
                             <!-- Ícono por categoría (pedido explícito del usuario, con el
@@ -2386,7 +2386,7 @@ function submit() {
 
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center justify-between gap-2">
-                                    <span class="text-arka-base" :class="category === 'fleet' ? 'font-semibold' : 'font-medium'">
+                                    <span class="text-arka-ink" :class="category === 'fleet' ? 'font-semibold' : 'font-medium'">
                                         {{ CATEGORY_META[category].label }}
                                         <span
                                             v-if="category === 'fleet' && categoryCounts.fleet"
@@ -2408,7 +2408,7 @@ function submit() {
                                         >
                                             Agregar conductor →
                                         </span>
-                                        <span v-else class="block text-sm text-arka-base/50">{{ categoryCounts[category] }} ›</span>
+                                        <span v-else class="block text-sm text-arka-ink/50">{{ categoryCounts[category] }} ›</span>
                                         <span
                                             v-if="formattedStartingPrice(category)"
                                             class="mt-0.5 flex items-center justify-end gap-1 text-[11px] font-semibold text-arka-primary"
@@ -2420,7 +2420,7 @@ function submit() {
                                         </span>
                                     </span>
                                 </div>
-                                <p class="text-xs text-arka-base/50">{{ CATEGORY_META[category].hint }}</p>
+                                <p class="text-xs text-arka-ink/50">{{ CATEGORY_META[category].hint }}</p>
                             </div>
                         </button>
                     </div>
@@ -2432,16 +2432,16 @@ function submit() {
                          <select> de antes. -->
                     <div v-if="activeCategory === 'cooperative'" class="space-y-2 pt-1">
                         <div class="relative">
-                            <input v-model="cooperativeSearch" type="search" placeholder="Buscar cooperativa por nombre" class="w-full rounded-arka border-arka-base/10 bg-white px-4 py-3 text-sm text-arka-base focus:border-arka-primary focus:ring-arka-primary" />
+                            <input v-model="cooperativeSearch" type="search" placeholder="Buscar cooperativa por nombre" class="w-full rounded-arka border-arka-ink/10 bg-white px-4 py-3 text-sm text-arka-ink focus:border-arka-primary focus:ring-arka-primary" />
                         </div>
-                        <p v-if="!cooperatives.length" class="text-sm text-arka-base/50 py-2">
+                        <p v-if="!cooperatives.length" class="text-sm text-arka-ink/50 py-2">
                             Todavía no tiene cooperativas en su red.
                         </p>
                         <div
                             v-for="cooperative in filteredCooperatives"
                             :key="cooperative.id"
                             class="flex items-center justify-between gap-3 p-3 rounded-arka border cursor-pointer"
-                            :class="selectedCooperativeId === cooperative.id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white'"
+                            :class="selectedCooperativeId === cooperative.id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-ink/10 bg-white'"
                             role="radio"
                             :aria-checked="selectedCooperativeId === cooperative.id"
                             tabindex="0"
@@ -2451,7 +2451,7 @@ function submit() {
                         >
                             <span class="flex min-w-0 items-center gap-3">
                                 <input type="radio" :value="cooperative.id" v-model="selectedCooperativeId" class="text-arka-primary" tabindex="-1" aria-hidden="true" />
-                                <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-arka-base/10 bg-arka-primary/10">
+                                <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-arka-ink/10 bg-arka-primary/10">
                                     <img
                                         v-if="cooperative.logo_url"
                                         :src="cooperative.logo_url"
@@ -2464,7 +2464,7 @@ function submit() {
                                 </span>
                                 <span class="min-w-0">
                                     <span class="flex min-w-0 items-center gap-2">
-                                        <span class="truncate font-medium text-arka-base">{{ cooperative.name }}</span>
+                                        <span class="truncate font-medium text-arka-ink">{{ cooperative.name }}</span>
                                         <span
                                             v-if="recommendedCooperative?.id === cooperative.id"
                                             class="shrink-0 rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-arka-primary"
@@ -2500,9 +2500,9 @@ function submit() {
                                     </a>
                                 </span>
                             </span>
-                            <span class="shrink-0 text-right text-sm text-arka-base/50">{{ cooperative.active_driver_memberships_count }} unidades<br><small v-if="cooperative.distance_km != null">{{ cooperative.distance_km }} km · ~{{ Math.max(1, Math.ceil(cooperative.distance_km / 0.45)) }} min desde el origen</small></span>
+                            <span class="shrink-0 text-right text-sm text-arka-ink/50">{{ cooperative.active_driver_memberships_count }} unidades<br><small v-if="cooperative.distance_km != null">{{ cooperative.distance_km }} km · ~{{ Math.max(1, Math.ceil(cooperative.distance_km / 0.45)) }} min desde el origen</small></span>
                         </div>
-                        <p v-if="cooperatives.length" class="text-xs text-arka-base/50">
+                        <p v-if="cooperatives.length" class="text-xs text-arka-ink/50">
                             Dejamos seleccionada la opción recomendada por precio estimado y cercanía. Puede cambiarla antes de pedir.
                         </p>
                     </div>
@@ -2511,12 +2511,12 @@ function submit() {
                          esa categoría (sección 33: quién es, si es de confianza,
                          cuánto tarda, cuánto cuesta, qué vehículo tiene). -->
                     <div v-else-if="activeCategory" class="space-y-3 pt-1">
-                        <p v-if="!driversWithDistance.length" class="text-sm text-arka-base/50 py-2">
+                        <p v-if="!driversWithDistance.length" class="text-sm text-arka-ink/50 py-2">
                             0 disponibles ahora en esta categoría para {{ passengerCount }} pasajero(s){{ needsTrunk ? ' con cajuela' : '' }}.
                             <button
                                 v-if="nextNonEmptyCategory(activeCategory)"
                                 type="button"
-                                class="underline hover:text-arka-base"
+                                class="underline hover:text-arka-ink"
                                 @click="activeCategory = nextNonEmptyCategory(activeCategory)"
                             >
                                 Probar con {{ CATEGORY_META[nextNonEmptyCategory(activeCategory)].label.toLowerCase() }}.
@@ -2526,17 +2526,17 @@ function submit() {
                         <template v-else>
                             <label
                                 class="flex items-center gap-3 p-3 rounded-arka border cursor-pointer"
-                                :class="selectedDriverId === WHOLE_FLEET ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white'"
+                                :class="selectedDriverId === WHOLE_FLEET ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-ink/10 bg-white'"
                             >
                                 <input type="radio" :value="WHOLE_FLEET" v-model="selectedDriverId" class="text-arka-primary" @change="step = 'confirm'" />
-                                <span class="text-arka-base font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</span>
+                                <span class="text-arka-ink font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</span>
                             </label>
 
                             <!-- Pedido explícito del usuario: no había ningún orden claro
                                  con flotas grandes — el disponible siempre va primero,
                                  esto solo cambia el desempate entre ellos. -->
-                            <div class="flex items-center justify-between gap-3 rounded-arka border border-arka-base/10 bg-white p-2.5">
-                                <span class="flex shrink-0 items-center gap-1.5 text-xs font-medium text-arka-base/55">
+                            <div class="flex items-center justify-between gap-3 rounded-arka border border-arka-ink/10 bg-white p-2.5">
+                                <span class="flex shrink-0 items-center gap-1.5 text-xs font-medium text-arka-ink/55">
                                     <svg class="h-4 w-4 text-arka-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                         <path d="M3 5.25A1.25 1.25 0 0 1 4.25 4h15.5a1.25 1.25 0 1 1 0 2.5H4.25A1.25 1.25 0 0 1 3 5.25ZM6 12a1.25 1.25 0 0 1 1.25-1.25h9.5a1.25 1.25 0 1 1 0 2.5h-9.5A1.25 1.25 0 0 1 6 12Zm4.25 6.75a1.25 1.25 0 1 1 0-2.5h3.5a1.25 1.25 0 1 1 0 2.5h-3.5Z" />
                                     </svg>
@@ -2562,7 +2562,7 @@ function submit() {
                                 :key="`${driver.source}-${driver.user_id}`"
                                 class="flex items-center justify-between gap-3 p-3 rounded-arka border cursor-pointer"
                                 :class="[
-                                    selectedDriverId === driver.user_id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-base/10 bg-white',
+                                    selectedDriverId === driver.user_id ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-ink/10 bg-white',
                                     STATUS_STYLE[driver.status].textClass,
                                     driver.outOfRange ? 'opacity-50 grayscale' : '',
                                 ]"
@@ -2589,7 +2589,7 @@ function submit() {
                                 </span>
                                 <span class="min-w-0 flex-1">
                                     <span class="flex items-center gap-1.5 flex-wrap">
-                                        <span class="text-arka-base font-medium">{{ driver.name }}</span>
+                                        <span class="text-arka-ink font-medium">{{ driver.name }}</span>
                                         <span
                                             v-if="driver.source === 'public'"
                                             class="px-1.5 py-0.5 rounded text-[10px] font-medium"
@@ -2597,11 +2597,11 @@ function submit() {
                                         >
                                             {{ tierLabel(driver.tier) }}
                                         </span>
-                                        <span v-if="driver.review_count > 0" class="text-xs text-arka-base/60">
+                                        <span v-if="driver.review_count > 0" class="text-xs text-arka-ink/60">
                                             ★ {{ Number(driver.average_rating).toFixed(1) }}
                                         </span>
                                     </span>
-                                    <span class="block text-xs text-arka-base/50">
+                                    <span class="block text-xs text-arka-ink/50">
                                         {{ driver.outOfRange ? 'Fuera de su zona de cobertura' : STATUS_STYLE[driver.status].label }}
                                     </span>
                                     <DriverCategoryBadge class="mt-1" :label="driver.public_category_label" />
@@ -2609,7 +2609,7 @@ function submit() {
                                          saber qué esperar antes de pedirle la carrera. Placa
                                          tapada, no completa (confidencialidad, ver
                                          DriverProfile::maskedPlate()). -->
-                                    <span v-if="driver.vehicle_make" class="block text-xs text-arka-base/40 truncate">
+                                    <span v-if="driver.vehicle_make" class="block text-xs text-arka-ink/40 truncate">
                                         {{ driver.vehicle_make }} {{ driver.vehicle_model }} {{ driver.vehicle_color }}
                                         <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
                                         · {{ driver.vehicle_plate }}
@@ -2623,10 +2623,10 @@ function submit() {
                                      privacidad... los km cercano manejemos minutos mejor para la
                                      distancia"): nunca km exacto hasta un conductor puntual. -->
                                 <span class="text-right shrink-0">
-                                    <span v-if="estimatedTotalPriceForDriver(driver) != null" class="block text-sm font-semibold text-arka-base">
+                                    <span v-if="estimatedTotalPriceForDriver(driver) != null" class="block text-sm font-semibold text-arka-ink">
                                         ${{ estimatedTotalPriceForDriver(driver).toFixed(2) }}
                                     </span>
-                                    <span v-if="driver.etaMinutes != null" class="block text-xs text-arka-base/50">{{ driver.etaMinutes }} min</span>
+                                    <span v-if="driver.etaMinutes != null" class="block text-xs text-arka-ink/50">{{ driver.etaMinutes }} min</span>
                                 </span>
                             </label>
 
@@ -2634,13 +2634,13 @@ function submit() {
                                  que scrollear una lista de 20+ conductores. -->
                             <div v-if="totalDriverPages > 1" class="flex items-center justify-between gap-2 text-sm">
                                 <SecondaryButton :disabled="currentPage === 1" @click="currentPage--">Anterior</SecondaryButton>
-                                <span class="text-arka-base/50">Página {{ currentPage }} de {{ totalDriverPages }}</span>
+                                <span class="text-arka-ink/50">Página {{ currentPage }} de {{ totalDriverPages }}</span>
                                 <SecondaryButton :disabled="currentPage === totalDriverPages" @click="currentPage++">Siguiente</SecondaryButton>
                             </div>
                         </template>
                     </div>
 
-                    <p v-if="!categoryCounts.fleet && !categoryCounts.cooperative && !categoryCounts.public" class="text-sm text-arka-base/50 py-2">
+                    <p v-if="!categoryCounts.fleet && !categoryCounts.cooperative && !categoryCounts.public" class="text-sm text-arka-ink/50 py-2">
                         Todavía no tiene conductores acá.
                         <a :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">Vaya a Mi Flota para invitar a alguno</a>
                         o mire el
@@ -2672,7 +2672,7 @@ function submit() {
                             />
                         </span>
                         <div class="min-w-0 flex-1">
-                            <p class="text-arka-base font-medium flex items-center gap-1.5 flex-wrap">
+                            <p class="text-arka-ink font-medium flex items-center gap-1.5 flex-wrap">
                                 {{ selectedDriverInfo.name }}
                                 <span
                                     v-if="selectedDriverInfo.source === 'public'"
@@ -2681,11 +2681,11 @@ function submit() {
                                 >
                                     {{ tierLabel(selectedDriverInfo.tier) }}
                                 </span>
-                                <span v-if="selectedDriverInfo.review_count > 0" class="text-xs text-arka-base/60">
+                                <span v-if="selectedDriverInfo.review_count > 0" class="text-xs text-arka-ink/60">
                                     ★ {{ Number(selectedDriverInfo.average_rating).toFixed(1) }}
                                 </span>
                             </p>
-                            <p v-if="selectedDriverInfo.vehicle_make" class="text-sm text-arka-base/50 truncate">
+                            <p v-if="selectedDriverInfo.vehicle_make" class="text-sm text-arka-ink/50 truncate">
                                 {{ selectedDriverInfo.vehicle_make }} {{ selectedDriverInfo.vehicle_model }} · {{ selectedDriverInfo.vehicle_plate }}
                             </p>
                             <DriverCategoryBadge class="mt-1" :label="selectedDriverInfo.public_category_label" />
@@ -2701,12 +2701,12 @@ function submit() {
                         </span>
                     </div>
                     <div v-else-if="selectedCooperativeInfo">
-                        <p class="text-arka-base font-medium">{{ selectedCooperativeInfo.name }}</p>
-                        <p class="text-sm text-arka-base/50">Cooperativa · asigna una unidad verificada</p>
+                        <p class="text-arka-ink font-medium">{{ selectedCooperativeInfo.name }}</p>
+                        <p class="text-sm text-arka-ink/50">Cooperativa · asigna una unidad verificada</p>
                     </div>
                     <div v-else>
-                        <p class="text-arka-base font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</p>
-                        <p class="text-sm text-arka-base/50">Se ofrece primero al más cercano</p>
+                        <p class="text-arka-ink font-medium">{{ WHOLE_POOL_LABEL[sourceMode] }}</p>
+                        <p class="text-sm text-arka-ink/50">Se ofrece primero al más cercano</p>
                     </div>
 
                     <p v-if="!selectedDriverStillFits" class="text-xs text-arka-danger">
@@ -2717,32 +2717,32 @@ function submit() {
                     <!-- Precio (sección 5): estimado a partir de la distancia y la
                          tarifa, desglosado y editable — el cliente puede aceptarlo o
                          contraofertar. -->
-                    <div v-if="estimatedPrice != null" class="pt-2 border-t border-arka-base/10 space-y-2">
+                    <div v-if="estimatedPrice != null" class="pt-2 border-t border-arka-ink/10 space-y-2">
                         <!-- Desglose por parada (pedido explícito del usuario: "cada
                              parada se calcula diferente e individual") — cada tramo
                              con su propio precio, antes del tramo final. -->
-                        <div v-for="(stop, index) in stopsWithPrices" :key="index" class="flex items-center justify-between text-sm text-arka-base/50">
+                        <div v-for="(stop, index) in stopsWithPrices" :key="index" class="flex items-center justify-between text-sm text-arka-ink/50">
                             <span>Parada {{ index + 1 }}{{ stop.distanceKm != null ? ` · ${stop.distanceKm.toFixed(1)} km` : '' }}</span>
-                            <span class="text-arka-base font-medium">{{ stop.price != null ? `$${stop.price.toFixed(2)}` : 'Calculando…' }}</span>
+                            <span class="text-arka-ink font-medium">{{ stop.price != null ? `$${stop.price.toFixed(2)}` : 'Calculando…' }}</span>
                         </div>
 
-                        <div class="flex items-center justify-between text-sm text-arka-base/50">
+                        <div class="flex items-center justify-between text-sm text-arka-ink/50">
                             <!-- Si el mínimo configurado ya supera lo que daría distancia ×
                                  tarifa, mostrar ese cálculo sería engañoso — no es lo que se
                                  termina cobrando (fix reportado por el usuario). -->
                             <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
                             <span v-else>{{ realDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km{{ stops.length ? ' (tramo final)' : '' }}</span>
-                            <span class="text-arka-base font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
+                            <span class="text-arka-ink font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
                         </div>
 
-                        <div v-if="stopsTotalPrice != null" class="flex items-center justify-between text-sm font-semibold pt-1 border-t border-arka-base/10">
-                            <span class="text-arka-base">Total del recorrido</span>
+                        <div v-if="stopsTotalPrice != null" class="flex items-center justify-between text-sm font-semibold pt-1 border-t border-arka-ink/10">
+                            <span class="text-arka-ink">Total del recorrido</span>
                             <span class="text-arka-primary-bright">${{ estimatedTotalPrice.toFixed(2) }}</span>
                         </div>
 
                         <label class="flex items-center gap-2">
                             <input type="checkbox" v-model="useCustomPrice" class="text-arka-primary rounded" />
-                            <span class="text-sm text-arka-base">Proponer otro monto en vez del estimado</span>
+                            <span class="text-sm text-arka-ink">Proponer otro monto en vez del estimado</span>
                         </label>
 
                         <TextInput
@@ -2774,7 +2774,7 @@ function submit() {
                              showsPickupSurchargeNotice). El conductor sigue
                              pudiendo decidir no cobrarlo al recibir la solicitud —
                              esto es un estimado, no una promesa de cobro. -->
-                        <p v-if="showsPickupSurchargeNotice" class="text-xs italic text-emerald-600 dark:text-emerald-400">
+                        <p v-if="showsPickupSurchargeNotice" class="text-xs italic text-emerald-600 dark:text-emerald-700">
                             🍃 Tu conductor viene desde más lejos. El total incluye un aporte por su desplazamiento.
                         </p>
                     </div>

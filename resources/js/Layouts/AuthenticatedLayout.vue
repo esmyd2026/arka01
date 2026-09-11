@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AdminNavIcon from '@/Components/AdminNavIcon.vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import ThemeToggle from '@/Components/ThemeToggle.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import BottomSheet from '@/Components/BottomSheet.vue';
@@ -532,7 +533,7 @@ onBeforeUnmount(() => {
         >
             <span class="block text-sm font-semibold text-arka-text">Soporte</span>
             <span class="block mt-1 text-sm text-arka-text-muted">{{ adminSupportAlert.message }}</span>
-            <span class="block mt-2 text-xs font-medium text-red-400">Tocar para atender</span>
+            <span class="block mt-2 text-xs font-medium text-red-600">Tocar para atender</span>
         </button>
         <!-- Bug reportado por el usuario: invitación de flota (en cualquiera
              de las dos direcciones) no avisaba con sonido fuera de
@@ -553,8 +554,8 @@ onBeforeUnmount(() => {
         <nav
             :class="
                 transparentNav
-                    ? 'fixed top-0 inset-x-0 z-50 bg-arka-base/65 backdrop-blur-md border-b border-white/5 sm:static sm:bg-arka-card sm:backdrop-blur-none sm:border-arka-text-muted/10'
-                    : 'bg-arka-card border-b border-arka-text-muted/10'
+                    ? 'fixed top-0 inset-x-0 z-50 bg-arka-base/65 backdrop-blur-md border-b border-arka-border sm:static sm:bg-arka-card sm:backdrop-blur-none sm:border-arka-border'
+                    : 'bg-arka-card border-b border-arka-border'
             "
         >
             <!-- Primary Navigation Menu -->
@@ -698,6 +699,9 @@ onBeforeUnmount(() => {
                             </svg>
                         </button>
 
+                        <!-- Selector claro/oscuro visible para clientes y conductores. -->
+                        <ThemeToggle />
+
                         <!-- Accesos rápidos en grilla — solo en escritorio: en móvil esta
                              misma lista ya la abre el botón central (FAB) de la barra
                              inferior, así que repetirla acá arriba era la misma opción
@@ -764,14 +768,14 @@ onBeforeUnmount(() => {
                                         <UserAvatar :user="$page.props.auth.user" />
                                         <span
                                             v-if="notificationSummary.total > 0"
-                                            class="absolute -right-2 -top-2 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-arka-primary px-1 text-[10px] font-extrabold leading-none text-arka-base ring-2 ring-arka-card"
+                                            class="absolute -right-2 -top-2 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-arka-primary px-1 text-[10px] font-extrabold leading-none text-white ring-2 ring-arka-card"
                                             :aria-label="`${notificationSummary.total} notificaciones pendientes`"
                                         >{{ notificationCountLabel }}</span>
                                     </button>
                                 </template>
 
                                 <template #content>
-                                    <div class="px-4 py-3 border-b border-arka-text-muted/10">
+                                    <div class="px-4 py-3 border-b border-arka-border">
                                         <p class="text-sm text-arka-text font-medium truncate">{{ $page.props.auth.user.full_name }}</p>
                                         <p class="text-xs text-arka-text-muted truncate mb-2">{{ $page.props.auth.user.email }}</p>
 
@@ -855,7 +859,7 @@ onBeforeUnmount(() => {
                                             </p>
                                         </div>
                                     </div>
-                                    <div class="border-b border-arka-text-muted/10 px-3 py-3">
+                                    <div class="border-b border-arka-border px-3 py-3">
                                         <div class="mb-2 flex items-center justify-between gap-3 px-1">
                                             <span class="text-xs font-semibold text-arka-text">Notificaciones</span>
                                             <span class="rounded-full bg-arka-primary/15 px-2 py-0.5 text-[10px] font-bold text-arka-primary-bright">
@@ -869,7 +873,7 @@ onBeforeUnmount(() => {
                                                 :href="item.url"
                                                 class="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-arka-base"
                                             >
-                                                <span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-arka-primary text-[11px] font-extrabold text-arka-base">
+                                                <span class="flex h-7 min-w-7 items-center justify-center rounded-full bg-arka-primary text-[11px] font-extrabold text-white">
                                                     {{ item.count > 99 ? '99+' : item.count }}
                                                 </span>
                                                 <span class="min-w-0 flex-1">
@@ -991,7 +995,7 @@ onBeforeUnmount(() => {
              con un botón central flotante para accesos rápidos (preferencia de diseño del usuario). -->
         <nav
             v-if="!hideBottomNav"
-            class="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-arka-card border-t border-arka-text-muted/10 flex items-stretch"
+            class="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-arka-card border-t border-arka-border flex items-stretch"
             style="padding-bottom: env(safe-area-inset-bottom)"
         >
             <!-- Tabs a la izquierda del botón central. La cantidad de tabs visibles
@@ -1037,7 +1041,7 @@ onBeforeUnmount(() => {
                         </svg>
                         <span
                             v-if="$page.props.auth.pendingRideRequestsCount > 0"
-                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
+                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-white text-[10px] font-bold flex items-center justify-center"
                         >
                             {{ $page.props.auth.pendingRideRequestsCount }}
                         </span>
@@ -1114,7 +1118,7 @@ onBeforeUnmount(() => {
                         </svg>
                         <span
                             v-if="$page.props.auth.pendingFleetInvitationsCount > 0"
-                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-arka-base text-[10px] font-bold flex items-center justify-center"
+                            class="absolute -top-1 -right-2 h-4 w-4 rounded-full bg-arka-primary text-white text-[10px] font-bold flex items-center justify-center"
                         >
                             {{ $page.props.auth.pendingFleetInvitationsCount }}
                         </span>
@@ -1148,7 +1152,7 @@ onBeforeUnmount(() => {
                         </svg>
                         <span
                             v-if="notificationSummary.total > 0"
-                            class="absolute -right-2 -top-1.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-arka-primary px-1 text-[9px] font-extrabold leading-none text-arka-base ring-2 ring-arka-card"
+                            class="absolute -right-2 -top-1.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-arka-primary px-1 text-[9px] font-extrabold leading-none text-white ring-2 ring-arka-card"
                             :aria-label="`${notificationSummary.total} notificaciones pendientes`"
                         >{{ notificationCountLabel }}</span>
                     </span>
@@ -1164,7 +1168,7 @@ onBeforeUnmount(() => {
                 <button
                     type="button"
                     @click="showingQuickActions = true"
-                    class="-mt-6 h-14 w-14 rounded-full bg-arka-primary text-arka-base shadow-lg shadow-arka-primary/30 flex items-center justify-center active:scale-95 transition-transform pointer-events-auto"
+                    class="-mt-6 h-14 w-14 rounded-full bg-arka-primary text-white shadow-lg shadow-arka-primary/30 flex items-center justify-center active:scale-95 transition-transform pointer-events-auto"
                     aria-label="Accesos rápidos"
                 >
                     <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1446,7 +1450,7 @@ onBeforeUnmount(() => {
                     </button>
                     <button
                         type="button"
-                        class="px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-sm font-medium"
+                        class="px-4 py-2 rounded-arka bg-arka-primary text-white text-sm font-medium"
                         @click="showingHelp = false"
                     >
                         Entendido

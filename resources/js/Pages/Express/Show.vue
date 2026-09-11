@@ -202,7 +202,7 @@ function submitIncident() {
                     class="p-4 sm:p-6 bg-arka-card shadow rounded-arka"
                 >
                     <h3 class="text-lg font-medium text-arka-text mb-4">Pedidos para compartir su Expreso</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li
                             v-for="c in expressRoute.companions.filter((c) => c.status === 'pending')"
                             :key="c.id"
@@ -223,7 +223,7 @@ function submitIncident() {
                     class="p-4 sm:p-6 bg-arka-card shadow rounded-arka"
                 >
                     <h3 class="text-lg font-medium text-arka-text mb-2">Acompañantes sumados</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="c in expressRoute.companions.filter((c) => c.status === 'accepted')" :key="c.id" class="py-2 text-sm text-arka-text">
                             {{ c.passenger.name }}
                         </li>
@@ -238,7 +238,7 @@ function submitIncident() {
                 >
                     <h3 class="text-lg font-medium text-arka-warning mb-2">Acompañantes por confirmar</h3>
                     <p class="text-sm text-arka-text-muted mb-4">Revise el punto de recogida y confirme únicamente si puede incluirlo en este Expreso.</p>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li
                             v-for="c in expressRoute.companions.filter((c) => c.status === 'accepted' && c.driver_approval_status === 'pending')"
                             :key="c.id"
@@ -262,7 +262,7 @@ function submitIncident() {
                     class="p-4 sm:p-6 bg-arka-card shadow rounded-arka"
                 >
                     <h3 class="text-lg font-medium text-arka-text mb-4">Postulaciones pendientes</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li
                             v-for="a in expressRoute.applications.filter((a) => a.status === 'pending')"
                             :key="a.id"
@@ -284,7 +284,7 @@ function submitIncident() {
                 <!-- Historial de carreras generadas -->
                 <div v-if="expressRoute.ride_requests.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-4">Carreras generadas</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="rr in expressRoute.ride_requests" :key="rr.id" class="py-3">
                             <div class="flex items-center justify-between gap-4">
                                 <span class="text-sm text-arka-text-muted">{{ new Date(rr.requested_at).toLocaleDateString() }}</span>
@@ -301,7 +301,7 @@ function submitIncident() {
                                 <select
                                     v-if="expressRoute.conditions.length"
                                     v-model="incidentConditionId"
-                                    class="block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm"
+                                    class="block w-full rounded-arka border-arka-border bg-transparent text-arka-text text-sm"
                                 >
                                     <option value="">Queja general (no ligada a una condición puntual)</option>
                                     <option v-for="c in expressRoute.conditions" :key="c.id" :value="c.id">{{ c.description }}</option>

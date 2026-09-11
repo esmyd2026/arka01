@@ -22,7 +22,7 @@ const proofForm = useForm({ payment_proof: null });
 const paymentStatus = computed(() => props.ride.payment_status ?? 'pending');
 const paymentStatusMeta = computed(() => ({
     pending: { label: 'Falta comprobante', classes: 'border-arka-warning/30 bg-arka-warning/10 text-arka-warning' },
-    proof_submitted: { label: 'Comprobante en revisión', classes: 'border-sky-400/30 bg-sky-400/10 text-sky-300' },
+    proof_submitted: { label: 'Comprobante en revisión', classes: 'border-sky-400/30 bg-sky-400/10 text-sky-700' },
     confirmed: { label: 'Pagada', classes: 'border-arka-primary/30 bg-arka-primary/10 text-arka-primary' },
     rejected: { label: 'Comprobante rechazado', classes: 'border-arka-danger/30 bg-arka-danger/10 text-arka-danger' },
 }[paymentStatus.value] ?? { label: 'Pago pendiente', classes: 'border-arka-warning/30 bg-arka-warning/10 text-arka-warning' }));
@@ -59,7 +59,7 @@ function uploadProof() {
                 <p class="mt-1 text-sm text-arka-text-muted">El pago se envía a {{ recipient }}.</p>
             </div>
 
-            <p v-if="goesToCooperative" class="rounded-xl border border-arka-primary/20 bg-arka-primary/10 px-3 py-2 text-xs leading-relaxed text-arka-text-muted">
+            <p v-if="goesToCooperative" class="rounded-xl border border-arka-primary/30 bg-arka-primary/10 px-3 py-2 text-xs leading-relaxed text-arka-text-muted">
                 La cooperativa recibe el total y liquida internamente el valor correspondiente al conductor.
             </p>
 
@@ -67,7 +67,7 @@ function uploadProof() {
                 v-for="account in accounts"
                 :key="account.id"
                 class="rounded-xl border p-4"
-                :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-text-muted/15'"
+                :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-border'"
             >
                 <p class="flex items-center gap-1.5 font-semibold text-arka-text">
                     <span v-if="account.is_favorite" class="text-arka-primary" aria-label="Cuenta principal">★</span>
@@ -81,7 +81,7 @@ function uploadProof() {
                 </dl>
             </div>
 
-            <div v-if="goesToCooperative && !isDriver && ride.status === 'completed'" class="border-t border-arka-text-muted/10 pt-4">
+            <div v-if="goesToCooperative && !isDriver && ride.status === 'completed'" class="border-t border-arka-border pt-4">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h4 class="font-semibold text-arka-text">Comprobante</h4>
@@ -108,7 +108,7 @@ function uploadProof() {
                 </form>
 
                 <div v-else class="mt-3 space-y-2">
-                    <a v-if="paymentProofUrl" :href="paymentProofUrl" target="_blank" class="flex w-full items-center justify-center rounded-xl border border-arka-text-muted/20 px-3 py-2.5 text-sm font-semibold text-arka-text hover:border-arka-primary/40">Ver comprobante enviado</a>
+                    <a v-if="paymentProofUrl" :href="paymentProofUrl" target="_blank" class="flex w-full items-center justify-center rounded-xl border border-arka-border px-3 py-2.5 text-sm font-semibold text-arka-text hover:border-arka-primary/40">Ver comprobante enviado</a>
                     <p v-if="paymentStatus === 'proof_submitted'" class="text-center text-xs text-arka-text-muted">La cooperativa lo revisará y le avisará al confirmarlo.</p>
                     <p v-if="paymentStatus === 'confirmed'" class="text-center text-xs font-medium text-arka-primary">Pago verificado por la cooperativa.</p>
                 </div>

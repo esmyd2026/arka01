@@ -111,12 +111,12 @@ function toggleActive(coupon) {
 
                 <template v-for="(list, audience) in { client: clientCoupons, driver: driverCoupons }" :key="audience">
                     <div class="bg-arka-card shadow rounded-arka">
-                        <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                        <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                             <h3 class="text-lg font-medium text-arka-text">Cupones de {{ AUDIENCE_LABEL[audience] }}</h3>
                             <PrimaryButton @click="startCreate(audience)">Nuevo cupón</PrimaryButton>
                         </div>
 
-                        <div class="divide-y divide-arka-text-muted/10">
+                        <div class="divide-y divide-arka-border">
                             <div v-for="coupon in list" :key="coupon.id" class="p-4 sm:p-6">
                                 <div v-if="editingId !== coupon.id" class="flex items-start gap-4">
                                     <img :src="coupon.image_url" :alt="coupon.title" class="h-16 w-28 object-cover rounded-arka shrink-0" />
@@ -163,7 +163,7 @@ function toggleActive(coupon) {
                                         <input
                                             type="file"
                                             accept="image/*"
-                                            class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                            class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white"
                                             @input="form.image = $event.target.files[0]"
                                         />
                                         <InputError class="mt-1" :message="form.errors.image" />
@@ -215,7 +215,7 @@ function toggleActive(coupon) {
                                         type="file"
                                         accept="image/*"
                                         required
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white"
                                         @input="form.image = $event.target.files[0]"
                                     />
                                     <InputError class="mt-1" :message="form.errors.image" />

@@ -99,7 +99,7 @@ function formatDate(value) {
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm">
                                 <thead>
-                                    <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                    <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                         <th class="py-2 pr-3">País</th>
                                         <th class="py-2 pr-3">Provincia</th>
                                         <th class="py-2 pr-3">Ciudad</th>
@@ -108,7 +108,7 @@ function formatDate(value) {
                                         <th class="py-2">Registro</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-arka-text-muted/10">
+                                <tbody class="divide-y divide-arka-border">
                                     <tr v-for="r in registrations" :key="r.id">
                                         <td class="py-2 pr-3 text-arka-text-muted">{{ r.country }}</td>
                                         <td class="py-2 pr-3 text-arka-text-muted">{{ r.province ?? '—' }}</td>
@@ -151,7 +151,7 @@ function formatDate(value) {
                         exactamente con los nombres del catálogo de zonas.
                     </p>
                     <table class="w-full text-sm">
-                        <tbody class="divide-y divide-arka-text-muted/10">
+                        <tbody class="divide-y divide-arka-border">
                             <tr v-for="n in topNeighborhoods" :key="n.registration_neighborhood">
                                 <td class="py-2 text-arka-text">{{ n.registration_neighborhood }}</td>
                                 <td class="py-2 text-right text-arka-text-muted">{{ n.total }} registro(s)</td>

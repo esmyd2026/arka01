@@ -55,19 +55,19 @@ defineProps({
                 <!-- Embudo de adquisición de la portada. Se muestran personas
                      únicas para decidir con datos, no un contador inflado por
                      recargas o dobles clics. -->
-                <section class="overflow-hidden rounded-2xl border border-arka-primary/15 bg-arka-card shadow-sm">
-                    <div class="flex flex-col gap-2 border-b border-arka-text-muted/10 px-5 py-5 sm:flex-row sm:items-end sm:justify-between">
+                <section class="overflow-hidden rounded-2xl border border-arka-primary/25 bg-arka-card shadow-sm">
+                    <div class="flex flex-col gap-2 border-b border-arka-border px-5 py-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-arka-primary">Portada · últimos 30 días</p>
                             <h3 class="mt-1 text-xl font-semibold text-arka-text">Interés en crear una cuenta</h3>
                             <p class="mt-1 text-sm text-arka-text-muted">Qué hicieron los visitantes reales después de ver el llamado.</p>
                         </div>
-                        <span class="w-fit rounded-full border border-arka-primary/20 bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
+                        <span class="w-fit rounded-full border border-arka-primary/30 bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
                             {{ landingCta.conversion_rate }}% de conversión
                         </span>
                     </div>
 
-                    <div class="grid grid-cols-2 divide-x divide-y divide-arka-text-muted/10 sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0">
+                    <div class="grid grid-cols-2 divide-x divide-y divide-arka-border sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0">
                         <div class="p-4 sm:p-5">
                             <p class="text-2xl font-bold text-arka-text">{{ landingCta.unique_visitors_30d }}</p>
                             <p class="mt-1 text-xs text-arka-text-muted">Vieron el llamado</p>
@@ -94,7 +94,7 @@ defineProps({
                         </div>
                     </div>
 
-                    <div class="border-t border-arka-text-muted/10 px-5 pb-5 pt-4">
+                    <div class="border-t border-arka-border px-5 pb-5 pt-4">
                         <div class="flex h-28 items-end gap-1.5" aria-label="Alcance y clics diarios de los últimos 14 días">
                             <div v-for="day in landingCta.daily" :key="day.date" class="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
                                 <div class="relative flex h-20 w-full items-end justify-center rounded-t bg-arka-base/40">
@@ -122,7 +122,7 @@ defineProps({
                                         <th class="pb-1.5 font-medium">Hicieron clic</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-arka-text-muted/10">
+                                <tbody class="divide-y divide-arka-border">
                                     <tr v-for="day in landingCta.daily" :key="day.date">
                                         <td class="py-1.5 pr-3 text-arka-text-muted">{{ day.label }}</td>
                                         <td class="py-1.5 pr-3 font-semibold text-arka-text">{{ day.impressions }}</td>
@@ -156,7 +156,7 @@ defineProps({
                                 <th class="pb-2">Subtotal</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-arka-text-muted/10">
+                        <tbody class="divide-y divide-arka-border">
                             <tr v-for="plan in driverPlans" :key="plan.code">
                                 <td class="py-2 text-arka-text">{{ plan.name }}</td>
                                 <td class="py-2 text-arka-text">{{ plan.subscriber_count }}</td>
@@ -179,7 +179,7 @@ defineProps({
                                 <th class="pb-2">Subtotal</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-arka-text-muted/10">
+                        <tbody class="divide-y divide-arka-border">
                             <tr v-for="plan in clientPlans" :key="plan.code">
                                 <td class="py-2 text-arka-text">{{ plan.name }}</td>
                                 <td class="py-2 text-arka-text">{{ plan.subscriber_count }}</td>
@@ -203,7 +203,7 @@ defineProps({
                                 <th class="pb-2">Subtotal</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-arka-text-muted/10">
+                        <tbody class="divide-y divide-arka-border">
                             <tr v-for="plan in cooperativePlans" :key="plan.code">
                                 <td class="py-2 text-arka-text">{{ plan.name }}</td>
                                 <td class="py-2 text-arka-text">{{ plan.subscriber_count }}</td>

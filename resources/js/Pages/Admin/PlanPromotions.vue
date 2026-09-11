@@ -98,12 +98,12 @@ function toggleActive(promotion) {
                 </p>
 
                 <div class="bg-arka-card shadow rounded-arka">
-                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                         <h3 class="text-lg font-medium text-arka-text">Promociones</h3>
                         <PrimaryButton v-if="plans.length" @click="startCreate">Nueva promoción</PrimaryButton>
                     </div>
 
-                    <div class="divide-y divide-arka-text-muted/10">
+                    <div class="divide-y divide-arka-border">
                         <div v-for="promotion in promotions" :key="promotion.id" class="p-4 sm:p-6">
                             <div v-if="editingId !== promotion.id" class="flex items-start justify-between gap-4">
                                 <div class="flex-1 min-w-0">

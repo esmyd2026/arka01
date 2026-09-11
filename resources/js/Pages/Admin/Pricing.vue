@@ -111,7 +111,7 @@ const submit = () => {
                              poco las tarifas en las horas pico") — dos franjas,
                              mañana y tarde, mismo criterio que el nocturno de
                              arriba. Nunca se suma con el nocturno. -->
-                        <div class="pt-2 border-t border-arka-text-muted/10">
+                        <div class="pt-2 border-t border-arka-border">
                             <InputLabel value="Recargo de hora pico (%)" />
                             <TextInput
                                 type="number"
@@ -165,7 +165,7 @@ const submit = () => {
                              aparte. Sobre el umbral se cobra distancia ×
                              tarifa del conductor × este porcentaje, y el
                              conductor decide si lo aplica al aceptar. -->
-                        <div class="pt-2 border-t border-arka-text-muted/10">
+                        <div class="pt-2 border-t border-arka-border">
                             <InputLabel value="Distancia de recogida a partir de la cual se cobra aparte (km)" />
                             <TextInput
                                 type="number"
@@ -194,7 +194,7 @@ const submit = () => {
                             <InputError class="mt-1" :message="form.errors.pickup_surcharge_percent" />
                         </div>
 
-                        <div class="pt-2 border-t border-arka-text-muted/10">
+                        <div class="pt-2 border-t border-arka-border">
                             <InputLabel value="Minutos sin ubicación antes de marcar a un conductor desconectado" />
                             <TextInput
                                 type="number"

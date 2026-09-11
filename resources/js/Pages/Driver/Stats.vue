@@ -220,7 +220,7 @@ const statusSegments = computed(() => [
                     <div class="overflow-x-auto">
                         <table class="w-full min-w-[860px] border-collapse text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">Fecha</th>
                                     <th class="py-2 pr-3">Cliente</th>
                                     <th class="py-2 pr-3">Origen → Destino</th>
@@ -231,7 +231,7 @@ const statusSegments = computed(() => [
                                     <th class="py-2 pr-3 text-right">Le deben</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10 [font-variant-numeric:tabular-nums]">
+                            <tbody class="divide-y divide-arka-border [font-variant-numeric:tabular-nums]">
                                 <tr v-for="ride in cooperativeRideHistory.data" :key="ride.id">
                                     <td class="py-2 pr-3 text-arka-text-muted whitespace-nowrap">{{ formatDate(ride.date) }}</td>
                                     <td class="py-2 pr-3 text-arka-text">{{ ride.client }}</td>
@@ -271,7 +271,7 @@ const statusSegments = computed(() => [
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">Fecha</th>
                                     <th class="py-2 pr-3">Cliente</th>
                                     <th class="py-2 pr-3">Origen → Destino</th>
@@ -282,7 +282,7 @@ const statusSegments = computed(() => [
                                     <th class="py-2 pr-3">Puntos</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="ride in history.data" :key="ride.id">
                                     <td class="py-2 pr-3 text-arka-text-muted whitespace-nowrap">{{ formatDate(ride.date) }}</td>
                                     <td class="py-2 pr-3 text-arka-text">

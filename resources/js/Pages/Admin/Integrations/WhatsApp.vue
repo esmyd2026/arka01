@@ -74,7 +74,7 @@ const notificationGroups = ['cliente', 'conductor'].map((group) => ({
                     </p>
 
                     <form @submit.prevent="submit" class="space-y-4">
-                        <div class="rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-4 space-y-4">
+                        <div class="rounded-arka border border-arka-primary/30 bg-arka-primary/5 p-4 space-y-4">
                             <div>
                                 <h3 class="font-medium text-arka-text">Operación de carreras por WhatsApp</h3>
                                 <p class="mt-1 text-xs text-arka-text-muted">Estos controles no sustituyen la app. Definen qué puede hacerse dentro de una conversación abierta con el número oficial.</p>
@@ -93,7 +93,7 @@ const notificationGroups = ['cliente', 'conductor'].map((group) => ({
                             </label>
                             <div>
                                 <InputLabel value="Aviso de privacidad para el primer uso" />
-                                <textarea v-model="form.privacy_notice_text" rows="4" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text" placeholder="Explique qué datos se usan para gestionar la solicitud y cómo consultar la política completa." />
+                                <textarea v-model="form.privacy_notice_text" rows="4" class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text" placeholder="Explique qué datos se usan para gestionar la solicitud y cómo consultar la política completa." />
                                 <InputError class="mt-1" :message="form.errors.privacy_notice_text" />
                             </div>
                         </div>
@@ -101,7 +101,7 @@ const notificationGroups = ['cliente', 'conductor'].map((group) => ({
                              mensajes y ayudame a configurar los modulos que yo
                              active de envios de whatsapp... y coloquemos precios
                              estimados... quiero ver indicadores alli" -->
-                        <div class="rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-4 space-y-4">
+                        <div class="rounded-arka border border-arka-primary/30 bg-arka-primary/5 p-4 space-y-4">
                             <div>
                                 <h3 class="font-medium text-arka-text">Notificaciones por WhatsApp</h3>
                                 <p class="mt-1 text-xs text-arka-text-muted">
@@ -145,7 +145,7 @@ const notificationGroups = ['cliente', 'conductor'].map((group) => ({
 
                             <div v-for="group in notificationGroups" :key="group.key">
                                 <p class="text-sm font-medium text-arka-text mb-2">{{ group.label }}</p>
-                                <ul class="divide-y divide-arka-text-muted/10">
+                                <ul class="divide-y divide-arka-border">
                                     <li v-for="type in group.items" :key="type.key" class="py-2.5 flex items-center justify-between gap-3">
                                         <label class="flex items-center gap-3 min-w-0 flex-1">
                                             <input
@@ -200,7 +200,7 @@ const notificationGroups = ['cliente', 'conductor'].map((group) => ({
                             <InputError class="mt-1" :message="form.errors.business_number" />
                         </div>
 
-                        <div class="pt-2 border-t border-arka-text-muted/10">
+                        <div class="pt-2 border-t border-arka-border">
                             <div class="flex items-center justify-between">
                                 <InputLabel for="webhook_verify_token" value="Token de verificación del webhook" />
                                 <span class="text-xs" :class="statusFor(settings.has_webhook_verify_token, envFallback.has_webhook_verify_token).class">
@@ -262,7 +262,7 @@ const notificationGroups = ['cliente', 'conductor'].map((group) => ({
 
                     <p v-if="!auditLogs.length" class="text-sm text-arka-text-muted">Todavía no hay cambios registrados.</p>
 
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <li v-for="log in auditLogs" :key="log.id" class="py-3 text-sm">
                             <div class="flex items-center gap-2">
                                 <UserAvatar :user="log.admin" size-class="h-6 w-6 text-[10px] shrink-0" />

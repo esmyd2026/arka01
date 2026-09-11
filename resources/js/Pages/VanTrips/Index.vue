@@ -215,7 +215,7 @@ function submit() {
                     </ul>
                 </div>
 
-                <ul v-if="trips.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-if="trips.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="trip in trips" :key="trip.id" class="p-4 sm:p-6">
                         <Link :href="route('van-trips.show', trip.id)" class="flex items-center justify-between gap-4">
                             <div>
@@ -263,7 +263,7 @@ function submit() {
                                     <button
                                         type="button"
                                         class="px-2 py-1 rounded-arka"
-                                        :class="pickingPoint === 'origin' ? 'bg-arka-primary text-arka-base' : 'bg-arka-base text-arka-text-muted'"
+                                        :class="pickingPoint === 'origin' ? 'bg-arka-primary text-white' : 'bg-arka-base text-arka-text-muted'"
                                         @click="pickingPoint = 'origin'"
                                     >
                                         Marcar salida
@@ -271,7 +271,7 @@ function submit() {
                                     <button
                                         type="button"
                                         class="px-2 py-1 rounded-arka"
-                                        :class="pickingPoint === 'destination' ? 'bg-arka-primary text-arka-base' : 'bg-arka-base text-arka-text-muted'"
+                                        :class="pickingPoint === 'destination' ? 'bg-arka-primary text-white' : 'bg-arka-base text-arka-text-muted'"
                                         @click="pickingPoint = 'destination'"
                                     >
                                         Marcar llegada
@@ -329,7 +329,7 @@ function submit() {
                              precio") — solo aparece si marcó los dos puntos en el mapa
                              de arriba; si todavía no tiene tarifa/km configurada en su
                              perfil, se muestra igual la distancia, sin el monto. -->
-                        <div v-if="estimatedDistanceKm != null" class="p-4 rounded-arka border border-arka-text-muted/20 space-y-1">
+                        <div v-if="estimatedDistanceKm != null" class="p-4 rounded-arka border border-arka-border space-y-1">
                             <p class="text-sm text-arka-text">
                                 Distancia aproximada entre los puntos marcados: <strong>{{ estimatedDistanceKm.toFixed(1) }} km</strong>
                             </p>
@@ -354,7 +354,7 @@ function submit() {
                             <textarea
                                 v-model="form.description"
                                 rows="3"
-                                class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                                 placeholder="Ej: salida turística al feriado, paradas en el camino, punto de encuentro..."
                             ></textarea>
                         </div>
@@ -381,7 +381,7 @@ function submit() {
                                 type="file"
                                 accept="image/*"
                                 multiple
-                                class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white"
                                 @change="onPhotosSelected"
                             />
                             <InputError class="mt-1" :message="form.errors.photos" />

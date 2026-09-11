@@ -79,7 +79,7 @@ function roleInsightsBlock(role) {
                              generan (ver MIN_SAMPLE_FOR_INSIGHTS en el backend):
                              "el 100% de las cooperativas opinan..." con 1 sola
                              respuesta sería engañoso. -->
-                        <div v-if="role.insights.length" class="p-4 sm:p-6 bg-gradient-to-br from-arka-primary/10 via-arka-card to-arka-card border border-arka-primary/20 shadow rounded-arka">
+                        <div v-if="role.insights.length" class="p-4 sm:p-6 bg-gradient-to-br from-arka-primary/10 via-arka-card to-arka-card border border-arka-primary/30 shadow rounded-arka">
                             <div class="flex items-center justify-between gap-3 flex-wrap">
                                 <p class="text-sm font-semibold text-arka-primary-bright">📢 Para compartir</p>
                                 <button
@@ -124,7 +124,7 @@ function roleInsightsBlock(role) {
                                         <th class="pb-2">%</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-arka-text-muted/10">
+                                <tbody class="divide-y divide-arka-border">
                                     <tr v-for="option in question.options" :key="option.key">
                                         <td class="py-2 text-arka-text">{{ option.label }}</td>
                                         <td class="py-2 text-arka-text-muted">{{ option.count }}</td>

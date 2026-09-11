@@ -80,7 +80,7 @@ function search() {
 
                     <div v-if="fallbackTrips.length">
                         <p class="text-sm text-arka-text-muted font-medium mb-2">Mientras tanto, estos viajes ya están disponibles:</p>
-                        <ul class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                        <ul class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                             <li v-for="trip in fallbackTrips" :key="trip.id" class="p-4 sm:p-6">
                                 <Link :href="route('van-trips.show', trip.id)" class="flex items-center gap-4">
                                     <img
@@ -108,7 +108,7 @@ function search() {
                     </div>
                 </div>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="trip in trips" :key="trip.id" class="p-4 sm:p-6">
                         <Link :href="route('van-trips.show', trip.id)" class="flex items-center gap-4">
                             <img

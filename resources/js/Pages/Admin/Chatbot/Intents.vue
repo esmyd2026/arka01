@@ -189,7 +189,7 @@ async function removeKeyword(keyword) {
                         <textarea
                             v-model="createForm.reply_message"
                             rows="3"
-                            class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                            class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                         ></textarea>
                         <InputError class="mt-1" :message="createForm.errors.reply_message" />
                     </div>
@@ -199,7 +199,7 @@ async function removeKeyword(keyword) {
                     </div>
                 </form>
 
-                <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <div v-for="intent in intents" :key="intent.id" class="p-4 sm:p-6">
                         <div v-if="editingId !== intent.id" class="flex items-start justify-between gap-4">
                             <div class="min-w-0">
@@ -257,7 +257,7 @@ async function removeKeyword(keyword) {
                                 <textarea
                                     v-model="form.reply_message"
                                     rows="4"
-                                    class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                    class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                                 ></textarea>
                                 <InputError class="mt-1" :message="form.errors.reply_message" />
                             </div>
@@ -271,7 +271,7 @@ async function removeKeyword(keyword) {
                         </form>
 
                         <!-- Vocablos -->
-                        <div v-if="expandedId === intent.id" class="mt-4 pt-4 border-t border-arka-text-muted/10 space-y-3">
+                        <div v-if="expandedId === intent.id" class="mt-4 pt-4 border-t border-arka-border space-y-3">
                             <ul v-if="intent.keywords.length" class="flex flex-wrap gap-1.5">
                                 <li
                                     v-for="keyword in intent.keywords"

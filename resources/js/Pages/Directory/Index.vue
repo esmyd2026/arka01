@@ -53,7 +53,7 @@ function invite(driver) {
             <h2 class="font-semibold text-xl text-arka-text leading-tight">Directorio de conductores</h2>
         </template>
 
-        <div class="py-12">
+        <div class="py-6 sm:py-10">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <p class="text-sm text-arka-text-muted">
                     Conductores con visibilidad pública, para cuando nadie de su flota está disponible (sección
@@ -65,8 +65,8 @@ function invite(driver) {
                     <p class="text-arka-text-muted">Todavía no hay conductores públicos para mostrar.</p>
                 </div>
 
-                <div v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
-                    <div v-for="driver in drivers.data" :key="driver.user_id" class="p-4 sm:p-6">
+                <div v-else class="space-y-3">
+                    <div v-for="driver in drivers.data" :key="driver.user_id" class="rounded-2xl border border-arka-border bg-arka-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-arka-primary/45 hover:shadow-md sm:p-6">
                         <div class="flex items-start justify-between gap-4">
                             <UserAvatar :user="driver" size-class="h-12 w-12 text-sm shrink-0" />
                             <div class="flex-1">

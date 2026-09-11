@@ -170,7 +170,7 @@ async function resetDemo() {
 
                     <div v-for="group in quickLinkGroups" :key="group.key">
                         <p class="text-sm font-medium text-arka-text mb-2">{{ group.label }}</p>
-                        <ul class="divide-y divide-arka-text-muted/10">
+                        <ul class="divide-y divide-arka-border">
                             <li v-for="item in group.items" :key="item.route" class="py-2.5">
                                 <label class="flex items-center gap-3">
                                     <input
@@ -213,7 +213,7 @@ async function resetDemo() {
                         </p>
                     </div>
 
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="item in driverRequirements" :key="item.key" class="py-2.5">
                             <label class="flex items-center gap-3">
                                 <input
@@ -269,7 +269,7 @@ async function resetDemo() {
                         />
                     </div>
 
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="item in notificationSounds" :key="item.key" class="py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                             <span class="text-sm text-arka-text flex-1">{{ item.label }}</span>
                             <div class="flex items-center gap-2">

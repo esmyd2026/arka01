@@ -54,7 +54,7 @@ function applyFilter() {
 
                 <p v-if="!tickets.data.length" class="text-sm text-arka-text-muted">No hay tickets con ese filtro.</p>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="ticket in tickets.data" :key="ticket.id">
                         <Link :href="route('admin.support-tickets.show', ticket.id)" class="p-4 sm:p-6 flex items-center gap-4 hover:bg-arka-base/40">
                             <UserAvatar :user="ticket.user" size-class="h-10 w-10 text-sm shrink-0" />

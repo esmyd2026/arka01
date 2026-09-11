@@ -125,7 +125,7 @@ const timeline = [
                     </p>
                     <p v-if="ride.notes" class="text-sm text-arka-text-muted">Notas: {{ ride.notes }}</p>
 
-                    <div v-if="ride.stops.length" class="pt-2 border-t border-arka-text-muted/10">
+                    <div v-if="ride.stops.length" class="pt-2 border-t border-arka-border">
                         <p class="text-sm font-medium text-arka-text-muted mb-1">Paradas</p>
                         <ul class="space-y-1">
                             <li v-for="stop in ride.stops" :key="stop.id" class="text-sm text-arka-text">
@@ -204,7 +204,7 @@ const timeline = [
                 <div v-if="reviews.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h4 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide mb-2">Reseñas</h4>
                     <ul class="space-y-3">
-                        <li v-for="review in reviews" :key="review.id" class="text-sm border-b border-arka-text-muted/10 pb-2 last:border-0 last:pb-0">
+                        <li v-for="review in reviews" :key="review.id" class="text-sm border-b border-arka-border pb-2 last:border-0 last:pb-0">
                             <p class="text-arka-text">
                                 {{ review.reviewer_name }} calificó a {{ review.reviewee_name }} con {{ review.rating }}/5
                             </p>

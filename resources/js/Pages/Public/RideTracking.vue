@@ -75,7 +75,7 @@ const mapMarkers = computed(() => {
     <Head title="Seguimiento en vivo" />
 
     <div class="arka-app-background min-h-screen flex flex-col">
-        <header class="bg-arka-card border-b border-arka-text-muted/10 px-4 py-3">
+        <header class="bg-arka-card border-b border-arka-border px-4 py-3">
             <!-- Bug real reportado por el usuario (con captura de una pantalla
                  parecida): las páginas públicas sin sesión no tenían ninguna
                  salida hacia el resto de la app — acá se abre en un enlace

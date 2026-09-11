@@ -143,7 +143,7 @@ const mapMarkers = computed(() => {
 const locatedDriverCount = computed(() => props.drivers.filter((driver) => driver.lat != null && driver.lng != null).length);
 const driverStatus = {
     active: { label: 'Disponible', dot: 'bg-arka-primary', badge: 'bg-arka-primary/10 text-arka-primary' },
-    in_ride: { label: 'En carrera', dot: 'bg-sky-400', badge: 'bg-sky-400/10 text-sky-300' },
+    in_ride: { label: 'En carrera', dot: 'bg-sky-400', badge: 'bg-sky-400/10 text-sky-700' },
     inactive: { label: 'Inactivo', dot: 'bg-arka-text-muted', badge: 'bg-arka-text-muted/10 text-arka-text-muted' },
 };
 const driverStatusCount = (status) => props.drivers.filter((driver) => driver.operational_status === status).length;
@@ -221,20 +221,20 @@ onBeforeUnmount(() => {
                     La cooperativa aún no puede operar. Estado: <strong>{{ cooperative.status }}</strong>.
                     <Link :href="route('cooperative.profile.edit')" class="ml-1 underline">Revisar perfil y documentos</Link>
                 </div>
-                <nav class="grid grid-cols-3 gap-2 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-2 shadow-lg">
-                    <button type="button" class="relative rounded-xl px-4 py-3 text-left transition sm:px-5" :class="activeView === 'dispatch' ? 'bg-arka-primary text-arka-base shadow' : 'text-arka-text-muted hover:bg-arka-primary/5 hover:text-arka-text'" @click="activeView = 'dispatch'">
+                <nav class="grid grid-cols-3 gap-2 rounded-2xl border border-arka-border bg-arka-card p-2 shadow-lg">
+                    <button type="button" class="relative rounded-xl px-4 py-3 text-left transition sm:px-5" :class="activeView === 'dispatch' ? 'bg-arka-primary text-white shadow' : 'text-arka-text-muted hover:bg-arka-primary/5 hover:text-arka-text'" @click="activeView = 'dispatch'">
                         <span class="block text-xs font-semibold uppercase tracking-[0.12em]">Atención inmediata</span>
                         <span class="mt-0.5 block text-sm font-bold sm:text-base">Asignar carreras</span>
-                        <span v-if="stats.pendingRequests" class="absolute right-3 top-3 grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-xs font-bold" :class="activeView === 'dispatch' ? 'bg-arka-base text-arka-primary' : 'bg-arka-primary text-arka-base'">{{ stats.pendingRequests }}</span>
+                        <span v-if="stats.pendingRequests" class="absolute right-3 top-3 grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-xs font-bold" :class="activeView === 'dispatch' ? 'bg-arka-base text-arka-primary' : 'bg-arka-primary text-white'">{{ stats.pendingRequests }}</span>
                     </button>
-                    <button type="button" class="rounded-xl px-4 py-3 text-left transition sm:px-5" :class="activeView === 'operations' ? 'bg-arka-primary text-arka-base shadow' : 'text-arka-text-muted hover:bg-arka-primary/5 hover:text-arka-text'" @click="activeView = 'operations'">
+                    <button type="button" class="rounded-xl px-4 py-3 text-left transition sm:px-5" :class="activeView === 'operations' ? 'bg-arka-primary text-white shadow' : 'text-arka-text-muted hover:bg-arka-primary/5 hover:text-arka-text'" @click="activeView = 'operations'">
                         <span class="block text-xs font-semibold uppercase tracking-[0.12em]">Supervisión</span>
                         <span class="mt-0.5 block text-sm font-bold sm:text-base">Mapa y operación</span>
                     </button>
                     <Link :href="route('cooperative.wallet')" class="relative rounded-xl px-4 py-3 text-left text-arka-text-muted transition hover:bg-arka-primary/5 hover:text-arka-text sm:px-5">
                         <span class="block text-xs font-semibold uppercase tracking-[0.12em]">Finanzas</span>
                         <span class="mt-0.5 block text-sm font-bold sm:text-base">Pagos y comprobantes</span>
-                        <span v-if="stats.paymentsToReview" class="absolute right-3 top-3 grid h-6 min-w-6 place-items-center rounded-full bg-sky-400 px-1.5 text-xs font-bold text-arka-base">{{ stats.paymentsToReview }}</span>
+                        <span v-if="stats.paymentsToReview" class="absolute right-3 top-3 grid h-6 min-w-6 place-items-center rounded-full bg-sky-400 px-1.5 text-xs font-bold text-arka-ink">{{ stats.paymentsToReview }}</span>
                     </Link>
                 </nav>
 
@@ -246,18 +246,18 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-3">
-                    <Link :href="route('cooperative.drivers.index')" class="rounded-full bg-arka-primary px-4 py-2 text-sm font-semibold text-arka-base">Administrar conductores</Link>
+                    <Link :href="route('cooperative.drivers.index')" class="rounded-full bg-arka-primary px-4 py-2 text-sm font-semibold text-white">Administrar conductores</Link>
                     <!-- Pedido explícito del usuario: "donde la cooperativa
                          ve la trazabilidad de las carreras, cuánto hizo su
                          equipo y cuánto le deben o cuánto ella le debe a su
                          equipo" — antes solo se veía conductor por conductor. -->
-                    <Link :href="route('cooperative.wallet')" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Billetera y trazabilidad</Link>
+                    <Link :href="route('cooperative.wallet')" class="rounded-full border border-arka-border px-4 py-2 text-sm text-arka-text">Billetera y trazabilidad</Link>
                     <!-- Pedido explícito del usuario: "quiero ver mis clientes
                          vinculados... la lista, cantidad de carreras,
                          puntuaccion y desvincular". -->
-                    <Link :href="route('cooperative.clients.index')" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Clientes vinculados</Link>
-                    <Link :href="route('cooperative.profile.edit')" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Perfil y documentos</Link>
-                    <Link :href="route('cooperatives.show', cooperative.public_id)" class="rounded-full border border-arka-text-muted/20 px-4 py-2 text-sm text-arka-text">Perfil público</Link>
+                    <Link :href="route('cooperative.clients.index')" class="rounded-full border border-arka-border px-4 py-2 text-sm text-arka-text">Clientes vinculados</Link>
+                    <Link :href="route('cooperative.profile.edit')" class="rounded-full border border-arka-border px-4 py-2 text-sm text-arka-text">Perfil y documentos</Link>
+                    <Link :href="route('cooperatives.show', cooperative.public_id)" class="rounded-full border border-arka-border px-4 py-2 text-sm text-arka-text">Perfil público</Link>
                 </div>
                 <section>
                     <div class="overflow-hidden rounded-arka bg-arka-card shadow-lg">
@@ -270,7 +270,7 @@ onBeforeUnmount(() => {
                             <div class="flex items-center gap-2">
                                 <button
                                     type="button"
-                                    class="relative inline-flex min-h-[44px] flex-1 items-center gap-3 rounded-full border border-arka-text-muted/15 bg-arka-base/50 px-3 py-2 text-left transition hover:border-arka-primary/40 sm:flex-none"
+                                    class="relative inline-flex min-h-[44px] flex-1 items-center gap-3 rounded-full border border-arka-border bg-arka-base/50 px-3 py-2 text-left transition hover:border-arka-primary/40 sm:flex-none"
                                     role="switch"
                                     :aria-checked="cooperative.automatic_assignment_enabled"
                                     @click="toggleAutomatic"
@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
                                     </span>
                                     <span><span class="block text-[10px] uppercase tracking-wider text-arka-text-muted">Asignación</span><span class="block text-xs font-bold" :class="cooperative.automatic_assignment_enabled ? 'text-arka-primary' : 'text-arka-text'">{{ cooperative.automatic_assignment_enabled ? 'Automática' : 'Manual' }}</span></span>
                                 </button>
-                                <button type="button" class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-arka-text-muted/20 text-sm font-bold text-arka-text-muted transition hover:border-arka-primary/50 hover:text-arka-primary" aria-label="¿Cómo funciona la asignación?" @click="dispatchHelpOpen = !dispatchHelpOpen">?</button>
+                                <button type="button" class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-arka-border text-sm font-bold text-arka-text-muted transition hover:border-arka-primary/50 hover:text-arka-primary" aria-label="¿Cómo funciona la asignación?" @click="dispatchHelpOpen = !dispatchHelpOpen">?</button>
                             </div>
 
                             <div v-if="dispatchHelpOpen" class="absolute right-4 top-[5.5rem] z-20 w-[min(22rem,calc(100%-2rem))] rounded-2xl border border-arka-primary/25 bg-arka-base p-4 text-xs leading-relaxed text-arka-text-muted shadow-2xl sm:right-5 sm:top-[4.75rem]">
@@ -294,17 +294,17 @@ onBeforeUnmount(() => {
                              ahora también visible en el propio ícono del vehículo, no solo
                              en la lista de abajo. -->
                         <FleetMap :markers="mapMarkers" :dark="false" :minimal-style="true" vehicle-status-ring height="360px" />
-                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-arka-text-muted/10 px-4 py-2.5 text-[11px] text-arka-text-muted sm:px-5">
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-arka-border px-4 py-2.5 text-[11px] text-arka-text-muted sm:px-5">
                             <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background:#34d399"></span>Disponible</span>
                             <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background:#38bdf8"></span>En carrera</span>
                             <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full" style="background:#94a3b8"></span>Inactivo</span>
                         </div>
-                        <div class="border-t border-arka-text-muted/10 p-4 sm:p-5">
+                        <div class="border-t border-arka-border p-4 sm:p-5">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div><h4 class="font-semibold text-arka-text">Estado de las unidades</h4><p class="text-xs text-arka-text-muted">Actualización automática cada 15 segundos</p></div>
                                 <div class="flex flex-wrap gap-1.5 text-[11px] font-semibold">
                                     <span class="rounded-full bg-arka-primary/10 px-2.5 py-1 text-arka-primary">{{ driverStatusCount('active') }} disponibles</span>
-                                    <span class="rounded-full bg-sky-400/10 px-2.5 py-1 text-sky-300">{{ driverStatusCount('in_ride') }} en carrera</span>
+                                    <span class="rounded-full bg-sky-400/10 px-2.5 py-1 text-sky-700">{{ driverStatusCount('in_ride') }} en carrera</span>
                                     <span class="rounded-full bg-arka-text-muted/10 px-2.5 py-1 text-arka-text-muted">{{ driverStatusCount('inactive') }} inactivos</span>
                                 </div>
                             </div>
@@ -315,14 +315,14 @@ onBeforeUnmount(() => {
                                     v-for="driver in drivers"
                                     :key="driver.user_id"
                                     :href="route('cooperative.drivers.show', driver.membership_id)"
-                                    class="group flex min-w-0 items-center gap-3 rounded-2xl border border-arka-text-muted/10 bg-arka-base/35 p-3 transition hover:border-arka-primary/35 hover:bg-arka-primary/5"
+                                    class="group flex min-w-0 items-center gap-3 rounded-2xl border border-arka-border bg-arka-base/35 p-3 transition hover:border-arka-primary/35 hover:bg-arka-primary/5"
                                 >
                                     <img v-if="driver.avatar_url" :src="driver.avatar_url" :alt="driver.name" class="h-11 w-11 shrink-0 rounded-full object-cover" />
                                     <span v-else class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-arka-primary/15 text-xs font-bold text-arka-primary">{{ initials(driver.name) }}</span>
                                     <span class="min-w-0 flex-1">
                                         <span class="flex items-center gap-2"><span class="truncate text-sm font-semibold text-arka-text">{{ driver.name }}</span><span v-if="driver.verified" class="text-xs text-arka-primary" title="Conductor verificado">✓</span></span>
                                         <span class="mt-0.5 block truncate text-xs text-arka-text-muted">{{ driver.vehicle || 'Unidad sin detalle' }}{{ driver.plate ? ` · ${driver.plate}` : '' }}</span>
-                                        <span v-if="driver.active_ride" class="mt-1 block truncate text-[11px] text-sky-300">Carrera #{{ driver.active_ride.id }} · {{ driver.active_ride.client_name || 'Cliente' }}</span>
+                                        <span v-if="driver.active_ride" class="mt-1 block truncate text-[11px] text-sky-700">Carrera #{{ driver.active_ride.id }} · {{ driver.active_ride.client_name || 'Cliente' }}</span>
                                         <span v-else class="mt-1 block text-[11px] text-arka-text-muted">{{ lastLocation(driver.location_updated_at) }}</span>
                                     </span>
                                     <span class="shrink-0 text-right">
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
                 </template>
 
                 <section v-if="activeView === 'dispatch'" class="rounded-arka bg-arka-card shadow-lg">
-                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-arka-text-muted/10 p-5">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-arka-border p-5">
                         <div><p class="text-xs font-semibold uppercase tracking-[0.15em] text-arka-primary">Central de despacho</p><h3 class="mt-1 text-lg font-semibold text-arka-text">Solicitudes pendientes</h3></div>
                         <div class="flex items-center gap-2">
                             <button type="button" class="rounded-full border border-arka-primary/30 px-3 py-1.5 text-xs font-semibold text-arka-primary transition hover:bg-arka-primary/10" @click="testDispatchSound">Probar sonido</button>
@@ -346,10 +346,10 @@ onBeforeUnmount(() => {
                     </div>
                     <p v-if="!requests.length" class="p-6 text-sm text-arka-text-muted">No hay solicitudes pendientes.</p>
                     <div v-else class="space-y-4 p-3 sm:p-5">
-                        <article v-for="request in requests" :key="request.id" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/45">
+                        <article v-for="request in requests" :key="request.id" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/45">
                             <div class="p-3.5 sm:p-4">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0"><p class="font-semibold text-arka-text">{{ request.client.name }}</p><p class="mt-1 text-xs text-arka-text-muted">Solicitud #{{ request.id }} · {{ requestDateTimeLabel(request) }}</p><div class="mt-2 flex flex-wrap gap-1.5 text-[11px]"><span class="rounded-full px-2 py-1 font-semibold" :class="scheduleBadge(request).classes">{{ scheduleBadge(request).label }}</span><TrustScoreBadge :trust="request.client_stats.trust" compact /><span class="rounded-full bg-arka-primary/10 px-2 py-1 font-semibold text-arka-primary">{{ request.client_stats.completed_rides }} carreras completadas</span><span v-if="request.client_stats.review_count" class="rounded-full bg-arka-warning/10 px-2 py-1 text-arka-warning">★ {{ request.client_stats.average_rating }} · {{ request.client_stats.review_count }} opiniones</span><span v-if="request.client_stats.cancelled_rides" class="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{{ request.client_stats.cancelled_rides }} canceladas</span><Link :href="route('profiles.show', request.client.public_id)" class="rounded-full border border-arka-text-muted/20 px-2 py-1 text-arka-text-muted hover:text-arka-primary">Ver perfil →</Link></div></div>
+                                    <div class="min-w-0"><p class="font-semibold text-arka-text">{{ request.client.name }}</p><p class="mt-1 text-xs text-arka-text-muted">Solicitud #{{ request.id }} · {{ requestDateTimeLabel(request) }}</p><div class="mt-2 flex flex-wrap gap-1.5 text-[11px]"><span class="rounded-full px-2 py-1 font-semibold" :class="scheduleBadge(request).classes">{{ scheduleBadge(request).label }}</span><TrustScoreBadge :trust="request.client_stats.trust" compact /><span class="rounded-full bg-arka-primary/10 px-2 py-1 font-semibold text-arka-primary">{{ request.client_stats.completed_rides }} carreras completadas</span><span v-if="request.client_stats.review_count" class="rounded-full bg-arka-warning/10 px-2 py-1 text-arka-warning">★ {{ request.client_stats.average_rating }} · {{ request.client_stats.review_count }} opiniones</span><span v-if="request.client_stats.cancelled_rides" class="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{{ request.client_stats.cancelled_rides }} canceladas</span><Link :href="route('profiles.show', request.client.public_id)" class="rounded-full border border-arka-border px-2 py-1 text-arka-text-muted hover:text-arka-primary">Ver perfil →</Link></div></div>
                                     <div class="flex shrink-0 items-center gap-2"><span v-if="fallbackSeconds(request) !== null" class="rounded-full px-2.5 py-1 text-xs font-bold" :class="fallbackSeconds(request) <= 10 ? 'bg-arka-warning/15 text-arka-warning' : 'bg-arka-primary/10 text-arka-primary'">Auto {{ fallbackSeconds(request) }}s</span><button v-if="!request.driver" type="button" class="rounded-full border border-arka-primary/40 px-3 py-1 text-xs font-semibold text-arka-primary" @click="toggleDispatchCard(request.id)">{{ openDispatchCards[request.id] ? 'Cerrar ↑' : 'Asignar →' }}</button></div>
                                 </div>
 
@@ -365,15 +365,15 @@ onBeforeUnmount(() => {
                                     <div class="flex gap-3"><span class="mt-1 h-3 w-3 shrink-0 rounded-sm bg-arka-warning"></span><div class="min-w-0"><p class="text-[11px] uppercase tracking-wide text-arka-text-muted">Destino</p><p class="truncate text-arka-text">{{ request.destination_address || 'Destino sin dirección' }}</p></div></div>
                                 </div>
                                 <div v-if="openDispatchCards[request.id]" class="mt-4 grid grid-cols-3 gap-2">
-                                    <div class="rounded-xl border border-arka-text-muted/10 bg-arka-card px-3 py-2.5">
+                                    <div class="rounded-xl border border-arka-border bg-arka-card px-3 py-2.5">
                                         <p class="text-[10px] font-semibold uppercase tracking-wide text-arka-text-muted">Valor</p>
                                         <p class="mt-0.5 text-base font-bold text-arka-primary">${{ Number(request.current_offered_price ?? 0).toFixed(2) }}</p>
                                     </div>
-                                    <div class="rounded-xl border border-arka-text-muted/10 bg-arka-card px-3 py-2.5">
+                                    <div class="rounded-xl border border-arka-border bg-arka-card px-3 py-2.5">
                                         <p class="text-[10px] font-semibold uppercase tracking-wide text-arka-text-muted">Distancia</p>
                                         <p class="mt-0.5 text-base font-bold text-arka-text">{{ Number(request.distance_km ?? 0).toFixed(1) }} km</p>
                                     </div>
-                                    <div class="rounded-xl border border-arka-text-muted/10 bg-arka-card px-3 py-2.5">
+                                    <div class="rounded-xl border border-arka-border bg-arka-card px-3 py-2.5">
                                         <p class="text-[10px] font-semibold uppercase tracking-wide text-arka-text-muted">Duración est.</p>
                                         <p class="mt-0.5 text-base font-bold text-arka-text">~{{ request.trip_eta_minutes }} min</p>
                                     </div>
@@ -381,25 +381,25 @@ onBeforeUnmount(() => {
                                 <p v-if="request.is_scheduled && openDispatchCards[request.id]" class="mt-3 rounded-xl bg-arka-warning/10 px-3 py-2 text-xs text-arka-warning">Programada: {{ new Date(request.scheduled_at).toLocaleString('es-EC') }}</p>
                             </div>
 
-                            <div v-if="request.status === 'pending' && !request.driver && openDispatchCards[request.id]" class="border-t border-arka-text-muted/10 p-4 sm:p-5">
+                            <div v-if="request.status === 'pending' && !request.driver && openDispatchCards[request.id]" class="border-t border-arka-border p-4 sm:p-5">
                                 <div class="mb-3 flex items-center justify-between"><div><h4 class="text-sm font-semibold text-arka-text">Elija una unidad</h4><p class="text-xs text-arka-text-muted">Ordenadas por cercanía al punto de origen</p></div><span class="text-xs text-arka-text-muted">{{ eligibleDrivers(request).length }} disponibles</span></div>
                                 <p v-if="!eligibleDrivers(request).length" class="rounded-xl border border-arka-warning/30 bg-arka-warning/10 p-3 text-sm text-arka-warning">No hay unidades disponibles. El sistema seguirá verificando automáticamente.</p>
                                 <div v-else class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                    <button v-for="(driver, index) in visibleDrivers(request)" :key="driver.user_id" type="button" class="relative flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition" :class="selectedDrivers[request.id] === driver.user_id ? 'border-arka-primary bg-arka-primary/10 ring-1 ring-arka-primary' : 'border-arka-text-muted/15 bg-arka-card hover:border-arka-primary/50'" @click="selectedDrivers[request.id] = driver.user_id">
-                                        <span v-if="index === 0" class="absolute -right-1 -top-2 rounded-full bg-arka-primary px-2 py-0.5 text-[9px] font-bold uppercase text-arka-base">Recomendado</span>
+                                    <button v-for="(driver, index) in visibleDrivers(request)" :key="driver.user_id" type="button" class="relative flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition" :class="selectedDrivers[request.id] === driver.user_id ? 'border-arka-primary bg-arka-primary/10 ring-1 ring-arka-primary' : 'border-arka-border bg-arka-card hover:border-arka-primary/50'" @click="selectedDrivers[request.id] = driver.user_id">
+                                        <span v-if="index === 0" class="absolute -right-1 -top-2 rounded-full bg-arka-primary px-2 py-0.5 text-[9px] font-bold uppercase text-white">Recomendado</span>
                                         <img v-if="driver.avatar_url" :src="driver.avatar_url" :alt="driver.name" class="h-10 w-10 shrink-0 rounded-full object-cover" /><span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-arka-primary/15 text-xs font-bold text-arka-primary">{{ initials(driver.name) }}</span>
                                         <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold text-arka-text">{{ driver.name }}</span><span class="block truncate text-[11px] text-arka-text-muted">{{ driver.vehicle || 'Unidad registrada' }}{{ driver.plate ? ` · ${driver.plate}` : '' }}</span><span class="mt-1 block text-xs font-semibold text-arka-primary">{{ driver.distance_km != null ? `${driver.distance_km} km · ~${driver.eta_minutes} min` : 'Sin GPS reciente' }}</span></span>
-                                        <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full border" :class="selectedDrivers[request.id] === driver.user_id ? 'border-arka-primary bg-arka-primary text-arka-base' : 'border-arka-text-muted/30'"><span v-if="selectedDrivers[request.id] === driver.user_id">✓</span></span>
+                                        <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full border" :class="selectedDrivers[request.id] === driver.user_id ? 'border-arka-primary bg-arka-primary text-white' : 'border-arka-text-muted/30'"><span v-if="selectedDrivers[request.id] === driver.user_id">✓</span></span>
                                     </button>
                                 </div>
                                 <button v-if="eligibleDrivers(request).length > 3" type="button" class="mt-3 text-xs font-semibold text-arka-primary" @click="expandedRequests[request.id] = !expandedRequests[request.id]">{{ expandedRequests[request.id] ? 'Ver menos unidades' : `Ver las ${eligibleDrivers(request).length} unidades` }}</button>
 
                                 <div class="mt-4 flex flex-col gap-3 rounded-xl bg-arka-card p-3 sm:flex-row sm:items-center sm:justify-between">
                                     <p class="text-xs text-arka-text-muted"><template v-if="selectedDriver(request)"><strong class="text-arka-text">{{ selectedDriver(request).name }}</strong> llegará en aproximadamente {{ selectedDriver(request).eta_minutes ?? '—' }} min.</template><template v-else>Seleccione una unidad para continuar.</template></p>
-                                    <button type="button" class="w-full shrink-0 rounded-full bg-arka-primary px-5 py-2.5 text-sm font-bold text-arka-base disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" :disabled="!selectedDrivers[request.id] || assigningRequests[request.id]" @click="assign(request)">{{ assigningRequests[request.id] ? 'Asignando…' : 'Confirmar asignación →' }}</button>
+                                    <button type="button" class="w-full shrink-0 rounded-full bg-arka-primary px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" :disabled="!selectedDrivers[request.id] || assigningRequests[request.id]" @click="assign(request)">{{ assigningRequests[request.id] ? 'Asignando…' : 'Confirmar asignación →' }}</button>
                                 </div>
                             </div>
-                            <div v-else-if="request.driver" class="border-t border-arka-text-muted/10 bg-arka-primary/5 p-4">
+                            <div v-else-if="request.driver" class="border-t border-arka-border bg-arka-primary/5 p-4">
                                 <div class="flex items-center justify-between gap-3">
                                     <div class="min-w-0">
                                         <p class="text-sm text-arka-text">Esperando respuesta de <strong>{{ request.driver.name }}</strong></p>
@@ -423,7 +423,7 @@ onBeforeUnmount(() => {
                                      quien se la asignaron y la cancelo?"): antes esto no quedaba
                                      visible en ningún lado — antes de esta unidad se le ofreció a
                                      otra(s) que no respondieron o la rechazaron. -->
-                                <ul v-if="request.cooperative_dispatch_log?.length" class="mt-3 space-y-1 border-t border-arka-text-muted/10 pt-2">
+                                <ul v-if="request.cooperative_dispatch_log?.length" class="mt-3 space-y-1 border-t border-arka-border pt-2">
                                     <li v-for="(attempt, index) in request.cooperative_dispatch_log" :key="index" class="text-xs text-arka-text-muted">
                                         Antes se le ofreció a <strong class="text-arka-text">{{ attempt.driver_name ?? 'un conductor que ya no está en la cooperativa' }}</strong> y {{ DISPATCH_OUTCOME_LABEL[attempt.outcome] ?? 'no respondió' }}.
                                     </li>

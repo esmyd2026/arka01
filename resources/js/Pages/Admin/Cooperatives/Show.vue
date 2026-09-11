@@ -91,7 +91,7 @@ function toggleAntiCapture() {
             <section class="rounded-arka bg-arka-card p-6 shadow-xl">
                 <h2 class="text-lg font-semibold text-arka-text">Documentación privada</h2>
                 <div class="mt-4 space-y-3">
-                    <div v-for="document in cooperative.documents" :key="document.id" class="rounded-arka border border-arka-text-muted/10 p-4">
+                    <div v-for="document in cooperative.documents" :key="document.id" class="rounded-arka border border-arka-border p-4">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                             <div class="flex-1"><p class="font-medium text-arka-text">{{ document.label || 'Otro documento' }}</p><p class="text-xs text-arka-text-muted">{{ document.original_name }} · {{ document.status }}</p><p v-if="document.rejection_reason" class="mt-1 text-xs text-arka-danger">{{ document.rejection_reason }}</p></div>
                             <Link :href="route('cooperative.documents.show', document.id)" class="text-sm text-arka-primary">Descargar</Link>
@@ -108,12 +108,12 @@ function toggleAntiCapture() {
                 <div class="mt-4 flex flex-wrap gap-2"><SecondaryButton v-if="cooperative.status === 'pending'" @click="action('review', cooperative.id)">Marcar en revisión</SecondaryButton><PrimaryButton v-if="['pending','in_review','rejected'].includes(cooperative.status)" @click="action('approve', cooperative.id)">Aprobar cooperativa</PrimaryButton><DangerButton v-if="['pending','in_review'].includes(cooperative.status)" :disabled="!reason" @click="action('reject', cooperative.id, true)">Rechazar</DangerButton><DangerButton v-if="cooperative.status === 'approved'" :disabled="!reason" @click="action('suspend', cooperative.id, true)">Suspender</DangerButton><PrimaryButton v-if="cooperative.status === 'suspended'" @click="action('reactivate', cooperative.id)">Reactivar</PrimaryButton></div>
             </section>
 
-            <section class="rounded-arka bg-arka-card p-6 shadow-xl"><h2 class="text-lg font-semibold text-arka-text">Conductores asociados</h2><p v-if="!cooperative.driver_memberships.length" class="mt-3 text-sm text-arka-text-muted">Sin vínculos todavía.</p><div v-else class="mt-3 divide-y divide-arka-text-muted/10"><div v-for="membership in cooperative.driver_memberships" :key="membership.id" class="flex justify-between py-3 text-sm"><span class="text-arka-text">{{ membership.driver.name }}</span><span class="text-arka-text-muted">{{ membership.status }}</span></div></div></section>
+            <section class="rounded-arka bg-arka-card p-6 shadow-xl"><h2 class="text-lg font-semibold text-arka-text">Conductores asociados</h2><p v-if="!cooperative.driver_memberships.length" class="mt-3 text-sm text-arka-text-muted">Sin vínculos todavía.</p><div v-else class="mt-3 divide-y divide-arka-border"><div v-for="membership in cooperative.driver_memberships" :key="membership.id" class="flex justify-between py-3 text-sm"><span class="text-arka-text">{{ membership.driver.name }}</span><span class="text-arka-text-muted">{{ membership.status }}</span></div></div></section>
 
             <section class="rounded-arka bg-arka-card p-6 shadow-xl">
                 <h2 class="text-lg font-semibold text-arka-text">Historial y auditoría</h2>
                 <p v-if="!auditLogs.length" class="mt-3 text-sm text-arka-text-muted">Todavía no hay decisiones administrativas registradas para esta cooperativa.</p>
-                <div v-else class="mt-3 divide-y divide-arka-text-muted/10">
+                <div v-else class="mt-3 divide-y divide-arka-border">
                     <div v-for="log in auditLogs" :key="log.id" class="py-3 text-sm">
                         <div class="flex flex-wrap justify-between gap-2"><span class="font-medium text-arka-text">{{ log.action }}</span><span class="text-xs text-arka-text-muted">{{ new Date(log.created_at).toLocaleString('es-EC') }}</span></div>
                         <p class="mt-1 text-xs text-arka-text-muted">Administrador: {{ log.admin?.name || 'Cuenta eliminada' }}</p>

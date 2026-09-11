@@ -45,7 +45,7 @@ async function destroy(id) {
                     cualquier carrera en curso.
                 </p>
 
-                <ul v-if="contacts.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-if="contacts.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="c in contacts" :key="c.id" class="p-4 sm:p-6 flex items-center justify-between gap-4">
                         <div>
                             <p class="text-arka-text font-medium">

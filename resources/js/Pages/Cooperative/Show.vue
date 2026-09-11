@@ -33,7 +33,7 @@ function toggle() {
                  mobile. Ahora en mobile es una columna centrada con su
                  propio espacio (logo → insignia → nombre → calificación →
                  botón), y recién en escritorio (sm:) pasa a fila. -->
-            <section class="overflow-hidden rounded-3xl border border-arka-primary/15 bg-arka-card shadow-2xl">
+            <section class="overflow-hidden rounded-3xl border border-arka-primary/25 bg-arka-card shadow-2xl">
                 <div class="bg-gradient-to-br from-arka-primary/25 via-arka-card to-arka-lime/10 p-6 sm:p-9">
                     <div class="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-center sm:text-start sm:gap-6">
                         <img
@@ -128,7 +128,7 @@ function toggle() {
                      flota" — sin nombres, fotos ni links a perfiles
                      individuales, solo la cantidad (ya mostrada arriba en la
                      tarjeta de estadísticas). -->
-                <div v-if="!fleetVisible" class="mt-5 flex items-center gap-3 rounded-2xl border border-arka-text-muted/10 bg-arka-base/40 p-5">
+                <div v-if="!fleetVisible" class="mt-5 flex items-center gap-3 rounded-2xl border border-arka-border bg-arka-base/40 p-5">
                     <div class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-arka-text-muted/10 text-arka-text-muted">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                             <rect x="5" y="11" width="14" height="9" rx="2" />
@@ -147,7 +147,7 @@ function toggle() {
                         v-for="driver in drivers"
                         :key="driver.id"
                         :href="route('profiles.show', driver.public_id)"
-                        class="group rounded-2xl border border-arka-text-muted/10 bg-arka-base/40 p-4 transition hover:border-arka-primary/40"
+                        class="group rounded-2xl border border-arka-border bg-arka-base/40 p-4 transition hover:border-arka-primary/40"
                     >
                         <div class="flex items-center gap-3">
                             <img v-if="driver.avatar_url" :src="driver.avatar_url" class="h-12 w-12 rounded-full object-cover" />
@@ -177,7 +177,7 @@ function toggle() {
                     Esta cooperativa todavía no tiene comentarios de carreras completadas.
                 </p>
                 <div v-else class="mt-5 grid gap-3 sm:grid-cols-2">
-                    <article v-for="review in reviews" :key="review.id" class="rounded-2xl border border-arka-text-muted/10 bg-arka-base/40 p-4">
+                    <article v-for="review in reviews" :key="review.id" class="rounded-2xl border border-arka-border bg-arka-base/40 p-4">
                         <div class="flex items-center justify-between gap-3">
                             <p class="font-semibold text-arka-text">{{ review.client }}</p>
                             <span class="text-sm font-bold text-arka-warning">★ {{ review.rating }}</span>

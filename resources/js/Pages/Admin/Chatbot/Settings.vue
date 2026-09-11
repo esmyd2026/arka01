@@ -48,7 +48,7 @@ function submit() {
                         <textarea
                             v-model="form.welcome_message"
                             rows="3"
-                            class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                            class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                         ></textarea>
                         <InputError class="mt-1" :message="form.errors.welcome_message" />
                     </div>
@@ -58,7 +58,7 @@ function submit() {
                         <textarea
                             v-model="form.help_message"
                             rows="2"
-                            class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                            class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                         ></textarea>
                         <InputError class="mt-1" :message="form.errors.help_message" />
                     </div>
@@ -68,7 +68,7 @@ function submit() {
                         <textarea
                             v-model="form.fallback_message"
                             rows="2"
-                            class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                            class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                         ></textarea>
                         <InputError class="mt-1" :message="form.errors.fallback_message" />
                     </div>
@@ -78,7 +78,7 @@ function submit() {
                         <textarea
                             v-model="form.fallback_escalation_message"
                             rows="2"
-                            class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                            class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                         ></textarea>
                         <InputError class="mt-1" :message="form.errors.fallback_escalation_message" />
                     </div>
@@ -98,7 +98,7 @@ function submit() {
                          espera respuesta. Los dos opcionales — sin completar,
                          el chatbot sigue mandando solo el aviso de texto de
                          siempre. -->
-                    <div class="grid gap-4 sm:grid-cols-2 rounded-arka border border-arka-text-muted/15 p-4">
+                    <div class="grid gap-4 sm:grid-cols-2 rounded-arka border border-arka-border p-4">
                         <div class="sm:col-span-2">
                             <p class="text-sm font-medium text-arka-text">Contacto de soporte (tarjeta de WhatsApp)</p>
                             <p class="mt-0.5 text-xs text-arka-text-muted">
@@ -122,7 +122,7 @@ function submit() {
                         <textarea
                             v-model="form.farewell_message"
                             rows="2"
-                            class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                            class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                         ></textarea>
                         <InputError class="mt-1" :message="form.errors.farewell_message" />
                     </div>

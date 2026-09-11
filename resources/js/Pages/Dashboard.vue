@@ -651,7 +651,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                 </Link>
 
                 <template v-if="isAdmin">
-                    <section class="relative overflow-hidden rounded-3xl border border-arka-primary/20 bg-arka-card p-5 shadow-sm sm:p-7">
+                    <section class="relative overflow-hidden rounded-3xl border border-arka-primary/30 bg-arka-card p-5 shadow-sm sm:p-7">
                         <span class="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-arka-primary/8" aria-hidden="true"></span>
                         <div class="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                             <div class="max-w-2xl">
@@ -663,11 +663,11 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 <p class="mt-2 text-sm leading-6 text-arka-text-muted">Revise primero lo que está ocurriendo y luego entre al módulo que necesita gestionar.</p>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                                <Link :href="route('admin.live-operations.index')" class="inline-flex min-h-11 items-center gap-2 rounded-xl bg-arka-primary px-4 py-2 text-sm font-bold text-arka-base">
+                                <Link :href="route('admin.live-operations.index')" class="inline-flex min-h-11 items-center gap-2 rounded-xl bg-arka-primary px-4 py-2 text-sm font-bold text-white">
                                     <span class="h-4 w-4"><AdminNavIcon icon="route" /></span>
                                     Abrir operación en vivo
                                 </Link>
-                                <Link :href="route('admin.driver-verifications.index')" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-arka-text-muted/20 px-4 py-2 text-sm font-semibold text-arka-text hover:border-arka-primary/40">
+                                <Link :href="route('admin.driver-verifications.index')" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-arka-border px-4 py-2 text-sm font-semibold text-arka-text hover:border-arka-primary/40">
                                     Revisar pendientes
                                     <span v-if="adminAttentionTotal" class="rounded-full bg-arka-primary/15 px-2 py-0.5 text-xs text-arka-primary-bright">{{ adminAttentionTotal }}</span>
                                 </Link>
@@ -696,7 +696,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 }"
                             >
                                 <div class="flex items-start justify-between gap-3">
-                                    <span class="grid h-10 w-10 place-items-center rounded-xl" :class="stat.tone === 'danger' ? 'bg-red-400/10 text-red-300' : 'bg-arka-primary/10 text-arka-primary-bright'">
+                                    <span class="grid h-10 w-10 place-items-center rounded-xl" :class="stat.tone === 'danger' ? 'bg-red-400/10 text-red-700' : 'bg-arka-primary/10 text-arka-primary-bright'">
                                         <span v-if="stat.key === 'requests'" class="h-5 w-5"><AdminNavIcon icon="message" /></span>
                                         <span v-else-if="stat.key === 'active'" class="h-5 w-5"><AdminNavIcon icon="route" /></span>
                                         <svg v-else-if="stat.key === 'completed'" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m5 12 4 4L19 6" /></svg>
@@ -721,7 +721,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <div class="mt-4 grid gap-2 md:grid-cols-2">
                             <Link v-for="item in adminAttentionItems" :key="item.key" :href="item.url" class="flex items-center justify-between gap-3 rounded-xl border border-arka-warning/15 bg-arka-card px-4 py-3 hover:border-arka-warning/40">
                                 <span class="min-w-0"><span class="block text-sm font-semibold text-arka-text">{{ item.label }}</span><span class="block truncate text-xs text-arka-text-muted">{{ item.detail }}</span></span>
-                                <span class="rounded-full bg-arka-warning px-2.5 py-1 text-xs font-bold text-arka-base">{{ item.count }}</span>
+                                <span class="rounded-full bg-arka-warning px-2.5 py-1 text-xs font-bold text-arka-ink">{{ item.count }}</span>
                             </Link>
                         </div>
                     </section>
@@ -733,7 +733,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             <p class="mt-1 text-xs text-arka-text-muted">Cada área concentra únicamente sus procesos y herramientas.</p>
                         </div>
                         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                            <Link v-for="module in adminModules" :key="module.route" :href="route(module.route)" class="group flex min-h-32 items-start gap-4 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-5 transition hover:-translate-y-0.5 hover:border-arka-primary/35 hover:shadow-lg">
+                            <Link v-for="module in adminModules" :key="module.route" :href="route(module.route)" class="group flex min-h-32 items-start gap-4 rounded-2xl border border-arka-border bg-arka-card p-5 transition hover:-translate-y-0.5 hover:border-arka-primary/35 hover:shadow-lg">
                                 <span class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-arka-primary/10 text-arka-primary-bright group-hover:bg-arka-primary/15"><span class="h-6 w-6"><AdminNavIcon :icon="module.icon" /></span></span>
                                 <span class="min-w-0 flex-1">
                                     <span class="flex items-start justify-between gap-3"><strong class="text-base text-arka-text">{{ module.label }}</strong><strong v-if="module.value !== null" class="text-2xl text-arka-text">{{ module.value }}</strong></span>
@@ -759,7 +759,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     >
                         <span class="absolute right-0 top-0 h-24 w-24 -translate-y-1/2 translate-x-1/2 rounded-full bg-arka-primary/15" aria-hidden="true"></span>
                         <div class="relative flex items-start gap-3">
-                            <div class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-arka-primary text-arka-base shadow-lg shadow-arka-primary/30">
+                            <div class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-arka-primary text-white shadow-lg shadow-arka-primary/30">
                                 <span class="absolute inset-0 animate-ping rounded-full bg-arka-primary/40" aria-hidden="true"></span>
                                 <svg class="relative h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                     <path d="M12 2.25a6.25 6.25 0 0 0-6.25 6.25v2.04c0 .87-.28 1.72-.8 2.42l-1.3 1.74A1.75 1.75 0 0 0 5.05 17.5h13.9a1.75 1.75 0 0 0 1.4-2.8l-1.3-1.74a4.03 4.03 0 0 1-.8-2.42V8.5A6.25 6.25 0 0 0 12 2.25Z" />
@@ -778,7 +778,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </div>
                         </div>
                         <div class="relative mt-4 flex items-center gap-2">
-                            <Link :href="route('rides.index')" class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 text-sm font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/20">
+                            <Link :href="route('rides.index')" class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/20">
                                 Ver solicitud
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.22 4.72a.75.75 0 0 1 1.06 0l6.75 6.75a.75.75 0 0 1 0 1.06l-6.75 6.75a.75.75 0 1 1-1.06-1.06l5.47-5.47H3.5a.75.75 0 0 1 0-1.5h15.19l-5.47-5.47a.75.75 0 0 1 0-1.06Z" /></svg>
                             </Link>
@@ -790,7 +790,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          conductor no le avisaba nada si estaba parado acá). -->
                     <div
                         v-if="newInvitationAlert"
-                        class="p-4 bg-arka-primary text-arka-base rounded-arka flex items-center justify-between gap-4"
+                        class="p-4 bg-arka-primary text-white rounded-arka flex items-center justify-between gap-4"
                     >
                         <div>
                             <p class="font-semibold">¡Le invitaron a una flota!</p>
@@ -800,7 +800,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             <Link :href="route('driver.invitations.index')" class="px-3 py-1.5 rounded-arka bg-arka-base text-arka-primary-bright text-sm font-medium">
                                 Ver
                             </Link>
-                            <button type="button" class="text-arka-base/70 hover:text-arka-base" @click="newInvitationAlert = null">
+                            <button type="button" class="text-arka-ink/70 hover:text-arka-ink" @click="newInvitationAlert = null">
                                 ✕
                             </button>
                         </div>
@@ -815,7 +815,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             ? 'border-arka-warning/35 bg-arka-warning/5'
                             : isAvailableNow
                                 ? 'border-arka-primary/25 bg-arka-primary/5'
-                                : 'border-arka-text-muted/15 bg-arka-card'"
+                                : 'border-arka-border bg-arka-card'"
                     >
                         <div class="flex items-center gap-3">
                             <div
@@ -870,7 +870,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          cuántos viajes realizó sin tener que desplazarse por
                          la agenda ni interpretar cifras históricas como si
                          fueran del día. -->
-                    <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                    <section class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-sm">
                         <div class="flex items-center justify-between gap-3 px-4 py-3">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-primary">Resultados</p>
@@ -911,7 +911,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </Link>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-px border-t border-arka-text-muted/10 bg-arka-text-muted/10 sm:grid-cols-4">
+                        <div class="grid grid-cols-2 gap-px border-t border-arka-border bg-arka-text-muted/10 sm:grid-cols-4">
                             <div class="bg-arka-card px-3 py-3">
                                 <p class="text-[10px] leading-tight text-arka-text-muted">Ingresos del mes</p>
                                 <p class="mt-1 text-lg font-semibold text-arka-text">${{ driverStats.earnings_this_month.toFixed(2) }}</p>
@@ -937,7 +937,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
 
                     <!-- Después del resumen, la agenda responde cuál es la
                          siguiente tarea sin competir con los indicadores. -->
-                    <section v-if="upcomingTrips" class="rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 shadow-sm">
+                    <section v-if="upcomingTrips" class="rounded-2xl border border-arka-border bg-arka-card p-4 shadow-sm">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-primary">Agenda</p>
@@ -948,7 +948,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             </Link>
                         </div>
 
-                        <div v-if="!upcomingTrips.length" class="mt-3 flex items-center gap-3 rounded-xl border border-dashed border-arka-text-muted/20 bg-arka-base/35 p-3">
+                        <div v-if="!upcomingTrips.length" class="mt-3 flex items-center gap-3 rounded-xl border border-dashed border-arka-border bg-arka-base/35 p-3">
                             <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-arka-primary/10 text-arka-primary">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 6V3m8 3V3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" />
@@ -963,7 +963,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <Link
                             v-else
                             :href="upcomingTrips[0].ride_id ? route('rides.show', upcomingTrips[0].ride_id) : route('rides.index')"
-                            class="mt-3 block rounded-xl border border-arka-primary/15 bg-arka-base/45 p-3 transition hover:border-arka-primary/35"
+                            class="mt-3 block rounded-xl border border-arka-primary/25 bg-arka-base/45 p-3 transition hover:border-arka-primary/35"
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
@@ -1026,7 +1026,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          buscarlo en Mi perfil). -->
                     <Link
                         :href="`${route('driver.profile.edit')}#rate_per_km`"
-                        class="block rounded-2xl border border-arka-text-muted/10 bg-arka-card p-4 shadow-sm transition hover:border-arka-primary/40"
+                        class="block rounded-2xl border border-arka-border bg-arka-card p-4 shadow-sm transition hover:border-arka-primary/40"
                     >
                         <div class="flex items-center justify-between gap-3">
                             <div>
@@ -1174,7 +1174,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         role="status"
                         aria-live="polite"
                     >
-                        <div class="flex items-center gap-3 rounded-full border border-white/80 bg-arka-base/85 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md">
+                        <div class="flex items-center gap-3 rounded-full border border-white/80 bg-arka-ink/85 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md">
                             <span class="h-5 w-5 animate-spin rounded-full border-2 border-white/35 border-t-arka-primary" aria-hidden="true"></span>
                             <span>Ubicando y ajustando el mapa…</span>
                         </div>
@@ -1191,7 +1191,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          sistema operativo dibuje un emoji. -->
                     <p
                         v-if="nearbyDriversCaption"
-                        class="absolute left-3 top-[4.5rem] z-10 flex max-w-[calc(100%-4.75rem)] items-center gap-2 rounded-full border border-white/10 bg-arka-base/75 py-2 pl-3 pr-3.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md"
+                        class="absolute left-3 top-[4.5rem] z-10 flex max-w-[calc(100%-4.75rem)] items-center gap-2 rounded-full border border-arka-border bg-arka-ink/75 py-2 pl-3 pr-3.5 text-xs font-semibold text-white shadow-lg backdrop-blur-md"
                     >
                         <span class="relative flex h-2 w-2 shrink-0">
                             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-arka-primary opacity-75"></span>
@@ -1205,7 +1205,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                          para esto mismo en otras pantallas. -->
                     <button
                         type="button"
-                        class="absolute right-3 top-[4.5rem] z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-arka-base/60 shadow-[0_2px_10px_rgba(16,24,23,0.14)] transition hover:text-arka-primary active:scale-95"
+                        class="absolute right-3 top-[4.5rem] z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-arka-ink/60 shadow-[0_2px_10px_rgba(16,24,23,0.14)] transition hover:text-arka-primary active:scale-95"
                         aria-label="Centrar en mi ubicación"
                         @click="recenterMap"
                     >
@@ -1221,7 +1221,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <Link
                         v-if="!surveyDone"
                         :href="route('survey.show')"
-                        class="absolute left-3 top-[7.25rem] z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-arka-base/75 py-2 pl-3 pr-3.5 text-xs font-semibold text-arka-primary-bright shadow-lg backdrop-blur-md hover:bg-arka-base/90 transition"
+                        class="absolute left-3 top-[7.25rem] z-10 flex items-center gap-1.5 rounded-full border border-arka-border bg-arka-ink/75 py-2 pl-3 pr-3.5 text-xs font-semibold text-emerald-200 shadow-lg backdrop-blur-md hover:bg-arka-ink/90 transition"
                     >
                         Encuesta (2 min) →
                     </Link>
@@ -1241,7 +1241,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                     <Link
                         v-if="pendingRideToClose"
                         :href="route('rides.show', pendingRideToClose.ride_id)"
-                        class="absolute inset-x-2 top-32 z-10 p-3 rounded-arka bg-arka-warning/95 text-arka-base shadow-lg"
+                        class="absolute inset-x-2 top-32 z-10 p-3 rounded-arka bg-arka-warning/95 text-arka-ink shadow-lg"
                     >
                         <p class="font-semibold text-sm">⚠️ Carrera en curso sin cerrar</p>
                         <p class="text-xs">Con {{ pendingRideToClose.counterpart_name }}. Tocá para continuar.</p>
@@ -1305,11 +1305,11 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
 
                             <div
                                 v-if="locationLoading"
-                                class="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-white/50 backdrop-blur-[1px]"
+                                class="pointer-events-none absolute inset-0 z-[9] flex items-center justify-center bg-arka-surface0 backdrop-blur-[1px]"
                                 role="status"
                                 aria-live="polite"
                             >
-                                <div class="flex items-center gap-3 rounded-full bg-arka-base/85 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md">
+                                <div class="flex items-center gap-3 rounded-full bg-arka-ink/85 px-4 py-3 text-sm font-medium text-white shadow-xl backdrop-blur-md">
                                     <span class="h-5 w-5 animate-spin rounded-full border-2 border-white/35 border-t-arka-primary" aria-hidden="true"></span>
                                     <span>Ubicando y ajustando el mapa…</span>
                                 </div>
@@ -1328,7 +1328,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
 
                             <button
                                 type="button"
-                                class="absolute right-3 top-3 z-10 h-12 w-12 rounded-full bg-white shadow-[0_2px_10px_rgba(16,24,23,0.14)] flex items-center justify-center text-arka-base/60 hover:text-arka-primary"
+                                class="absolute right-3 top-3 z-10 h-12 w-12 rounded-full bg-white shadow-[0_2px_10px_rgba(16,24,23,0.14)] flex items-center justify-center text-arka-ink/60 hover:text-arka-primary"
                                 aria-label="Centrar en mi ubicación"
                                 @click="recenterMap"
                             >

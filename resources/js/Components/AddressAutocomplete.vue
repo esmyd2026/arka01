@@ -303,10 +303,10 @@ onBeforeUnmount(() => {
             class="relative z-[1501] w-full focus:ring-arka-primary"
             :class="
                 flat
-                    ? 'min-h-[52px] rounded-[15px] ps-11 pe-10 border border-transparent bg-[#F5F7F6] text-arka-base placeholder:text-[#8D9793] transition-colors duration-200 focus:border-arka-primary/40 focus:bg-white'
+                    ? 'min-h-[52px] rounded-[15px] ps-11 pe-10 border border-transparent bg-[#F5F7F6] text-arka-ink placeholder:text-[#8D9793] transition-colors duration-200 focus:border-arka-primary/40 focus:bg-white'
                     : light
-                        ? 'min-h-12 rounded-full ps-11 pe-10 border border-arka-base/[0.06] bg-white text-arka-base placeholder:text-arka-base/40 shadow-[0_8px_24px_rgba(15,23,42,0.06)] focus:border-arka-primary focus:shadow-[0_10px_28px_rgba(52,211,153,0.12)]'
-                        : 'rounded-arka pe-9 border-arka-text-muted/20 bg-transparent text-arka-text focus:border-arka-primary'
+                        ? 'min-h-12 rounded-full ps-11 pe-10 border border-arka-ink/[0.06] bg-white text-arka-ink placeholder:text-arka-ink/40 shadow-[0_8px_24px_rgba(15,23,42,0.06)] focus:border-arka-primary focus:shadow-[0_10px_28px_rgba(52,211,153,0.12)]'
+                        : 'rounded-arka pe-9 border-arka-border bg-transparent text-arka-text focus:border-arka-primary'
             "
             autocomplete="off"
             @input="onInput"
@@ -324,7 +324,7 @@ onBeforeUnmount(() => {
         <span
             v-if="light || flat || !modelValue?.trim()"
             class="pointer-events-none absolute inset-y-0 z-[1502] flex items-center"
-            :class="flat ? 'left-0 ps-4 text-[#737D79]' : light ? 'left-0 ps-4 text-arka-base/40' : 'right-0 px-3 text-arka-text-muted'"
+            :class="flat ? 'left-0 ps-4 text-[#737D79]' : light ? 'left-0 ps-4 text-arka-ink/40' : 'right-0 px-3 text-arka-text-muted'"
         >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="7" stroke-linecap="round" stroke-linejoin="round" />
@@ -338,7 +338,7 @@ onBeforeUnmount(() => {
             v-if="modelValue?.trim()"
             type="button"
             class="absolute inset-y-0 right-0 z-[1502] flex items-center px-2.5"
-            :class="flat ? 'text-[#737D79] hover:text-arka-base/70' : light ? 'text-arka-base/40 hover:text-arka-base/70' : 'text-arka-text-muted hover:text-arka-text'"
+            :class="flat ? 'text-[#737D79] hover:text-arka-ink/70' : light ? 'text-arka-ink/40 hover:text-arka-ink/70' : 'text-arka-text-muted hover:text-arka-text'"
             aria-label="Limpiar"
             tabindex="-1"
             @click="clearField"
@@ -360,13 +360,13 @@ onBeforeUnmount(() => {
         <ul
             v-if="showFavorites"
             class="absolute z-[1500] mt-1 hidden w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1 sm:block"
-            :class="light || flat ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
+            :class="light || flat ? 'border-arka-ink/10 bg-white' : 'border-arka-border bg-arka-card'"
         >
             <li v-for="place in favorites" :key="place.address">
                 <button
                     type="button"
                     class="w-full px-3 py-2 text-start text-sm flex items-center gap-2"
-                    :class="light || flat ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
+                    :class="light || flat ? 'text-arka-ink hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
                     @click="selectFavorite(place)"
                 >
                     <span class="text-arka-primary-bright shrink-0">★</span>
@@ -378,13 +378,13 @@ onBeforeUnmount(() => {
         <ul
             v-else-if="showSuggestions"
             class="absolute z-[1500] mt-1 hidden w-full max-h-56 overflow-y-auto rounded-arka border shadow-lg py-1 sm:block"
-            :class="light || flat ? 'border-arka-base/10 bg-white' : 'border-arka-text-muted/20 bg-arka-card'"
+            :class="light || flat ? 'border-arka-ink/10 bg-white' : 'border-arka-border bg-arka-card'"
         >
             <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
                 <button
                     type="button"
                     class="w-full px-3 py-2 text-start text-sm"
-                    :class="light || flat ? 'text-arka-base hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
+                    :class="light || flat ? 'text-arka-ink hover:bg-arka-cream' : 'text-arka-text hover:bg-arka-base'"
                     @click="selectSuggestion(suggestion)"
                 >
                     {{ suggestion.placePrediction.text.text }}
@@ -398,12 +398,12 @@ onBeforeUnmount(() => {
         <Teleport to="body">
             <ul
                 v-if="showFavorites"
-                class="fixed z-[1600] overflow-y-auto overscroll-contain rounded-2xl border border-arka-base/10 bg-white py-1 shadow-2xl sm:hidden"
+                class="fixed z-[1600] overflow-y-auto overscroll-contain rounded-2xl border border-arka-ink/10 bg-white py-1 shadow-2xl sm:hidden"
                 :style="mobileDropdownStyle"
             >
-                <li class="sticky top-0 border-b border-arka-base/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-arka-base/45">Lugares recientes</li>
+                <li class="sticky top-0 border-b border-arka-ink/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-arka-ink/45">Lugares recientes</li>
                 <li v-for="place in favorites" :key="place.address">
-                    <button type="button" class="flex w-full items-center gap-2 px-3 py-3 text-start text-sm text-arka-base active:bg-arka-cream" @click="selectFavorite(place)">
+                    <button type="button" class="flex w-full items-center gap-2 px-3 py-3 text-start text-sm text-arka-ink active:bg-arka-cream" @click="selectFavorite(place)">
                         <span class="shrink-0 text-arka-primary">★</span>
                         <span class="line-clamp-2">{{ place.address }}</span>
                     </button>
@@ -412,12 +412,12 @@ onBeforeUnmount(() => {
 
             <ul
                 v-else-if="showSuggestions"
-                class="fixed z-[1600] overflow-y-auto overscroll-contain rounded-2xl border border-arka-base/10 bg-white py-1 shadow-2xl sm:hidden"
+                class="fixed z-[1600] overflow-y-auto overscroll-contain rounded-2xl border border-arka-ink/10 bg-white py-1 shadow-2xl sm:hidden"
                 :style="mobileDropdownStyle"
             >
-                <li class="sticky top-0 border-b border-arka-base/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-arka-base/45">Direcciones encontradas</li>
+                <li class="sticky top-0 border-b border-arka-ink/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-arka-ink/45">Direcciones encontradas</li>
                 <li v-for="suggestion in suggestions" :key="suggestion.placePrediction.placeId">
-                    <button type="button" class="flex w-full items-start gap-2.5 px-3 py-3 text-start text-sm text-arka-base active:bg-arka-cream" @click="selectSuggestion(suggestion)">
+                    <button type="button" class="flex w-full items-start gap-2.5 px-3 py-3 text-start text-sm text-arka-ink active:bg-arka-cream" @click="selectSuggestion(suggestion)">
                         <svg class="mt-0.5 h-4 w-4 shrink-0 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
                         <span class="line-clamp-2 leading-snug">{{ suggestion.placePrediction.text.text }}</span>
                     </button>

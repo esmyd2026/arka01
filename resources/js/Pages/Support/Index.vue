@@ -129,7 +129,7 @@ async function sendChatMessage(text) {
                         v-model="search"
                         type="text"
                         placeholder="Buscar en preguntas frecuentes"
-                        class="w-full rounded-arka bg-arka-card border border-arka-text-muted/20 py-2.5 ps-10 pe-3 text-sm text-arka-text placeholder:text-arka-text-muted focus:outline-none focus:ring-2 focus:ring-arka-primary"
+                        class="w-full rounded-arka bg-arka-card border border-arka-border py-2.5 ps-10 pe-3 text-sm text-arka-text placeholder:text-arka-text-muted focus:outline-none focus:ring-2 focus:ring-arka-primary"
                     />
                 </div>
 
@@ -139,7 +139,7 @@ async function sendChatMessage(text) {
 
                 <div v-for="category in categories" :key="category" class="space-y-2">
                     <h3 class="text-sm font-medium text-arka-text-muted uppercase tracking-wide">{{ category }}</h3>
-                    <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                    <div class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                         <div v-for="faq in faqsInCategory(category)" :key="faq.id">
                             <button
                                 type="button"
@@ -167,7 +167,7 @@ async function sendChatMessage(text) {
                             :key="message.id"
                             class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                             :class="message.sender_user_id === $page.props.auth.user.id
-                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                ? 'ms-auto bg-arka-primary text-white'
                                 : 'bg-arka-base text-arka-text'"
                         >
                             <p v-if="message.sender_is_admin" class="text-xs font-medium opacity-70">Soporte Arka01</p>
@@ -180,7 +180,7 @@ async function sendChatMessage(text) {
                             v-for="reply in quickReplies"
                             :key="reply"
                             type="button"
-                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-border"
                             :disabled="chatSending"
                             @click="sendChatMessage(reply)"
                         >

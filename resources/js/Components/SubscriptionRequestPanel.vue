@@ -123,7 +123,7 @@ async function cancelRequest() {
                 v-if="pendingRequest.payment_proof_url"
                 :src="pendingRequest.payment_proof_url"
                 alt="Comprobante subido"
-                class="max-h-48 rounded-arka border border-arka-text-muted/20"
+                class="max-h-48 rounded-arka border border-arka-border"
             />
             <SecondaryButton @click="cancelRequest">Cancelar pedido</SecondaryButton>
         </div>

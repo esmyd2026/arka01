@@ -605,7 +605,7 @@ const VERIFICATION_LABELS = {
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- Cabecera profesional: identidad, estado operativo y
                      clasificación del servicio en una sola lectura. -->
-                <section class="overflow-hidden rounded-arka border border-arka-primary/20 bg-arka-card shadow-xl">
+                <section class="overflow-hidden rounded-arka border border-arka-primary/30 bg-arka-card shadow-xl">
                     <div class="h-1.5 bg-gradient-to-r from-arka-primary via-arka-primary-bright to-arka-warning"></div>
                     <div class="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.35fr_1fr] lg:items-center">
                         <!-- Pedido explícito del usuario ("mejora esto el
@@ -621,7 +621,7 @@ const VERIFICATION_LABELS = {
                                 <UserAvatar :user="$page.props.auth.user" size-class="h-20 w-20 text-2xl sm:h-24 sm:w-24 sm:text-3xl" />
                                 <span
                                     v-if="driverProfile?.verification_status === 'approved'"
-                                    class="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border-4 border-arka-card bg-arka-primary text-sm font-black text-arka-base"
+                                    class="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border-4 border-arka-card bg-arka-primary text-sm font-black text-white"
                                     title="Conductor verificado"
                                 >✓</span>
                             </div>
@@ -701,7 +701,7 @@ const VERIFICATION_LABELS = {
                             </div>
                         </div>
 
-                        <div v-if="driverProfile && whatsappBusinessNumber" class="rounded-arka border p-4" :class="whatsappSession && whatsappSession.status !== 'expired' ? 'border-arka-primary/20 bg-arka-base/40' : 'border-arka-warning/25 bg-arka-warning/5'">
+                        <div v-if="driverProfile && whatsappBusinessNumber" class="rounded-arka border p-4" :class="whatsappSession && whatsappSession.status !== 'expired' ? 'border-arka-primary/30 bg-arka-base/40' : 'border-arka-warning/25 bg-arka-warning/5'">
                             <div class="flex items-start gap-3">
                                 <svg class="mt-0.5 h-5 w-5 shrink-0 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4A8 8 0 1 1 20 11.5Z"/><path d="M8.5 8.5c.7 3.1 2.2 4.6 5 5" stroke-linecap="round"/></svg>
                                 <div class="min-w-0 flex-1">
@@ -750,7 +750,7 @@ const VERIFICATION_LABELS = {
                              qué está activo y qué falta para cada cosa (disponible,
                              directorio público, insignia de verificado) — y por qué,
                              no solo "sí" o "no". -->
-                        <div v-if="driverProfile" class="mt-4 overflow-hidden rounded-xl border border-arka-text-muted/10">
+                        <div v-if="driverProfile" class="mt-4 overflow-hidden rounded-xl border border-arka-border">
                             <div class="h-1 bg-arka-text-muted/10">
                                 <div
                                     class="h-full bg-arka-primary transition-all"
@@ -814,7 +814,7 @@ const VERIFICATION_LABELS = {
                              (WhatsAppWebhookController) y al que le llegan los
                              avisos de carrera nueva — tiene que poder
                              corregirlo si se equivocó o cambió de celular. -->
-                        <section id="driver-contact-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-contact-settings" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('contact')">
                                 <SectionIcon name="phone" />
                                 <span class="min-w-0 flex-1">
@@ -827,7 +827,7 @@ const VERIFICATION_LABELS = {
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
-                        <div v-show="activeProfileSection === 'contact'" class="border-t border-arka-text-muted/10 p-4">
+                        <div v-show="activeProfileSection === 'contact'" class="border-t border-arka-border p-4">
                             <InputLabel value="Su número de WhatsApp" />
                             <p class="mt-1 text-sm text-arka-text-muted">
                                 Actual: <span class="font-mono text-arka-text">{{ currentPhone ?? 'sin declarar' }}</span>
@@ -870,7 +870,7 @@ const VERIFICATION_LABELS = {
                         </div>
                         </section>
 
-                        <section id="driver-vehicle-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-vehicle-settings" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('vehicle')">
                                 <SectionIcon name="vehicle" />
                                 <span class="min-w-0 flex-1">
@@ -883,9 +883,9 @@ const VERIFICATION_LABELS = {
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
-                            <div v-show="activeProfileSection === 'vehicle'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                            <div v-show="activeProfileSection === 'vehicle'" class="space-y-5 border-t border-arka-border p-4 sm:p-5">
 
-                        <div v-if="driverProfile" class="flex items-start gap-3 rounded-xl border border-arka-primary/20 bg-arka-primary/5 p-3 text-sm">
+                        <div v-if="driverProfile" class="flex items-start gap-3 rounded-xl border border-arka-primary/30 bg-arka-primary/5 p-3 text-sm">
                             <svg class="mt-0.5 h-4 w-4 shrink-0 text-arka-primary-bright" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="5" y="10" width="14" height="10" rx="2" />
                                 <path stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3" />
@@ -942,7 +942,7 @@ const VERIFICATION_LABELS = {
                                 <select
                                     id="vehicle_color"
                                     v-model="form.vehicle_color"
-                                    class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text disabled:cursor-not-allowed disabled:opacity-60"
+                                    class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text disabled:cursor-not-allowed disabled:opacity-60"
                                     :disabled="vehicleFieldLocked('vehicle_color')"
                                 >
                                     <option value="" disabled>Elija un color</option>
@@ -956,7 +956,7 @@ const VERIFICATION_LABELS = {
                                 <select
                                     id="vehicle_type"
                                     v-model="form.vehicle_type"
-                                    class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text disabled:cursor-not-allowed disabled:opacity-60"
+                                    class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text disabled:cursor-not-allowed disabled:opacity-60"
                                     :disabled="vehicleFieldLocked('vehicle_type')"
                                 >
                                     <option value="" disabled>Elija un tipo</option>
@@ -1011,7 +1011,7 @@ const VERIFICATION_LABELS = {
 
                         <!-- Comodidades opcionales: ayudan al admin a evaluar
                              la categoría, pero no la asignan automáticamente. -->
-                        <section class="rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-4 sm:p-5">
+                        <section class="rounded-arka border border-arka-primary/30 bg-arka-primary/5 p-4 sm:p-5">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <h3 class="font-semibold text-arka-text">Comodidades y experiencia</h3>
@@ -1031,7 +1031,7 @@ const VERIFICATION_LABELS = {
                                     class="flex cursor-pointer items-start gap-3 rounded-arka border p-3 transition"
                                     :class="form.vehicle_amenities.includes(key)
                                         ? 'border-arka-primary/50 bg-arka-primary/10'
-                                        : 'border-arka-text-muted/15 bg-arka-card hover:border-arka-primary/30'"
+                                        : 'border-arka-border bg-arka-card hover:border-arka-primary/30'"
                                 >
                                     <Checkbox v-model:checked="form.vehicle_amenities" :value="key" class="mt-0.5" />
                                     <span>
@@ -1050,7 +1050,7 @@ const VERIFICATION_LABELS = {
 
                         <!-- Verificación de identidad: los documentos son privados y
                              solo pueden verlos el conductor y un administrador. -->
-                        <section id="driver-verification-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-verification-settings" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('verification')">
                                 <SectionIcon name="identity" />
                                 <span class="min-w-0 flex-1">
@@ -1065,7 +1065,7 @@ const VERIFICATION_LABELS = {
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
-                        <div v-show="activeProfileSection === 'verification'" class="space-y-4 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                        <div v-show="activeProfileSection === 'verification'" class="space-y-4 border-t border-arka-border p-4 sm:p-5">
                             <div class="flex items-center justify-between">
                                 <InputLabel value="Verificación" />
                                 <span
@@ -1109,7 +1109,7 @@ const VERIFICATION_LABELS = {
                                         ]"
                                         :key="option.value"
                                         class="cursor-pointer rounded-arka border p-3 transition"
-                                        :class="form.driver_type === option.value ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20 bg-arka-surface'"
+                                        :class="form.driver_type === option.value ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border bg-arka-surface'"
                                     >
                                         <input v-model="form.driver_type" type="radio" :value="option.value" class="sr-only" />
                                         <span class="block text-sm font-semibold text-arka-text">{{ option.title }}</span>
@@ -1117,7 +1117,7 @@ const VERIFICATION_LABELS = {
                                     </label>
                                 </div>
                                 <InputError class="mt-2" :message="form.errors.driver_type" />
-                                <div v-if="form.driver_type === 'public_transport'" class="mt-3 rounded-arka border border-arka-primary/20 bg-arka-primary/5 p-3">
+                                <div v-if="form.driver_type === 'public_transport'" class="mt-3 rounded-arka border border-arka-primary/30 bg-arka-primary/5 p-3">
                                     <p class="text-sm font-semibold text-arka-primary-bright">Beneficios de ser Transporte Público Verificado</p>
                                     <ul class="mt-2 grid list-inside list-disc gap-1 text-xs text-arka-text-muted sm:grid-cols-2">
                                         <li>Mayor visibilidad y prioridad en búsquedas</li>
@@ -1142,7 +1142,7 @@ const VERIFICATION_LABELS = {
                                         type="file"
                                         accept="image/*"
                                         capture="user"
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-white"
                                         @input="form.profile_photo = $event.target.files[0]"
                                     />
                                     <InputError class="mt-2" :message="form.errors.profile_photo" />
@@ -1162,7 +1162,7 @@ const VERIFICATION_LABELS = {
                                         accept="image/*,application/pdf"
                                         capture="environment"
                                         :disabled="driverProfile?.verification_status === 'pending'"
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base disabled:opacity-50"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-white disabled:opacity-50"
                                         @input="form.identity_document = $event.target.files[0]"
                                     />
                                     <InputError class="mt-2" :message="form.errors.identity_document" />
@@ -1182,7 +1182,7 @@ const VERIFICATION_LABELS = {
                                         accept="image/*,application/pdf"
                                         capture="environment"
                                         :disabled="driverProfile?.verification_status === 'pending'"
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white disabled:opacity-50"
                                         @input="form.license_photo = $event.target.files[0]"
                                     />
                                     <InputError class="mt-2" :message="form.errors.license_photo" />
@@ -1206,7 +1206,7 @@ const VERIFICATION_LABELS = {
                                         accept="image/*,application/pdf"
                                         capture="environment"
                                         :disabled="driverProfile?.verification_status === 'pending'"
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base disabled:opacity-50"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white disabled:opacity-50"
                                         @input="form.vehicle_registration = $event.target.files[0]"
                                     />
                                     <InputError class="mt-2" :message="form.errors.vehicle_registration" />
@@ -1229,7 +1229,7 @@ const VERIFICATION_LABELS = {
                                         type="file"
                                         accept="image/*"
                                         capture="environment"
-                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-arka-base"
+                                        class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-arka file:border-0 file:bg-arka-primary file:text-white"
                                         @input="form.vehicle_photo = $event.target.files[0]"
                                     />
                                     <InputError class="mt-2" :message="form.errors.vehicle_photo" />
@@ -1252,7 +1252,7 @@ const VERIFICATION_LABELS = {
                              cliente las ve (la favorita primero) cuando la carrera
                              es por transferencia y usted va en camino a
                              recogerlo — ver Ride/Show.vue. -->
-                        <section id="driver-bank-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-bank-settings" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('bank')">
                                 <SectionIcon name="bank" />
                                 <span class="min-w-0 flex-1">
@@ -1265,7 +1265,7 @@ const VERIFICATION_LABELS = {
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
-                            <div v-show="activeProfileSection === 'bank'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                            <div v-show="activeProfileSection === 'bank'" class="space-y-5 border-t border-arka-border p-4 sm:p-5">
                                 <p class="text-xs text-arka-text-muted">
                                     El cliente las ve cuando le toca pagar por transferencia y usted va en camino a recogerlo —
                                     la favorita aparece primero.
@@ -1276,7 +1276,7 @@ const VERIFICATION_LABELS = {
                                         v-for="account in bankAccounts"
                                         :key="account.id"
                                         class="flex items-center justify-between gap-3 rounded-xl border p-3"
-                                        :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-text-muted/15'"
+                                        :class="account.is_favorite ? 'border-arka-primary bg-arka-primary/5' : 'border-arka-border'"
                                     >
                                         <div class="min-w-0">
                                             <p class="flex items-center gap-1.5 text-sm font-medium text-arka-text">
@@ -1295,7 +1295,7 @@ const VERIFICATION_LABELS = {
                                     </div>
                                 </div>
 
-                                <form @submit.prevent="submitBankAccount" class="space-y-4 border-t border-arka-text-muted/10 pt-4">
+                                <form @submit.prevent="submitBankAccount" class="space-y-4 border-t border-arka-border pt-4">
                                     <p class="text-sm font-medium text-arka-text">Agregar una cuenta</p>
                                     <div class="grid gap-4 sm:grid-cols-2">
                                         <div class="sm:col-span-2">
@@ -1311,7 +1311,7 @@ const VERIFICATION_LABELS = {
                                         </div>
                                         <div>
                                             <InputLabel for="bank_name" value="Banco" />
-                                            <select id="bank_name" v-model="selectedBank" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                            <select id="bank_name" v-model="selectedBank" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                                 <option value="" disabled>Seleccione un banco</option>
                                                 <option v-for="bank in banks" :key="bank" :value="bank">{{ bank }}</option>
                                             </select>
@@ -1325,7 +1325,7 @@ const VERIFICATION_LABELS = {
                                         </div>
                                         <div>
                                             <InputLabel for="account_type" value="Tipo de cuenta" />
-                                            <select id="account_type" v-model="bankAccountForm.account_type" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                            <select id="account_type" v-model="bankAccountForm.account_type" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                                 <option value="ahorros">Ahorros</option>
                                                 <option value="corriente">Corriente</option>
                                             </select>
@@ -1342,7 +1342,7 @@ const VERIFICATION_LABELS = {
                             </div>
                         </section>
 
-                        <section id="driver-work-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-work-settings" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('work')">
                                 <SectionIcon name="rates" />
                                 <span class="min-w-0 flex-1">
@@ -1355,7 +1355,7 @@ const VERIFICATION_LABELS = {
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
-                            <div v-show="activeProfileSection === 'work'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                            <div v-show="activeProfileSection === 'work'" class="space-y-5 border-t border-arka-border p-4 sm:p-5">
                         <!-- Tarifa y forma de pago: el conductor define su propio precio,
                              la plataforma no lo impone (sección 5 del alcance) -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1432,7 +1432,7 @@ const VERIFICATION_LABELS = {
                              usuario): interruptor general, igual jerarquía que la
                              tarifa por km — con esto apagado, la función no existe
                              para este conductor en ninguna solicitud. -->
-                        <div class="rounded-xl border border-arka-text-muted/15 p-3.5">
+                        <div class="rounded-xl border border-arka-border p-3.5">
                             <label class="flex items-start gap-3">
                                 <Checkbox v-model:checked="form.pickup_surcharge_enabled" class="mt-0.5" />
                                 <span>
@@ -1452,7 +1452,7 @@ const VERIFICATION_LABELS = {
                              explícita, o si prefiere que cualquier cliente que
                              lo agregue quede vinculado de una — solo le llega
                              un aviso con el detalle del cliente nuevo. -->
-                        <div class="rounded-xl border border-arka-text-muted/15 p-3.5">
+                        <div class="rounded-xl border border-arka-border p-3.5">
                             <label class="flex items-start gap-3">
                                 <Checkbox v-model:checked="form.requires_fleet_invitation_approval" class="mt-0.5" />
                                 <span>
@@ -1470,11 +1470,11 @@ const VERIFICATION_LABELS = {
                         <div id="payment-methods">
                             <InputLabel value="Métodos de pago que acepta" />
                             <div class="mt-2 flex flex-wrap gap-3">
-                                <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
+                                <label class="flex items-center rounded-xl border border-arka-border px-3 py-2.5">
                                     <Checkbox v-model:checked="form.accepts_cash" />
                                     <span class="ms-2 text-sm text-arka-text">Efectivo</span>
                                 </label>
-                                <label class="flex items-center rounded-xl border border-arka-text-muted/15 px-3 py-2.5">
+                                <label class="flex items-center rounded-xl border border-arka-border px-3 py-2.5">
                                     <Checkbox v-model:checked="form.accepts_transfer" />
                                     <span class="ms-2 text-sm text-arka-text">Transferencia</span>
                                 </label>
@@ -1483,7 +1483,7 @@ const VERIFICATION_LABELS = {
                             </div>
                         </section>
 
-                        <section id="driver-visibility-settings" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/25">
+                        <section id="driver-visibility-settings" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/25">
                             <button type="button" class="flex w-full items-center gap-3 p-4 text-left" @click="toggleProfileSection('visibility')">
                                 <SectionIcon name="visibility" />
                                 <span class="min-w-0 flex-1">
@@ -1496,7 +1496,7 @@ const VERIFICATION_LABELS = {
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                                 </svg>
                             </button>
-                            <div v-show="activeProfileSection === 'visibility'" class="space-y-5 border-t border-arka-text-muted/10 p-4 sm:p-5">
+                            <div v-show="activeProfileSection === 'visibility'" class="space-y-5 border-t border-arka-border p-4 sm:p-5">
                         <!-- Compartir perfil para que lo agreguen a una flota (pedido
                              explícito del usuario): mismo código/QR que ya usaba el
                              encabezado, reubicado acá — justo después de los
@@ -1649,7 +1649,7 @@ const VERIFICATION_LABELS = {
                             </div>
                         </section>
 
-                        <div id="driver-profile-submit" class="sticky bottom-20 z-20 flex items-center gap-4 rounded-2xl border border-arka-primary/20 bg-arka-card/95 p-3 shadow-xl backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+                        <div id="driver-profile-submit" class="sticky bottom-20 z-20 flex items-center gap-4 rounded-2xl border border-arka-primary/30 bg-arka-card/95 p-3 shadow-xl backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
                             <PrimaryButton class="min-h-11 flex-1 justify-center sm:flex-none" :disabled="form.processing">
                                 {{ driverProfile ? 'Guardar cambios' : 'Activar perfil de conductor' }}
                             </PrimaryButton>
@@ -1669,7 +1669,7 @@ const VERIFICATION_LABELS = {
                 <!-- Medición local y orientativa: no envía telemetría al
                      servidor. El conductor puede consultarla al final de su
                      perfil sin ocupar espacio permanente en la cabecera. -->
-                <div v-if="driverProfile" class="mt-6 rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow">
+                <div v-if="driverProfile" class="mt-6 rounded-arka border border-arka-border bg-arka-card p-4 shadow">
                     <div class="flex items-center justify-between gap-4">
                         <div>
                             <h3 class="font-medium text-arka-text">Uso aproximado de datos</h3>

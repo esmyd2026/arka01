@@ -257,7 +257,7 @@ function submit() {
                     espera postulaciones todavía no aceptó su invitación, vaya a "Mi Flota" primero.
                 </p>
 
-                <ul v-if="routes.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-if="routes.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="r in routes" :key="r.id" class="p-4 sm:p-6">
                         <Link :href="route('express-routes.show', r.id)" class="flex items-center justify-between gap-4">
                             <div>
@@ -294,7 +294,7 @@ function submit() {
                                     <button
                                         type="button"
                                         class="px-2 py-1 rounded-arka"
-                                        :class="pickingPoint === 'origin' ? 'bg-arka-primary text-arka-base' : 'bg-arka-base text-arka-text-muted'"
+                                        :class="pickingPoint === 'origin' ? 'bg-arka-primary text-white' : 'bg-arka-base text-arka-text-muted'"
                                         @click="pickingPoint = 'origin'"
                                     >
                                         Marcar origen
@@ -302,7 +302,7 @@ function submit() {
                                     <button
                                         type="button"
                                         class="px-2 py-1 rounded-arka"
-                                        :class="pickingPoint === 'destination' ? 'bg-arka-primary text-arka-base' : 'bg-arka-base text-arka-text-muted'"
+                                        :class="pickingPoint === 'destination' ? 'bg-arka-primary text-white' : 'bg-arka-base text-arka-text-muted'"
                                         @click="pickingPoint = 'destination'"
                                     >
                                         Marcar destino
@@ -344,7 +344,7 @@ function submit() {
                                     v-for="day in DAYS"
                                     :key="day.value"
                                     class="px-3 py-1.5 rounded-arka border cursor-pointer text-sm"
-                                    :class="form.days_of_week.includes(day.value) ? 'border-arka-primary bg-arka-primary/10 text-arka-text' : 'border-arka-text-muted/20 text-arka-text-muted'"
+                                    :class="form.days_of_week.includes(day.value) ? 'border-arka-primary bg-arka-primary/10 text-arka-text' : 'border-arka-border text-arka-text-muted'"
                                 >
                                     <input type="checkbox" :value="day.value" v-model="form.days_of_week" class="hidden" />
                                     {{ day.label }}
@@ -383,13 +383,13 @@ function submit() {
                              precio no tiene que calzar con el estimado (pedido
                              explícito del usuario), pero no puede irse por debajo de
                              la mitad — ver `minimumAllowedPrice`. -->
-                        <div v-if="estimatedPrice != null" class="p-4 rounded-arka border border-arka-text-muted/20 space-y-1">
+                        <div v-if="estimatedPrice != null" class="p-4 rounded-arka border border-arka-border space-y-1">
                             <div class="flex items-center justify-between text-sm text-arka-text-muted">
                                 <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
                                 <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ Number(referenceRatePerKm).toFixed(2) }}/km</span>
                                 <span class="text-arka-text font-medium">${{ estimatedPrice.toFixed(2) }} (estimado por trayecto)</span>
                             </div>
-                            <div v-if="roundTripTotalEstimate != null" class="flex items-center justify-between text-sm text-arka-text-muted border-t border-arka-text-muted/10 pt-1">
+                            <div v-if="roundTripTotalEstimate != null" class="flex items-center justify-between text-sm text-arka-text-muted border-t border-arka-border pt-1">
                                 <span>Ida y vuelta: ${{ estimatedPrice.toFixed(2) }} × 2 carreras/día</span>
                                 <span class="text-arka-text font-medium">${{ roundTripTotalEstimate.toFixed(2) }}/día</span>
                             </div>
@@ -423,7 +423,7 @@ function submit() {
                              conviene hacer un Expreso porque va vacío por una sola
                              persona — abrirlo a compartir reparte el costo entre más
                              gente con ruta parecida. -->
-                        <div class="p-3 rounded-arka border border-arka-text-muted/20 space-y-2">
+                        <div class="p-3 rounded-arka border border-arka-border space-y-2">
                             <label class="flex items-center">
                                 <Checkbox v-model:checked="form.share_enabled" />
                                 <span class="ms-2 text-sm text-arka-text">

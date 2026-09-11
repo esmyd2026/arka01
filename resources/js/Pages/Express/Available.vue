@@ -143,7 +143,7 @@ function submitApplication(routeId) {
                     </article>
                 </section>
 
-                <hr class="border-arka-text-muted/15" />
+                <hr class="border-arka-border" />
 
                 <p class="text-sm text-arka-text-muted">
                     Acá aparecen los Expresos que publicó un cliente <strong>de una flota a la que pertenecés</strong>
@@ -173,7 +173,7 @@ function submitApplication(routeId) {
                     <Link :href="route('driver.plan.edit')" class="underline hover:text-arka-primary-bright">Ver planes</Link>
                 </p>
 
-                <ul v-if="routes.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-if="routes.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="r in routes" :key="r.id" class="p-4 sm:p-6">
                         <div class="flex items-start justify-between gap-4">
                             <div>

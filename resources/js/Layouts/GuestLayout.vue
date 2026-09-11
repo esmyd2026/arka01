@@ -62,9 +62,8 @@ onMounted(() => {
          móvil, donde alcanza con el logo chico arriba de la tarjeta) y el
          formulario a la derecha. -->
     <div class="relative isolate arka-app-background min-h-screen flex overflow-hidden">
-        <!-- Efecto "duotono" pedido por el usuario en vez de una foto a color
-             con un velo oscuro encima: la imagen va en escala de grises y el
-             verde de marca se mezcla arriba con mix-blend-mode — se ve
+        <!-- Efecto duotono: la imagen va en escala de grises y el verde de
+             marca se mezcla con una capa clara — se ve
              integrada, casi con relieve, funciona automáticamente con
              cualquier foto que suba el admin (no depende de editarla antes). -->
         <div
@@ -74,10 +73,10 @@ onMounted(() => {
         >
             <div
                 class="absolute inset-0 bg-cover bg-center"
-                :style="{ backgroundImage: `url('${backgroundUrl}')`, filter: 'grayscale(1) contrast(1.05) brightness(0.85)' }"
+                :style="{ backgroundImage: `url('${backgroundUrl}')`, filter: 'grayscale(1) contrast(0.9) brightness(1.12)' }"
             />
-            <div class="absolute inset-0 mix-blend-color" style="background: linear-gradient(160deg, #123d2c 0%, #0a1f16 55%, #071310 100%)" />
-            <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(7,17,13,0.25) 0%, rgba(7,17,13,0.45) 55%, rgba(7,17,13,0.78) 100%)" />
+            <div class="absolute inset-0 mix-blend-color" style="background: linear-gradient(160deg, #dceee5 0%, #edf5f1 55%, #f3f6f4 100%)" />
+            <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(248,250,249,0.62) 0%, rgba(243,246,244,0.78) 55%, rgba(237,242,239,0.94) 100%)" />
         </div>
 
         <AuthBrandingPanel v-if="showBrandingPanel" />

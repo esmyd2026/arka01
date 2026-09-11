@@ -67,7 +67,7 @@ const RIDE_PHASE_COLOR = {
     accepted: 'bg-arka-text-muted/15 text-arka-text-muted',
     heading_to_passenger: 'bg-arka-warning/15 text-arka-warning',
     arrived_waiting_pickup: 'bg-arka-warning/15 text-arka-warning',
-    en_route_to_destination: 'bg-sky-400/15 text-sky-300',
+    en_route_to_destination: 'bg-sky-400/15 text-sky-700',
 };
 
 function initials(name) {
@@ -140,7 +140,7 @@ const hasAnyLocatedNearbyDriver = computed(() => props.waitingRequests.some((r) 
                         <p class="text-xs text-arka-text-muted">Esperando conductor</p>
                     </div>
                     <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka text-center">
-                        <p class="text-2xl font-semibold text-sky-300">{{ stats.in_progress }}</p>
+                        <p class="text-2xl font-semibold text-sky-700">{{ stats.in_progress }}</p>
                         <p class="text-xs text-arka-text-muted">Carreras en curso</p>
                     </div>
                     <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka text-center">
@@ -214,7 +214,7 @@ const hasAnyLocatedNearbyDriver = computed(() => props.waitingRequests.some((r) 
                             <p class="text-xs font-medium text-arka-text-muted uppercase tracking-wide mb-1.5">Unidades cercanas</p>
                             <p v-if="!request.nearby_drivers.length" class="text-sm text-arka-warning">No hay conductores disponibles cerca de este punto.</p>
                             <div v-else class="flex flex-wrap gap-2">
-                                <div v-for="driver in request.nearby_drivers" :key="driver.user_id" class="flex items-center gap-2 rounded-full border border-arka-text-muted/15 bg-arka-base/40 pl-1 pr-3 py-1">
+                                <div v-for="driver in request.nearby_drivers" :key="driver.user_id" class="flex items-center gap-2 rounded-full border border-arka-border bg-arka-base/40 pl-1 pr-3 py-1">
                                     <img v-if="driver.avatar_url" :src="driver.avatar_url" :alt="driver.name" class="h-6 w-6 rounded-full object-cover" />
                                     <span v-else class="grid h-6 w-6 place-items-center rounded-full bg-arka-primary/15 text-[10px] font-bold text-arka-primary">{{ initials(driver.name) }}</span>
                                     <span class="text-xs text-arka-text">{{ driver.name }} · {{ driver.distance_km }} km (~{{ driver.eta_minutes }} min)</span>

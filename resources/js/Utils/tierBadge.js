@@ -4,14 +4,14 @@
 // build de Tailwind solo genera CSS para clases que aparecen literalmente en
 // el código fuente — una guardada en la base de datos no serviría de nada.
 export const TIER_COLOR_CLASSES = {
-    slate: 'bg-slate-400/15 text-slate-300',
-    orange: 'bg-orange-700/15 text-orange-400',
-    cyan: 'bg-cyan-500/15 text-cyan-300',
-    yellow: 'bg-yellow-500/15 text-yellow-400',
-    purple: 'bg-purple-500/15 text-purple-300',
-    blue: 'bg-blue-500/15 text-blue-300',
-    green: 'bg-green-500/15 text-green-400',
-    red: 'bg-red-500/15 text-red-400',
+    slate: 'bg-slate-400/15 text-slate-700',
+    orange: 'bg-orange-700/15 text-orange-700',
+    cyan: 'bg-cyan-500/15 text-cyan-700',
+    yellow: 'bg-yellow-500/15 text-yellow-700',
+    purple: 'bg-purple-500/15 text-purple-700',
+    blue: 'bg-blue-500/15 text-blue-700',
+    green: 'bg-green-500/15 text-green-700',
+    red: 'bg-red-500/15 text-red-700',
 };
 
 const DEFAULT_CLASS = 'bg-arka-text-muted/15 text-arka-text-muted';

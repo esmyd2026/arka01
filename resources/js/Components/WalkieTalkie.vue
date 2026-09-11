@@ -882,7 +882,7 @@ onBeforeUnmount(() => {
     >
         <button
             type="button"
-            class="grid h-8 w-5 touch-none select-none place-items-center rounded-full border border-arka-text-muted/15 bg-arka-card/90 text-arka-text-muted shadow-lg backdrop-blur active:cursor-grabbing"
+            class="grid h-8 w-5 touch-none select-none place-items-center rounded-full border border-arka-border bg-arka-card/90 text-arka-text-muted shadow-lg backdrop-blur active:cursor-grabbing"
             :class="draggingBubble ? 'cursor-grabbing text-arka-primary' : 'cursor-grab'"
             aria-label="Mover botón de radio"
             title="Arrastra para mover la radio"
@@ -918,7 +918,7 @@ onBeforeUnmount(() => {
             type="button"
             class="grid h-12 w-12 touch-none select-none place-items-center rounded-full border shadow-2xl backdrop-blur transition focus:outline-none focus:ring-4 focus:ring-arka-primary/25 disabled:cursor-not-allowed"
             :class="isMeSpeaking
-                ? 'scale-[0.97] border-arka-primary bg-arka-primary text-arka-base'
+                ? 'scale-[0.97] border-arka-primary bg-arka-primary text-white'
                 : channelBusy
                     ? 'border-arka-text-muted/25 bg-arka-card/95 text-arka-text-muted'
                     : 'border-arka-primary/40 bg-arka-card/95 text-arka-primary active:scale-[0.97]'"
@@ -955,8 +955,8 @@ onBeforeUnmount(() => {
 
     <Teleport to="body">
         <div v-if="isOpen" class="fixed inset-0 z-[1900] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" @click.self="isOpen = false">
-            <section class="w-full max-w-md rounded-t-3xl border border-arka-text-muted/15 bg-arka-card shadow-2xl sm:rounded-3xl" role="dialog" aria-modal="true" aria-labelledby="radio-title">
-                <header class="flex items-center justify-between border-b border-arka-text-muted/10 px-5 py-4">
+            <section class="w-full max-w-md rounded-t-3xl border border-arka-border bg-arka-card shadow-2xl sm:rounded-3xl" role="dialog" aria-modal="true" aria-labelledby="radio-title">
+                <header class="flex items-center justify-between border-b border-arka-border px-5 py-4">
                     <div class="flex items-center gap-3">
                         <span class="grid h-10 w-10 place-items-center rounded-xl bg-arka-primary/10 text-arka-primary">
                             <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -984,14 +984,14 @@ onBeforeUnmount(() => {
                             <span class="mb-1.5 block text-xs font-medium text-arka-text-muted">Canal activo</span>
                             <select
                                 :value="config.publicId"
-                                class="w-full rounded-xl border border-arka-text-muted/20 bg-arka-base px-3 py-2.5 text-sm text-arka-text"
+                                class="w-full rounded-xl border border-arka-border bg-arka-base px-3 py-2.5 text-sm text-arka-text"
                                 @change="selectChannel(activeChannels.find((channel) => channel.public_id === $event.target.value))"
                             >
                                 <option v-for="channel in activeChannels" :key="channel.public_id" :value="channel.public_id">{{ channel.label }}</option>
                             </select>
                         </label>
 
-                        <div class="rounded-2xl border border-arka-primary/20 bg-arka-primary/5 p-4">
+                        <div class="rounded-2xl border border-arka-primary/30 bg-arka-primary/5 p-4">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <p class="truncate font-semibold text-arka-text">{{ config.channelName }}</p>
@@ -1015,7 +1015,7 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <button v-if="!connected" type="button" class="min-h-14 w-full rounded-xl bg-arka-primary px-4 text-sm font-bold text-arka-base shadow-lg disabled:opacity-60" :disabled="connectionState === 'connecting'" @click="connectRadio({ userGesture: true })">
+                        <button v-if="!connected" type="button" class="min-h-14 w-full rounded-xl bg-arka-primary px-4 text-sm font-bold text-white shadow-lg disabled:opacity-60" :disabled="connectionState === 'connecting'" @click="connectRadio({ userGesture: true })">
                             {{ connectionState === 'connecting' ? 'Conectando…' : 'Entrar y escuchar' }}
                         </button>
 
@@ -1023,7 +1023,7 @@ onBeforeUnmount(() => {
                             <button
                                 type="button"
                                 class="grid h-40 w-40 touch-none select-none place-items-center rounded-full border-4 text-center shadow-xl transition duration-100 focus:outline-none focus:ring-4 focus:ring-arka-primary/25"
-                                :class="isMeSpeaking ? 'scale-[0.97] border-arka-primary-bright bg-arka-primary text-arka-base' : channelBusy ? 'cursor-not-allowed border-arka-text-muted/20 bg-arka-base text-arka-text-muted' : 'border-arka-primary/35 bg-arka-primary/10 text-arka-primary active:scale-[0.97]'"
+                                :class="isMeSpeaking ? 'scale-[0.97] border-arka-primary-bright bg-arka-primary text-white' : channelBusy ? 'cursor-not-allowed border-arka-border bg-arka-base text-arka-text-muted' : 'border-arka-primary/35 bg-arka-primary/10 text-arka-primary active:scale-[0.97]'"
                                 :disabled="channelBusy"
                                 :aria-label="buttonLabel"
                                 @pointerdown.prevent="requestTransmission"
@@ -1043,7 +1043,7 @@ onBeforeUnmount(() => {
                             <p class="mt-3 text-center text-xs text-arka-text-muted">Mantén presionado para hablar · Suelta para escuchar</p>
                         </div>
 
-                        <div v-if="showListeners" class="rounded-xl border border-arka-text-muted/15 bg-arka-base/60 p-3">
+                        <div v-if="showListeners" class="rounded-xl border border-arka-border bg-arka-base/60 p-3">
                             <div class="flex items-center justify-between">
                                 <p class="text-sm font-semibold text-arka-text">Personas conectadas</p>
                                 <button type="button" class="text-xs text-arka-text-muted" @click="showListeners = false">Ocultar</button>
@@ -1058,13 +1058,13 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <div v-if="config.isOwner && config.inviteUrl" class="border-t border-arka-text-muted/10 pt-3">
+                        <div v-if="config.isOwner && config.inviteUrl" class="border-t border-arka-border pt-3">
                             <button type="button" class="flex min-h-11 w-full items-center justify-between text-sm font-semibold text-arka-primary" @click="showShareOptions = !showShareOptions">
                                 <span>Invitar a mi círculo</span><span aria-hidden="true">{{ showShareOptions ? '−' : '+' }}</span>
                             </button>
                             <div v-if="showShareOptions" class="grid grid-cols-2 gap-2 pt-2">
                                 <button type="button" class="min-h-11 rounded-xl border border-arka-primary/40 px-3 text-xs font-semibold text-arka-primary" @click="shareChannelByWhatsApp">WhatsApp</button>
-                                <button type="button" class="min-h-11 rounded-xl border border-arka-text-muted/20 px-3 text-xs font-semibold text-arka-text" @click="shareChannel">Otra aplicación</button>
+                                <button type="button" class="min-h-11 rounded-xl border border-arka-border px-3 text-xs font-semibold text-arka-text" @click="shareChannel">Otra aplicación</button>
                             </div>
                         </div>
 
@@ -1098,7 +1098,7 @@ onBeforeUnmount(() => {
                         </div>
                         <p v-if="errorMessage" class="rounded-xl border border-arka-danger/20 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">{{ errorMessage }}</p>
 
-                        <div class="flex items-center justify-between border-t border-arka-text-muted/10 pt-3">
+                        <div class="flex items-center justify-between border-t border-arka-border pt-3">
                             <button v-if="connected" type="button" class="text-xs font-semibold text-arka-text-muted hover:text-arka-text" @click="disconnectRadio">Desactivar audio</button>
                             <span v-else></span>
                             <span class="max-w-52 text-right text-[10px] leading-4 text-arka-text-muted">Se oculta cuando termina la carrera del propietario.</span>

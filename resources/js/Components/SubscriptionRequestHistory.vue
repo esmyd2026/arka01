@@ -25,7 +25,7 @@ const STATUS_CLASS = {
 <template>
     <div v-if="requestHistory.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
         <h3 class="text-lg font-medium text-arka-text mb-4">Historial de pagos</h3>
-        <ul class="divide-y divide-arka-text-muted/10">
+        <ul class="divide-y divide-arka-border">
             <li v-for="req in requestHistory" :key="req.id" class="py-3 flex items-center justify-between gap-4">
                 <div>
                     <p class="text-arka-text font-medium">{{ req.plan.name }}</p>

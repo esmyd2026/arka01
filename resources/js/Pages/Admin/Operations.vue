@@ -104,7 +104,7 @@ function notifyNearby(sectorId) {
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-3">Demanda histórica por zona</h3>
                     <table class="w-full text-sm">
-                        <tbody class="divide-y divide-arka-text-muted/10">
+                        <tbody class="divide-y divide-arka-border">
                             <tr v-for="z in demandByZone" :key="z.sector">
                                 <td class="py-2 text-arka-text">{{ z.sector }}</td>
                                 <td class="py-2 text-right text-arka-text-muted">{{ z.total }} solicitud(es)</td>

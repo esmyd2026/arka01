@@ -17,7 +17,7 @@ function search() { router.get(route('admin.cooperatives.index'), { q: q.value |
         <div class="py-10"><div class="mx-auto max-w-6xl space-y-5 px-4 sm:px-6">
             <form class="grid gap-3 rounded-arka bg-arka-card p-4 sm:grid-cols-[1fr_14rem_auto]" @submit.prevent="search">
                 <TextInput v-model="q" placeholder="Nombre, razón social o RUC" />
-                <select v-model="status" class="rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text"><option value="">Todos los estados</option><option value="pending">Pendiente</option><option value="in_review">En revisión</option><option value="approved">Aprobada</option><option value="rejected">Rechazada</option><option value="suspended">Suspendida</option></select>
+                <select v-model="status" class="rounded-arka border-arka-border bg-arka-base text-arka-text"><option value="">Todos los estados</option><option value="pending">Pendiente</option><option value="in_review">En revisión</option><option value="approved">Aprobada</option><option value="rejected">Rechazada</option><option value="suspended">Suspendida</option></select>
                 <PrimaryButton>Filtrar</PrimaryButton>
             </form>
             <div class="overflow-x-auto rounded-arka bg-arka-card shadow-lg">
@@ -26,7 +26,7 @@ function search() { router.get(route('admin.cooperatives.index'), { q: q.value |
                      vinculados/unidades/documentos, sin nada de visibilidad, clientes
                      ni plan vigente. -->
                 <table class="min-w-full text-sm"><thead class="bg-arka-base/60 text-left text-xs uppercase text-arka-text-muted"><tr><th class="p-4">Cooperativa</th><th class="p-4">Estado</th><th class="p-4">Plan</th><th class="p-4">Capacidad</th><th class="p-4">Clientes</th><th class="p-4">Visibilidad</th><th class="p-4">Documentos</th><th class="p-4"></th></tr></thead>
-                    <tbody class="divide-y divide-arka-text-muted/10"><tr v-for="item in cooperatives.data" :key="item.id">
+                    <tbody class="divide-y divide-arka-border"><tr v-for="item in cooperatives.data" :key="item.id">
                         <td class="p-4"><p class="font-medium text-arka-text">{{ item.name || 'Registro incompleto' }}</p><p class="text-xs text-arka-text-muted">{{ item.ruc || 'Sin RUC' }} · {{ item.city?.name || 'Sin ciudad' }}</p></td>
                         <td class="p-4 text-arka-text-muted">{{ item.status }}</td>
                         <td class="p-4 text-arka-text-muted">

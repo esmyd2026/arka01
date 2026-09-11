@@ -177,7 +177,7 @@ async function discard() {
 
             <div
                 v-if="current.offer_comparison?.uses_another_driver_price"
-                class="mt-3 rounded-xl border border-arka-primary/20 bg-arka-base/45 px-3 py-2.5"
+                class="mt-3 rounded-xl border border-arka-primary/30 bg-arka-base/45 px-3 py-2.5"
             >
                 <p class="text-xs font-semibold text-arka-text">Oferta inicial conservada</p>
                 <p class="mt-0.5 text-xs text-arka-text-muted">
@@ -225,7 +225,7 @@ async function discard() {
                      corrida con "→", ilegible cuando la dirección es larga y hace
                      wrap. Mismo lenguaje visual de "punto de origen (verde) → punto
                      de destino (rojo)" que ya usa el mapa (FleetMap.vue). -->
-                <div class="flex gap-3 rounded-arka border border-arka-text-muted/10 p-3">
+                <div class="flex gap-3 rounded-arka border border-arka-border p-3">
                     <div class="flex flex-col items-center pt-1.5 shrink-0">
                         <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
                         <span class="w-px flex-1 min-h-[1.25rem] bg-arka-text-muted/30 my-1"></span>
@@ -277,7 +277,7 @@ async function discard() {
 
             <!-- Acciones pegadas al borde inferior: siempre quedan al alcance
                  del pulgar aunque una dirección o nota sea extensa. -->
-            <div class="shrink-0 border-t border-arka-text-muted/10 bg-arka-card px-4 pb-4 pt-3 sm:px-6">
+            <div class="shrink-0 border-t border-arka-border bg-arka-card px-4 pb-4 pt-3 sm:px-6">
                 <p v-if="actionError" class="mb-3 rounded-xl border border-arka-danger/30 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger">
                     {{ actionError }}
                 </p>

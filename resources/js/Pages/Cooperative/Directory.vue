@@ -41,9 +41,9 @@ function toggle(cooperative) {
 
         <div class="py-8 sm:py-12">
             <div class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6">
-                <form class="grid gap-3 rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow-lg sm:grid-cols-[1fr_16rem_auto]" @submit.prevent="search">
+                <form class="grid gap-3 rounded-arka border border-arka-border bg-arka-card p-4 shadow-lg sm:grid-cols-[1fr_16rem_auto]" @submit.prevent="search">
                     <TextInput v-model="q" placeholder="Buscar por nombre, razón social o cobertura" class="w-full" />
-                    <select v-model="cityId" class="rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                    <select v-model="cityId" class="rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                         <option value="">Todas las ciudades</option>
                         <option v-for="city in cities" :key="city.id" :value="city.id">{{ city.name }}</option>
                     </select>
@@ -55,7 +55,7 @@ function toggle(cooperative) {
                 </div>
 
                 <div v-else class="grid gap-4 sm:grid-cols-2">
-                    <article v-for="cooperative in cooperatives.data" :key="cooperative.id" class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-lg">
+                    <article v-for="cooperative in cooperatives.data" :key="cooperative.id" class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-lg">
                         <div class="flex items-start gap-4">
                             <img v-if="cooperative.logo_url" :src="cooperative.logo_url" :alt="cooperative.name" class="h-14 w-14 rounded-xl bg-white object-contain p-1" />
                             <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-arka-primary/15 text-xl font-bold text-arka-primary">{{ cooperative.name.charAt(0) }}</div>

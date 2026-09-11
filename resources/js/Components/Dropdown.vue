@@ -71,7 +71,7 @@ const open = ref(false);
                 style="display: none"
                 @click="open = false"
             >
-                <!-- Contenedor del menú desplegable con fondo de tarjeta oscura -->
+                <!-- Contenedor del menú desplegable sobre una tarjeta blanca. -->
                 <div class="rounded-arka ring-1 ring-arka-text-muted/20" :class="contentClasses">
                     <slot name="content" />
                 </div>

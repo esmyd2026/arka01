@@ -128,7 +128,7 @@ function formatTime(value) {
                             :key="message.id"
                             class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                             :class="message.direction === 'out'
-                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                ? 'ms-auto bg-arka-primary text-white'
                                 : 'bg-arka-base text-arka-text'"
                         >
                             <p class="whitespace-pre-wrap">{{ message.body || '[ubicación]' }}</p>

@@ -81,12 +81,12 @@ async function destroyTier(tier) {
                 </p>
 
                 <div class="bg-arka-card shadow rounded-arka">
-                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                         <h3 class="text-lg font-medium text-arka-text">Medallas</h3>
                         <PrimaryButton @click="startCreate">Nueva medalla</PrimaryButton>
                     </div>
 
-                    <div class="divide-y divide-arka-text-muted/10">
+                    <div class="divide-y divide-arka-border">
                         <div v-for="tier in tiers" :key="tier.id" class="p-4 sm:p-6">
                             <div v-if="editingId !== tier.id" class="flex items-start justify-between gap-4">
                                 <div>

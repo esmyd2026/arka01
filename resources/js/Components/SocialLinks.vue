@@ -21,7 +21,7 @@ defineProps({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Arka01 en Instagram"
-            class="flex items-center justify-center rounded-full border border-arka-text-muted/20 text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
+            class="flex items-center justify-center rounded-full border border-arka-border text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
             :class="size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'"
         >
             <svg :class="size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -35,7 +35,7 @@ defineProps({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Arka01 en TikTok"
-            class="flex items-center justify-center rounded-full border border-arka-text-muted/20 text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
+            class="flex items-center justify-center rounded-full border border-arka-border text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
             :class="size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'"
         >
             <svg :class="size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -48,7 +48,7 @@ defineProps({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Arka01 en WhatsApp"
-            class="flex items-center justify-center rounded-full border border-arka-text-muted/20 text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
+            class="flex items-center justify-center rounded-full border border-arka-border text-arka-text-muted hover:text-arka-primary-bright hover:border-arka-primary/50 transition"
             :class="size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'"
         >
             <svg :class="size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">

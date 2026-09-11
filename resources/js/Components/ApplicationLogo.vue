@@ -1,26 +1,32 @@
 <script setup>
-// Logotipo de la marca (sección 9.9): antes era texto tipográfico armado a
-// mano; pedido explícito del usuario, ahora usa el archivo real del logo
-// (fondo transparente, se ve bien tanto en tarjetas oscuras como en la base
-// de la app). `size` ahora es una clase de alto (h-*), no de texto — el
-// ancho se ajusta solo para no deformar la imagen.
-defineProps({
+import { computed } from 'vue';
+
+// El isotipo original se acompaña con texto semántico: oscuro en el tema claro
+// y blanco suave en el tema oscuro, sin añadir una placa negra artificial.
+const props = defineProps({
     size: { type: String, default: 'h-8' },
 });
 
-// Bug real reportado por el usuario (con capturas): el archivo original que
-// subió ("logo arka01 completo sin fondo.png") trae de fábrica un margen
-// transparente enorme alrededor del isotipo + "Arka01" + eslogan — a las
-// alturas chicas en las que vive el logo en la app (header, login, perfil
-// público, etc.) ese margen se comía casi todo el alto disponible y el logo
-// quedaba minúsculo o directamente invisible. `logo-arka01.png` es un
-// recorte generado una sola vez (PHP GD, al margen del bounding box real de
-// píxeles opacos) del mismo archivo original, sin ese margen muerto y sin el
-// eslogan (que ya se repite como texto en cada pantalla donde hace falta) —
-// mismo isotipo, mismo trazo, solo bien encuadrado.
-const LOGO_SRC = '/img/logo-arka01.png';
+// El isotipo sí tiene transparencia real y funciona tanto en encabezados
+// compactos como en el hero sin añadir fondos artificiales.
+const LOGO_SRC = '/img/logo-arka01-icono.png';
+
+const textSizeClass = computed(() => {
+    if (props.size.includes('h-24') || props.size.includes('h-28')) return 'text-5xl sm:text-6xl';
+    if (props.size.includes('h-14') || props.size.includes('h-16')) return 'text-4xl sm:text-5xl';
+    if (props.size.includes('h-11')) return 'text-3xl sm:text-4xl';
+    if (props.size.includes('h-10')) return 'text-2xl';
+    if (props.size.includes('h-9')) return 'text-xl sm:text-2xl';
+    if (props.size.includes('h-6') || props.size.includes('h-7')) return 'text-base sm:text-lg';
+    return 'text-xl';
+});
 </script>
 
 <template>
-    <img :src="LOGO_SRC" alt="Arka01" class="w-auto select-none" :class="size" />
+    <span class="inline-flex w-auto select-none items-center gap-1.5" :class="size" aria-label="Arka01">
+        <img :src="LOGO_SRC" alt="" class="h-full w-auto object-contain" />
+        <span class="font-black leading-none tracking-[-0.065em] text-arka-text" :class="textSizeClass">
+            Arka<span class="text-arka-primary">01</span>
+        </span>
+    </span>
 </template>

@@ -342,7 +342,7 @@ function formatMessageTime(value) {
                         <p class="text-sm text-arka-text-muted">Motivo: {{ profileUser.driver_profile.admin_activation_note }}</p>
                         <SecondaryButton @click="revokeForceActivate">Revocar activación manual</SecondaryButton>
                     </div>
-                    <form v-else @submit.prevent="forceActivateDriver" class="p-3 rounded-arka border border-arka-text-muted/15 space-y-2">
+                    <form v-else @submit.prevent="forceActivateDriver" class="p-3 rounded-arka border border-arka-border space-y-2">
                         <InputLabel for="activation_note" value="Activar a este conductor sin exigirle documentos/seguro completos" />
                         <TextInput
                             id="activation_note"
@@ -369,7 +369,7 @@ function formatMessageTime(value) {
                         </p>
                         <SecondaryButton @click="revokeRequireDocuments">Quitar exigencia de documentos</SecondaryButton>
                     </div>
-                    <form v-else @submit.prevent="requireDriverDocuments" class="p-3 rounded-arka border border-arka-text-muted/15 space-y-2">
+                    <form v-else @submit.prevent="requireDriverDocuments" class="p-3 rounded-arka border border-arka-border space-y-2">
                         <InputLabel for="require_documents_note" value="Exigirle documentos a este conductor en particular antes de dejarlo conectarse" />
                         <TextInput
                             id="require_documents_note"
@@ -416,7 +416,7 @@ function formatMessageTime(value) {
                     <!-- Ajuste manual de puntos (pedido explícito del usuario:
                          "¿dónde actualizo los puntos de un conductor?" — hoy
                          solo suben solos, uno por carrera completada). -->
-                    <form @submit.prevent="updatePoints" class="flex items-end gap-2 pt-2 border-t border-arka-text-muted/10">
+                    <form @submit.prevent="updatePoints" class="flex items-end gap-2 pt-2 border-t border-arka-border">
                         <div>
                             <InputLabel for="total_points" value="Ajustar puntos" />
                             <TextInput
@@ -449,7 +449,7 @@ function formatMessageTime(value) {
                         <img v-if="profileUser.driver_profile.vehicle_photo_url" :src="profileUser.driver_profile.vehicle_photo_url" alt="Vehículo" class="h-32 w-full object-cover rounded-arka" />
                     </div>
 
-                    <div v-if="driverPlan" class="pt-2 border-t border-arka-text-muted/10">
+                    <div v-if="driverPlan" class="pt-2 border-t border-arka-border">
                         <p class="text-sm text-arka-text">Plan {{ driverPlan.plan_name }}</p>
                         <p class="text-xs text-arka-text-muted">{{ subscriptionLine(driverPlan) }}</p>
                     </div>
@@ -488,7 +488,7 @@ function formatMessageTime(value) {
                     <p v-if="!driverClients.length" class="text-sm text-arka-text-muted">
                         Todavía no forma parte de ninguna flota.
                     </p>
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <li
                             v-for="member in driverClients"
                             :key="member.member_id"
@@ -526,7 +526,7 @@ function formatMessageTime(value) {
                     <div v-for="fleet in fleetsOwned" :key="fleet.id">
                         <p class="text-sm font-medium text-arka-text">{{ fleet.name }} — {{ fleet.drivers.length }} conductor(es)</p>
                         <p v-if="!fleet.drivers.length" class="text-sm text-arka-text-muted mt-1">Todavía no tiene conductores.</p>
-                        <ul v-else class="mt-2 divide-y divide-arka-text-muted/10">
+                        <ul v-else class="mt-2 divide-y divide-arka-border">
                             <li
                                 v-for="driver in fleet.drivers"
                                 :key="driver.user_id"
@@ -553,7 +553,7 @@ function formatMessageTime(value) {
                         </ul>
                     </div>
 
-                    <div v-if="clientPlan" class="pt-2 border-t border-arka-text-muted/10">
+                    <div v-if="clientPlan" class="pt-2 border-t border-arka-border">
                         <p class="text-sm text-arka-text">Plan {{ clientPlan.plan_name }}</p>
                         <p class="text-xs text-arka-text-muted">{{ subscriptionLine(clientPlan) }}</p>
                     </div>
@@ -566,7 +566,7 @@ function formatMessageTime(value) {
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
                     <h3 class="text-lg font-medium text-arka-text">Historial de carreras ({{ rideHistory.length }})</h3>
                     <p v-if="!rideHistory.length" class="text-sm text-arka-text-muted">Todavía no hizo ninguna carrera.</p>
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <li v-for="ride in rideHistory" :key="ride.id" class="py-3 space-y-1">
                             <div class="flex items-center justify-between gap-3">
                                 <p class="text-sm text-arka-text">
@@ -595,7 +595,7 @@ function formatMessageTime(value) {
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-3">
                     <h3 class="text-lg font-medium text-arka-text">Calificaciones recibidas</h3>
                     <p v-if="!recentReviews.length" class="text-sm text-arka-text-muted">Todavía no recibió ninguna.</p>
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <li v-for="review in recentReviews" :key="review.id" class="py-2.5 text-sm space-y-1">
                             <div class="flex items-center gap-2">
                                 <span class="text-arka-text font-medium">{{ review.reviewer.name }}</span>
@@ -621,7 +621,7 @@ function formatMessageTime(value) {
                             :key="message.id"
                             class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                             :class="message.direction === 'out'
-                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                ? 'ms-auto bg-arka-primary text-white'
                                 : 'bg-arka-base text-arka-text'"
                         >
                             <p class="whitespace-pre-wrap">{{ message.body || '[ubicación]' }}</p>

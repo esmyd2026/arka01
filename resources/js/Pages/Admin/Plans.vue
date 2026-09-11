@@ -125,14 +125,14 @@ async function destroyPlan(plan) {
             <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
                 <template v-for="(list, ownerType) in { driver: driverPlans, client: clientPlans, cooperative: cooperativePlans }" :key="ownerType">
                     <div class="bg-arka-card shadow rounded-arka">
-                        <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                        <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                             <h3 class="text-lg font-medium text-arka-text">
                                 Planes de {{ ownerType === 'driver' ? 'conductor' : ownerType === 'client' ? 'cliente' : 'cooperativa' }}
                             </h3>
                             <PrimaryButton @click="startCreate(ownerType)">Nuevo plan</PrimaryButton>
                         </div>
 
-                        <div class="divide-y divide-arka-text-muted/10">
+                        <div class="divide-y divide-arka-border">
                             <div v-for="plan in list" :key="plan.id" class="p-4 sm:p-6">
                                 <div v-if="editingId !== plan.id" class="flex items-start justify-between gap-4">
                                     <div>

@@ -137,7 +137,7 @@ async function destroySector(sector) {
                 </form>
 
                 <div v-for="city in cities" :key="city.id" class="bg-arka-card shadow rounded-arka">
-                    <div class="p-4 sm:p-6 border-b border-arka-text-muted/10">
+                    <div class="p-4 sm:p-6 border-b border-arka-border">
                         <div v-if="editingCityId !== city.id" class="flex items-start justify-between gap-4">
                             <div>
                                 <p class="text-arka-text font-medium">

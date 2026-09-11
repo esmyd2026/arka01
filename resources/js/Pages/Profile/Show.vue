@@ -132,7 +132,7 @@ const shareProfile = async () => {
 
                 <section
                     v-if="mutualPeople.length"
-                    class="mt-4 rounded-2xl border border-arka-primary/15 bg-arka-card p-4 shadow sm:p-5"
+                    class="mt-4 rounded-2xl border border-arka-primary/25 bg-arka-card p-4 shadow sm:p-5"
                 >
                     <div class="flex items-start justify-between gap-3">
                         <div>
@@ -151,7 +151,7 @@ const shareProfile = async () => {
                             v-for="person in mutualPeople"
                             :key="person.public_id"
                             :href="route('profiles.show', person.public_id)"
-                            class="flex min-w-0 items-center gap-3 rounded-xl border border-white/5 bg-arka-base/45 p-2.5 transition hover:border-arka-primary/30"
+                            class="flex min-w-0 items-center gap-3 rounded-xl border border-arka-border bg-arka-base/45 p-2.5 transition hover:border-arka-primary/30"
                         >
                             <UserAvatar :user="person" size-class="h-10 w-10 shrink-0 text-xs" />
                             <span class="min-w-0">
@@ -175,7 +175,7 @@ const shareProfile = async () => {
                 <ApplicationLogo size="h-10" />
             </Link>
 
-            <main class="mt-6 overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-2xl shadow-black/20">
+            <main class="mt-6 overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-2xl shadow-black/20">
                 <div class="h-1.5 bg-gradient-to-r from-arka-primary to-arka-lime"></div>
                 <div class="p-5 sm:p-7">
                     <div class="text-center">
@@ -219,7 +219,7 @@ const shareProfile = async () => {
                     <div class="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Link
                             :href="route('register', { ref: profileUser.public_id })"
-                            class="inline-flex min-h-11 items-center justify-center rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold text-arka-base transition hover:bg-arka-primary-bright"
+                            class="inline-flex min-h-11 items-center justify-center rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold text-white transition hover:bg-arka-primary-bright"
                         >
                             Unirme a Arka01
                         </Link>

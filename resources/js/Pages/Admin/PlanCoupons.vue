@@ -140,12 +140,12 @@ function formatDate(value) {
                 </p>
 
                 <div class="bg-arka-card shadow rounded-arka">
-                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-text-muted/10">
+                    <div class="p-4 sm:p-6 flex items-center justify-between border-b border-arka-border">
                         <h3 class="text-lg font-medium text-arka-text">Cupones</h3>
                         <PrimaryButton @click="startCreate">Nuevo cupón</PrimaryButton>
                     </div>
 
-                    <div class="divide-y divide-arka-text-muted/10">
+                    <div class="divide-y divide-arka-border">
                         <div v-for="coupon in coupons" :key="coupon.id" class="p-4 sm:p-6">
                             <div v-if="editingId !== coupon.id" class="flex items-start justify-between gap-4">
                                 <div class="flex-1 min-w-0">
@@ -234,7 +234,7 @@ function formatDate(value) {
                                             placeholder="Nombre, usuario o código de socio"
                                             @input="searchReferrer"
                                         />
-                                        <ul v-if="referrerResults.length" class="mt-1 max-h-40 divide-y divide-arka-text-muted/10 overflow-y-auto rounded-arka border border-arka-text-muted/10">
+                                        <ul v-if="referrerResults.length" class="mt-1 max-h-40 divide-y divide-arka-border overflow-y-auto rounded-arka border border-arka-border">
                                             <li
                                                 v-for="candidate in referrerResults"
                                                 :key="candidate.id"
@@ -321,7 +321,7 @@ function formatDate(value) {
                                         placeholder="Nombre, usuario o código de socio"
                                         @input="searchReferrer"
                                     />
-                                    <ul v-if="referrerResults.length" class="mt-1 max-h-40 divide-y divide-arka-text-muted/10 overflow-y-auto rounded-arka border border-arka-text-muted/10">
+                                    <ul v-if="referrerResults.length" class="mt-1 max-h-40 divide-y divide-arka-border overflow-y-auto rounded-arka border border-arka-border">
                                         <li
                                             v-for="candidate in referrerResults"
                                             :key="candidate.id"

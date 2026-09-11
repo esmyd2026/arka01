@@ -124,7 +124,7 @@ const SEVERITY_CLASS = {
 
                 <p v-if="!events.data.length" class="text-sm text-arka-text-muted">No hay eventos con esos filtros.</p>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="event in events.data" :key="event.id" class="p-4 sm:p-6">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0">

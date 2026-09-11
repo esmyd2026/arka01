@@ -48,13 +48,13 @@ function formatDate(value) {
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">Se registró</th>
                                     <th class="py-2 pr-3">Invitado por</th>
                                     <th class="py-2 pr-3">Fecha</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="r in referrals.data" :key="r.id">
                                     <td class="py-2 pr-3">
                                         <Link :href="route('admin.users.show', r.id)" class="text-arka-text font-medium hover:text-arka-primary-bright">

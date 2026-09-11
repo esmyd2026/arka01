@@ -266,7 +266,7 @@ async function switchToClient() {
                                     :href="whatsappProfileShareUrl"
                                     target="_blank"
                                     rel="noopener"
-                                    class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-semibold text-arka-base transition hover:bg-arka-primary-bright"
+                                    class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-arka-primary-bright"
                                 >
                                     <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.2-.7.8-.8 1-.1.1-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5.1-.1.2-.3.4-.4.1-.1.2-.2.2-.4.1-.1 0-.3 0-.4 0-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2 1 2.4c.1.1 1.6 2.4 3.8 3.4.5.2.9.4 1.3.5.6.2 1.1.1 1.5.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3Z" />
@@ -303,7 +303,7 @@ async function switchToClient() {
                     <p class="mt-1 text-sm text-arka-text-muted">
                         Le falta completar algunos datos — tocá "Completar" para ir directo al campo.
                     </p>
-                    <ul class="mt-4 divide-y divide-arka-text-muted/10">
+                    <ul class="mt-4 divide-y divide-arka-border">
                         <li v-for="item in profileChecklist" :key="item.label" class="py-2 flex items-center justify-between gap-3">
                             <span class="flex items-center gap-2 text-sm" :class="item.done ? 'text-arka-text-muted' : 'text-arka-text'">
                                 <svg v-if="item.done" class="h-4 w-4 text-arka-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -327,7 +327,7 @@ async function switchToClient() {
                 <!-- Secciones operativas de la cuenta: una sola abierta para
                      que en móvil se encuentre cada ajuste sin recorrer toda
                      la página. -->
-                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                <section class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('personal')">
                         <SectionIcon name="user" />
                         <span class="min-w-0 flex-1">
@@ -340,7 +340,7 @@ async function switchToClient() {
                             <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                         </svg>
                     </button>
-                <div v-show="accountSection === 'personal'" class="border-t border-arka-text-muted/10 p-4 sm:p-6">
+                <div v-show="accountSection === 'personal'" class="border-t border-arka-border p-4 sm:p-6">
                     <UpdateProfileInformationForm
                         :must-verify-email="mustVerifyEmail"
                         :status="status"
@@ -355,7 +355,7 @@ async function switchToClient() {
                      solo estaban en el menú desplegable del header, también
                      acá. Usuario/código de socio ya se muestran arriba, en la
                      tarjeta de perfil — sin repetirlos acá. -->
-                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                <section class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('account')">
                         <SectionIcon name="settings" />
                         <span class="min-w-0 flex-1">
@@ -368,7 +368,7 @@ async function switchToClient() {
                             <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                         </svg>
                     </button>
-                    <div v-show="accountSection === 'account'" class="space-y-6 border-t border-arka-text-muted/10 p-4 sm:p-6">
+                    <div v-show="accountSection === 'account'" class="space-y-6 border-t border-arka-border p-4 sm:p-6">
                 <div>
                     <h2 class="flex items-center gap-2 text-lg font-medium text-arka-text">
                         <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -441,7 +441,7 @@ async function switchToClient() {
                                 :href="whatsappOptInUrl"
                                 target="_blank"
                                 rel="noopener"
-                                class="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-sm font-semibold hover:bg-arka-primary-bright transition"
+                                class="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-arka bg-arka-primary text-white text-sm font-semibold hover:bg-arka-primary-bright transition"
                             >
                                 {{ whatsappSession && whatsappSession.status !== 'expired' ? 'Renovar por WhatsApp' : 'Conectar WhatsApp' }} &rarr;
                             </a>
@@ -458,7 +458,7 @@ async function switchToClient() {
                      vía, manual: buscar y guardar una sola vez. Si ya vino
                      por enlace o cupón, esto ya aparece resuelto y de solo
                      lectura. -->
-                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                <section class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('referrals')">
                         <SectionIcon name="referrals" />
                         <span class="min-w-0 flex-1">
@@ -471,7 +471,7 @@ async function switchToClient() {
                             <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                         </svg>
                     </button>
-                    <div v-show="accountSection === 'referrals'" class="space-y-6 border-t border-arka-text-muted/10 p-4 sm:p-6">
+                    <div v-show="accountSection === 'referrals'" class="space-y-6 border-t border-arka-border p-4 sm:p-6">
                 <div>
                     <h2 class="flex items-center gap-2 text-lg font-medium text-arka-text">
                         <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -500,7 +500,7 @@ async function switchToClient() {
                                 placeholder="Nombre, usuario o código de socio"
                                 @input="searchReferrer"
                             />
-                            <ul v-if="referrerResults.length" class="mt-2 divide-y divide-arka-text-muted/10 rounded-arka border border-arka-text-muted/10">
+                            <ul v-if="referrerResults.length" class="mt-2 divide-y divide-arka-border rounded-arka border border-arka-border">
                                 <li
                                     v-for="candidate in referrerResults"
                                     :key="candidate.id"
@@ -546,13 +546,13 @@ async function switchToClient() {
                     <div class="mt-4 overflow-x-auto max-w-xl">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">Nombre</th>
                                     <th class="py-2 pr-3">Rol</th>
                                     <th class="py-2 pr-3">Se unió</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="referral in referrals" :key="referral.id">
                                     <td class="py-2 pr-3 text-arka-text font-medium">{{ referral.name }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ referral.role }}</td>
@@ -567,7 +567,7 @@ async function switchToClient() {
                     </div>
                 </section>
 
-                <section v-if="Object.keys(subscriptionSummary).length" class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                <section v-if="Object.keys(subscriptionSummary).length" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('subscription')">
                         <SectionIcon name="subscription" />
                         <span class="min-w-0 flex-1">
@@ -578,12 +578,12 @@ async function switchToClient() {
                             <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                         </svg>
                     </button>
-                <div v-show="accountSection === 'subscription'" class="border-t border-arka-text-muted/10 p-4 sm:p-6">
+                <div v-show="accountSection === 'subscription'" class="border-t border-arka-border p-4 sm:p-6">
                     <SubscriptionSummary :summary="subscriptionSummary" class="max-w-xl" />
                 </div>
                 </section>
 
-                <section class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card shadow-sm">
+                <section class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card shadow-sm">
                     <button type="button" class="flex w-full items-center gap-3 p-4 text-left sm:p-5" @click="toggleAccountSection('security')">
                         <SectionIcon name="security" />
                         <span class="min-w-0 flex-1">
@@ -594,12 +594,12 @@ async function switchToClient() {
                             <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
                         </svg>
                     </button>
-                    <div v-show="accountSection === 'security'" class="space-y-8 border-t border-arka-text-muted/10 p-4 sm:p-6">
+                    <div v-show="accountSection === 'security'" class="space-y-8 border-t border-arka-border p-4 sm:p-6">
                 <div>
                     <UpdatePasswordForm class="max-w-xl" />
                 </div>
 
-                <div class="border-t border-arka-text-muted/10 pt-6">
+                <div class="border-t border-arka-border pt-6">
                     <DeleteUserForm class="max-w-xl" />
                 </div>
                     </div>
@@ -617,14 +617,14 @@ async function switchToClient() {
     height: 88px;
     place-items: center;
     border-radius: 50%;
-    background: conic-gradient(#34d399 var(--profile-trust-score), rgba(255, 255, 255, 0.08) 0);
+    background: conic-gradient(#147d58 var(--profile-trust-score), #d9e2dd 0);
 }
 
 .profile-trust-ring::before {
     position: absolute;
     inset: 7px;
     border-radius: inherit;
-    background: #10231b;
+    background: #ffffff;
     content: '';
 }
 
@@ -636,12 +636,12 @@ async function switchToClient() {
 }
 
 .profile-trust-ring strong {
-    color: #e7f4ee;
+    color: #18231e;
     font-size: 1.6rem;
 }
 
 .profile-trust-ring small {
-    color: #93ada2;
+    color: #68756f;
     font-size: 0.65rem;
 }
 

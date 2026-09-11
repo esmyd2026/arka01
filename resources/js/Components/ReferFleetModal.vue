@@ -149,7 +149,7 @@ watch(
                     Debe ser el usuario exacto (con o sin @) o el código de socio completo — no busca por nombre.
                 </p>
 
-                <ul v-if="searchResults.length" class="mt-4 divide-y divide-arka-text-muted/10">
+                <ul v-if="searchResults.length" class="mt-4 divide-y divide-arka-border">
                     <li v-for="friend in searchResults" :key="friend.user_id" class="py-3 flex items-center justify-between gap-4">
                         <div class="flex items-center gap-3 min-w-0">
                             <UserAvatar :user="friend" size-class="h-11 w-11 text-sm shrink-0" />
@@ -198,7 +198,7 @@ watch(
                     </button>
                 </div>
 
-                <ul class="mt-2 max-h-72 divide-y divide-arka-text-muted/10 overflow-y-auto rounded-arka border border-arka-text-muted/10">
+                <ul class="mt-2 max-h-72 divide-y divide-arka-border overflow-y-auto rounded-arka border border-arka-border">
                     <li v-for="driver in drivers" :key="driver.id" class="flex items-center gap-3 p-3">
                         <input
                             :id="`refer-driver-${driver.id}`"

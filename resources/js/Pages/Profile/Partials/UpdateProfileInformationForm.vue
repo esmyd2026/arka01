@@ -213,7 +213,7 @@ function submit() {
                     <div class="min-w-0 flex-1">
                         <label
                             for="avatar"
-                            class="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-arka bg-arka-primary px-3 py-2 text-sm font-semibold text-arka-base transition hover:bg-arka-primary-bright focus-within:ring-2 focus-within:ring-arka-primary"
+                            class="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-arka bg-arka-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-arka-primary-bright focus-within:ring-2 focus-within:ring-arka-primary"
                         >
                             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                 <path d="M8.25 3A2.25 2.25 0 0 0 6 5.25V6H4.25A2.25 2.25 0 0 0 2 8.25v9.5A2.25 2.25 0 0 0 4.25 20h15.5A2.25 2.25 0 0 0 22 17.75v-9.5A2.25 2.25 0 0 0 19.75 6H18v-.75A2.25 2.25 0 0 0 15.75 3h-7.5ZM12 8a4.25 4.25 0 1 1 0 8.5A4.25 4.25 0 0 1 12 8Z" />
@@ -332,7 +332,7 @@ function submit() {
                          para que el resumen de "datos completos" tenga
                          sentido de un vistazo. -->
                     <InputLabel value="País" />
-                    <p class="mt-1 flex h-[42px] items-center rounded-arka border border-arka-text-muted/20 bg-arka-base px-3 text-sm text-arka-text-muted">
+                    <p class="mt-1 flex h-[42px] items-center rounded-arka border border-arka-border bg-arka-base px-3 text-sm text-arka-text-muted">
                         🇪🇨 Ecuador
                     </p>
                 </div>

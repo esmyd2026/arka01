@@ -30,7 +30,7 @@ const props = defineProps({
     guestCooperatives: { type: Array, default: () => [] },
     // Imagen de fondo del hero (pedido explícito del usuario: configurable
     // desde /admin/sitio, ver Admin\SiteSettingController) — null hasta que
-    // un admin suba una, el hero se ve con el fondo oscuro liso de siempre.
+    // un admin suba una, el hero conserva el fondo claro de la aplicación.
     heroBackgroundUrl: { type: String, default: null },
     ctaInteractionToken: { type: String, default: '' },
 });
@@ -41,7 +41,7 @@ const authUser = usePage().props.auth?.user ?? null;
 // carga de la imagen... lo hiciste en el login y me gustó"): mismo criterio
 // que GuestLayout.vue — la foto se precarga en JS y recién se hace visible
 // con un fundido suave una vez lista, en vez de aparecer de golpe cuando
-// pesa mucho. Mientras tanto se ve el fondo oscuro liso de siempre.
+// pesa mucho. Mientras tanto se ve el fondo claro de la aplicación.
 const heroBackgroundLoaded = ref(false);
 const showingWelcomeCta = ref(false);
 const ctaHoneypot = ref('');
@@ -293,11 +293,11 @@ function submitFeedback() {
 
             <!-- Con sesión iniciada, el hero completo (mockup, CTAs de registro)
                  no aplica — ya tiene el acceso directo arriba. -->
-            <div v-if="authUser" class="text-center">
-                <ApplicationLogo size="h-14 sm:h-16" />
+            <div v-if="authUser" class="flex items-center justify-between gap-4 rounded-2xl border border-arka-border bg-arka-card p-4 shadow-sm sm:px-6">
+                <ApplicationLogo size="h-10 sm:h-11" />
                 <Link
                     :href="route('dashboard')"
-                    class="mt-6 inline-flex items-center px-5 py-2.5 bg-arka-primary rounded-arka font-semibold text-sm text-arka-base hover:bg-arka-primary-bright transition"
+                    class="inline-flex min-h-11 items-center rounded-xl bg-arka-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-arka-primary-bright"
                 >
                     Ir a mi cuenta
                 </Link>
@@ -312,7 +312,7 @@ function submitFeedback() {
                  `heroBackgroundUrl` (Admin\SiteSettingController, subida
                  desde /admin/sitio). Sin ninguna subida todavía, queda sin
                  imagen — el degradado solo ya se ve bien contra el fondo
-                 oscuro de siempre de toda la app. `bg-cover`/`bg-top` para
+                 claro de toda la app. `bg-cover`/`bg-top` para
                  que la parte de arriba (donde vive el texto) sea la que más
                  se vea. -->
             <div
@@ -328,7 +328,7 @@ function submitFeedback() {
                     v-if="heroBackgroundUrl"
                     class="pointer-events-none absolute inset-0 -z-10 bg-cover bg-top transition-opacity duration-700 ease-out"
                     :class="heroBackgroundLoaded ? 'opacity-100' : 'opacity-0'"
-                    :style="{ backgroundImage: `linear-gradient(180deg, rgba(7,17,13,0.35) 0%, rgba(7,17,13,0.55) 60%, rgba(7,17,13,0.85) 100%), url('${heroBackgroundUrl}')` }"
+                    :style="{ backgroundImage: `linear-gradient(180deg, rgba(248,250,249,0.68) 0%, rgba(243,246,244,0.82) 60%, rgba(237,242,239,0.96) 100%), url('${heroBackgroundUrl}')` }"
                 />
 
                 <div class="text-center lg:text-start">
@@ -425,7 +425,7 @@ function submitFeedback() {
                     <Link
                         v-if="canLogin"
                         :href="route('login')"
-                        class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/20 transition hover:-translate-y-0.5 hover:bg-arka-primary-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                        class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/20 transition hover:-translate-y-0.5 hover:bg-arka-primary-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
                     >
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4M11 8.5 15 12l-4 3.5M15 12H4"/></svg>
                         Iniciar sesión
@@ -440,7 +440,7 @@ function submitFeedback() {
                     </Link>
                     <a
                         href="#como-funciona"
-                        class="group col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-arka-text-muted/15 bg-arka-card/55 px-4 py-2.5 text-sm font-semibold text-arka-text-muted transition hover:border-arka-primary/35 hover:bg-arka-primary/[0.06] hover:text-arka-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
+                        class="group col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-arka-border bg-arka-card/55 px-4 py-2.5 text-sm font-semibold text-arka-text-muted transition hover:border-arka-primary/35 hover:bg-arka-primary/[0.06] hover:text-arka-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary"
                     >
                         <span class="flex h-6 w-6 items-center justify-center rounded-full border border-arka-primary/30 text-arka-primary">
                             <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14Z"/></svg>
@@ -449,13 +449,13 @@ function submitFeedback() {
                     </a>
                 </div>
 
-                <div class="relative overflow-visible rounded-[1.75rem] border border-arka-primary/20 bg-arka-card shadow-2xl">
+                <div class="relative overflow-visible rounded-[1.75rem] border border-arka-primary/30 bg-arka-card shadow-2xl">
                     <!-- Cabecera inspirada en un buscador de reservas: primero
                          explica la acción y después presenta el trayecto. -->
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-3 rounded-[1.75rem] px-5 py-3.5 text-start transition hover:bg-arka-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-arka-primary focus-visible:ring-offset-2 focus-visible:ring-offset-arka-base sm:px-6"
-                        :class="showingGuestRideForm ? 'rounded-b-none border-b border-arka-text-muted/10' : ''"
+                        :class="showingGuestRideForm ? 'rounded-b-none border-b border-arka-border' : ''"
                         :aria-expanded="showingGuestRideForm"
                         aria-controls="guest-ride-form"
                         @click="showingGuestRideForm = !showingGuestRideForm"
@@ -478,7 +478,7 @@ function submitFeedback() {
                             </div>
                             <button
                                 type="button"
-                                class="inline-flex h-8 items-center gap-1.5 rounded-full border border-arka-text-muted/20 px-2.5 text-[11px] font-semibold text-arka-text transition hover:border-arka-primary/50 hover:text-arka-primary"
+                                class="inline-flex h-8 items-center gap-1.5 rounded-full border border-arka-border px-2.5 text-[11px] font-semibold text-arka-text transition hover:border-arka-primary/50 hover:text-arka-primary"
                                 aria-label="Invertir punto de partida y destino"
                                 @click="swapGuestRoute"
                             >
@@ -534,13 +534,13 @@ function submitFeedback() {
                             No hay cooperativas disponibles en este momento.
                         </div>
 
-                        <div class="mt-3 grid grid-cols-3 gap-2 border-y border-arka-text-muted/10 py-2 text-center">
-                            <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full bg-arka-primary text-[9px] font-bold text-arka-base">1</span><p class="text-[9px] text-arka-text-muted">Ruta</p></div>
+                        <div class="mt-3 grid grid-cols-3 gap-2 border-y border-arka-border py-2 text-center">
+                            <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full bg-arka-primary text-[9px] font-bold text-white">1</span><p class="text-[9px] text-arka-text-muted">Ruta</p></div>
                             <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full border border-arka-primary/40 text-[9px] font-bold text-arka-primary">2</span><p class="text-[9px] text-arka-text-muted">Tarifa</p></div>
                             <div class="flex items-center justify-center gap-1.5"><span class="flex h-4 w-4 items-center justify-center rounded-full border border-arka-primary/40 text-[9px] font-bold text-arka-primary">3</span><p class="text-[9px] text-arka-text-muted">Confirmar</p></div>
                         </div>
 
-                        <button type="button" :disabled="!guestCooperatives.length" class="mt-3 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3 text-xs font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright disabled:cursor-not-allowed disabled:opacity-40" @click="continueAsGuest">
+                        <button type="button" :disabled="!guestCooperatives.length" class="mt-3 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright disabled:cursor-not-allowed disabled:opacity-40" @click="continueAsGuest">
                             Consultar tarifa
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6"/></svg>
                         </button>
@@ -555,9 +555,9 @@ function submitFeedback() {
                  usuario, mockup provisto) — id como destino del botón "¿Cómo
                  funciona?" del hero, para reusar este mismo contenido en vez de
                  duplicarlo en una página aparte. -->
-            <div id="como-funciona" class="mt-16 scroll-mt-6 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-8">
+            <div id="como-funciona" class="scroll-mt-6 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-8" :class="authUser ? 'mt-8' : 'mt-16'">
                 <!-- Para Clientes -->
-                <div class="p-6 bg-arka-card shadow rounded-arka">
+                <div class="rounded-2xl border border-arka-border bg-arka-card p-6 shadow-sm">
                     <div class="flex items-center gap-3 mb-1">
                         <span class="h-11 w-11 rounded-full bg-arka-primary/15 flex items-center justify-center shrink-0">
                             <svg class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -593,7 +593,7 @@ function submitFeedback() {
                         </li>
                     </ul>
 
-                    <div class="mt-1 flex items-start gap-3 rounded-arka border border-arka-primary/15 bg-arka-primary/[0.06] p-3">
+                    <div class="mt-1 flex items-start gap-3 rounded-arka border border-arka-primary/25 bg-arka-primary/[0.06] p-3">
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-arka-primary/15 text-arka-primary">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4A8 8 0 1 1 20 11.5Z" />
@@ -625,7 +625,7 @@ function submitFeedback() {
 
                     <div class="flex items-center justify-center gap-2 lg:flex-col lg:gap-3">
                         <div class="flex flex-col items-center gap-1">
-                            <span class="h-12 w-12 rounded-full bg-arka-card border border-arka-text-muted/20 flex items-center justify-center">
+                            <span class="h-12 w-12 rounded-full bg-arka-card border border-arka-border flex items-center justify-center">
                                 <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20a7.5 7.5 0 0 1 15 0" />
@@ -650,7 +650,7 @@ function submitFeedback() {
                         <div class="w-10 lg:w-px lg:h-8 border-t-2 lg:border-t-0 lg:border-s-2 border-dashed border-arka-primary/30"></div>
 
                         <div class="flex flex-col items-center gap-1">
-                            <span class="h-12 w-12 rounded-full bg-arka-card border border-arka-text-muted/20 flex items-center justify-center">
+                            <span class="h-12 w-12 rounded-full bg-arka-card border border-arka-border flex items-center justify-center">
                                 <svg class="h-5 w-5 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
@@ -671,7 +671,7 @@ function submitFeedback() {
                 </div>
 
                 <!-- Para Conductores -->
-                <div class="p-6 bg-arka-card shadow rounded-arka">
+                <div class="rounded-2xl border border-arka-border bg-arka-card p-6 shadow-sm">
                     <div class="flex items-center gap-3 mb-1">
                         <span class="h-11 w-11 rounded-full bg-arka-primary/15 flex items-center justify-center shrink-0">
                             <svg class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -717,7 +717,7 @@ function submitFeedback() {
 
             <!-- Las cooperativas forman parte de la red, pero conservamos el
                  bloque principal original limpio y fácil de recorrer. -->
-            <div class="mt-8 flex flex-col items-center gap-4 rounded-arka border border-arka-primary/20 bg-arka-card p-5 text-center shadow sm:flex-row sm:px-6 sm:text-start">
+            <div class="mt-8 flex flex-col items-center gap-4 rounded-arka border border-arka-primary/30 bg-arka-card p-5 text-center shadow sm:flex-row sm:px-6 sm:text-start">
                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15">
                     <svg class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 20V8l8-4 8 4v12M8 20v-4h8v4M8 10h.01M12 10h.01M16 10h.01" />
@@ -749,7 +749,7 @@ function submitFeedback() {
                     Cinco formas en las que Arka01 convierte cada experiencia en más confianza y mejores conexiones.
                 </p>
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                    <div v-for="item in WHY_ARKA01" :key="item.title" class="rounded-arka border border-arka-text-muted/10 bg-arka-card/50 p-4 text-center">
+                    <div v-for="item in WHY_ARKA01" :key="item.title" class="rounded-arka border border-arka-border bg-arka-card/50 p-4 text-center">
                         <span class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-arka-primary/15">
                             <svg v-if="item.title === 'Relaciones que continúan'" class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 12.5 11 15a2 2 0 0 0 2.8 0l5.4-5.4a2.5 2.5 0 0 0-3.5-3.5L14 7.8l-1.7-1.7a2.5 2.5 0 0 0-3.5 0L7.4 7.5" />
@@ -797,7 +797,7 @@ function submitFeedback() {
                     <span class="block text-sm font-medium text-arka-text">Ayúdanos a mejorar Arka01</span>
                     <span class="block text-xs text-arka-text-muted">Su opinión nos ayuda a construir una mejor experiencia.</span>
                 </span>
-                <span class="shrink-0 px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-xs font-semibold uppercase tracking-wide">
+                <span class="shrink-0 px-4 py-2 rounded-arka bg-arka-primary text-white text-xs font-semibold uppercase tracking-wide">
                     Enviar sugerencia
                 </span>
             </button>
@@ -825,13 +825,13 @@ function submitFeedback() {
                             v-model="feedbackForm.name"
                             type="text"
                             placeholder="Nombre (opcional)"
-                            class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm placeholder:text-arka-text-muted"
+                            class="rounded-arka border-arka-border bg-transparent text-arka-text text-sm placeholder:text-arka-text-muted"
                         />
                         <input
                             v-model="feedbackForm.email"
                             type="email"
                             placeholder="Correo (opcional)"
-                            class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm placeholder:text-arka-text-muted"
+                            class="rounded-arka border-arka-border bg-transparent text-arka-text text-sm placeholder:text-arka-text-muted"
                         />
                     </div>
                     <SearchableSelect v-model="feedbackForm.type" :options="FEEDBACK_TYPES" placeholder="Tipo" />
@@ -840,7 +840,7 @@ function submitFeedback() {
                         rows="3"
                         required
                         placeholder="Su comentario"
-                        class="block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm placeholder:text-arka-text-muted"
+                        class="block w-full rounded-arka border-arka-border bg-transparent text-arka-text text-sm placeholder:text-arka-text-muted"
                     ></textarea>
                     <p v-if="feedbackForm.errors.comment" class="text-xs text-arka-danger">{{ feedbackForm.errors.comment }}</p>
                     <div class="flex justify-end gap-2">
@@ -854,7 +854,7 @@ function submitFeedback() {
                         <button
                             type="submit"
                             :disabled="feedbackForm.processing"
-                            class="inline-flex items-center justify-center px-4 py-2 bg-arka-primary rounded-arka font-semibold text-sm text-arka-base hover:bg-arka-primary-bright transition disabled:opacity-50"
+                            class="inline-flex items-center justify-center px-4 py-2 bg-arka-primary rounded-arka font-semibold text-sm text-white hover:bg-arka-primary-bright transition disabled:opacity-50"
                         >
                             Enviar opinión
                         </button>
@@ -877,7 +877,7 @@ function submitFeedback() {
                 <input v-model="ctaHoneypot" type="text" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
                 <div class="pointer-events-none absolute -end-16 -top-20 h-48 w-48 rounded-full bg-arka-primary/10 blur-2xl"></div>
 
-                <button type="button" class="absolute end-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/15 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary" aria-label="Cerrar" @click="closeWelcomeCta">
+                <button type="button" class="absolute end-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-arka-border text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary" aria-label="Cerrar" @click="closeWelcomeCta">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="m6 6 12 12M18 6 6 18" /></svg>
                 </button>
 
@@ -896,12 +896,12 @@ function submitFeedback() {
                     </p>
 
                     <div class="mt-5 grid grid-cols-3 gap-2">
-                        <div v-for="item in ['Su círculo', 'Índice de confianza', 'Viaje acompañado']" :key="item" class="rounded-xl border border-arka-text-muted/10 bg-arka-base/50 px-2 py-3 text-center text-[11px] font-medium leading-4 text-arka-text-muted">
+                        <div v-for="item in ['Su círculo', 'Índice de confianza', 'Viaje acompañado']" :key="item" class="rounded-xl border border-arka-border bg-arka-base/50 px-2 py-3 text-center text-[11px] font-medium leading-4 text-arka-text-muted">
                             {{ item }}
                         </div>
                     </div>
 
-                    <button type="button" class="mt-6 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-arka-base shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright" @click="followWelcomeCta">
+                    <button type="button" class="mt-6 flex w-full items-center justify-center gap-2 rounded-arka bg-arka-primary px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-white shadow-lg shadow-arka-primary/15 transition hover:bg-arka-primary-bright" @click="followWelcomeCta">
                         Crear mi cuenta
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-6-6 6 6-6 6" /></svg>
                     </button>
@@ -924,14 +924,14 @@ function submitFeedback() {
                 <div class="mt-5 space-y-4">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium text-arka-text">Nombre</label>
-                        <input v-model="guestForm.name" type="text" autocomplete="name" placeholder="Ej. María López" class="w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
+                        <input v-model="guestForm.name" type="text" autocomplete="name" placeholder="Ej. María López" class="w-full rounded-arka border-arka-border bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
                         <p v-if="guestForm.errors.name" class="mt-1 text-xs text-arka-danger">{{ guestForm.errors.name }}</p>
                     </div>
                     <div>
                         <label class="mb-1.5 block text-sm font-medium text-arka-text">Número de WhatsApp</label>
                         <div class="grid grid-cols-[7rem_1fr] gap-2">
                             <SearchableSelect v-model="guestForm.country_code" :options="[{value: '+593', label: '🇪🇨 +593'}, {value: '+51', label: '🇵🇪 +51'}, {value: '+57', label: '🇨🇴 +57'}, {value: '+58', label: '🇻🇪 +58'}, {value: '+56', label: '🇨🇱 +56'}, {value: '+54', label: '🇦🇷 +54'}]" />
-                            <input v-model="guestForm.phone_local" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="999 000 222" class="min-w-0 rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
+                            <input v-model="guestForm.phone_local" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="999 000 222" class="min-w-0 rounded-arka border-arka-border bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
                         </div>
                         <p v-if="guestForm.errors.phone_local" class="mt-1 text-xs text-arka-danger">{{ guestForm.errors.phone_local }}</p>
                         <p v-if="showsAccountExistsError" class="mt-1 text-sm">
@@ -947,7 +947,7 @@ function submitFeedback() {
 
                 <div class="mt-6 grid grid-cols-[auto_1fr] gap-2">
                     <button type="button" class="rounded-arka border border-arka-text-muted/25 px-4 py-3 text-sm font-semibold text-arka-text" @click="showingGuestIdentity = false">Volver</button>
-                    <button type="submit" :disabled="guestForm.processing" class="rounded-arka bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-arka-base hover:bg-arka-primary-bright disabled:opacity-50">
+                    <button type="submit" :disabled="guestForm.processing" class="rounded-arka bg-arka-primary px-4 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-arka-primary-bright disabled:opacity-50">
                         {{ guestForm.processing ? 'Preparando…' : 'Continuar seguro' }}
                     </button>
                 </div>

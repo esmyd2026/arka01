@@ -554,7 +554,7 @@ function confirmRaiseOffer(id) {
                 <section v-if="isClient && activeImmediateRequest" class="w-full overflow-hidden rounded-3xl border border-arka-primary/30 bg-gradient-to-b from-arka-primary/15 to-arka-card shadow-2xl">
                     <div class="p-5 sm:p-7">
                         <div class="flex items-start gap-3">
-                            <div class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-arka-primary text-arka-base shadow-lg shadow-arka-primary/25">
+                            <div class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full bg-arka-primary text-white shadow-lg shadow-arka-primary/25">
                                 <span class="absolute inset-0 animate-ping rounded-full bg-arka-primary/30" aria-hidden="true"></span>
                                 <svg class="relative h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5.25 6.5A2.75 2.75 0 0 1 8 3.75h8a2.75 2.75 0 0 1 2.75 2.75v.75h.5A1.75 1.75 0 0 1 21 9v7.25a1.75 1.75 0 0 1-1.75 1.75h-.5v.75a1.5 1.5 0 0 1-3 0V18h-7.5v.75a1.5 1.5 0 0 1-3 0V18h-.5A1.75 1.75 0 0 1 3 16.25V9a1.75 1.75 0 0 1 1.75-1.75h.5V6.5Zm2.1.75h9.3l-.55-1.37a.75.75 0 0 0-.7-.48H8.6a.75.75 0 0 0-.7.48l-.55 1.37ZM6.5 14a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" /></svg>
                             </div>
@@ -567,10 +567,10 @@ function confirmRaiseOffer(id) {
 
                         <div class="mt-5 h-2 overflow-hidden rounded-full bg-arka-base/80"><div class="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-arka-primary/30 via-arka-primary to-arka-lime"></div></div>
 
-                        <div class="mt-5 overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base/55">
-                            <div class="flex items-center justify-between border-b border-arka-text-muted/10 px-4 py-3">
+                        <div class="mt-5 overflow-hidden rounded-2xl border border-arka-border bg-arka-base/55">
+                            <div class="flex items-center justify-between border-b border-arka-border px-4 py-3">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-text-muted">Tu recorrido</p>
-                                <span v-if="activeImmediateStops.length" class="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold text-amber-400">
+                                <span v-if="activeImmediateStops.length" class="rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold text-amber-700">
                                     {{ activeImmediateStops.length }} parada{{ activeImmediateStops.length === 1 ? '' : 's' }}
                                 </span>
                             </div>
@@ -578,7 +578,7 @@ function confirmRaiseOffer(id) {
                             <div class="px-4 py-4">
                                 <div class="relative space-y-4 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-px before:bg-arka-text-muted/25">
                                     <div class="relative flex min-w-0 gap-3">
-                                        <span class="relative z-10 mt-0.5 h-4 w-4 shrink-0 rounded-full border-[3px] border-arka-base bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
+                                        <span class="relative z-10 mt-0.5 h-4 w-4 shrink-0 rounded-full border-[3px] border-arka-ink bg-arka-primary shadow-[0_0_0_2px_rgba(52,211,153,0.18)]"></span>
                                         <div class="min-w-0 flex-1">
                                             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-arka-primary">Recoger en</p>
                                             <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.origin_address || 'Origen marcado en el mapa' }}</p>
@@ -594,7 +594,7 @@ function confirmRaiseOffer(id) {
                                                  cada parada tenga su propio cálculo y costos... sigue sin
                                                  aparecer") — el dato ya venía del backend, solo faltaba
                                                  pintarlo acá. -->
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-400">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">
                                                 Parada {{ stop.sequence ?? index + 1 }}<span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span><span v-if="stop.leg_price != null"> · ${{ Number(stop.leg_price).toFixed(2) }}</span>
                                             </p>
                                             <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ stop.address || 'Parada marcada en el mapa' }}</p>
@@ -602,7 +602,7 @@ function confirmRaiseOffer(id) {
                                     </div>
 
                                     <div class="relative flex min-w-0 gap-3">
-                                        <span class="relative z-10 mt-0.5 h-4 w-4 shrink-0 rounded-[4px] border-[3px] border-arka-base bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.18)]"></span>
+                                        <span class="relative z-10 mt-0.5 h-4 w-4 shrink-0 rounded-[4px] border-[3px] border-arka-ink bg-arka-danger shadow-[0_0_0_2px_rgba(248,113,113,0.18)]"></span>
                                         <div class="min-w-0 flex-1">
                                             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-arka-danger">Destino final</p>
                                             <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ activeImmediateRequest.destination_address || 'Destino seleccionado' }}</p>
@@ -633,7 +633,7 @@ function confirmRaiseOffer(id) {
 
                 <template v-if="!activeImmediateRequest">
 
-                <section v-if="upcomingReminderRide" class="rounded-2xl border border-arka-warning/40 bg-arka-warning/10 p-4 sm:p-5"><div class="flex items-center gap-3"><span class="text-2xl">⏰</span><div class="min-w-0 flex-1"><p class="font-bold text-arka-warning">Su carrera programada está próxima</p><p class="text-sm text-arka-text">{{ upcomingReminderRide.client.name }} · {{ formatScheduledAt(upcomingReminderRide.ride_request?.scheduled_at) }}</p><p class="mt-1 text-xs text-arka-text-muted">Revise la ruta y prepárese para salir.</p></div><Link :href="route('rides.show', upcomingReminderRide.id)" class="shrink-0 rounded-full bg-arka-warning px-4 py-2 text-xs font-bold text-arka-base">Ver viaje</Link></div></section>
+                <section v-if="upcomingReminderRide" class="rounded-2xl border border-arka-warning/40 bg-arka-warning/10 p-4 sm:p-5"><div class="flex items-center gap-3"><span class="text-2xl">⏰</span><div class="min-w-0 flex-1"><p class="font-bold text-arka-warning">Su carrera programada está próxima</p><p class="text-sm text-arka-text">{{ upcomingReminderRide.client.name }} · {{ formatScheduledAt(upcomingReminderRide.ride_request?.scheduled_at) }}</p><p class="mt-1 text-xs text-arka-text-muted">Revise la ruta y prepárese para salir.</p></div><Link :href="route('rides.show', upcomingReminderRide.id)" class="shrink-0 rounded-full bg-arka-warning px-4 py-2 text-xs font-bold text-arka-ink">Ver viaje</Link></div></section>
 
                 <!-- Pedido explícito del usuario: alarma visible mientras haya
                      carreras completadas sin calificar de mi parte — cliente y
@@ -651,7 +651,7 @@ function confirmRaiseOffer(id) {
                 <!-- Carreras en curso -->
                 <div v-if="activeRides.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-3">En curso</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="ride in activeRides" :key="ride.id" class="py-3">
                             <Link :href="route('rides.show', ride.id)" class="flex items-center justify-between gap-3">
                                 <span class="min-w-0">
@@ -671,7 +671,7 @@ function confirmRaiseOffer(id) {
                      arrancó, así que no cuentan como "en curso". -->
                 <div v-if="scheduledRides.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-3">Programados</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="ride in scheduledRides" :key="ride.id" class="py-3 flex items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="text-arka-text font-medium">
@@ -717,7 +717,7 @@ function confirmRaiseOffer(id) {
                         <li
                             v-for="invitation in pendingCooperativeInvitations"
                             :key="invitation.id"
-                            class="overflow-hidden rounded-2xl border border-arka-text-muted/15 bg-arka-base/35 p-4 shadow-lg"
+                            class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/35 p-4 shadow-lg"
                         >
                             <div class="flex items-start gap-3">
                                 <img
@@ -752,8 +752,8 @@ function confirmRaiseOffer(id) {
                     </p>
 
                     <ul v-else class="space-y-4">
-                        <li v-for="r in incoming" :key="r.id" class="overflow-hidden rounded-2xl border border-arka-text-muted/15 bg-arka-base/35 shadow-lg">
-                            <div class="flex items-center justify-between gap-3 border-b border-arka-text-muted/10 bg-arka-primary/10 px-4 py-3">
+                        <li v-for="r in incoming" :key="r.id" class="overflow-hidden rounded-2xl border border-arka-border bg-arka-base/35 shadow-lg">
+                            <div class="flex items-center justify-between gap-3 border-b border-arka-border bg-arka-primary/10 px-4 py-3">
                                 <div>
                                     <!-- Origen de la solicitud (pedido explícito del usuario): que
                                          quede claro si viene de la cooperativa o es directa — un
@@ -780,7 +780,7 @@ function confirmRaiseOffer(id) {
                             <div class="space-y-4 p-4">
                             <div
                                 v-if="r.offer_comparison?.uses_another_driver_price"
-                                class="rounded-xl border border-arka-primary/20 bg-arka-primary/5 px-3 py-2.5"
+                                class="rounded-xl border border-arka-primary/30 bg-arka-primary/5 px-3 py-2.5"
                             >
                                 <p class="text-xs font-semibold text-arka-text">Oferta inicial conservada</p>
                                 <p class="mt-0.5 text-xs text-arka-text-muted">
@@ -818,7 +818,7 @@ function confirmRaiseOffer(id) {
                             </div>
                             <!-- Sector de origen/destino (consideración agregada al alcance): de
                                  un vistazo, sin tener que abrir el mapa — ej. "Sauces 1 → Samanes 3". -->
-                            <div class="flex gap-3 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
+                            <div class="flex gap-3 rounded-arka border border-arka-border bg-arka-card/45 p-3">
                                 <div class="flex shrink-0 flex-col items-center pt-1.5">
                                     <span class="h-2.5 w-2.5 rounded-full bg-arka-lime"></span>
                                     <span class="my-1 min-h-8 w-px flex-1 bg-arka-text-muted/30"></span>
@@ -863,7 +863,7 @@ function confirmRaiseOffer(id) {
                                      precio ofertado ya incluye la recogida" — sin checkbox,
                                      ya no es una decisión del conductor al aceptar), así que
                                      acá se resta para mostrar el viaje puro sin duplicarlo. -->
-                                <div v-if="r.is_cooperative_request" class="rounded-arka border border-arka-primary/20 bg-arka-primary/10 p-3">
+                                <div v-if="r.is_cooperative_request" class="rounded-arka border border-arka-primary/30 bg-arka-primary/10 p-3">
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">Pago acordado por la cooperativa</p>
                                     <div class="mt-2 flex items-end justify-between gap-3">
                                         <p class="text-sm text-arka-text-muted">
@@ -874,7 +874,7 @@ function confirmRaiseOffer(id) {
                                     </div>
                                     <p class="mt-2 text-xs text-arka-text-muted">El margen de la cooperativa no se presenta como parte de su ganancia.</p>
                                 </div>
-                                <div v-else class="space-y-2 rounded-arka border border-arka-text-muted/10 bg-arka-card/45 p-3">
+                                <div v-else class="space-y-2 rounded-arka border border-arka-border bg-arka-card/45 p-3">
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-text-muted">Desglose de tu ganancia</p>
                                     <div class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Origen → destino · {{ Number(r.distance_km).toFixed(1) }} km</span>
@@ -929,7 +929,7 @@ function confirmRaiseOffer(id) {
                 <!-- Mis solicitudes pendientes como cliente -->
                 <div v-if="otherPendingRequests.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <h3 class="text-lg font-medium text-arka-text mb-3">Esperando respuesta</h3>
-                    <ul class="divide-y divide-arka-text-muted/10">
+                    <ul class="divide-y divide-arka-border">
                         <li v-for="r in otherPendingRequests" :key="r.id" class="py-3">
                             <div class="flex items-center justify-between">
                                 <span class="text-arka-text">
@@ -1041,7 +1041,7 @@ function confirmRaiseOffer(id) {
                         Todavía no tiene carreras completadas.
                     </p>
 
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <li v-for="ride in rideHistory.data" :key="ride.id">
                             <Link
                                 :href="route('rides.show', ride.id)"
@@ -1076,7 +1076,7 @@ function confirmRaiseOffer(id) {
                     <!-- Paginado (pedido explícito del usuario: "asegura que tenga
                          paginado") — mismo criterio simple de Anterior/Siguiente
                          que ya usa Admin/Rides.vue. -->
-                    <div v-if="rideHistory.prev_page_url || rideHistory.next_page_url" class="flex justify-between pt-3 mt-1 border-t border-arka-text-muted/10">
+                    <div v-if="rideHistory.prev_page_url || rideHistory.next_page_url" class="flex justify-between pt-3 mt-1 border-t border-arka-border">
                         <Link
                             v-if="rideHistory.prev_page_url"
                             :href="rideHistory.prev_page_url"

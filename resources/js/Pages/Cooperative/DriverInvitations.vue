@@ -19,7 +19,7 @@ function respond(id, decision) {
             <div class="mx-auto max-w-3xl space-y-4 px-4 sm:px-6">
                 <p class="text-sm text-arka-text-muted">Ninguna cooperativa puede vincularlo automáticamente. Usted decide qué invitación aceptar.</p>
                 <div v-if="!memberships.length" class="rounded-arka bg-arka-card p-7 text-center text-arka-text-muted">No tiene invitaciones ni vínculos activos.</div>
-                <article v-for="membership in memberships" :key="membership.id" class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-lg">
+                <article v-for="membership in memberships" :key="membership.id" class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-lg">
                     <div class="flex items-start gap-4">
                         <img v-if="membership.cooperative.logo_url" :src="membership.cooperative.logo_url" class="h-14 w-14 rounded-xl bg-white object-contain p-1" alt="Logo" />
                         <div class="flex-1">

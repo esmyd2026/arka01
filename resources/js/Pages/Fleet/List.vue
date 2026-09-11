@@ -135,7 +135,7 @@ onMounted(() => {
             </div>
         </template>
 
-        <div class="py-12">
+        <div class="py-6 sm:py-10">
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
                 <!-- Una de estas por flota — en el plan Gratis (el caso más común)
                      es una sola, así que el buscador para invitar y el roster de
@@ -175,7 +175,7 @@ onMounted(() => {
                     <FleetRoster :fleet="fleetData.fleet" :max-drivers-per-fleet="maxDriversPerFleet" :member-stats="fleetData.memberStats" />
                 </div>
 
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow sm:p-6">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-4 shadow sm:p-6">
                     <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-arka-primary">Cooperativas de confianza</p>
@@ -185,9 +185,9 @@ onMounted(() => {
                         <span class="rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary">{{ attachedCooperatives.length }} agregadas</span>
                     </div>
 
-                    <input v-model="cooperativeSearch" type="search" placeholder="Buscar cooperativa por nombre" class="mt-4 w-full rounded-arka border-arka-text-muted/20 bg-arka-base px-4 py-3 text-sm text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
+                    <input v-model="cooperativeSearch" type="search" placeholder="Buscar cooperativa por nombre" class="mt-4 w-full rounded-arka border-arka-border bg-arka-base px-4 py-3 text-sm text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
 
-                    <p v-if="!cooperatives.length" class="mt-4 rounded-arka border border-arka-text-muted/10 p-4 text-sm text-arka-text-muted">No existen cooperativas aprobadas disponibles en este momento.</p>
+                    <p v-if="!cooperatives.length" class="mt-4 rounded-arka border border-arka-border p-4 text-sm text-arka-text-muted">No existen cooperativas aprobadas disponibles en este momento.</p>
                     <p v-else-if="!filteredCooperatives.length" class="mt-4 text-sm text-arka-text-muted">No encontramos una cooperativa con ese nombre.</p>
                     <!-- Mismo estilo de tarjeta que "Conductores en su flota"
                          (pedido explícito del usuario, con una captura de
@@ -197,7 +197,7 @@ onMounted(() => {
                             v-for="cooperative in filteredCooperatives"
                             :key="cooperative.id"
                             class="rounded-2xl border p-4 transition"
-                            :class="cooperative.is_attached ? 'border-arka-primary/40 bg-arka-primary/5' : 'border-arka-text-muted/10 bg-arka-base hover:border-arka-primary/30'"
+                            :class="cooperative.is_attached ? 'border-arka-primary/40 bg-arka-primary/5' : 'border-arka-border bg-arka-base hover:border-arka-primary/30'"
                         >
                             <!-- Pedido explícito del usuario: ver el perfil público
                                  de la cooperativa tocando el logo o el nombre, sin
@@ -215,7 +215,7 @@ onMounted(() => {
                                 <button
                                     type="button"
                                     class="shrink-0 rounded-full px-3 py-2 text-xs font-semibold"
-                                    :class="cooperative.is_attached ? 'border border-arka-text-muted/20 text-arka-text-muted' : 'bg-arka-primary text-arka-base'"
+                                    :class="cooperative.is_attached ? 'border border-arka-border text-arka-text-muted' : 'bg-arka-primary text-white'"
                                     @click="toggleCooperative(cooperative)"
                                 >
                                     {{ cooperative.is_attached ? 'Retirar' : (cooperativesAtLimit ? 'Subir de plan' : 'Agregar') }}
@@ -230,7 +230,7 @@ onMounted(() => {
                      deshabilitado con solo un texto de ayuda al costado (fácil de
                      pasar por alto), el botón queda siempre activo — si no alcanza el
                      plan, lleva directo a "Mi plan" a subirlo. -->
-                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-border">
                     <div v-if="!showCreateForm" class="flex items-center justify-between gap-4">
                         <p class="text-sm text-arka-text-muted">
                             <span v-if="atLimit">

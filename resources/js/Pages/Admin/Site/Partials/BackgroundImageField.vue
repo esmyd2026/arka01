@@ -62,10 +62,10 @@ function removeBackground() {
             <p class="mt-1 text-sm text-arka-text-muted">{{ help }}</p>
         </div>
 
-        <div v-if="previewUrl || currentUrl" class="overflow-hidden rounded-arka border border-arka-text-muted/20">
+        <div v-if="previewUrl || currentUrl" class="overflow-hidden rounded-arka border border-arka-border">
             <img :src="previewUrl || currentUrl" :alt="title" class="h-40 w-full object-cover" />
         </div>
-        <p v-else class="rounded-arka border border-arka-text-muted/15 bg-arka-base p-3 text-sm text-arka-text-muted">
+        <p v-else class="rounded-arka border border-arka-border bg-arka-base p-3 text-sm text-arka-text-muted">
             {{ emptyMessage }}
         </p>
 
@@ -75,7 +75,7 @@ function removeBackground() {
                 :id="fieldKey"
                 type="file"
                 accept="image/*"
-                class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-arka-base"
+                class="mt-1 block w-full text-sm text-arka-text-muted file:mr-3 file:rounded-arka file:border-0 file:bg-arka-primary file:px-3 file:py-1.5 file:text-white"
                 @change="onFileChange"
             />
             <p class="mt-1 text-xs text-arka-text-muted">JPG o PNG, hasta 8 MB.</p>

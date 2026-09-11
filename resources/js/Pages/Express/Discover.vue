@@ -83,7 +83,7 @@ function requestToJoin(routeId) {
                     Sin resultados todavía — busque su origen y destino arriba para ver Expresos cercanos abiertos a compartir.
                 </p>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="r in routes" :key="r.id" class="p-4 sm:p-6 flex items-center justify-between gap-4">
                         <div>
                             <p class="text-arka-text font-medium">{{ r.name }}</p>

@@ -55,7 +55,7 @@ const currentItem = computed(() => currentGroup.value?.items.find((item) => rout
                  siempre dónde está y no tiene que recordar en qué dropdown
                  estaba cada herramienta. -->
             <aside class="hidden px-4 py-8 lg:block xl:px-6" aria-label="Navegación administrativa">
-                <nav class="sticky top-4 rounded-2xl border border-arka-text-muted/10 bg-arka-card p-3 shadow-sm">
+                <nav class="sticky top-4 rounded-2xl border border-arka-border bg-arka-card p-3 shadow-sm">
                     <Link
                         :href="route('dashboard')"
                         class="mb-3 flex items-center gap-3 rounded-xl border border-arka-warning/15 bg-arka-warning/5 px-3 py-3 transition hover:border-arka-warning/35"
@@ -71,7 +71,7 @@ const currentItem = computed(() => currentGroup.value?.items.find((item) => rout
                         </span>
                     </Link>
 
-                    <details v-for="group in ADMIN_NAV_GROUPS" :key="group.key" :open="groupIsActive(group)" class="group border-t border-arka-text-muted/10 py-1 first:border-0">
+                    <details v-for="group in ADMIN_NAV_GROUPS" :key="group.key" :open="groupIsActive(group)" class="group border-t border-arka-border py-1 first:border-0">
                         <summary class="flex cursor-pointer list-none items-start gap-2 rounded-lg px-2 py-2.5 hover:bg-arka-base">
                             <span class="mt-0.5 h-4 w-4 shrink-0 text-arka-text-muted"><AdminNavIcon :icon="group.icon" /></span>
                             <div class="min-w-0 flex-1">
@@ -79,7 +79,7 @@ const currentItem = computed(() => currentGroup.value?.items.find((item) => rout
                                     <h3 class="text-xs font-bold uppercase tracking-[0.1em] text-arka-text">{{ group.label }}</h3>
                                     <span
                                         v-if="group.key === 'conductores' && driverAttentionCount > 0"
-                                        class="inline-flex min-w-5 items-center justify-center rounded-full bg-arka-primary px-1.5 py-0.5 text-[10px] font-bold text-arka-base"
+                                        class="inline-flex min-w-5 items-center justify-center rounded-full bg-arka-primary px-1.5 py-0.5 text-[10px] font-bold text-white"
                                     >
                                         {{ driverAttentionCount }}
                                     </span>
@@ -105,7 +105,7 @@ const currentItem = computed(() => currentGroup.value?.items.find((item) => rout
                                 <span>{{ item.label }}</span>
                                 <span
                                     v-if="attentionFor(item) > 0"
-                                    class="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-arka-primary px-1.5 py-0.5 text-[10px] font-bold text-arka-base"
+                                    class="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-arka-primary px-1.5 py-0.5 text-[10px] font-bold text-white"
                                 >
                                     {{ attentionFor(item) }}
                                 </span>
@@ -120,21 +120,21 @@ const currentItem = computed(() => currentGroup.value?.items.find((item) => rout
                      poco espacio; al abrirlo muestra las mismas áreas del
                      menú lateral, no siete barras antes del contenido. -->
                 <nav class="px-4 pt-4 lg:hidden" aria-label="Navegación administrativa móvil">
-                    <details class="overflow-hidden rounded-xl border border-arka-text-muted/10 bg-arka-card">
+                    <details class="overflow-hidden rounded-xl border border-arka-border bg-arka-card">
                         <summary class="flex cursor-pointer list-none items-center gap-3 px-3 py-3">
                             <span class="h-5 w-5 shrink-0 text-arka-primary"><AdminNavIcon :icon="currentGroup?.icon ?? 'shield'" /></span>
                             <span class="min-w-0 flex-1">
                                 <span class="block text-sm font-semibold text-arka-text">Menú administrativo</span>
                                 <span class="block truncate text-[11px] text-arka-text-muted">{{ currentGroup?.label ?? 'Todas las áreas' }}</span>
                             </span>
-                            <span v-if="driverAttentionCount > 0" class="rounded-full bg-arka-primary px-2 py-0.5 text-[10px] font-bold text-arka-base">
+                            <span v-if="driverAttentionCount > 0" class="rounded-full bg-arka-primary px-2 py-0.5 text-[10px] font-bold text-white">
                                 {{ driverAttentionCount }}
                             </span>
                             <svg class="h-4 w-4 shrink-0 text-arka-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m7 9 5 5 5-5" />
                             </svg>
                         </summary>
-                        <div class="max-h-[65vh] space-y-3 overflow-y-auto border-t border-arka-text-muted/10 p-2">
+                        <div class="max-h-[65vh] space-y-3 overflow-y-auto border-t border-arka-border p-2">
                             <section v-for="group in ADMIN_NAV_GROUPS" :key="group.key">
                                 <div class="flex items-center gap-2 px-2 pb-1 pt-1">
                                     <span class="h-4 w-4 shrink-0 text-arka-text-muted"><AdminNavIcon :icon="group.icon" /></span>
@@ -152,7 +152,7 @@ const currentItem = computed(() => currentGroup.value?.items.find((item) => rout
                                         :class="route().current(item.match) ? 'bg-arka-primary/10 font-semibold text-arka-primary-bright' : 'text-arka-text-muted hover:bg-arka-base'"
                                     >
                                         <span>{{ item.label }}</span>
-                                        <span v-if="attentionFor(item) > 0" class="rounded-full bg-arka-primary px-2 py-0.5 text-[10px] font-bold text-arka-base">
+                                        <span v-if="attentionFor(item) > 0" class="rounded-full bg-arka-primary px-2 py-0.5 text-[10px] font-bold text-white">
                                             {{ attentionFor(item) }}
                                         </span>
                                     </Link>

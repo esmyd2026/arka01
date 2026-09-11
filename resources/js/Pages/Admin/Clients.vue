@@ -52,7 +52,7 @@ function formatDate(value) {
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">Cliente</th>
                                     <th class="py-2 pr-3">Ciudad</th>
                                     <th class="py-2 pr-3">Conductores en su flota</th>
@@ -62,7 +62,7 @@ function formatDate(value) {
                                     <th class="py-2"></th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="c in clients.data" :key="c.id">
                                     <td class="py-2 pr-3">
                                         <Link :href="route('admin.users.show', c.id)" class="text-arka-text font-medium hover:text-arka-primary-bright">

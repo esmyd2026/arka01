@@ -177,8 +177,8 @@ function clientPlanOf(user) {
             <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 <!-- Comprobantes de pago esperando revisión (consideración agregada al
                      alcance): lo primero para atender, antes que la lista general. -->
-                <div v-if="pendingRequests.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
-                    <div class="p-4 sm:p-6 border-b border-arka-text-muted/10">
+                <div v-if="pendingRequests.length" class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
+                    <div class="p-4 sm:p-6 border-b border-arka-border">
                         <h3 class="text-lg font-medium text-arka-text">Comprobantes pendientes de revisión</h3>
                     </div>
                     <div v-for="req in pendingRequests" :key="req.id" class="p-4 sm:p-6 flex flex-col sm:flex-row gap-4">
@@ -192,7 +192,7 @@ function clientPlanOf(user) {
                             <img
                                 :src="req.payment_proof_url"
                                 alt="Comprobante de pago"
-                                class="w-full sm:w-40 h-40 object-cover rounded-arka border border-arka-text-muted/20 hover:opacity-80 transition"
+                                class="w-full sm:w-40 h-40 object-cover rounded-arka border border-arka-border hover:opacity-80 transition"
                             />
                         </button>
                         <div class="flex-1">
@@ -255,7 +255,7 @@ function clientPlanOf(user) {
                                         v-for="reason in REJECT_REASON_PRESETS"
                                         :key="reason"
                                         type="button"
-                                        class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                                        class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-border"
                                         @click="applyRejectPreset(reason)"
                                     >
                                         {{ reason }}
@@ -316,7 +316,7 @@ function clientPlanOf(user) {
                             v-if="viewingRequest.payment_proof_url"
                             :src="viewingRequest.payment_proof_url"
                             alt="Comprobante de pago completo"
-                            class="w-full max-h-[70vh] object-contain rounded-arka border border-arka-text-muted/20 bg-arka-base"
+                            class="w-full max-h-[70vh] object-contain rounded-arka border border-arka-border bg-arka-base"
                         />
 
                         <div class="flex justify-end">
@@ -340,7 +340,7 @@ function clientPlanOf(user) {
                             <InputLabel :value="`Plan a activar (${activatingUser.role === 'conductor' ? 'conductor' : 'cliente'})`" />
                             <select
                                 v-model="form.subscription_plan_id"
-                                class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                                 required
                             >
                                 <option value="" disabled>Elegí un plan</option>
@@ -391,7 +391,7 @@ function clientPlanOf(user) {
                             <InputLabel value="Rol" />
                             <select
                                 v-model="roleFilter"
-                                class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm"
+                                class="mt-1 block rounded-arka border-arka-border bg-transparent text-arka-text text-sm"
                                 @change="applyFilters"
                             >
                                 <option value="">Todos</option>
@@ -404,7 +404,7 @@ function clientPlanOf(user) {
                             <InputLabel value="Plan" />
                             <select
                                 v-model="planStatusFilter"
-                                class="mt-1 block rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm"
+                                class="mt-1 block rounded-arka border-arka-border bg-transparent text-arka-text text-sm"
                                 @change="applyFilters"
                             >
                                 <option value="">Todos</option>
@@ -432,7 +432,7 @@ function clientPlanOf(user) {
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="border-b border-arka-text-muted/10 text-left text-xs text-arka-text-muted uppercase tracking-wide">
+                                <tr class="border-b border-arka-border text-left text-xs text-arka-text-muted uppercase tracking-wide">
                                     <th class="px-4 sm:px-6 py-3 font-medium">
                                         <button type="button" class="flex items-center gap-1 hover:text-arka-text" @click="toggleSort('name')">
                                             Usuario
@@ -464,7 +464,7 @@ function clientPlanOf(user) {
                                     <th class="px-4 sm:px-6 py-3 font-medium text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="user in users.data" :key="user.id" class="hover:bg-arka-base/40 transition">
                                     <td class="px-4 sm:px-6 py-3">
                                         <div class="flex items-center gap-3 min-w-0">
@@ -563,7 +563,7 @@ function clientPlanOf(user) {
 
                     <p v-if="!recentChanges.length" class="text-sm text-arka-text-muted">Todavía no hay cambios de plan.</p>
 
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <li v-for="change in recentChanges" :key="change.id" class="py-3 text-sm flex items-center gap-2">
                             <UserAvatar :user="change.user" size-class="h-6 w-6 text-[10px] shrink-0" />
                             <span>

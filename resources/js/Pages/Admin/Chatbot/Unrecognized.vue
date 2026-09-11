@@ -51,7 +51,7 @@ function markReviewed(message) {
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="border-b border-arka-text-muted/10 text-left text-xs text-arka-text-muted uppercase tracking-wide">
+                                <tr class="border-b border-arka-border text-left text-xs text-arka-text-muted uppercase tracking-wide">
                                     <th class="px-4 sm:px-6 py-3 font-medium">Mensaje</th>
                                     <th class="px-4 py-3 font-medium whitespace-nowrap">Fecha</th>
                                     <th class="px-4 py-3 font-medium whitespace-nowrap">Rol</th>
@@ -59,7 +59,7 @@ function markReviewed(message) {
                                     <th class="px-4 sm:px-6 py-3 font-medium text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr v-for="message in messages.data" :key="message.id" class="hover:bg-arka-base/40 transition">
                                     <td class="px-4 sm:px-6 py-3 max-w-xs">
                                         <p class="text-arka-text truncate">"{{ message.message }}"</p>

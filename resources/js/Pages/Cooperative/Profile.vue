@@ -147,7 +147,7 @@ function uploadLogo(event) {
 
         <div class="py-8 sm:py-12">
             <form class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6" @submit.prevent="submit(false)">
-                <section class="overflow-hidden rounded-arka border border-arka-text-muted/10 bg-arka-card shadow-xl">
+                <section class="overflow-hidden rounded-arka border border-arka-border bg-arka-card shadow-xl">
                     <div class="bg-gradient-to-r from-arka-primary/20 to-arka-lime/10 p-5 sm:p-7">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-4">
@@ -155,7 +155,7 @@ function uploadLogo(event) {
                                     v-if="cooperative.logo_url"
                                     :src="cooperative.logo_url"
                                     alt="Logo de la cooperativa"
-                                    class="h-16 w-16 rounded-2xl border border-white/10 bg-white object-contain p-1"
+                                    class="h-16 w-16 rounded-2xl border border-arka-border bg-white object-contain p-1"
                                 />
                                 <div v-else class="grid h-16 w-16 place-items-center rounded-2xl bg-arka-primary/15 text-2xl font-bold text-arka-primary">
                                     {{ (form.name || 'C').charAt(0).toUpperCase() }}
@@ -207,14 +207,14 @@ function uploadLogo(event) {
                             <AddressAutocomplete id="main_address" v-model="form.main_address" class="mt-1 block w-full" @place-selected="selectStand" />
                             <p class="mt-1 text-xs text-arka-text-muted">Seleccione la parada en las sugerencias; se usará para calcular cercanía.</p>
                             <InputError class="mt-1" :message="form.errors.main_address || form.errors.stand_lat || form.errors.stand_lng" />
-                            <div class="mt-3 overflow-hidden rounded-arka border border-arka-text-muted/15">
+                            <div class="mt-3 overflow-hidden rounded-arka border border-arka-border">
                                 <FleetMap :markers="baseMarkers" :center="baseCenter" :zoom="15" :dark="false" :minimal-style="true" :clickable="true" height="280px" @map-click="selectStandOnMap" />
                             </div>
                             <p class="mt-2 text-xs text-arka-text-muted">La marca amarilla identifica la base. También puede tocar el mapa para ajustar el punto exacto.</p>
                         </div>
                         <div>
                             <InputLabel for="city_id" value="Ciudad" />
-                            <select id="city_id" v-model="form.city_id" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                            <select id="city_id" v-model="form.city_id" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                 <option value="">Seleccione</option>
                                 <option v-for="city in cities" :key="city.id" :value="city.id">{{ city.name }}</option>
                             </select>
@@ -244,7 +244,7 @@ function uploadLogo(event) {
                     </div>
                 </section>
 
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-xl sm:p-7">
                     <h3 class="text-lg font-semibold text-arka-text">Información operativa</h3>
                     <p class="mt-1 text-sm text-arka-text-muted">Estos datos ayudan a clientes y administración a entender su capacidad real.</p>
                     <div class="mt-5 grid gap-5 sm:grid-cols-2">
@@ -259,16 +259,16 @@ function uploadLogo(event) {
                         </div>
                         <div class="sm:col-span-2">
                             <InputLabel value="Cobertura geográfica" />
-                            <textarea v-model="form.geographic_coverage" rows="3" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary" placeholder="Ciudades, cantones o zonas donde opera" />
+                            <textarea v-model="form.geographic_coverage" rows="3" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary" placeholder="Ciudades, cantones o zonas donde opera" />
                             <InputError class="mt-1" :message="form.errors.geographic_coverage" />
                         </div>
                         <div>
                             <InputLabel value="Horario de operación" />
-                            <textarea v-model="form.operating_hours" rows="3" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary" placeholder="Ej. lunes a domingo, 24 horas" />
+                            <textarea v-model="form.operating_hours" rows="3" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary" placeholder="Ej. lunes a domingo, 24 horas" />
                         </div>
                         <div>
                             <InputLabel value="Tiempo para responder una asignación" />
-                            <select v-model="form.response_timeout_seconds" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                            <select v-model="form.response_timeout_seconds" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                 <option :value="15">15 segundos</option>
                                 <option :value="30">30 segundos</option>
                                 <option :value="60">60 segundos</option>
@@ -283,7 +283,7 @@ function uploadLogo(event) {
                      diferencia es su margen. Mientras no configure esto, el
                      precio sigue siendo el promedio de tarifas de sus
                      conductores, como siempre. -->
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-xl sm:p-7">
                     <h3 class="text-lg font-semibold text-arka-text">Tarifa y reparto con conductores</h3>
                     <p class="mt-1 text-sm text-arka-text-muted">
                         En blanco, el precio sigue siendo el promedio de la tarifa de sus conductores, sin
@@ -318,7 +318,7 @@ function uploadLogo(event) {
                     </p>
                 </section>
 
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-xl sm:p-7">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h3 class="text-lg font-semibold text-arka-text">Cuentas para recibir transferencias</h3>
@@ -336,7 +336,7 @@ function uploadLogo(event) {
                             v-for="account in cooperative.bank_accounts"
                             :key="account.id"
                             class="rounded-xl border p-4"
-                            :class="account.is_favorite ? 'border-arka-primary/50 bg-arka-primary/5' : 'border-arka-text-muted/15 bg-arka-base/35'"
+                            :class="account.is_favorite ? 'border-arka-primary/50 bg-arka-primary/5' : 'border-arka-border bg-arka-base/35'"
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div>
@@ -346,14 +346,14 @@ function uploadLogo(event) {
                                 </div>
                                 <span v-if="account.is_favorite" class="rounded-full bg-arka-primary/15 px-2 py-1 text-[10px] font-bold uppercase text-arka-primary">Principal</span>
                             </div>
-                            <div class="mt-3 flex gap-4 border-t border-arka-text-muted/10 pt-3">
+                            <div class="mt-3 flex gap-4 border-t border-arka-border pt-3">
                                 <button v-if="!account.is_favorite" type="button" class="text-xs font-semibold text-arka-primary" @click="markBankAccountFavorite(account)">Usar como principal</button>
                                 <button type="button" class="text-xs font-semibold text-arka-danger" @click="deleteBankAccount(account)">Eliminar</button>
                             </div>
                         </article>
                     </div>
 
-                    <form class="mt-5 border-t border-arka-text-muted/10 pt-5" @submit.prevent="submitBankAccount">
+                    <form class="mt-5 border-t border-arka-border pt-5" @submit.prevent="submitBankAccount">
                         <h4 class="font-semibold text-arka-text">Agregar cuenta</h4>
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
                             <div>
@@ -368,7 +368,7 @@ function uploadLogo(event) {
                             </div>
                             <div>
                                 <InputLabel value="Banco o cooperativa" />
-                                <select v-model="bankForm.bank_name" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                <select v-model="bankForm.bank_name" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                     <option value="" disabled>Seleccione una entidad</option>
                                     <option v-for="bank in banks" :key="bank" :value="bank">{{ bank }}</option>
                                 </select>
@@ -376,7 +376,7 @@ function uploadLogo(event) {
                             </div>
                             <div>
                                 <InputLabel value="Tipo de cuenta" />
-                                <select v-model="bankForm.account_type" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                                <select v-model="bankForm.account_type" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                     <option value="ahorros">Ahorros</option>
                                     <option value="corriente">Corriente</option>
                                 </select>
@@ -402,7 +402,7 @@ function uploadLogo(event) {
                      perfil en sí ya es público apenas la cooperativa está
                      aprobada, sin toggle aparte para eso — esto es solo la
                      lista de conductores dentro de ese perfil. -->
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-xl sm:p-7">
                     <h3 class="text-lg font-semibold text-arka-text">Privacidad</h3>
                     <p class="mt-1 text-sm text-arka-text-muted">Controla qué ve el público en su perfil (cooperativas.show).</p>
 
@@ -418,7 +418,7 @@ function uploadLogo(event) {
                     </div>
                 </section>
 
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-xl sm:p-7">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-xl sm:p-7">
                     <h3 class="text-lg font-semibold text-arka-text">Documentación legal</h3>
                     <p class="mt-1 text-sm text-arka-text-muted">
                         Por ahora no son obligatorios para enviar su cooperativa a revisión — puede completarlos
@@ -433,7 +433,7 @@ function uploadLogo(event) {
                          ocultan acá para no pesarle el arranque — el backend los
                          sigue aceptando igual si algún día se reactivan. -->
                     <div v-if="false" class="mt-5 grid gap-5 sm:grid-cols-2">
-                        <div v-for="(label, type) in requiredDocuments" :key="type" class="rounded-arka border border-arka-text-muted/15 p-4">
+                        <div v-for="(label, type) in requiredDocuments" :key="type" class="rounded-arka border border-arka-border p-4">
                             <InputLabel :value="label" />
                             <p v-if="documentByType(type)" class="mt-1 text-xs text-arka-primary-bright">
                                 ✓ {{ documentByType(type).original_name }}
@@ -454,7 +454,7 @@ function uploadLogo(event) {
                          sí siguen visibles, no pesan el arranque como los 4 de
                          arriba. -->
                     <div class="mt-5 grid gap-5 sm:grid-cols-2">
-                        <div class="rounded-arka border border-arka-text-muted/15 p-4 sm:col-span-2">
+                        <div class="rounded-arka border border-arka-border p-4 sm:col-span-2">
                             <label class="flex items-start gap-2">
                                 <Checkbox v-model:checked="form.has_insurance" class="mt-0.5" />
                                 <span class="text-sm text-arka-text">Contamos con un seguro vigente que protege al representante/dueño, a los conductores afiliados y a los vehículos</span>
@@ -462,7 +462,7 @@ function uploadLogo(event) {
                             <InputError class="mt-1" :message="form.errors.has_insurance" />
                         </div>
 
-                        <div class="rounded-arka border border-dashed border-arka-text-muted/20 p-4 sm:col-span-2">
+                        <div class="rounded-arka border border-dashed border-arka-border p-4 sm:col-span-2">
                             <InputLabel value="Otros documentos solicitados por administración (opcional, máximo 5)" />
                             <input type="file" accept="application/pdf" multiple class="mt-3 block w-full text-xs text-arka-text-muted" @change="form.other_documents = Array.from($event.target.files)" />
                             <InputError class="mt-1" :message="form.errors.other_documents" />

@@ -88,7 +88,7 @@ async function destroyRide(ride) {
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-arka-text-muted border-b border-arka-text-muted/10">
+                                <tr class="text-left text-arka-text-muted border-b border-arka-border">
                                     <th class="py-2 pr-3">#</th>
                                     <th class="py-2 pr-3">Cliente</th>
                                     <th class="py-2 pr-3">Conductor</th>
@@ -99,7 +99,7 @@ async function destroyRide(ride) {
                                     <th class="py-2"></th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-arka-text-muted/10">
+                            <tbody class="divide-y divide-arka-border">
                                 <tr
                                     v-for="ride in rides.data"
                                     :key="ride.id"

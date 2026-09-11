@@ -292,7 +292,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         @input="runSearch"
                     />
 
-                    <ul v-if="searchResults.length" class="mt-4 divide-y divide-arka-text-muted/10">
+                    <ul v-if="searchResults.length" class="mt-4 divide-y divide-arka-border">
                         <li
                             v-for="client in searchResults"
                             :key="client.user_id"
@@ -367,7 +367,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         No tiene invitaciones pendientes por ahora.
                     </p>
 
-                    <ul v-else class="divide-y divide-arka-text-muted/10">
+                    <ul v-else class="divide-y divide-arka-border">
                         <!-- Bug reportado por el usuario (con captura: nombre
                              cortado y botón "Aceptar" superpuesto en móvil) —
                              mismo arreglo ya aplicado en Fleet/Show.vue: sin
@@ -423,7 +423,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
 
                             <div
                                 v-if="openInvitation === invitation.id"
-                                class="w-full rounded-xl border border-arka-primary/15 bg-arka-base/50 p-3 sm:col-span-2"
+                                class="w-full rounded-xl border border-arka-primary/25 bg-arka-base/50 p-3 sm:col-span-2"
                             >
                                 <!-- Pedido explícito del usuario: el texto genérico
                                      "Información para decidir" no aportaba nada — en su
@@ -465,7 +465,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         v-for="person in invitation.mutual_clients"
                                         :key="person.public_id"
                                         :href="route('profiles.show', person.public_id)"
-                                        class="inline-flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-arka-card px-2 py-1.5 transition hover:border-arka-primary/30"
+                                        class="inline-flex min-w-0 items-center gap-2 rounded-full border border-arka-border bg-arka-card px-2 py-1.5 transition hover:border-arka-primary/30"
                                     >
                                         <UserAvatar :user="person" size-class="h-7 w-7 text-[10px] shrink-0" />
                                         <span class="max-w-36 truncate text-xs font-medium text-arka-text">{{ person.name }}</span>
@@ -494,7 +494,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                 <!-- Cartera activa. Sigue el mismo patrón visual de las
                      tarjetas de conductores que ve el cliente: identidad,
                      indicadores comparables y acciones claras. -->
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-4 shadow sm:p-6">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-4 shadow sm:p-6">
                     <div class="mb-4 flex items-start justify-between gap-3">
                         <div>
                             <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-arka-primary">Su cartera</p>
@@ -528,11 +528,11 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
 
                     </div>
 
-                    <div class="mb-4 flex items-center justify-between gap-3 rounded-xl border border-arka-text-muted/10 bg-arka-base/45 px-3 py-2">
+                    <div class="mb-4 flex items-center justify-between gap-3 rounded-xl border border-arka-border bg-arka-base/45 px-3 py-2">
                         <span class="text-xs text-arka-text-muted">Ordenar clientes</span>
                         <select
                             v-model="membershipQuery.sort"
-                            class="rounded-lg border-arka-text-muted/20 bg-arka-card py-1.5 pe-8 ps-3 text-xs text-arka-text"
+                            class="rounded-lg border-arka-border bg-arka-card py-1.5 pe-8 ps-3 text-xs text-arka-text"
                             @change="applyMembershipQuery"
                         >
                             <option value="recientes">Actividad reciente</option>
@@ -548,7 +548,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                         <li
                             v-for="member in activeMemberships.data"
                             :key="member.id"
-                            class="group relative overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base p-4 shadow-sm transition duration-200 hover:border-arka-primary/35 hover:shadow-lg hover:shadow-black/10"
+                            class="group relative overflow-hidden rounded-2xl border border-arka-border bg-arka-base p-4 shadow-sm transition duration-200 hover:border-arka-primary/35 hover:shadow-lg hover:shadow-black/10"
                         >
                             <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-arka-primary/50 to-transparent opacity-0 transition group-hover:opacity-100"></div>
 
@@ -567,7 +567,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                     </p>
                                     <div class="mt-2 flex flex-wrap gap-1.5">
                                         <span class="rounded-full bg-arka-primary/10 px-2 py-0.5 text-[10px] font-semibold text-arka-primary-bright">Cliente</span>
-                                        <span class="rounded-full border border-arka-text-muted/15 px-2 py-0.5 text-[10px] font-medium text-arka-text-muted">
+                                        <span class="rounded-full border border-arka-border px-2 py-0.5 text-[10px] font-medium text-arka-text-muted">
                                             {{ CATEGORY_LABELS[member.client_category] }}
                                         </span>
                                     </div>
@@ -576,7 +576,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
 
                             <TrustScoreBadge :trust="member.trust" class="mt-3 max-w-full" />
 
-                            <div class="mt-3 grid grid-cols-3 divide-x divide-arka-text-muted/10 rounded-xl border border-arka-text-muted/10 bg-arka-card/70 py-3 text-center">
+                            <div class="mt-3 grid grid-cols-3 divide-x divide-arka-border rounded-xl border border-arka-border bg-arka-card/70 py-3 text-center">
                                 <div class="px-1">
                                     <p class="text-sm font-semibold text-arka-text">{{ member.client_review_count > 0 ? member.client_rating.toFixed(1) : '—' }}</p>
                                     <p class="mt-0.5 text-[9px] uppercase tracking-wide text-arka-text-muted">Calificación</p>
@@ -604,7 +604,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                             <div class="mt-4 grid grid-cols-2 gap-2">
                                 <Link
                                     :href="route('profiles.show', member.fleet.owner.public_id)"
-                                    class="inline-flex min-h-10 items-center justify-center rounded-xl bg-arka-primary px-3 py-2 text-center text-xs font-semibold text-arka-base transition hover:bg-arka-primary-bright"
+                                    class="inline-flex min-h-10 items-center justify-center rounded-xl bg-arka-primary px-3 py-2 text-center text-xs font-semibold text-white transition hover:bg-arka-primary-bright"
                                 >
                                     Ver perfil
                                 </Link>
@@ -621,7 +621,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
 
                             <div
                                 v-if="openMembership === member.id"
-                                class="mt-4 rounded-xl border border-arka-primary/15 bg-arka-card/75 p-3"
+                                class="mt-4 rounded-xl border border-arka-primary/25 bg-arka-card/75 p-3"
                             >
                                 <div class="flex items-center justify-between gap-3">
                                     <div>
@@ -656,7 +656,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                         v-for="person in member.mutual_clients"
                                         :key="person.public_id"
                                         :href="route('profiles.show', person.public_id)"
-                                        class="inline-flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-arka-card px-2 py-1.5 transition hover:border-arka-primary/30"
+                                        class="inline-flex min-w-0 items-center gap-2 rounded-full border border-arka-border bg-arka-card px-2 py-1.5 transition hover:border-arka-primary/30"
                                     >
                                         <UserAvatar :user="person" size-class="h-7 w-7 shrink-0 text-[10px]" />
                                         <span class="max-w-36 truncate text-xs font-medium text-arka-text">{{ person.name }}</span>
@@ -667,7 +667,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                      detalle, lejos del CTA principal, para
                                      evitar que el conductor quite a alguien
                                      por error al recorrer la lista. -->
-                                <div class="mt-4 border-t border-arka-text-muted/10 pt-3">
+                                <div class="mt-4 border-t border-arka-border pt-3">
                                     <button
                                         type="button"
                                         class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-medium transition hover:bg-arka-base/60"
@@ -679,7 +679,7 @@ const atLimit = props.maxClients !== null && props.activeClientCount >= props.ma
                                     </button>
                                     <button
                                         type="button"
-                                        class="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-medium text-red-400 transition hover:bg-red-500/10"
+                                        class="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-500/10"
                                         @click="leave(member.id)"
                                     >
                                         <span>Quitar de mis clientes</span>

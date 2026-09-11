@@ -73,7 +73,7 @@ function bulletsFor(side, current) {
             <div
                 v-for="(data, side) in summary"
                 :key="side"
-                class="p-4 rounded-arka border border-arka-text-muted/20"
+                class="p-4 rounded-arka border border-arka-border"
             >
                 <div class="flex items-center justify-between flex-wrap gap-2">
                     <div>

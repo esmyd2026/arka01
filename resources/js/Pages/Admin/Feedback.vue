@@ -50,11 +50,11 @@ function save(id) {
                 </p>
 
                 <div class="bg-arka-card shadow rounded-arka p-4 sm:p-6 flex flex-wrap items-center gap-3">
-                    <select v-model="statusFilter" class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="applyFilters">
+                    <select v-model="statusFilter" class="rounded-arka border-arka-border bg-transparent text-arka-text text-sm" @change="applyFilters">
                         <option value="">Todos los estados</option>
                         <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
                     </select>
-                    <select v-model="typeFilter" class="rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm" @change="applyFilters">
+                    <select v-model="typeFilter" class="rounded-arka border-arka-border bg-transparent text-arka-text text-sm" @change="applyFilters">
                         <option value="">Todos los tipos</option>
                         <option v-for="(label, value) in TYPE_LABEL" :key="value" :value="value">{{ label }}</option>
                     </select>
@@ -63,7 +63,7 @@ function save(id) {
 
                 <p v-if="!feedback.data.length" class="text-sm text-arka-text-muted">No hay opiniones con ese filtro.</p>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="item in feedback.data" :key="item.id" class="p-4 sm:p-6">
                         <div class="flex items-start justify-between gap-4">
                             <div class="min-w-0">
@@ -81,15 +81,15 @@ function save(id) {
                             <SecondaryButton class="shrink-0" @click="startEdit(item)">Clasificar</SecondaryButton>
                         </div>
 
-                        <form v-if="editingId === item.id" @submit.prevent="save(item.id)" class="mt-3 space-y-2 border-t border-arka-text-muted/10 pt-3">
-                            <select v-model="form.status" class="block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm">
+                        <form v-if="editingId === item.id" @submit.prevent="save(item.id)" class="mt-3 space-y-2 border-t border-arka-border pt-3">
+                            <select v-model="form.status" class="block w-full rounded-arka border-arka-border bg-transparent text-arka-text text-sm">
                                 <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
                             </select>
                             <textarea
                                 v-model="form.internal_notes"
                                 rows="2"
                                 placeholder="Nota interna (no la ve quien mandó la opinión)"
-                                class="block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text text-sm"
+                                class="block w-full rounded-arka border-arka-border bg-transparent text-arka-text text-sm"
                             ></textarea>
                             <div class="flex gap-2">
                                 <SecondaryButton type="submit" :disabled="form.processing">Guardar</SecondaryButton>

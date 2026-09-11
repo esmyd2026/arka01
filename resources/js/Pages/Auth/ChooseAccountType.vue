@@ -20,7 +20,7 @@ const firstName = (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Link
                 :href="route('dashboard')"
-                class="p-4 rounded-arka border-2 border-arka-text-muted/20 hover:border-arka-primary hover:bg-arka-primary/10 text-start transition"
+                class="p-4 rounded-arka border-2 border-arka-border hover:border-arka-primary hover:bg-arka-primary/10 text-start transition"
             >
                 <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -32,7 +32,7 @@ const firstName = (usePage().props.auth.user.name ?? '').trim().split(/\s+/)[0] 
 
             <Link
                 :href="route('driver.profile.edit')"
-                class="p-4 rounded-arka border-2 border-arka-text-muted/20 hover:border-arka-primary hover:bg-arka-primary/10 text-start transition"
+                class="p-4 rounded-arka border-2 border-arka-border hover:border-arka-primary hover:bg-arka-primary/10 text-start transition"
             >
                 <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />

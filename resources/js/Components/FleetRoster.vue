@@ -243,7 +243,7 @@ onBeforeUnmount(() => {
 <template>
     <div class="space-y-6">
         <!-- Buscador para invitar conductores -->
-        <div :id="`fleet-search-card-${fleet.id}`" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
+        <div :id="`fleet-search-card-${fleet.id}`" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-border">
             <div class="flex items-start justify-between gap-3">
                 <!-- Pedido explícito del usuario: buscar por nombre, apellido,
                      usuario o código — cada resultado ya muestra foto, código y
@@ -271,11 +271,11 @@ onBeforeUnmount(() => {
                 a más.
             </p>
 
-            <ul v-if="searchResults.length" class="mt-4 divide-y divide-arka-text-muted/10">
+            <ul v-if="searchResults.length" class="mt-4 space-y-2">
                 <li
                     v-for="driver in searchResults"
                     :key="driver.user_id"
-                    class="py-3 flex items-center justify-between gap-4"
+                    class="flex items-center justify-between gap-4 rounded-xl border border-arka-border bg-arka-surface/75 p-3 transition hover:border-arka-primary/40 hover:bg-white"
                 >
                     <div class="flex items-center gap-3 min-w-0">
                         <UserAvatar :user="driver" size-class="h-11 w-11 text-sm shrink-0" />
@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Conductores activos en la flota -->
-        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
+        <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-border">
             <h3 class="text-lg font-medium text-arka-text mb-4">Conductores en su flota</h3>
 
             <p v-if="!fleet.active_members?.length" class="text-sm text-arka-text-muted">
@@ -366,7 +366,7 @@ onBeforeUnmount(() => {
                 <article
                     v-for="member in fleet.active_members"
                     :key="member.id"
-                    class="group relative overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-base p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-arka-primary/35 hover:shadow-lg hover:shadow-black/10"
+                    class="group relative overflow-hidden rounded-2xl border border-arka-border bg-arka-surface p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-arka-primary/45 hover:bg-white hover:shadow-lg hover:shadow-black/10"
                 >
                     <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-arka-primary/45 to-transparent opacity-0 transition group-hover:opacity-100"></div>
 
@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
                             <template #trigger>
                                 <button
                                     type="button"
-                                    class="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-arka-text-muted/20 bg-arka-base/90 text-arka-text-muted transition hover:border-arka-text-muted/40 hover:bg-arka-card hover:text-arka-text"
+                                    class="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-arka-border bg-arka-base/90 text-arka-text-muted transition hover:border-arka-text-muted/40 hover:bg-arka-card hover:text-arka-text"
                                     :aria-label="`Más opciones para ${member.driver.name}`"
                                 >
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
                                 {{ member.driver.name }}
                                 <span
                                     v-if="memberStats[member.driver.id]"
-                                    class="rounded-full border border-arka-primary/15 bg-arka-primary/10 px-2 py-0.5 text-[10px] font-semibold text-arka-primary"
+                                    class="rounded-full border border-arka-primary/25 bg-arka-primary/10 px-2 py-0.5 text-[10px] font-semibold text-arka-primary"
                                 >
                                     {{ tierLabel(memberStats[member.driver.id].tier) }}
                                 </span>
@@ -432,7 +432,7 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <div v-if="memberStats[member.driver.id]" class="mt-4 grid grid-cols-3 divide-x divide-arka-text-muted/10 rounded-xl border border-arka-text-muted/10 bg-arka-card/60 py-2.5 text-center">
+                    <div v-if="memberStats[member.driver.id]" class="mt-4 grid grid-cols-3 divide-x divide-arka-border rounded-xl border border-arka-border bg-white py-2.5 text-center">
                         <div class="px-1">
                             <p class="text-sm font-semibold text-arka-text">
                                 <template v-if="memberStats[member.driver.id].review_count > 0">
@@ -459,7 +459,7 @@ onBeforeUnmount(() => {
                     <div class="mt-4 grid grid-cols-2 items-center gap-2">
                         <Link
                             :href="route('ride-requests.create', { flota: fleet.id, conductor: member.driver.public_id })"
-                            class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-arka-primary px-2 text-[11px] font-semibold text-arka-base shadow-sm transition hover:bg-arka-primary-bright focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base"
+                            class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl bg-arka-primary px-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-arka-primary-bright focus:outline-none focus:ring-2 focus:ring-arka-primary focus:ring-offset-2 focus:ring-offset-arka-base"
                         >
                             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 16.5v-3.2a2 2 0 0 1 .2-.9l1.6-3.3a2 2 0 0 1 1.8-1.1h8.8a2 2 0 0 1 1.8 1.1l1.6 3.3a2 2 0 0 1 .2.9v3.2" />
@@ -475,7 +475,7 @@ onBeforeUnmount(() => {
                             :href="whatsappReferralUrl(member)"
                             target="_blank"
                             rel="noopener"
-                            class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/30 bg-[#25D366]/10 px-2 text-[11px] font-semibold text-[#57e389] transition hover:border-[#25D366]/50 hover:bg-[#25D366]/15 focus:outline-none focus:ring-2 focus:ring-[#25D366]/60 focus:ring-offset-2 focus:ring-offset-arka-base"
+                            class="inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-[#25D366]/45 bg-[#eaf9ef] px-2 text-[11px] font-semibold text-[#128c4a] transition hover:border-[#25D366]/70 hover:bg-[#def5e6] focus:outline-none focus:ring-2 focus:ring-[#25D366]/60 focus:ring-offset-2 focus:ring-offset-arka-base"
                             :aria-label="`Recomendar a ${member.driver.name} por WhatsApp`"
                         >
                             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -489,10 +489,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Invitaciones pendientes de respuesta -->
-        <div v-if="invitations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-text-muted/10">
+        <div v-if="invitations.length" class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-border">
             <h3 class="text-lg font-medium text-arka-text mb-4">Invitaciones pendientes</h3>
 
-            <ul class="divide-y divide-arka-text-muted/10">
+            <ul class="divide-y divide-arka-border">
                 <li
                     v-for="invitation in invitations"
                     :key="invitation.id"

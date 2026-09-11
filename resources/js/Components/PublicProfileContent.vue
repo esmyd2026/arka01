@@ -69,7 +69,7 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
              solo si la persona desea entenderlo. -->
         <section
             v-if="trustIndex"
-            class="mt-4 rounded-2xl border border-arka-primary/20 bg-arka-base/35 p-4"
+            class="mt-4 rounded-2xl border border-arka-primary/30 bg-arka-base/35 p-4"
             aria-labelledby="trust-index-title"
         >
             <div class="flex items-center gap-4">
@@ -101,7 +101,7 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
                 </div>
             </div>
 
-            <details class="group mt-4 border-t border-arka-text-muted/10 pt-3">
+            <details class="group mt-4 border-t border-arka-border pt-3">
                 <summary class="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-arka-text-muted transition hover:text-arka-primary-bright">
                     Cómo se calcula
                     <span class="transition group-open:rotate-180" aria-hidden="true">⌄</span>
@@ -167,7 +167,7 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
             <Link
                 v-if="canRequestRide"
                 :href="route('ride-requests.create', { conductor: profileUser.public_id })"
-                class="inline-block mt-2 px-4 py-2 rounded-arka bg-arka-primary text-arka-base text-xs font-semibold uppercase tracking-widest hover:opacity-90"
+                class="inline-block mt-2 px-4 py-2 rounded-arka bg-arka-primary text-white text-xs font-semibold uppercase tracking-widest hover:opacity-90"
             >
                 Pedir carrera
             </Link>
@@ -177,12 +177,12 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
     <div
         v-if="!(isDriver && profilePrivate) && reviews.data.length"
         :class="embedded
-            ? 'mt-6 border-t border-arka-text-muted/10 pt-5'
+            ? 'mt-6 border-t border-arka-border pt-5'
             : 'p-4 sm:p-6 bg-arka-card shadow rounded-arka mt-6'"
     >
         <h3 class="text-lg font-medium text-arka-text mb-4">Comentarios</h3>
 
-        <ul class="divide-y divide-arka-text-muted/10">
+        <ul class="divide-y divide-arka-border">
             <li v-for="review in reviews.data" :key="review.id" class="py-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">

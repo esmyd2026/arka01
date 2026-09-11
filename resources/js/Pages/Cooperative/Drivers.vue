@@ -55,7 +55,7 @@ async function remove(membership) {
         <template #header><h2 class="text-xl font-semibold text-arka-text">Conductores de {{ cooperative.name }}</h2></template>
         <div class="py-8 sm:py-12">
             <div class="mx-auto max-w-5xl space-y-6 px-4 sm:px-6">
-                <section class="rounded-arka border border-arka-text-muted/10 bg-arka-card p-5 shadow-lg">
+                <section class="rounded-arka border border-arka-border bg-arka-card p-5 shadow-lg">
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
                         <div class="flex-1">
                             <label class="text-sm font-medium text-arka-text">Buscar conductor por nombre, usuario o código</label>
@@ -64,7 +64,7 @@ async function remove(membership) {
                         <PrimaryButton :disabled="searching || query.trim().length < 2" @click="search">{{ searching ? 'Buscando…' : 'Buscar' }}</PrimaryButton>
                     </div>
                     <p class="mt-3 text-xs text-arka-text-muted">Plan {{ planLimits.plan_name }}: {{ planLimits.max_units ?? 'sin límite' }} unidades/conductores. La invitación nunca crea el vínculo automáticamente.</p>
-                    <div v-if="results.length" class="mt-4 divide-y divide-arka-text-muted/10 rounded-arka border border-arka-text-muted/10">
+                    <div v-if="results.length" class="mt-4 divide-y divide-arka-border rounded-arka border border-arka-border">
                         <div v-for="driver in results" :key="driver.id" class="flex items-center gap-3 p-3">
                             <UserAvatar :user="driver" size-class="h-10 w-10 text-xs shrink-0" />
                             <div class="min-w-0 flex-1">
@@ -78,9 +78,9 @@ async function remove(membership) {
                 </section>
 
                 <section class="rounded-arka bg-arka-card shadow-lg">
-                    <div class="border-b border-arka-text-muted/10 p-5"><h3 class="font-semibold text-arka-text">Vínculos actuales</h3></div>
+                    <div class="border-b border-arka-border p-5"><h3 class="font-semibold text-arka-text">Vínculos actuales</h3></div>
                     <p v-if="!memberships.length" class="p-6 text-sm text-arka-text-muted">Aún no hay conductores vinculados o invitados.</p>
-                    <div v-else class="divide-y divide-arka-text-muted/10">
+                    <div v-else class="divide-y divide-arka-border">
                         <div v-for="membership in memberships" :key="membership.id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
                             <UserAvatar :user="membership.driver" size-class="h-11 w-11 text-sm shrink-0" />
                             <div class="flex-1">

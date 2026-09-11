@@ -1205,7 +1205,7 @@ const cashPaymentError = ref('');
 const paymentStatus = computed(() => props.ride.payment_status ?? 'pending');
 const paymentStatusMeta = computed(() => ({
     pending: { label: props.ride.payment_method === 'efectivo' ? 'Pendiente de confirmar' : 'Falta comprobante', classes: 'border-arka-warning/30 bg-arka-warning/10 text-arka-warning' },
-    proof_submitted: { label: 'Comprobante en revisión', classes: 'border-sky-400/30 bg-sky-400/10 text-sky-300' },
+    proof_submitted: { label: 'Comprobante en revisión', classes: 'border-sky-400/30 bg-sky-400/10 text-sky-700' },
     confirmed: { label: 'Pagada', classes: 'border-arka-primary/30 bg-arka-primary/10 text-arka-primary' },
     rejected: { label: 'Comprobante rechazado', classes: 'border-arka-danger/30 bg-arka-danger/10 text-arka-danger' },
 }[paymentStatus.value] ?? { label: 'Pago pendiente', classes: 'border-arka-warning/30 bg-arka-warning/10 text-arka-warning' }));
@@ -1523,7 +1523,7 @@ function addDriverToFleet() {
                  el mapa más de lo necesario, para que el auto y la
                  trayectoria (pedido explícito del usuario: "el conductor
                  nunca debería ir abajo [de otra capa]") siempre se vean. -->
-            <div class="fixed inset-x-3 top-20 sm:top-3 z-10 p-3 bg-arka-card/95 backdrop-blur-sm shadow-lg rounded-arka border border-arka-text-muted/10 flex items-center gap-3">
+            <div class="fixed inset-x-3 top-20 sm:top-3 z-10 p-3 bg-arka-card/95 backdrop-blur-sm shadow-lg rounded-arka border border-arka-border flex items-center gap-3">
                 <UserAvatar :user="counterpart" size-class="h-12 w-12 text-sm shrink-0" />
                 <div class="min-w-0 flex-1">
                     <p class="font-medium text-arka-text flex items-center gap-1.5">
@@ -1549,7 +1549,7 @@ function addDriverToFleet() {
                 <div class="flex shrink-0 items-center gap-2">
                     <button
                         type="button"
-                        class="grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/20 bg-arka-base/80 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary active:scale-95"
+                        class="grid h-9 w-9 place-items-center rounded-full border border-arka-border bg-arka-base/80 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary active:scale-95"
                         aria-label="Enviar mensaje al conductor"
                         title="Mensaje"
                         @click="openClientMessage"
@@ -1559,7 +1559,7 @@ function addDriverToFleet() {
                     <a
                         v-if="counterpart.phone"
                         :href="`tel:${counterpart.phone}`"
-                        class="grid h-9 w-9 place-items-center rounded-full border border-arka-text-muted/20 bg-arka-base/80 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary active:scale-95"
+                        class="grid h-9 w-9 place-items-center rounded-full border border-arka-border bg-arka-base/80 text-arka-text-muted transition hover:border-arka-primary/40 hover:text-arka-primary active:scale-95"
                         aria-label="Llamar al conductor"
                         title="Llamar"
                     >
@@ -1585,7 +1585,7 @@ function addDriverToFleet() {
             <!-- Progreso y acciones esenciales, siempre visibles sin cubrir
                  innecesariamente el mapa. -->
             <div class="fixed inset-x-3 bottom-3 z-10">
-                <div class="overflow-hidden rounded-2xl border border-arka-text-muted/10 bg-arka-card/95 px-3 py-3 shadow-2xl backdrop-blur-md">
+                <div class="overflow-hidden rounded-2xl border border-arka-border bg-arka-card/95 px-3 py-3 shadow-2xl backdrop-blur-md">
                     <div class="mb-3 flex items-center justify-between gap-3">
                         <div class="min-w-0">
                             <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-arka-text-muted">Progreso del viaje</p>
@@ -1639,7 +1639,7 @@ function addDriverToFleet() {
                     <!-- La información económica queda agrupada debajo del
                          progreso, donde se entiende como parte del viaje y
                          no como tarjetas sueltas sin jerarquía. -->
-                    <div class="mt-3 grid grid-cols-2 divide-x divide-arka-text-muted/10 border-t border-arka-text-muted/10 pt-3">
+                    <div class="mt-3 grid grid-cols-2 divide-x divide-arka-border border-t border-arka-border pt-3">
                         <div class="pe-3">
                             <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-arka-text-muted">Forma de pago</p>
                             <p class="mt-0.5 text-xs font-semibold text-arka-text">{{ ride.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo' }}</p>
@@ -1724,8 +1724,8 @@ function addDriverToFleet() {
                             >{{ stop.sequence ?? index + 1 }}</span>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center justify-between gap-2">
-                                    <p class="text-[10px] font-bold uppercase tracking-wider" :class="stop.status === 'pending' ? 'text-amber-400' : 'text-arka-text-muted'">Parada {{ stop.sequence ?? index + 1 }}</p>
-                                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="stop.status === 'completed' ? 'bg-arka-primary/10 text-arka-primary' : stop.status === 'cancelled' ? 'bg-arka-text-muted/10 text-arka-text-muted' : 'bg-amber-500/10 text-amber-400'">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider" :class="stop.status === 'pending' ? 'text-amber-700' : 'text-arka-text-muted'">Parada {{ stop.sequence ?? index + 1 }}</p>
+                                    <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="stop.status === 'completed' ? 'bg-arka-primary/10 text-arka-primary' : stop.status === 'cancelled' ? 'bg-arka-text-muted/10 text-arka-text-muted' : 'bg-amber-500/10 text-amber-700'">
                                         {{ stop.status === 'completed' ? 'Completada' : stop.status === 'cancelled' ? 'Cancelada' : 'Pendiente' }}
                                     </span>
                                 </div>
@@ -1770,13 +1770,13 @@ function addDriverToFleet() {
                                 :key="message.id"
                                 class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                                 :class="message.sender_user_id === $page.props.auth.user.id
-                                    ? 'ms-auto bg-arka-primary text-arka-base'
+                                    ? 'ms-auto bg-arka-primary text-white'
                                     : 'bg-arka-base text-arka-text'"
                             >
                                 <p>{{ message.body }}</p>
                                 <p
                                     class="mt-0.5 text-[10px]"
-                                    :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-base/70' : 'text-arka-text-muted'"
+                                    :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-ink/70' : 'text-arka-text-muted'"
                                 >
                                     {{ new Date(message.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) }}
                                 </p>
@@ -1788,7 +1788,7 @@ function addDriverToFleet() {
                                 v-for="reply in quickReplies"
                                 :key="reply"
                                 type="button"
-                                class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                                class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-border"
                                 :disabled="chatSending"
                                 @click="sendChatMessage(reply)"
                             >
@@ -1827,7 +1827,7 @@ function addDriverToFleet() {
                                         type="text"
                                         readonly
                                         :value="trackingUrl"
-                                        class="flex-1 min-w-0 rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text text-sm px-3 py-1.5"
+                                        class="flex-1 min-w-0 rounded-arka border-arka-border bg-arka-base text-arka-text text-sm px-3 py-1.5"
                                         @focus="$event.target.select()"
                                     />
                                     <SecondaryButton size="sm" @click="copyTrackingUrl">{{ trackingCopied ? 'Copiado' : 'Copiar' }}</SecondaryButton>
@@ -2045,7 +2045,7 @@ function addDriverToFleet() {
                     <div class="absolute right-3 top-3 z-[400] flex flex-col gap-2">
                         <button
                             type="button"
-                            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-base shadow-lg hover:bg-gray-50 transition"
+                            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-ink shadow-lg hover:bg-gray-50 transition"
                             :aria-label="mapExpanded ? 'Achicar mapa' : 'Expandir mapa'"
                             @click="toggleMapExpanded"
                         >
@@ -2065,7 +2065,7 @@ function addDriverToFleet() {
                             v-if="isDriver"
                             type="button"
                             class="flex h-9 w-9 items-center justify-center rounded-full shadow-lg transition"
-                            :class="followDriver ? 'bg-arka-primary text-arka-base' : 'bg-white text-arka-base hover:bg-gray-50'"
+                            :class="followDriver ? 'bg-arka-primary text-white' : 'bg-white text-arka-ink hover:bg-gray-50'"
                             aria-label="Centrar mi ubicación"
                             title="Centrar mi ubicación"
                             @click="recenterMapButton"
@@ -2086,7 +2086,7 @@ function addDriverToFleet() {
                             :href="googleNavigateUrl(currentNavigationTarget.lat, currentNavigationTarget.lng)"
                             target="_blank"
                             rel="noopener"
-                            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-base shadow-lg hover:bg-gray-50 transition"
+                            class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-arka-ink shadow-lg hover:bg-gray-50 transition"
                             aria-label="Abrir en Google Maps"
                             title="Abrir en Google Maps"
                         >
@@ -2099,7 +2099,7 @@ function addDriverToFleet() {
 
                     <div
                         v-if="isDriver && driverRemainingLabel"
-                        class="absolute left-3 bottom-3 z-[400] flex items-center gap-2 rounded-full bg-white px-4 py-2 text-arka-base shadow-lg"
+                        class="absolute left-3 bottom-3 z-[400] flex items-center gap-2 rounded-full bg-white px-4 py-2 text-arka-ink shadow-lg"
                     >
                         <span class="text-arka-primary" aria-hidden="true">
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3h-2v10h2V3Zm4.3 2.3-1.4 1.4A6.9 6.9 0 0 1 19 12a7 7 0 1 1-11.9-5l-1.4-1.4A9 9 0 1 0 21 12a8.9 8.9 0 0 0-3.7-6.7Z"/></svg>
@@ -2114,7 +2114,7 @@ function addDriverToFleet() {
                      tarjeta, visible mientras hay una relación de viaje vigente. -->
                 <div
                     v-if="['scheduled', 'in_progress'].includes(ride.status)"
-                    class="-mt-6 mx-3 relative z-10 p-4 bg-arka-card shadow-lg rounded-arka border border-arka-text-muted/10 space-y-3"
+                    class="-mt-6 mx-3 relative z-10 p-4 bg-arka-card shadow-lg rounded-arka border border-arka-border space-y-3"
                 >
                     <div class="flex items-center gap-3">
                         <UserAvatar :user="counterpart" size-class="h-14 w-14 text-base" />
@@ -2191,7 +2191,7 @@ function addDriverToFleet() {
                          aparte, más abajo en la página, sale acá mismo junto al
                          pasajero. La tarjeta de abajo se saca para él (queda solo
                          para el cliente, sin cambios). -->
-                    <div v-if="isDriver" class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm border-t border-arka-text-muted/10 pt-3">
+                    <div v-if="isDriver" class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm border-t border-arka-border pt-3">
                         <div class="flex items-center justify-between col-span-2">
                             <span class="text-arka-text-muted">Estado</span>
                             <span class="text-arka-text font-medium">{{ statusLabel[ride.status] }}</span>
@@ -2208,7 +2208,7 @@ function addDriverToFleet() {
                             <span class="text-arka-text-muted">Tiempo de espera</span>
                             <span class="text-arka-text">{{ waitLabel }}</span>
                         </div>
-                        <div class="flex items-center justify-between col-span-2 pt-1.5 border-t border-arka-text-muted/10 text-base">
+                        <div class="flex items-center justify-between col-span-2 pt-1.5 border-t border-arka-border text-base">
                             <span class="text-arka-text-muted">Total</span>
                             <span class="text-arka-primary-bright font-semibold">${{ tripTotalCost.toFixed(2) }}</span>
                         </div>
@@ -2264,7 +2264,7 @@ function addDriverToFleet() {
                     <button
                         v-if="isDriver && chatOpen"
                         type="button"
-                        class="fixed right-4 bottom-24 z-30 h-12 w-12 rounded-full bg-arka-card border border-arka-text-muted/20 shadow-2xl flex items-center justify-center text-arka-text hover:bg-arka-base transition"
+                        class="fixed right-4 bottom-24 z-30 h-12 w-12 rounded-full bg-arka-card border border-arka-border shadow-2xl flex items-center justify-center text-arka-text hover:bg-arka-base transition"
                         aria-label="Más opciones"
                         @click="openDriverOptions"
                     >
@@ -2280,7 +2280,7 @@ function addDriverToFleet() {
                          pantalla esté mirando el conductor. -->
                     <div
                         v-if="isDriver && !showCancelForm && !showCompletionReasonForm && !showStopChoice && ['scheduled', 'in_progress'].includes(ride.status)"
-                        class="fixed inset-x-0 bottom-0 z-20 p-3 bg-arka-card border-t border-arka-text-muted/10 shadow-2xl flex flex-wrap gap-2"
+                        class="fixed inset-x-0 bottom-0 z-20 p-3 bg-arka-card border-t border-arka-border shadow-2xl flex flex-wrap gap-2"
                         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom))"
                     >
                         <PrimaryButton
@@ -2356,7 +2356,7 @@ function addDriverToFleet() {
                                 <button
                                     v-else
                                     type="button"
-                                    class="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-arka-base shadow-lg shadow-arka-primary/20 transition hover:bg-arka-primary-bright active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
+                                    class="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-white shadow-lg shadow-arka-primary/20 transition hover:bg-arka-primary-bright active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
                                     :disabled="completingStop"
                                     @click="openStopChoice"
                                 >
@@ -2388,7 +2388,7 @@ function addDriverToFleet() {
                                 <button
                                     v-else
                                     type="button"
-                                    class="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-arka-base shadow-lg shadow-arka-primary/20 transition hover:bg-arka-primary-bright active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
+                                    class="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-xl bg-arka-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-white shadow-lg shadow-arka-primary/20 transition hover:bg-arka-primary-bright active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
                                     :disabled="completing"
                                     @click="complete"
                                 >
@@ -2424,7 +2424,7 @@ function addDriverToFleet() {
                         </div>
                         <div>
                             <InputLabel value="Motivo" />
-                            <select v-model="completionReason" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                            <select v-model="completionReason" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                 <option value="" disabled>Seleccione un motivo</option>
                                 <option v-for="reason in EARLY_COMPLETION_REASONS" :key="reason" :value="reason">{{ reason }}</option>
                             </select>
@@ -2509,7 +2509,7 @@ function addDriverToFleet() {
                         </div>
                         <div>
                             <InputLabel value="Motivo" />
-                            <select v-model="stopCompletionReason" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                            <select v-model="stopCompletionReason" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                 <option value="" disabled>Seleccione un motivo</option>
                                 <option v-for="reason in EARLY_COMPLETION_REASONS" :key="reason" :value="reason">{{ reason }}</option>
                             </select>
@@ -2587,7 +2587,7 @@ function addDriverToFleet() {
                                             type="text"
                                             readonly
                                             :value="trackingUrl"
-                                            class="flex-1 min-w-0 rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text text-sm px-3 py-1.5"
+                                            class="flex-1 min-w-0 rounded-arka border-arka-border bg-arka-base text-arka-text text-sm px-3 py-1.5"
                                             @focus="$event.target.select()"
                                         />
                                         <SecondaryButton size="sm" @click="copyTrackingUrl">{{ trackingCopied ? 'Copiado' : 'Copiar' }}</SecondaryButton>
@@ -2652,13 +2652,13 @@ function addDriverToFleet() {
                                     :key="message.id"
                                     class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                                     :class="message.sender_user_id === $page.props.auth.user.id
-                                        ? 'ms-auto bg-arka-primary text-arka-base'
+                                        ? 'ms-auto bg-arka-primary text-white'
                                         : 'bg-arka-base text-arka-text'"
                                 >
                                     <p>{{ message.body }}</p>
                                     <p
                                         class="mt-0.5 text-[10px]"
-                                        :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-base/70' : 'text-arka-text-muted'"
+                                        :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-ink/70' : 'text-arka-text-muted'"
                                     >
                                         {{ new Date(message.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) }}
                                     </p>
@@ -2670,7 +2670,7 @@ function addDriverToFleet() {
                                     v-for="reply in quickReplies"
                                     :key="reply"
                                     type="button"
-                                    class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                                    class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-border"
                                     :disabled="chatSending"
                                     @click="sendChatMessage(reply)"
                                 >
@@ -2704,7 +2704,7 @@ function addDriverToFleet() {
                         <p v-if="cancelError" class="rounded-xl border border-arka-danger/30 bg-arka-danger/10 px-3 py-2 text-sm text-arka-danger" role="alert">{{ cancelError }}</p>
                         <div>
                             <InputLabel value="Motivo de la cancelación" />
-                            <select v-model="cancelReason" class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
+                            <select v-model="cancelReason" class="mt-1 block w-full rounded-arka border-arka-border bg-arka-base text-arka-text focus:border-arka-primary focus:ring-arka-primary">
                                 <option value="" disabled>Elija un motivo</option>
                                 <option v-for="reason in cancelReasons" :key="reason" :value="reason">{{ reason }}</option>
                             </select>
@@ -2733,7 +2733,7 @@ function addDriverToFleet() {
                         <p class="text-3xl font-semibold text-arka-primary-bright">${{ ride.settled_price ?? ride.price }}</p>
                     </div>
                     <!-- Desglose por parada, solo si hubo alguna. -->
-                    <div v-if="ride.stops?.length" class="pt-3 border-t border-arka-text-muted/10 space-y-2">
+                    <div v-if="ride.stops?.length" class="pt-3 border-t border-arka-border space-y-2">
                         <div v-for="stop in ride.stops" :key="stop.id" class="flex items-center justify-between gap-3 text-sm">
                             <span class="text-arka-text-muted">
                                 Parada {{ stop.sequence }}
@@ -2751,7 +2751,7 @@ function addDriverToFleet() {
                             </span>
                         </div>
                     </div>
-                    <div class="pt-3 border-t border-arka-text-muted/10 space-y-2">
+                    <div class="pt-3 border-t border-arka-border space-y-2">
                         <div class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Método de pago</span>
                             <span class="text-arka-text capitalize">{{ ride.payment_method ?? 'efectivo' }}</span>
@@ -2794,7 +2794,7 @@ function addDriverToFleet() {
                     <!-- Confirmación real del pago en carreras de cooperativa:
                          transferencia la valida la organización; efectivo lo
                          confirma el conductor que recibió el dinero. -->
-                    <div v-if="transferGoesToCooperative" class="border-t border-arka-text-muted/10 pt-4">
+                    <div v-if="transferGoesToCooperative" class="border-t border-arka-border pt-4">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-xs font-semibold uppercase tracking-[0.12em] text-arka-text-muted">Estado del pago</p>
@@ -2902,7 +2902,7 @@ function addDriverToFleet() {
                             type="text"
                             readonly
                             :value="trackingUrl"
-                            class="flex-1 min-w-0 rounded-arka border-arka-text-muted/20 bg-arka-base text-arka-text text-sm px-3 py-1.5"
+                            class="flex-1 min-w-0 rounded-arka border-arka-border bg-arka-base text-arka-text text-sm px-3 py-1.5"
                             @focus="$event.target.select()"
                         />
                         <SecondaryButton @click="copyTrackingUrl">{{ trackingCopied ? 'Copiado' : 'Copiar' }}</SecondaryButton>
@@ -2934,13 +2934,13 @@ function addDriverToFleet() {
                             :key="message.id"
                             class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                             :class="message.sender_user_id === $page.props.auth.user.id
-                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                ? 'ms-auto bg-arka-primary text-white'
                                 : 'bg-arka-base text-arka-text'"
                         >
                             <p>{{ message.body }}</p>
                             <p
                                 class="mt-0.5 text-[10px]"
-                                :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-base/70' : 'text-arka-text-muted'"
+                                :class="message.sender_user_id === $page.props.auth.user.id ? 'text-arka-ink/70' : 'text-arka-text-muted'"
                             >
                                 {{ new Date(message.created_at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) }}
                             </p>
@@ -2953,7 +2953,7 @@ function addDriverToFleet() {
                             v-for="reply in quickReplies"
                             :key="reply"
                             type="button"
-                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-border"
                             :disabled="chatSending"
                             @click="sendChatMessage(reply)"
                         >
@@ -3113,7 +3113,7 @@ function addDriverToFleet() {
                             <select
                                 id="rating_reason_id"
                                 v-model="reviewForm.rating_reason_id"
-                                class="mt-1 block w-full rounded-arka border-arka-text-muted/20 bg-transparent text-arka-text"
+                                class="mt-1 block w-full rounded-arka border-arka-border bg-transparent text-arka-text"
                                 required
                             >
                                 <option :value="null" disabled>Elija un motivo</option>
@@ -3136,7 +3136,7 @@ function addDriverToFleet() {
                         <p v-if="myReview.comment" class="mt-1 italic">"{{ myReview.comment }}"</p>
                     </div>
 
-                    <div v-if="theirReview" class="pt-3 border-t border-arka-text-muted/10">
+                    <div v-if="theirReview" class="pt-3 border-t border-arka-border">
                         <div class="flex items-center gap-2 mb-1">
                             <UserAvatar :user="counterpart" size-class="h-6 w-6 text-[10px] shrink-0" />
                             <p class="text-sm text-arka-text-muted">

@@ -11,8 +11,8 @@ defineProps({
 </script>
 
 <template>
-    <!-- Etiqueta de formulario en texto claro, para que se lea bien sobre el fondo oscuro -->
-    <label class="block text-sm font-semibold" :class="light ? 'text-arka-base/80' : 'text-arka-text'">
+    <!-- Etiqueta de formulario con contraste consistente en fondos claros. -->
+    <label class="block text-sm font-semibold" :class="light ? 'text-arka-ink/80' : 'text-arka-text'">
         <span v-if="value">{{ value }}</span>
         <span v-else><slot /></span>
     </label>

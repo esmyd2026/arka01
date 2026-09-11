@@ -20,7 +20,7 @@ defineProps({
 
                 <p v-if="!alerts.data.length" class="text-sm text-arka-text-muted">Todavía no hay alertas registradas.</p>
 
-                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-text-muted/10">
+                <ul v-else class="bg-arka-card shadow rounded-arka divide-y divide-arka-border">
                     <li v-for="alert in alerts.data" :key="alert.id" class="p-4 sm:p-6">
                         <div class="flex items-start justify-between gap-4">
                             <div>

@@ -153,7 +153,7 @@ onBeforeUnmount(() => window.clearInterval(timer));
             <span>≈{{ formatBytes(todayBytes) }}</span>
         </button>
 
-        <div v-if="open" class="absolute right-0 top-11 z-[60] w-72 rounded-2xl border border-arka-primary/20 bg-arka-card p-4 shadow-2xl">
+        <div v-if="open" class="absolute right-0 top-11 z-[60] w-72 rounded-2xl border border-arka-primary/30 bg-arka-card p-4 shadow-2xl">
             <div class="flex items-start justify-between gap-3">
                 <div><p class="text-sm font-semibold text-arka-text">Consumo de hoy</p><p class="mt-1 text-2xl font-bold text-arka-primary">≈ {{ formatBytes(todayBytes) }}</p><p class="mt-0.5 text-[10px] text-arka-text-muted">Promedio diario: ≈ {{ formatBytes(averageDailyBytes) }}</p><p class="mt-0.5 text-[10px] text-arka-text-muted/70">Comienza nuevamente cada día</p></div>
                 <button type="button" class="text-arka-text-muted hover:text-arka-text" aria-label="Cerrar" @click="open = false">✕</button>
@@ -167,7 +167,7 @@ onBeforeUnmount(() => window.clearInterval(timer));
                 <div class="rounded-xl bg-arka-base/60 px-2 py-2"><p class="text-xs font-bold text-arka-text">{{ formatBytes(weekBytes) }}</p><p class="text-[10px] text-arka-text-muted">7 días</p></div>
                 <div class="rounded-xl bg-arka-base/60 px-2 py-2"><p class="text-xs font-bold text-arka-text">{{ currentRideId ? formatBytes(currentRideBytes) : '—' }}</p><p class="text-[10px] text-arka-text-muted">Carrera actual</p></div>
             </div>
-            <button type="button" class="mt-3 flex w-full items-center justify-between rounded-xl border border-arka-text-muted/15 px-3 py-2 text-xs font-semibold text-arka-text transition hover:border-arka-primary/35" @click="showHistory = !showHistory">
+            <button type="button" class="mt-3 flex w-full items-center justify-between rounded-xl border border-arka-border px-3 py-2 text-xs font-semibold text-arka-text transition hover:border-arka-primary/35" @click="showHistory = !showHistory">
                 <span>{{ showHistory ? 'Ocultar histórico' : 'Ver histórico' }}</span><span class="text-arka-primary">{{ showHistory ? '↑' : '↓' }}</span>
             </button>
             <div v-if="showHistory" class="mt-3 space-y-1.5 rounded-xl bg-arka-base/40 p-3">

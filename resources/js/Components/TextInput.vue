@@ -27,11 +27,11 @@ defineExpose({ focus: () => input.value.focus() });
 </script>
 
 <template>
-    <!-- Input oscuro: fondo de tarjeta, texto claro, foco en verde menta -->
+    <!-- Input claro: superficie blanca, texto oscuro y foco en verde de marca. -->
     <input
         class="rounded-arka shadow-sm focus:border-arka-primary focus:ring-arka-primary"
         :class="light
-            ? 'border-arka-base/10 bg-white text-arka-base placeholder:text-arka-base/35'
+            ? 'border-arka-ink/10 bg-white text-arka-ink placeholder:text-arka-ink/35'
             : 'border-arka-text-muted/30 bg-arka-card text-arka-text placeholder:text-arka-text-muted'"
         v-model="model"
         ref="input"

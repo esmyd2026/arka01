@@ -5,8 +5,8 @@
     "start_url": "/dashboard",
     "id": "/dashboard",
     "display": "standalone",
-    "background_color": "#0a0f0c",
-    "theme_color": "#0a0f0c",
+    "background_color": "#dfe9e4",
+    "theme_color": "#dfe9e4",
     "orientation": "portrait-primary",
     "lang": "es-EC",
     "icons": [

@@ -104,7 +104,7 @@ function changeStatus(value = status.value) {
                     v-if="status === 'nuevo'"
                     class="p-4 rounded-arka bg-red-500/10 border border-red-500/40 flex flex-col sm:flex-row sm:items-center gap-3"
                 >
-                    <p class="flex-1 text-sm text-red-400 font-medium">
+                    <p class="flex-1 text-sm text-red-600 font-medium">
                         Este cliente solicita hablar con un asesor humano — todavía nadie lo atendió.
                     </p>
                     <button
@@ -132,7 +132,7 @@ function changeStatus(value = status.value) {
                             :key="message.id"
                             class="max-w-[80%] px-3 py-2 rounded-arka text-sm"
                             :class="message.sender_is_admin
-                                ? 'ms-auto bg-arka-primary text-arka-base'
+                                ? 'ms-auto bg-arka-primary text-white'
                                 : 'bg-arka-base text-arka-text'"
                         >
                             <p v-if="!message.sender_is_admin" class="text-xs font-medium opacity-70">{{ ticket.user.name }}</p>
@@ -145,7 +145,7 @@ function changeStatus(value = status.value) {
                             v-for="reply in QUICK_REPLIES"
                             :key="reply"
                             type="button"
-                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-text-muted/20"
+                            class="px-2 py-1 rounded-arka text-xs bg-arka-base text-arka-text-muted hover:text-arka-text border border-arka-border"
                             :disabled="sending"
                             @click="send(reply)"
                         >

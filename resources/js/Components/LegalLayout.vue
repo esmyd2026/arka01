@@ -17,7 +17,7 @@ defineProps({
     <Head :title="title" />
 
     <div class="min-h-screen bg-arka-base">
-        <header class="border-b border-arka-text-muted/10 px-4 sm:px-6 py-4">
+        <header class="border-b border-arka-border px-4 sm:px-6 py-4">
             <div class="max-w-3xl mx-auto flex items-center justify-between">
                 <Link href="/">
                     <ApplicationLogo size="h-8" />

@@ -55,7 +55,7 @@ watch(() => props.banners.length, () => {
                 <p v-if="banner.description" class="text-white/80 text-xs sm:text-sm line-clamp-1">{{ banner.description }}</p>
                 <span
                     v-if="banner.button_label"
-                    class="mt-1.5 inline-block w-fit px-3 py-1 rounded-full bg-arka-primary text-arka-base text-xs font-medium"
+                    class="mt-1.5 inline-block w-fit px-3 py-1 rounded-full bg-arka-primary text-white text-xs font-medium"
                 >
                     {{ banner.button_label }}
                 </span>
@@ -69,7 +69,7 @@ watch(() => props.banners.length, () => {
                 :key="banner.id"
                 type="button"
                 class="h-1.5 rounded-full transition-all"
-                :class="index === activeIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/50'"
+                :class="index === activeIndex ? 'w-4 bg-white' : 'w-1.5 bg-arka-surface0'"
                 :aria-label="`Ver anuncio ${index + 1}`"
                 @click="goTo(index)"
             />

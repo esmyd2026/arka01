@@ -339,7 +339,7 @@ const submit = () => {
                     <button
                         type="button"
                         class="p-4 rounded-arka border-2 text-start transition"
-                        :class="form.account_type === 'cliente' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20 hover:border-arka-text-muted/40'"
+                        :class="form.account_type === 'cliente' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border hover:border-arka-text-muted/40'"
                         @click="form.account_type = 'cliente'"
                     >
                         <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -353,7 +353,7 @@ const submit = () => {
                     <button
                         type="button"
                         class="p-4 rounded-arka border-2 text-start transition"
-                        :class="form.account_type === 'conductor' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20 hover:border-arka-text-muted/40'"
+                        :class="form.account_type === 'conductor' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border hover:border-arka-text-muted/40'"
                         @click="form.account_type = 'conductor'"
                     >
                         <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -367,7 +367,7 @@ const submit = () => {
                     <button
                         type="button"
                         class="p-4 rounded-arka border-2 text-start transition"
-                        :class="form.account_type === 'cooperativa' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-text-muted/20 hover:border-arka-text-muted/40'"
+                        :class="form.account_type === 'cooperativa' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border hover:border-arka-text-muted/40'"
                         @click="form.account_type = 'cooperativa'"
                     >
                         <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
