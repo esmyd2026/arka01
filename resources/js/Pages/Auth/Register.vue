@@ -502,7 +502,7 @@ const submit = () => {
                 <!-- Registro rápido (pedido explícito del usuario): acá no se pide
                      nada más — le mandamos un código por WhatsApp y con eso alcanza. -->
                 <p v-if="isQuickSignup" class="mt-1 text-xs text-arka-text-muted">
-                    Le vamos a enviar un código de un solo uso por WhatsApp para confirmarlo.
+                   <!--  Le vamos a enviar un código de un solo uso por WhatsApp para confirmarlo. -->
                 </p>
 
                 <!-- Bug real reportado por el usuario (con capturas): en móvil, el
@@ -565,7 +565,7 @@ const submit = () => {
                         class="mt-1 block w-full"
                         v-model="form.email"
                         autocomplete="email"
-                        placeholder="Por si el código no le llega por WhatsApp"
+                        placeholder="El email es opcional"
                         @keydown.enter.prevent="goNext"
                     />
                     <InputError class="mt-2" :message="form.errors.email" />

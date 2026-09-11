@@ -43,6 +43,16 @@ const authUser = usePage().props.auth?.user ?? null;
 // con un fundido suave una vez lista, en vez de aparecer de golpe cuando
 // pesa mucho. Mientras tanto se ve el fondo claro de la aplicación.
 const heroBackgroundLoaded = ref(false);
+// Pedido explícito del usuario ("las imágenes... son un poco pesadas, demoran
+// en cargar y se nota eso que va apareciendo poco a poco"): las fotos fijas
+// de móvil/escritorio del hero se agregaron sin el mismo fundido que ya tiene
+// login/registro (heroBackgroundLoaded de arriba quedó huérfano — era para la
+// vieja imagen configurable desde el admin, no para estas dos). Mismo patrón:
+// se precargan en JS y solo se muestran con opacidad 1 cuando terminan de
+// bajar, evitando el efecto de "se va pintando de a poco" de una imagen
+// pesada renderizándose directo desde el navegador.
+const mobileHeroLoaded = ref(false);
+const desktopHeroLoaded = ref(false);
 const showingWelcomeCta = ref(false);
 const ctaHoneypot = ref('');
 let welcomeCtaTimer = null;
@@ -97,6 +107,14 @@ onMounted(() => {
         image.onload = () => { heroBackgroundLoaded.value = true; };
         image.src = props.heroBackgroundUrl;
     }
+
+    const mobileHero = new Image();
+    mobileHero.onload = () => { mobileHeroLoaded.value = true; };
+    mobileHero.src = '/img/imagen%20para%20movil%20inicio.png';
+
+    const desktopHero = new Image();
+    desktopHero.onload = () => { desktopHeroLoaded.value = true; };
+    desktopHero.src = '/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png';
 
     if (!authUser && props.canRegister) {
         const lastShown = Number(window.localStorage.getItem('arka01_welcome_cta_shown_at') || 0);
@@ -344,11 +362,13 @@ function submitFeedback() {
                      imagen ya terminó de precargarse (ver heroBackgroundLoaded),
                      en vez de pintarse de golpe como antes. -->
                 <div
-                    class="welcome-hero__image welcome-hero__image--mobile pointer-events-none absolute inset-0 -z-20 bg-cover md:hidden"
+                    class="welcome-hero__image welcome-hero__image--mobile pointer-events-none absolute inset-0 -z-20 bg-cover md:hidden transition-opacity duration-700 ease-out"
+                    :class="mobileHeroLoaded ? 'opacity-100' : 'opacity-0'"
                     :style="{ backgroundImage: `url('/img/imagen%20para%20movil%20inicio.png')` }"
                 />
                 <div
-                    class="welcome-hero__image welcome-hero__image--desktop pointer-events-none absolute inset-0 -z-20 hidden bg-cover bg-center md:block"
+                    class="welcome-hero__image welcome-hero__image--desktop pointer-events-none absolute inset-0 -z-20 hidden bg-cover bg-center md:block transition-opacity duration-700 ease-out"
+                    :class="desktopHeroLoaded ? 'opacity-100' : 'opacity-0'"
                     :style="{ backgroundImage: `url('/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png')` }"
                 />
                 <div class="welcome-hero__content p-5 text-center sm:p-6 md:text-start">
@@ -537,8 +557,8 @@ function submitFeedback() {
                         @click="showingGuestRideForm = true"
                     >
                         <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s7-6.1 7-13A7 7 0 0 0 5 9c0 6.9 7 13 7 13Zm0-10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
-                        <span>Selecciona tu destino</span>
-                        <svg class="ms-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
+                        <span>Indica tu destino</span>
+                        <!-- <svg class="ms-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg> -->
                     </button>
 
                     <button
@@ -553,8 +573,7 @@ function submitFeedback() {
                     <div v-show="showingGuestRideForm" id="guest-ride-form" class="px-5 py-4 sm:px-6">
                         <div class="mb-2.5 flex items-center justify-between gap-3">
                             <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-arka-text-muted">Trayecto</p>
-                                <p class="mt-0.5 text-sm font-semibold text-arka-text">Origen y destino</p>
+                                 <p class="mt-0.5 text-sm font-semibold text-arka-text">Origen y destino</p>
                             </div>
                             <button
                                 type="button"
@@ -1462,6 +1481,22 @@ function submitFeedback() {
         background-repeat: no-repeat;
         background-color: #03140f;
         filter: saturate(1.04) contrast(1.02) brightness(1.02);
+    }
+
+    /* Bug real reportado por el usuario ("en algunos teléfonos se ve la
+       parte negra como si fuera un error"): la foto es "ancho:100%, alto:
+       auto" para no recortarla — en un teléfono más alto que su relación de
+       aspecto, se queda corta y el fondo #03140f de abajo se nota como un
+       corte duro. Un degradado a difuminar el propio final de la foto hace
+       que la transición se vea intencional en cualquier alto de pantalla,
+       sin depender de adivinar el punto exacto del corte por modelo. */
+    .welcome-hero__image--mobile::after {
+        position: absolute;
+        inset: auto 0 0 0;
+        height: 28vh;
+        content: '';
+        pointer-events: none;
+        background: linear-gradient(to bottom, transparent, #03140f);
     }
 
     .welcome-hero__content {
