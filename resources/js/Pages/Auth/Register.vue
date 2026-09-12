@@ -68,7 +68,9 @@ if (prefilledPhoneParam) {
 }
 
 const form = useForm({
-    account_type: validPreselection,
+    // En la primera visita se propone Pasajero, como en el diseño aprobado;
+    // la persona todavía puede cambiarlo antes de continuar.
+    account_type: validPreselection || 'cliente',
     first_name: '',
     last_name: '',
     email: '',
@@ -203,6 +205,11 @@ const stepIsValid = computed(() => {
 // Mensaje de aliento según cuánto falta (pedido explícito del usuario: "que
 // vaya diciendo ya casi terminamos").
 const progressPercent = computed(() => Math.round(((currentStep.value + 1) / STEPS.value.length) * 100));
+const accountTypeLabel = computed(() => ({
+    cliente: 'pasajero',
+    conductor: 'conductor',
+    cooperativa: 'cooperativa',
+}[form.account_type] || 'continuar'));
 const encouragement = computed(() => {
     if (isLastStep.value) return '¡Ya casi terminamos! Un último paso.';
     if (currentStep.value === 0) return 'Empecemos por lo básico.';
@@ -346,11 +353,11 @@ const submit = () => {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout registration-showcase max-width-class="sm:max-w-lg">
         <Head title="Crear cuenta" />
 
         <!-- Progreso: barra + mensaje de aliento (pedido explícito del usuario). -->
-        <div class="mb-6">
+        <div class="register-progress mb-6">
             <div class="flex items-center justify-between text-xs text-arka-text-muted mb-1.5">
                 <span>Paso {{ currentStep + 1 }} de {{ STEPS.length }}</span>
                 <span>{{ progressPercent }}%</span>
@@ -361,54 +368,54 @@ const submit = () => {
                     :style="{ width: `${progressPercent}%` }"
                 />
             </div>
-            <p class="mt-2 text-sm text-arka-primary-bright font-medium">{{ encouragement }}</p>
+            <p v-if="currentStep > 0" class="mt-2 text-sm text-arka-primary-bright font-medium">{{ encouragement }}</p>
         </div>
 
         <form @submit.prevent="goNext">
             <!-- Paso 1: tipo de cuenta (pedido explícito del usuario: elegir esto
                  primero, antes que cualquier otro dato). -->
             <div v-if="STEPS[currentStep] === 'account_type'">
-                <InputLabel value="¿Qué tipo de cuenta necesita?" />
-                <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="register-heading">
+                    <h1>Crea tu cuenta</h1>
+                    <p>Solo te tomará unos minutos.</p>
+                </div>
+
+                <InputLabel class="register-question" value="¿Cómo quieres usar Arka01?" />
+                <div class="register-account-options mt-3 grid grid-cols-1 gap-3">
                     <button
                         type="button"
-                        class="p-4 rounded-arka border-2 text-start transition"
+                        class="register-account-option p-4 rounded-arka border-2 text-start transition"
                         :class="form.account_type === 'cliente' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border hover:border-arka-text-muted/40'"
                         @click="form.account_type = 'cliente'"
                     >
-                        <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="8" r="3.5" stroke-linecap="round" stroke-linejoin="round" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-                        </svg>
-                        <p class="font-medium text-arka-text">Pasajero</p>
-                        <p class="text-xs text-arka-text-muted mt-0.5">Armo mi flota de conductores de confianza y pido carreras.</p>
+                        <span class="register-account-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path stroke-linecap="round" d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span>
+                        <span class="register-account-copy"><strong>Pasajero</strong><small>Crea tu flota y solicita viajes.</small></span>
+                        <span v-if="form.account_type === 'cliente'" class="register-account-check">✓</span>
+                        <svg class="register-account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
                     </button>
 
                     <button
                         type="button"
-                        class="p-4 rounded-arka border-2 text-start transition"
+                        class="register-account-option p-4 rounded-arka border-2 text-start transition"
                         :class="form.account_type === 'conductor' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border hover:border-arka-text-muted/40'"
                         @click="form.account_type = 'conductor'"
                     >
-                        <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16" />
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16h16v2.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V17H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V16Z" />
-                        </svg>
-                        <p class="font-medium text-arka-text">Conductor</p>
-                        <p class="text-xs text-arka-text-muted mt-0.5">Manejo mi propio vehículo y recibo carreras de mis clientes.</p>
+                        <span class="register-account-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l2.5-6.5A2 2 0 0 1 8.35 8.2h7.3a2 2 0 0 1 1.85 1.3L20 16M4 16h16v3H4v-3Z"/></svg></span>
+                        <span class="register-account-copy"><strong>Conductor</strong><small>Gestiona tus clientes y recibe carreras.</small></span>
+                        <span v-if="form.account_type === 'conductor'" class="register-account-check">✓</span>
+                        <svg class="register-account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
                     </button>
 
                     <button
                         type="button"
-                        class="p-4 rounded-arka border-2 text-start transition"
+                        class="register-account-option p-4 rounded-arka border-2 text-start transition"
                         :class="form.account_type === 'cooperativa' ? 'border-arka-primary bg-arka-primary/10' : 'border-arka-border hover:border-arka-text-muted/40'"
                         @click="form.account_type = 'cooperativa'"
                     >
-                        <svg class="h-7 w-7 text-arka-primary mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V8l7-4 7 4v13M9 12h2m2 0h2m-6 4h2m2 0h2" />
-                        </svg>
-                        <p class="font-medium text-arka-text">Cooperativa</p>
-                        <p class="text-xs text-arka-text-muted mt-0.5">Registro una organización de transporte y administro sus conductores.</p>
+                        <span class="register-account-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V8l7-4 7 4v13M9 12h6m-6 4h6"/></svg></span>
+                        <span class="register-account-copy"><strong>Cooperativa</strong><small>Registra tu cooperativa y administra tus conductores.</small></span>
+                        <span v-if="form.account_type === 'cooperativa'" class="register-account-check">✓</span>
+                        <svg class="register-account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
                     </button>
                 </div>
                 <!-- Transparencia (pedido explícito del usuario: pedir la
@@ -779,19 +786,13 @@ const submit = () => {
                 <InputError class="mt-2" :message="form.errors.ref" />
             </div>
 
-            <div class="flex items-center justify-between mt-6">
+            <div class="register-actions flex items-center justify-between mt-6" :class="{ 'register-actions--account': currentStep === 0 }">
                 <SecondaryButton v-if="currentStep > 0" type="button" @click="goBack">
                     &larr; Atrás
                 </SecondaryButton>
-                <Link
-                    v-else
-                    :href="route('login')"
-                    class="underline text-sm text-arka-text-muted hover:text-arka-text rounded-arka focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-arka-card focus:ring-arka-primary"
-                >
-                    ¿Ya tiene cuenta?
-                </Link>
 
                 <PrimaryButton
+                    class="register-primary-action"
                     :class="{ 'opacity-25': form.processing || quickSending || quickCodeForm.processing || fallbackPasswordForm.processing }"
                     :disabled="!stepIsValid || form.processing || quickSending || quickCodeForm.processing || fallbackPasswordForm.processing"
                 >
@@ -805,7 +806,7 @@ const submit = () => {
                         {{ quickCodeForm.processing ? 'Confirmando…' : 'Confirmar' }}
                     </template>
                     <template v-else>
-                        {{ isLastStep ? 'Crear cuenta' : 'Siguiente →' }}
+                        {{ currentStep === 0 ? `Continuar como ${accountTypeLabel} →` : (isLastStep ? 'Crear cuenta' : 'Siguiente →') }}
                     </template>
                 </PrimaryButton>
             </div>
@@ -824,7 +825,7 @@ const submit = () => {
 
             <a
                 :href="route('auth.google.redirect')"
-                class="mt-4 flex items-center justify-center gap-3 w-full py-2.5 rounded-arka bg-white text-gray-700 text-sm font-medium hover:bg-gray-100 transition"
+                class="register-google-button mt-4 flex items-center justify-center gap-3 w-full py-2.5 rounded-arka bg-white text-gray-700 text-sm font-medium hover:bg-gray-100 transition"
             >
                 <svg class="h-5 w-5" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.87c2.27-2.09 3.58-5.17 3.58-8.82Z" />
@@ -835,5 +836,202 @@ const submit = () => {
                 Continuar con Google
             </a>
         </template>
+
+        <p v-if="currentStep === 0" class="register-login-link">
+            ¿Ya tienes cuenta?
+            <Link :href="route('login')">Iniciar sesión</Link>
+        </p>
     </GuestLayout>
 </template>
+
+<style scoped>
+.register-heading {
+    margin-bottom: 1.1rem;
+}
+
+.register-heading h1 {
+    color: rgb(var(--arka-text));
+    font-size: 1.75rem;
+    font-weight: 750;
+    line-height: 1.05;
+    letter-spacing: -.025em;
+}
+
+.register-heading p {
+    margin-top: .3rem;
+    color: rgb(var(--arka-text-muted));
+    font-size: .84rem;
+    font-weight: 500;
+}
+
+.register-question {
+    display: block;
+    margin-bottom: .55rem;
+    font-size: .88rem;
+    font-weight: 700;
+}
+
+.register-account-option {
+    position: relative;
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr) 1.1rem;
+    align-items: center;
+    gap: .8rem;
+    min-height: 4.35rem;
+    padding: .65rem .9rem;
+    border-width: 1px;
+    border-radius: .7rem;
+    background: rgba(255,255,255,.72);
+}
+
+.register-account-icon {
+    display: flex;
+    width: 3rem;
+    height: 3rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(216,248,235,.86);
+    color: #078a60;
+}
+
+.register-account-icon svg {
+    width: 1.55rem;
+    height: 1.55rem;
+}
+
+.register-account-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.register-account-copy strong {
+    color: #17352f;
+    font-size: .92rem;
+    font-weight: 700;
+}
+
+.register-account-copy small {
+    margin-top: .1rem;
+    color: #61746d;
+    font-size: .72rem;
+    font-weight: 500;
+    line-height: .95rem;
+}
+
+.register-account-chevron {
+    width: 1rem;
+    height: 1rem;
+    color: #385e55;
+}
+
+.register-account-check {
+    position: absolute;
+    top: -.65rem;
+    right: -.55rem;
+    display: flex;
+    width: 1.45rem;
+    height: 1.45rem;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    border-radius: 999px;
+    background: #0b9568;
+    color: white;
+    font-size: .78rem;
+    font-weight: 800;
+    box-shadow: 0 4px 10px rgba(7,99,68,.16);
+}
+
+.register-actions--account .register-primary-action {
+    width: 100%;
+    min-height: 2.75rem;
+    justify-content: center;
+    border-radius: .65rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.register-google-button {
+    border: 1px solid rgba(171,190,183,.62);
+}
+
+.register-login-link {
+    margin-top: .85rem;
+    color: rgb(var(--arka-text-muted));
+    font-size: .75rem;
+    text-align: center;
+}
+
+.register-login-link a {
+    margin-left: .35rem;
+    color: rgb(var(--arka-primary));
+    font-weight: 700;
+}
+
+@media (min-width: 1024px) {
+    .register-progress {
+        margin-bottom: 1rem;
+    }
+
+    .register-account-options {
+        gap: .5rem;
+    }
+
+    details {
+        display: none;
+    }
+}
+
+@media (min-width: 1024px) and (max-height: 720px) {
+    .register-progress {
+        margin-bottom: .65rem;
+    }
+
+    .register-heading {
+        margin-bottom: .65rem;
+    }
+
+    .register-heading h1 {
+        font-size: 1.55rem;
+    }
+
+    .register-heading p {
+        margin-top: .18rem;
+        font-size: .78rem;
+    }
+
+    .register-question {
+        margin-bottom: .35rem;
+    }
+
+    .register-account-option {
+        grid-template-columns: 2.55rem minmax(0, 1fr) 1rem;
+        min-height: 3.65rem;
+        padding: .42rem .75rem;
+    }
+
+    .register-account-icon {
+        width: 2.45rem;
+        height: 2.45rem;
+    }
+
+    .register-account-icon svg {
+        width: 1.35rem;
+        height: 1.35rem;
+    }
+
+    .register-actions {
+        margin-top: .8rem;
+    }
+
+    .register-google-button {
+        margin-top: .65rem;
+    }
+
+    .register-login-link {
+        margin-top: .5rem;
+    }
+}
+</style>

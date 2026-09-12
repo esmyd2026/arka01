@@ -228,7 +228,7 @@ async function confirmTakeover() {
 </script>
 
 <template>
-    <GuestLayout>
+    <GuestLayout registration-showcase showcase-variant="login" max-width-class="sm:max-w-lg">
         <Head title="Iniciar sesión" />
 
         <div class="mb-6 flex items-center gap-3">
