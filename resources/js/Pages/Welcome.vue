@@ -214,6 +214,11 @@ function swapGuestRoute() {
     }
 }
 
+function toggleGuestRideForm() {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) return;
+    showingGuestRideForm.value = !showingGuestRideForm.value;
+}
+
 function useCurrentLocation() {
     guestLocationMessage.value = 'Ubicando…';
     if (!navigator.geolocation) {
@@ -308,7 +313,7 @@ function submitFeedback() {
                 <nav class="hidden items-center gap-6 text-xs font-semibold text-arka-text-muted lg:flex" aria-label="Navegación principal">
                     <a href="#inicio" class="text-arka-primary">Inicio</a>
                     <a href="#como-funciona" class="transition hover:text-arka-primary">Cómo Funciona</a>
-                    <a href="#para-quienes" class="transition hover:text-arka-primary">¿Su Valor?</a>
+                    <a href="#para-quienes" class="transition hover:text-arka-primary">Para quién es</a>
                     <a href="#contacto" class="transition hover:text-arka-primary">Contacto</a>
                 </nav>
 
@@ -394,7 +399,7 @@ function submitFeedback() {
                     <p class="mx-auto mt-3 max-w-md text-sm font-medium leading-5 text-arka-text-muted md:mx-0 md:text-base">
                         Crea tu propia red de conductores y solicita tus viajes con mayor tranquilidad.
                     </p>
- <ul class="welcome-desktop-benefits mt-5 hidden max-w-lg grid-cols-3 gap-5 md:grid">
+                    <ul class="welcome-desktop-benefits mt-5 grid max-w-lg grid-cols-3 gap-5">
 
     <li>
                             <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3"/><path stroke-linecap="round" d="M3 19a6 6 0 0 1 12 0M16 7.5a2.5 2.5 0 0 1 0 5M17 15c2 0 3.5 1.5 4 4"/></svg></span>
@@ -408,7 +413,6 @@ function submitFeedback() {
                             <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.6-7-10.5A7 7 0 0 1 12 4a7 7 0 0 1 7 6.5C19 16.4 12 21 12 21Z"/><circle cx="12" cy="10.5" r="2.2"/></svg></span>
                             <p>Cobertura<br>en tu zona</p>
                         </li>
-                        <li></li>
                     </ul>
 
                     <div class="welcome-desktop-actions mt-5 hidden max-w-md grid-cols-2 gap-3 md:grid">
@@ -523,12 +527,12 @@ function submitFeedback() {
                         :class="showingGuestRideForm ? 'rounded-b-none border-b border-arka-border' : ''"
                         :aria-expanded="showingGuestRideForm"
                         aria-controls="guest-ride-form"
-                        @click="showingGuestRideForm = !showingGuestRideForm"
+                        @click="toggleGuestRideForm"
                     >
                         <div>
                             <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-arka-primary">Solicitud rápida</p>
                             <h2 class="mt-0.5 text-xl font-bold text-arka-text">¿A dónde vamos?</h2>
-                            <p class="mt-0.5 text-[11px] text-arka-text-muted">{{ showingGuestRideForm ? 'Defina su recorrido y consulte la tarifa.' : 'Toque para indicar su origen y destino.' }}</p>
+                            <p class="mt-0.5 text-[11px] text-arka-text-muted">{{ showingGuestRideForm ? 'Defina su recorrido y consulte la tarifa.' : 'Indica tu origen y destino.' }}</p>
                         </div>
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-arka-primary/15 text-arka-primary">
                             <svg v-if="showingGuestRideForm" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 15 6-6 6 6"/></svg>
@@ -536,39 +540,69 @@ function submitFeedback() {
                         </span>
                     </button>
 
+                    <div
+                        v-if="!showingGuestRideForm"
+                        class="welcome-desktop-field welcome-desktop-field--origin hidden md:block"
+                    >
+                        <AddressAutocomplete
+                            v-model="guestForm.origin_address"
+                            light
+                            placeholder="Indica tu origen"
+                            @place-selected="chooseOrigin"
+                            @clear="guestForm.origin_lat = guestForm.origin_lng = null"
+                        />
+                        <p v-if="guestForm.errors.origin_address" class="welcome-desktop-field-error">{{ guestForm.errors.origin_address }}</p>
+                    </div>
+
                     <button
                         v-if="!showingGuestRideForm"
                         type="button"
-                        class="welcome-quick-preview welcome-quick-preview--origin hidden md:flex"
-                        aria-label="Seleccionar origen y abrir solicitud rápida"
-                        aria-controls="guest-ride-form"
-                        @click="showingGuestRideForm = true"
+                        class="welcome-desktop-swap hidden md:inline-flex"
+                        aria-label="Invertir origen y destino"
+                        @click="swapGuestRoute"
                     >
-                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s7-6.1 7-13A7 7 0 0 0 5 9c0 6.9 7 13 7 13Zm0-10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
-                        <span>Indica tu origen</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h11m0 0-3-3m3 3-3 3M17 17H6m0 0 3 3m-3-3 3-3"/></svg>
                     </button>
 
                     <button
                         v-if="!showingGuestRideForm"
                         type="button"
-                        class="welcome-quick-preview"
+                        class="welcome-quick-preview md:hidden"
                         aria-label="Seleccionar destino y abrir solicitud rápida"
                         aria-controls="guest-ride-form"
                         @click="showingGuestRideForm = true"
                     >
                         <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s7-6.1 7-13A7 7 0 0 0 5 9c0 6.9 7 13 7 13Zm0-10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
-                        <span>Indica tu destino</span>
-                        <!-- <svg class="ms-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg> -->
+                        <span>Selecciona tu destino</span>
+                        <svg class="ms-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
                     </button>
+
+                    <div
+                        v-if="!showingGuestRideForm"
+                        class="welcome-desktop-field welcome-desktop-field--destination hidden md:block"
+                    >
+                        <AddressAutocomplete
+                            v-model="guestForm.destination_address"
+                            light
+                            placeholder="Indica tu destino"
+                            @place-selected="chooseDestination"
+                            @clear="guestForm.destination_lat = guestForm.destination_lng = null"
+                        />
+                        <p v-if="guestForm.errors.destination_address" class="welcome-desktop-field-error">{{ guestForm.errors.destination_address }}</p>
+                    </div>
 
                     <button
                         v-if="!showingGuestRideForm"
                         type="button"
                         class="welcome-quick-submit-preview hidden md:inline-flex"
-                        @click="showingGuestRideForm = true"
+                        @click="continueAsGuest"
                     >
                         Buscar viaje
                     </button>
+
+                    <p v-if="guestForm.errors.cooperative_id" class="welcome-desktop-coop-error hidden md:block">
+                        {{ guestForm.errors.cooperative_id }}
+                    </p>
 
                     <div v-show="showingGuestRideForm" id="guest-ride-form" class="px-5 py-4 sm:px-6">
                         <div class="mb-2.5 flex items-center justify-between gap-3">
@@ -657,7 +691,8 @@ function submitFeedback() {
                  usuario, mockup provisto) — id como destino del botón "¿Cómo
                  funciona?" del hero, para reusar este mismo contenido en vez de
                  duplicarlo en una página aparte. -->
-            <div id="como-funciona" class="scroll-mt-6 grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-8" :class="authUser ? 'mt-8' : 'mt-16'">
+            <section id="como-funciona" class="scroll-mt-6" :class="authUser ? 'mt-8' : 'mt-16'">
+            <div class="grid grid-cols-1 items-center gap-8 md:hidden">
                 <!-- Para Clientes -->
                 <div class="rounded-2xl border border-arka-border bg-arka-card p-6 shadow-sm">
                     <div class="flex items-center gap-3 mb-1">
@@ -817,9 +852,101 @@ function submitFeedback() {
                 </div>
             </div>
 
+            <div class="welcome-desktop-story hidden md:block">
+                <div class="welcome-how-heading text-center">
+                    <span aria-hidden="true"></span>
+                    <h2>¿Cómo funciona?</h2>
+                    <p>Es muy fácil, en solo 3 pasos</p>
+                </div>
+
+                <div class="welcome-handwritten-note" aria-label="Tu confianza también nos mueve">
+                    <span>Tu confianza</span>
+                    <span>también nos mueve.</span>
+                    <svg viewBox="0 0 150 28" aria-hidden="true">
+                        <path d="M4 20C33 25 75 18 103 8c13-5 26-5 42-2" />
+                    </svg>
+                </div>
+
+                <div class="welcome-how-steps">
+                    <article>
+                        <span class="welcome-how-step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.25 19a5.75 5.75 0 0 1 11.5 0M18.25 8v6m-3-3h6"/></svg>
+                        </span>
+                        <h3><strong>1.</strong> Crea tu cuenta</h3>
+                        <p>Regístrate en segundos<br>y configura tu perfil.</p>
+                    </article>
+                    <span class="welcome-how-arrow" aria-hidden="true">→</span>
+                    <article>
+                        <span class="welcome-how-step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="8" cy="7.5" r="3"/><circle cx="17" cy="9" r="2.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19a5.5 5.5 0 0 1 11 0M14 14.75A4.5 4.5 0 0 1 21.5 19"/></svg>
+                        </span>
+                        <h3><strong>2.</strong> Construye tu flota de confianza</h3>
+                        <p>Agrega conductores que conoces<br>o descubre nuevos por tu zona.</p>
+                    </article>
+                    <span class="welcome-how-arrow" aria-hidden="true">→</span>
+                    <article>
+                        <span class="welcome-how-step-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 16.25h17l-2.65-6.4a2 2 0 0 0-1.85-1.23H8a2 2 0 0 0-1.85 1.23l-2.65 6.4Z"/><path stroke-linecap="round" d="M5.5 16.25v2.15m13-2.15v2.15M7.25 13h9.5"/></svg>
+                        </span>
+                        <h3><strong>3.</strong> Pide tu carrera a quien elijas</h3>
+                        <p>Se la solicitas directo a él — Arka01<br>no asigna conductores, solo los conecta.</p>
+                    </article>
+                </div>
+
+                <div id="para-quienes" class="welcome-platform scroll-mt-24">
+                    <div class="welcome-platform__heading">
+                        <div>
+                            <h2>Una plataforma para todos</h2>
+                            <p>Conectamos personas, conductores y cooperativas en un mismo ecosistema — empieza hoy, totalmente gratis.</p>
+                        </div>
+                        <Link v-if="canRegister" :href="route('register')">Conoce más <span>→</span></Link>
+                    </div>
+
+                    <div class="welcome-platform__grid">
+                        <article class="welcome-role-card">
+                            <div class="welcome-role-card__visual welcome-role-card__visual--passengers">
+                                <img src="/img/pasajera.png" alt="Pasajera usando Arka01 desde su teléfono" loading="lazy" decoding="async" />
+                            </div>
+                            <div class="welcome-role-card__body">
+                                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.25 19a5.75 5.75 0 0 1 11.5 0M18.25 8v6m-3-3h6"/></svg></span>
+                                <div><h3>Pasajeros</h3><p>Viaja con quienes confías y mira la tarifa exacta antes de aceptar, sin sorpresas.</p></div>
+                            </div>
+                        </article>
+                        <article class="welcome-role-card">
+                            <div class="welcome-role-card__visual welcome-role-card__visual--drivers">
+                                <img src="/img/conductor.png" alt="Conductor de Arka01 dentro de su vehículo" loading="lazy" decoding="async" />
+                            </div>
+                            <div class="welcome-role-card__body">
+                                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 10.25h14M12 14v5.5M7.1 10.25 10.6 14m6.3-3.75L13.4 14"/></svg></span>
+                                <div><h3>Conductores</h3><p>Cero comisiones por viaje: te quedas con el 100% de lo que cobras.</p></div>
+                            </div>
+                        </article>
+                        <article class="welcome-role-card">
+                            <div class="welcome-role-card__visual welcome-role-card__visual--cooperatives">
+                                <img src="/img/cooperativa.png" alt="Administrador gestionando una cooperativa en Arka01" loading="lazy" decoding="async" />
+                            </div>
+                            <div class="welcome-role-card__body">
+                                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="7" r="2.6"/><circle cx="5.75" cy="9" r="2"/><circle cx="18.25" cy="9" r="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M7.25 19a4.75 4.75 0 0 1 9.5 0M2.5 18a3.5 3.5 0 0 1 4.75-3.3M21.5 18a3.5 3.5 0 0 0-4.75-3.3"/></svg></span>
+                                <div><h3>Cooperativas</h3><p>Gestiona tu flota sin comisiones por viaje: un plan fijo, sin descuentos por carrera.</p></div>
+                            </div>
+                        </article>
+                        <article class="welcome-role-card">
+                            <div class="welcome-role-card__visual welcome-role-card__visual--coordinators">
+                                <img src="/img/coordinador.png" alt="Coordinadora supervisando viajes desde Arka01" loading="lazy" decoding="async" />
+                            </div>
+                            <div class="welcome-role-card__body">
+                                <span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="12" width="3.5" height="7" rx="1"/><rect x="10.25" y="7" width="3.5" height="12" rx="1"/><rect x="16.5" y="3.5" width="3.5" height="15.5" rx="1"/></svg></span>
+                                <div><h3>Coordinadores</h3><p>Supervisa cada carrera en tiempo real y optimiza la operación desde un solo panel.</p></div>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </div>
+            </section>
+
             <!-- Las cooperativas forman parte de la red, pero conservamos el
                  bloque principal original limpio y fácil de recorrer. -->
-            <div class="mt-8 flex flex-col items-center gap-4 rounded-arka border border-arka-primary/30 bg-arka-card p-5 text-center shadow sm:flex-row sm:px-6 sm:text-start">
+            <div class="mt-8 flex flex-col items-center gap-4 rounded-arka border border-arka-primary/30 bg-arka-card p-5 text-center shadow md:hidden sm:flex-row sm:px-6 sm:text-start">
                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-arka-primary/15">
                     <svg class="h-5 w-5 text-arka-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 20V8l8-4 8 4v12M8 20v-4h8v4M8 10h.01M12 10h.01M16 10h.01" />
@@ -842,7 +969,7 @@ function submitFeedback() {
             </div>
 
             <!-- ¿Por qué elegir Arka01? -->
-            <div id="para-quienes" class="mt-16 scroll-mt-24">
+            <div class="mt-16 scroll-mt-24 md:hidden">
                 <h2 class="mx-auto mb-2 max-w-2xl text-center text-2xl font-semibold leading-tight text-arka-text sm:text-3xl">
                     Más que encontrar un viaje.
                     <span class="block text-arka-primary">Construye una red para los próximos.</span>
@@ -1226,6 +1353,27 @@ function submitFeedback() {
 }
 
 @media (min-width: 768px) {
+    /* Textura exterior suave: da profundidad al lienzo que rodea el hero sin
+       competir con la fotografía ni convertir el fondo en otra tarjeta. */
+    .arka-app-background {
+        background-color: #e8f2ee;
+        background-image:
+            radial-gradient(circle at 14% 10%, rgba(255,255,255,.94) 0, rgba(255,255,255,.56) 19rem, transparent 39rem),
+            radial-gradient(circle at 88% 18%, rgba(79,196,151,.16) 0, transparent 33rem),
+            linear-gradient(118deg, transparent 0 47%, rgba(255,255,255,.32) 47.1% 47.25%, transparent 47.35% 100%),
+            repeating-linear-gradient(132deg, rgba(7,111,76,.024) 0 1px, transparent 1px 18px);
+        background-attachment: fixed;
+    }
+
+    :global(html.dark) .arka-app-background {
+        background-color: #061a14;
+        background-image:
+            radial-gradient(circle at 14% 10%, rgba(29,109,82,.22) 0, transparent 35rem),
+            radial-gradient(circle at 88% 18%, rgba(27,186,127,.12) 0, transparent 31rem),
+            linear-gradient(118deg, transparent 0 47%, rgba(93,232,181,.045) 47.1% 47.25%, transparent 47.35% 100%),
+            repeating-linear-gradient(132deg, rgba(129,230,192,.026) 0 1px, transparent 1px 18px);
+    }
+
     .welcome-hero {
         /* Pedido explícito del usuario ("la imagen de fondo... se ve como
            muy cerca"): la foto es cuadrada (1254×1254) contra un hero mucho
@@ -1245,6 +1393,10 @@ function submitFeedback() {
         border-radius: 1.6rem;
         background: #f4fcf8;
         box-shadow: 0 18px 50px rgba(10, 82, 57, .10);
+        /* Las sugerencias de origen/destino deben poder salir de la franja
+           inferior. El recorte queda aplicado a la foto, no al formulario. */
+        z-index: 2;
+        overflow: visible;
     }
 
     .welcome-hero::after {
@@ -1253,12 +1405,20 @@ function submitFeedback() {
         z-index: -10;
         content: '';
         pointer-events: none;
+        border-radius: inherit;
         background: linear-gradient(90deg, rgba(250,255,252,.99) 0%, rgba(247,255,251,.96) 31%, rgba(245,255,250,.76) 42%, rgba(245,255,250,.16) 56%, transparent 68%);
     }
 
     .welcome-hero__image--desktop {
+        /* El hero deja salir el dropdown, pero la fotografía no puede usar el
+           scale general porque mostraría fuera del bloque el logo impreso en
+           la propia imagen. */
+        border-radius: inherit;
         background-position: center 53%;
+        background-size: cover;
+        background-repeat: no-repeat;
         filter: saturate(1.04) contrast(1.02) brightness(1.02);
+        transform: none;
     }
 
     .welcome-hero__content {
@@ -1361,7 +1521,7 @@ function submitFeedback() {
 
     .welcome-quick-card:not(.welcome-quick-card--expanded) {
         display: grid;
-        grid-template-columns: minmax(12.5rem, .85fr) minmax(12rem, 1fr) minmax(12rem, 1fr) 8.5rem;
+        grid-template-columns: minmax(11.5rem, .78fr) minmax(11rem, 1fr) 2rem minmax(11rem, 1fr) 8.5rem;
         align-items: center;
         gap: .5rem;
         padding: .55rem;
@@ -1377,6 +1537,7 @@ function submitFeedback() {
         min-height: 3.1rem;
         padding: .25rem .65rem;
         border-radius: .7rem;
+        cursor: default;
     }
 
     .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type > span {
@@ -1392,25 +1553,60 @@ function submitFeedback() {
         display: none;
     }
 
-    .welcome-quick-card:not(.welcome-quick-card--expanded) .welcome-quick-preview {
-        display: flex;
-        min-height: 3rem;
-        align-items: center;
-        gap: .6rem;
-        margin: 0;
-        padding: .7rem .85rem;
-        border: 1px solid rgba(29,109,81,.09);
-        border-radius: .65rem;
-        background: rgba(239,247,243,.88);
-        color: #60736c;
-        font-size: .72rem;
-        text-align: left;
-        transition: border-color .2s ease, background-color .2s ease;
+    .welcome-desktop-field {
+        position: relative;
     }
 
-    .welcome-quick-card:not(.welcome-quick-card--expanded) .welcome-quick-preview:hover {
-        border-color: rgba(13,143,97,.34);
-        background: rgba(226,246,237,.92);
+    .welcome-desktop-field :deep(input) {
+        min-height: 3rem;
+        border: 1px solid rgba(29,109,81,.10);
+        border-radius: .65rem;
+        background: rgba(239,247,243,.90);
+        padding-inline-start: 2.55rem;
+        font-size: .72rem;
+        box-shadow: none;
+    }
+
+    .welcome-desktop-field :deep(input:focus) {
+        border-color: rgba(13,143,97,.42);
+        background: rgba(255,255,255,.97);
+        box-shadow: 0 0 0 3px rgba(13,143,97,.09);
+    }
+
+    .welcome-desktop-field-error {
+        position: absolute;
+        top: calc(100% + .72rem);
+        left: .3rem;
+        z-index: 5;
+        max-width: 100%;
+        padding: .3rem .5rem;
+        border-radius: .4rem;
+        background: #fff3f3;
+        color: #b42318;
+        font-size: .58rem;
+        line-height: .8rem;
+        box-shadow: 0 5px 14px rgba(82,20,20,.12);
+    }
+
+    .welcome-desktop-swap {
+        width: 2rem;
+        height: 2rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        color: #45645a;
+        transition: color .2s ease, background-color .2s ease, transform .2s ease;
+    }
+
+    .welcome-desktop-swap:hover {
+        background: rgba(13,143,97,.10);
+        color: #07835b;
+        transform: rotate(180deg);
+    }
+
+    .welcome-desktop-swap svg {
+        width: 1rem;
+        height: 1rem;
     }
 
     .welcome-quick-submit-preview {
@@ -1424,6 +1620,306 @@ function submitFeedback() {
         font-size: .72rem;
         font-weight: 800;
         box-shadow: 0 7px 18px rgba(4,112,75,.20), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+
+    .welcome-desktop-coop-error {
+        position: absolute;
+        right: .65rem;
+        bottom: -1.55rem;
+        z-index: 5;
+        padding: .25rem .5rem;
+        border-radius: .4rem;
+        background: #fff3f3;
+        color: #b42318;
+        font-size: .6rem;
+        box-shadow: 0 5px 14px rgba(82,20,20,.12);
+    }
+
+    #como-funciona {
+        position: relative;
+        z-index: 1;
+        width: 100vw;
+        margin-top: 0 !important;
+        margin-left: calc(50% - 50vw);
+        padding-top: 2.15rem;
+        background: #ffffff;
+        box-shadow: none;
+    }
+
+    .welcome-desktop-story {
+        position: relative;
+        color: #10251e;
+    }
+
+    .welcome-handwritten-note {
+        position: absolute;
+        top: -.25rem;
+        right: max(2.4rem, calc((100vw - 72rem) / 2 + 2.4rem));
+        z-index: 2;
+        display: flex;
+        width: 9.75rem;
+        flex-direction: column;
+        color: #42665b;
+        font-family: "Segoe Print", "Bradley Hand", "Snell Roundhand", cursive;
+        font-size: .88rem;
+        font-style: italic;
+        font-weight: 600;
+        line-height: 1.05rem;
+        text-align: center;
+        letter-spacing: -.035em;
+        transform: rotate(-6deg);
+    }
+
+    .welcome-handwritten-note span:last-of-type {
+        margin-left: 1.25rem;
+    }
+
+    .welcome-handwritten-note svg {
+        width: 7.4rem;
+        height: 1.45rem;
+        margin: -.15rem 0 0 1.25rem;
+        overflow: visible;
+        fill: none;
+        stroke: #15966c;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+    }
+
+    @media (max-width: 1023px) {
+        .welcome-handwritten-note {
+            display: none;
+        }
+    }
+
+    .welcome-how-heading > span {
+        display: block;
+        width: 2.5rem;
+        height: 2px;
+        margin: 0 auto .65rem;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #45d9a4, #07845b);
+    }
+
+    .welcome-how-heading h2 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -.025em;
+    }
+
+    .welcome-how-heading p {
+        margin-top: .45rem;
+        color: #63766f;
+        font-size: .75rem;
+    }
+
+    .welcome-how-steps {
+        display: grid;
+        grid-template-columns: 1fr 2.5rem 1fr 2.5rem 1fr;
+        align-items: center;
+        max-width: 64rem;
+        margin: 1.8rem auto 2.4rem;
+    }
+
+    .welcome-how-steps article {
+        text-align: center;
+    }
+
+    .welcome-how-step-icon {
+        display: flex;
+        width: 3.15rem;
+        height: 3.15rem;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto .65rem;
+        border: 1px solid rgba(54,220,160,.45);
+        border-radius: 999px;
+        background: linear-gradient(145deg, #0a9367, #06704e);
+        color: white;
+        box-shadow: 0 9px 20px rgba(5,113,76,.17), inset 0 1px 0 rgba(255,255,255,.25);
+    }
+
+    .welcome-how-step-icon svg {
+        width: 1.45rem;
+        height: 1.45rem;
+    }
+
+    .welcome-how-steps h3 {
+        font-size: .9rem;
+        font-weight: 750;
+    }
+
+    .welcome-how-steps h3 strong {
+        color: #087c57;
+    }
+
+    .welcome-how-steps article > p {
+        margin-top: .35rem;
+        color: #62736d;
+        font-size: .7rem;
+        line-height: 1.15rem;
+    }
+
+    .welcome-how-arrow {
+        color: #079368;
+        font-size: 1.75rem;
+        font-weight: 300;
+        text-align: center;
+    }
+
+    .welcome-platform {
+        position: relative;
+        width: 100vw;
+        margin-left: calc(50% - 50vw);
+        padding: 1.65rem max(2rem, calc((100vw - 72rem) / 2 + 2rem)) 2.5rem;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 12% 20%, rgba(12,150,105,.22), transparent 34%),
+            radial-gradient(circle at 88% 84%, rgba(0,109,89,.20), transparent 30%),
+            linear-gradient(135deg, #06251f, #031b1b 58%, #052d2d);
+        color: white;
+    }
+
+    .welcome-platform::before {
+        position: absolute;
+        inset: 0;
+        content: '';
+        pointer-events: none;
+        opacity: .16;
+        background-image: linear-gradient(120deg, transparent 42%, rgba(47,255,185,.22) 42.2%, transparent 42.5%);
+    }
+
+    .welcome-platform__heading {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 2rem;
+        margin-bottom: 1.15rem;
+        text-align: center;
+    }
+
+    .welcome-platform__heading > div {
+        flex: 1;
+        padding-left: 7rem;
+    }
+
+    .welcome-platform__heading h2 {
+        font-size: 1.35rem;
+        font-weight: 750;
+    }
+
+    .welcome-platform__heading p {
+        margin-top: .25rem;
+        color: rgba(231,255,247,.72);
+        font-size: .68rem;
+    }
+
+    .welcome-platform__heading > a {
+        display: inline-flex;
+        min-height: 2.25rem;
+        align-items: center;
+        gap: .75rem;
+        padding: 0 1rem;
+        border: 1px solid rgba(220,255,244,.55);
+        border-radius: .5rem;
+        color: white;
+        font-size: .68rem;
+        font-weight: 700;
+        transition: border-color .2s ease, background-color .2s ease;
+    }
+
+    .welcome-platform__heading > a:hover {
+        border-color: #3cdaa2;
+        background: rgba(52,211,153,.10);
+    }
+
+    .welcome-platform__grid {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .8rem;
+    }
+
+    .welcome-role-card {
+        overflow: hidden;
+        border: 1px solid rgba(212,255,241,.36);
+        border-radius: .8rem;
+        background: rgba(250,255,252,.98);
+        color: #10251e;
+        box-shadow: 0 14px 28px rgba(0,10,8,.18);
+    }
+
+    .welcome-role-card__visual {
+        position: relative;
+        height: 7.25rem;
+        overflow: hidden;
+        background: #dcece6;
+    }
+
+    .welcome-role-card__visual::after {
+        position: absolute;
+        inset: 0;
+        content: '';
+        pointer-events: none;
+        background: linear-gradient(to bottom, transparent 58%, rgba(2,35,26,.19));
+    }
+
+    .welcome-role-card__visual img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        filter: saturate(.96) contrast(1.025);
+        transition: transform .35s ease, filter .35s ease;
+    }
+
+    .welcome-role-card__visual--passengers img { object-position: center 38%; }
+    .welcome-role-card__visual--drivers img { object-position: center 31%; }
+    .welcome-role-card__visual--cooperatives img { object-position: center 43%; }
+    .welcome-role-card__visual--coordinators img { object-position: center 41%; }
+
+    .welcome-role-card:hover .welcome-role-card__visual img {
+        transform: scale(1.025);
+        filter: saturate(1.02) contrast(1.035);
+    }
+
+    .welcome-role-card__body {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        min-height: 4.4rem;
+        padding: .65rem .75rem;
+    }
+
+    .welcome-role-card__body > span {
+        display: flex;
+        width: 2.25rem;
+        height: 2.25rem;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: linear-gradient(145deg, #0b9669, #06704e);
+        color: white;
+    }
+
+    .welcome-role-card__body svg {
+        width: 1.05rem;
+        height: 1.05rem;
+    }
+
+    .welcome-role-card__body h3 {
+        font-size: .78rem;
+        font-weight: 800;
+    }
+
+    .welcome-role-card__body p {
+        margin-top: .1rem;
+        color: #687a73;
+        font-size: .6rem;
+        line-height: .85rem;
     }
 
     :global(html.dark) .welcome-hero::after {
@@ -1440,7 +1936,10 @@ function submitFeedback() {
     }
 }
 
-@media (max-width: 639px) {
+/* Todo el rango anterior al breakpoint de escritorio usa una sola composición
+   móvil. Antes estas reglas terminaban en 639px: varios iPhone en horizontal
+   CSS, teléfonos grandes y WebViews quedaban con una mezcla de estilos sm/md. */
+@media (max-width: 767px) {
     .welcome-page-shell {
         position: relative;
         width: 100%;
@@ -1461,13 +1960,24 @@ function submitFeedback() {
         box-shadow: none;
         -webkit-backdrop-filter: none;
         backdrop-filter: none;
+        justify-content: center;
+    }
+
+    .welcome-nav > div:last-child {
+        display: none;
+    }
+
+    .welcome-nav > div:last-child {
+        display: none;
     }
 
     .welcome-hero {
+        display: flex;
+        flex-direction: column;
         width: 100%;
         min-height: 100svh;
         margin-top: 0;
-        padding: 3.45rem 1.35rem 1rem;
+        padding: clamp(3.75rem, 16vw, 4.5rem) clamp(1rem, 5.5vw, 1.45rem) max(1rem, env(safe-area-inset-bottom));
         gap: 0;
         border: 0;
         border-radius: 0;
@@ -1477,23 +1987,20 @@ function submitFeedback() {
 
     .welcome-hero__image--mobile {
         background-position: center top;
-        background-size: 100% auto;
+        /* La foto llena el viewport aunque cambie la relación de aspecto del
+           teléfono. Así no aparece una franja vacía en iPhone altos. */
+        background-size: cover;
         background-repeat: no-repeat;
         background-color: #03140f;
         filter: saturate(1.04) contrast(1.02) brightness(1.02);
     }
 
-    /* Bug real reportado por el usuario ("en algunos teléfonos se ve la
-       parte negra como si fuera un error"): la foto es "ancho:100%, alto:
-       auto" para no recortarla — en un teléfono más alto que su relación de
-       aspecto, se queda corta y el fondo #03140f de abajo se nota como un
-       corte duro. Un degradado a difuminar el propio final de la foto hace
-       que la transición se vea intencional en cualquier alto de pantalla,
-       sin depender de adivinar el punto exacto del corte por modelo. */
+    /* El cierre verde oscuro acompaña las ondas originales de la imagen y
+       mantiene legibles la solicitud rápida y el enlace inferior. */
     .welcome-hero__image--mobile::after {
         position: absolute;
         inset: auto 0 0 0;
-        height: 28vh;
+        height: 38%;
         content: '';
         pointer-events: none;
         background: linear-gradient(to bottom, transparent, #03140f);
@@ -1521,7 +2028,7 @@ function submitFeedback() {
         border-radius: 0;
         background: transparent;
         color: #173128;
-        font-size: .72rem;
+        font-size: clamp(.62rem, 2.8vw, .72rem);
         font-weight: 500;
     }
 
@@ -1541,9 +2048,9 @@ function submitFeedback() {
     }
 
     .welcome-hero__title {
-        margin-top: 1.05rem;
+        margin-top: clamp(.8rem, 3.6vw, 1.05rem);
         color: #081812;
-        font-size: clamp(2.08rem, 10.7vw, 2.7rem);
+        font-size: clamp(1.9rem, 9.8vw, 2.65rem);
         font-weight: 750;
         line-height: 1;
         letter-spacing: -.025em;
@@ -1554,8 +2061,65 @@ function submitFeedback() {
         max-width: 16rem;
         margin-top: .55rem;
         color: #40554e;
-        font-size: .76rem;
+        font-size: clamp(.67rem, 2.9vw, .76rem);
         line-height: 1.05rem;
+    }
+
+    .welcome-desktop-benefits {
+        position: relative;
+        width: 100%;
+        max-width: 21rem;
+        margin: clamp(.8rem, 4vw, 1.05rem) auto 0;
+        gap: 0;
+    }
+
+    .welcome-desktop-benefits > li {
+        position: relative;
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        align-items: center;
+        gap: .3rem;
+        padding-inline: .3rem;
+        color: #081812;
+    }
+
+    .welcome-desktop-benefits > li:not(:last-child)::after {
+        position: absolute;
+        top: .25rem;
+        right: 0;
+        width: 1px;
+        height: 3.55rem;
+        content: '';
+        background: linear-gradient(to bottom, transparent, rgba(12,112,77,.24), transparent);
+    }
+
+    .welcome-desktop-benefits > li > span {
+        display: flex;
+        width: clamp(1.9rem, 9vw, 2.25rem);
+        height: clamp(1.9rem, 9vw, 2.25rem);
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(8,139,94,.26);
+        border-radius: 999px;
+        background: rgba(225,247,238,.88);
+        color: #07835b;
+        box-shadow: 0 4px 12px rgba(4,98,66,.10), inset 0 1px 0 rgba(255,255,255,.9);
+        -webkit-backdrop-filter: blur(7px);
+        backdrop-filter: blur(7px);
+    }
+
+    .welcome-desktop-benefits svg {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .welcome-desktop-benefits p {
+        font-size: clamp(.53rem, 2.35vw, .64rem);
+        font-weight: 700;
+        line-height: 1.12;
+        text-align: center;
+        text-shadow: 0 1px 5px rgba(255,255,255,.9);
     }
 
     .welcome-survey-link {
@@ -1565,11 +2129,15 @@ function submitFeedback() {
     .welcome-hero__journey {
         width: 100%;
         max-width: none;
+        /* Mantiene los botones sobre la zona del auto y no pegados al título.
+           El espacio escala con el ancho, igual que la fotografía 9:16. */
+        margin-top: calc(clamp(8.35rem, 43vw, 12.25rem) + 20px);
     }
 
     .welcome-hero__actions {
         width: 100%;
-        max-width: 18.5rem;
+        max-width: 21.5rem;
+        grid-template-columns: minmax(0, 1fr);
         margin: 0 auto .5rem;
         gap: .48rem;
     }
@@ -1613,7 +2181,7 @@ function submitFeedback() {
         gap: .65rem;
         width: 100%;
         max-width: 17rem;
-        margin: .55rem auto .6rem;
+        margin: .55rem auto 1.2rem;
         color: rgba(255,255,255,.72);
         font-size: .58rem;
     }
@@ -1629,12 +2197,51 @@ function submitFeedback() {
 
     .welcome-quick-card {
         width: 100%;
-        max-width: 18.75rem;
+        max-width: 21.5rem;
         margin-inline: auto;
         border-color: rgba(255,255,255,.70);
         border-radius: 1.25rem;
         background: rgba(255,255,255,.97);
         box-shadow: 0 10px 28px rgba(0,27,19,.24);
+    }
+
+    /* Estado cerrado más compacto. Las reglas no alcanzan al formulario
+       expandido para conservar su espacio de escritura y desplazamiento. */
+    .welcome-quick-card:not(.welcome-quick-card--expanded) {
+        max-width: 20.25rem;
+        border-radius: 1.1rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type {
+        padding: .58rem .85rem .22rem;
+        border-radius: 1.1rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type h2 {
+        margin-top: .05rem;
+        font-size: 1.04rem;
+        line-height: 1.15rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type p:first-child {
+        font-size: .54rem;
+        letter-spacing: .18em;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type h2 + p {
+        margin-top: .05rem;
+        font-size: .62rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type > span {
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: .68rem;
+    }
+
+    .welcome-quick-card:not(.welcome-quick-card--expanded) > button:first-of-type > span svg {
+        width: 1.05rem;
+        height: 1.05rem;
     }
 
     .welcome-quick-card h2 {
@@ -1658,16 +2265,24 @@ function submitFeedback() {
     .welcome-quick-preview {
         display: flex;
         align-items: center;
-        gap: .65rem;
-        margin: .15rem .85rem .8rem;
-        padding: .65rem .75rem;
+        gap: .55rem;
+        min-height: 2.3rem;
+        margin: .08rem .75rem .64rem;
+        padding: .48rem .68rem;
         border: 1px solid rgb(var(--arka-border) / .55);
         border-radius: .72rem;
         background: rgb(var(--arka-base) / .72);
         color: rgb(var(--arka-text-muted));
-        font-size: .7rem;
+        font-size: .66rem;
         text-align: left;
         transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+    }
+
+    /* Cerrada, la solicitud móvil muestra una sola acción, como el prototipo.
+       Se fuerza incluso si el navegador reporta un ancho CSS inesperado. */
+    .welcome-quick-preview--origin,
+    .welcome-quick-submit-preview {
+        display: none !important;
     }
 
     .welcome-quick-preview:hover {
@@ -1686,12 +2301,32 @@ function submitFeedback() {
         align-items: center;
         gap: .05rem;
         width: 100%;
-        max-width: 18.5rem;
+        max-width: 21.5rem;
         margin: .75rem auto 0;
         color: rgba(255,255,255,.92);
         font-size: .62rem;
         font-weight: 700;
         letter-spacing: .01em;
+    }
+
+    /* El inicio fotográfico mantiene contraste propio en modo oscuro; no se
+       hereda la placa oscura global que apagaría el cielo y el texto. */
+    :global(html.dark) .welcome-nav {
+        background: transparent;
+        box-shadow: none;
+    }
+
+    :global(html.dark) .welcome-hero__content {
+        text-shadow: none;
+    }
+
+    :global(html.dark) .welcome-hero__content::before {
+        background: linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,.06) 68%, transparent);
+    }
+
+    :global(html.dark) .welcome-hero__title,
+    :global(html.dark) .welcome-desktop-benefits > li {
+        color: #081812;
     }
 
     #como-funciona {
