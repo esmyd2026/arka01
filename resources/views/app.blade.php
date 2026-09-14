@@ -39,6 +39,14 @@
 
         {{-- Sin fuentes externas a propósito: la fuente de sistema carga más rápido y se siente nativa (sección 9.9) --}}
 
+        {{-- En la portada, estas imágenes forman parte del primer contenido visible.
+             Precargarlas desde el HTML inicial evita que Vue aparezca antes que la
+             fotografía y deje visible durante unos instantes el fondo provisional. --}}
+        @if (($page['component'] ?? null) === 'Welcome')
+            <link rel="preload" as="image" href="/img/home/imagen%20para%20movil%20inicio.png" media="(max-width: 767px)" fetchpriority="high">
+            <link rel="preload" as="image" href="/img/home/imagen%20para%20escritorio%20inicio%20de%20arka01.png" media="(min-width: 768px)" fetchpriority="high">
+        @endif
+
         <!-- Scripts -->
         @routes
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])

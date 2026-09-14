@@ -367,12 +367,12 @@ function submitFeedback() {
                      imagen ya terminó de precargarse (ver heroBackgroundLoaded),
                      en vez de pintarse de golpe como antes. -->
                 <div
-                    class="welcome-hero__image welcome-hero__image--mobile pointer-events-none absolute inset-0 -z-20 bg-cover md:hidden transition-opacity duration-700 ease-out"
+                    class="welcome-hero__image welcome-hero__image--mobile pointer-events-none absolute inset-0 -z-20 bg-cover md:hidden transition-opacity duration-300 ease-out"
                     :class="mobileHeroLoaded ? 'opacity-100' : 'opacity-0'"
                     :style="{ backgroundImage: `url('/img/home/imagen%20para%20movil%20inicio.png')` }"
                 />
                 <div
-                    class="welcome-hero__image welcome-hero__image--desktop pointer-events-none absolute inset-0 -z-20 hidden bg-cover bg-center md:block transition-opacity duration-700 ease-out"
+                    class="welcome-hero__image welcome-hero__image--desktop pointer-events-none absolute inset-0 -z-20 hidden bg-cover bg-center md:block transition-opacity duration-300 ease-out"
                     :class="desktopHeroLoaded ? 'opacity-100' : 'opacity-0'"
                     :style="{ backgroundImage: `url('/img/home/imagen%20para%20escritorio%20inicio%20de%20arka01.png')` }"
                 />
@@ -1983,7 +1983,9 @@ function submitFeedback() {
         border: 0;
         border-radius: 0;
         box-shadow: none;
-        background: #03140f;
+        /* Primer render antes de que llegue la fotografía: replica su cielo
+           claro y su cierre verde para que el contenido nunca quede negro. */
+        background: linear-gradient(180deg, #effcff 0%, #f7fbf8 43%, #d9eee6 57%, #0b4939 78%, #03140f 100%);
     }
 
     .welcome-hero__image--mobile {
