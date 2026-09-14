@@ -110,11 +110,11 @@ onMounted(() => {
 
     const mobileHero = new Image();
     mobileHero.onload = () => { mobileHeroLoaded.value = true; };
-    mobileHero.src = '/img/imagen%20para%20movil%20inicio.png';
+    mobileHero.src = '/img/home/imagen%20para%20movil%20inicio.png';
 
     const desktopHero = new Image();
     desktopHero.onload = () => { desktopHeroLoaded.value = true; };
-    desktopHero.src = '/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png';
+    desktopHero.src = '/img/home/imagen%20para%20escritorio%20inicio%20de%20arka01.png';
 
     if (!authUser && props.canRegister) {
         const lastShown = Number(window.localStorage.getItem('arka01_welcome_cta_shown_at') || 0);
@@ -298,8 +298,8 @@ function submitFeedback() {
 
 <template>
     <Head title="Arka01 — Tu círculo. Tus viajes. Tu decisión.">
-        <link rel="preload" as="image" href="/img/imagen%20para%20movil%20inicio.png" media="(max-width: 767px)" fetchpriority="high" />
-        <link rel="preload" as="image" href="/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png" media="(min-width: 768px)" fetchpriority="high" />
+        <link rel="preload" as="image" href="/img/home/imagen%20para%20movil%20inicio.png" media="(max-width: 767px)" fetchpriority="high" />
+        <link rel="preload" as="image" href="/img/home/imagen%20para%20escritorio%20inicio%20de%20arka01.png" media="(min-width: 768px)" fetchpriority="high" />
     </Head>
 
     <div class="arka-app-background min-h-screen">
@@ -369,12 +369,12 @@ function submitFeedback() {
                 <div
                     class="welcome-hero__image welcome-hero__image--mobile pointer-events-none absolute inset-0 -z-20 bg-cover md:hidden transition-opacity duration-700 ease-out"
                     :class="mobileHeroLoaded ? 'opacity-100' : 'opacity-0'"
-                    :style="{ backgroundImage: `url('/img/imagen%20para%20movil%20inicio.png')` }"
+                    :style="{ backgroundImage: `url('/img/home/imagen%20para%20movil%20inicio.png')` }"
                 />
                 <div
                     class="welcome-hero__image welcome-hero__image--desktop pointer-events-none absolute inset-0 -z-20 hidden bg-cover bg-center md:block transition-opacity duration-700 ease-out"
                     :class="desktopHeroLoaded ? 'opacity-100' : 'opacity-0'"
-                    :style="{ backgroundImage: `url('/img/imagen%20para%20escritorio%20inicio%20de%20arka01.png')` }"
+                    :style="{ backgroundImage: `url('/img/home/imagen%20para%20escritorio%20inicio%20de%20arka01.png')` }"
                 />
                 <div class="welcome-hero__content p-5 text-center sm:p-6 md:text-start">
                     <p class="inline-flex items-center gap-1.5 rounded-full bg-arka-primary/10 px-3 py-1 text-xs font-semibold text-arka-primary-bright">
@@ -905,7 +905,7 @@ function submitFeedback() {
                     <div class="welcome-platform__grid">
                         <article class="welcome-role-card">
                             <div class="welcome-role-card__visual welcome-role-card__visual--passengers">
-                                <img src="/img/pasajera.png" alt="Pasajera usando Arka01 desde su teléfono" loading="lazy" decoding="async" />
+                                <img src="/img/home/pasajera.png" alt="Pasajera usando Arka01 desde su teléfono" loading="lazy" decoding="async" />
                             </div>
                             <div class="welcome-role-card__body">
                                 <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7.5" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.25 19a5.75 5.75 0 0 1 11.5 0M18.25 8v6m-3-3h6"/></svg></span>
@@ -914,7 +914,7 @@ function submitFeedback() {
                         </article>
                         <article class="welcome-role-card">
                             <div class="welcome-role-card__visual welcome-role-card__visual--drivers">
-                                <img src="/img/conductor.png" alt="Conductor de Arka01 dentro de su vehículo" loading="lazy" decoding="async" />
+                                <img src="/img/home/conductor.png" alt="Conductor de Arka01 dentro de su vehículo" loading="lazy" decoding="async" />
                             </div>
                             <div class="welcome-role-card__body">
                                 <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 10.25h14M12 14v5.5M7.1 10.25 10.6 14m6.3-3.75L13.4 14"/></svg></span>
@@ -923,7 +923,7 @@ function submitFeedback() {
                         </article>
                         <article class="welcome-role-card">
                             <div class="welcome-role-card__visual welcome-role-card__visual--cooperatives">
-                                <img src="/img/cooperativa.png" alt="Administrador gestionando una cooperativa en Arka01" loading="lazy" decoding="async" />
+                                <img src="/img/home/cooperativa.png" alt="Administrador gestionando una cooperativa en Arka01" loading="lazy" decoding="async" />
                             </div>
                             <div class="welcome-role-card__body">
                                 <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="7" r="2.6"/><circle cx="5.75" cy="9" r="2"/><circle cx="18.25" cy="9" r="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M7.25 19a4.75 4.75 0 0 1 9.5 0M2.5 18a3.5 3.5 0 0 1 4.75-3.3M21.5 18a3.5 3.5 0 0 0-4.75-3.3"/></svg></span>
@@ -932,7 +932,7 @@ function submitFeedback() {
                         </article>
                         <article class="welcome-role-card">
                             <div class="welcome-role-card__visual welcome-role-card__visual--coordinators">
-                                <img src="/img/coordinador.png" alt="Coordinadora supervisando viajes desde Arka01" loading="lazy" decoding="async" />
+                                <img src="/img/home/coordinador.png" alt="Coordinadora supervisando viajes desde Arka01" loading="lazy" decoding="async" />
                             </div>
                             <div class="welcome-role-card__body">
                                 <span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="12" width="3.5" height="7" rx="1"/><rect x="10.25" y="7" width="3.5" height="12" rx="1"/><rect x="16.5" y="3.5" width="3.5" height="15.5" rx="1"/></svg></span>

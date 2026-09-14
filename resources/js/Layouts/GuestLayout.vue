@@ -46,7 +46,7 @@ const props = defineProps({
 
 const effectiveBackgroundUrl = computed(() => (
     props.registrationShowcase
-        ? '/img/imagen%20de%20fondo%20debes%20difuminar.png'
+        ? '/img/home/imagen%20de%20fondo%20debes%20difuminar.png'
         : backgroundUrl.value
 ));
 
