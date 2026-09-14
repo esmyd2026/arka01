@@ -1854,7 +1854,8 @@ function submitFeedback() {
 
     .welcome-role-card__visual {
         position: relative;
-        height: 7.25rem;
+        height: auto;
+        aspect-ratio: 16 / 9;
         overflow: hidden;
         background: #dcece6;
     }
@@ -1875,10 +1876,10 @@ function submitFeedback() {
         transition: transform .35s ease, filter .35s ease;
     }
 
-    .welcome-role-card__visual--passengers img { object-position: center 38%; }
-    .welcome-role-card__visual--drivers img { object-position: center 31%; }
-    .welcome-role-card__visual--cooperatives img { object-position: center 43%; }
-    .welcome-role-card__visual--coordinators img { object-position: center 41%; }
+    .welcome-role-card__visual--passengers img { object-position: center 40%; }
+    .welcome-role-card__visual--drivers img { object-position: center 36%; }
+    .welcome-role-card__visual--cooperatives img { object-position: center 45%; }
+    .welcome-role-card__visual--coordinators img { object-position: center 43%; }
 
     .welcome-role-card:hover .welcome-role-card__visual img {
         transform: scale(1.025);
@@ -2266,9 +2267,11 @@ function submitFeedback() {
         display: flex;
         align-items: center;
         gap: .55rem;
+        width: calc(100% - 1.5rem);
         min-height: 2.3rem;
         margin: .08rem .75rem .64rem;
         padding: .48rem .68rem;
+        box-sizing: border-box;
         border: 1px solid rgb(var(--arka-border) / .55);
         border-radius: .72rem;
         background: rgb(var(--arka-base) / .72);
