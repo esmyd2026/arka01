@@ -5,6 +5,8 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Session;
 use Laravel\Socialite\Contracts\Provider;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
@@ -29,6 +31,7 @@ class GoogleAuthTest extends TestCase
         $socialiteUser->shouldReceive('getAvatar')->andReturn($avatar);
 
         $provider = Mockery::mock(Provider::class);
+        $provider->shouldReceive('stateless')->zeroOrMoreTimes()->andReturnSelf();
         $provider->shouldReceive('user')->andReturn($socialiteUser);
 
         Socialite::shouldReceive('driver')->with('google')->andReturn($provider);
@@ -117,5 +120,52 @@ class GoogleAuthTest extends TestCase
 
         $this->assertSame(1, User::where('email', 'repetido@example.com')->count());
         $this->assertAuthenticatedAs(User::find($firstUserId));
+    }
+
+    public function test_mobile_google_callback_returns_a_one_time_code_that_the_app_can_exchange(): void
+    {
+        $this->fakeGoogleUser('google-mobile', 'mobile@example.com', 'Cuenta Móvil');
+
+        $callback = $this->withSession(['mobile_google_auth' => [
+            'device_id' => 'pixel-test-device',
+            'platform' => 'android',
+            'account_type' => 'cliente',
+        ]])->get(route('auth.google.callback'));
+
+        $location = $callback->headers->get('Location');
+        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $location);
+        parse_str(parse_url($location, PHP_URL_QUERY), $query);
+
+        $exchange = $this->postJson(route('api.v1.auth.google.exchange'), ['code' => $query['code']]);
+
+        $exchange->assertOk()->assertJsonStructure(['token', 'user' => ['id', 'name', 'email']]);
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'tokenable_id' => User::where('email', 'mobile@example.com')->value('id'),
+            'device_id' => 'pixel-test-device',
+            'platform' => 'android',
+        ]);
+
+        $this->postJson(route('api.v1.auth.google.exchange'), ['code' => $query['code']])->assertUnprocessable();
+    }
+
+    public function test_mobile_google_callback_survives_a_lost_browser_session(): void
+    {
+        $redirect = $this->get(route('auth.google.redirect', [
+            'mobile' => 1,
+            'device_id' => 'pixel-lost-cookie',
+            'platform' => 'android',
+            'account_type' => 'cliente',
+        ]));
+
+        parse_str(parse_url($redirect->headers->get('Location'), PHP_URL_QUERY), $googleQuery);
+        $this->assertNotEmpty($googleQuery['state'] ?? null);
+        $this->assertTrue(Cache::has('mobile-google-oauth-state:'.hash('sha256', $googleQuery['state'])));
+
+        Session::flush();
+        $this->fakeGoogleUser('google-mobile-state', 'mobile-state@example.com', 'Cuenta Móvil State');
+
+        $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
+
+        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $callback->headers->get('Location'));
     }
 }

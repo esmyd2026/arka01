@@ -489,6 +489,7 @@ class CooperativeModuleTest extends TestCase
         // que dispara playIncomingRideAlert().
         Event::assertDispatched(CooperativeRideUpdated::class, function (CooperativeRideUpdated $event) use ($rideRequest, $cooperativeUser) {
             $channels = $event->broadcastOn();
+
             return $event->rideRequest->id === $rideRequest->id
                 && $event->action === 'created'
                 && count($channels) === 1

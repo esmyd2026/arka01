@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Collection;
 
 class CooperativeDriverMembership extends Model
 {
@@ -72,9 +73,9 @@ class CooperativeDriverMembership extends Model
      * activa) devuelve una colección de un elemento — seguir usando
      * activeCooperativeFor() donde solo importa "la" cooperativa principal.
      *
-     * @return \Illuminate\Support\Collection<int, CooperativeDriverMembership>
+     * @return Collection<int, CooperativeDriverMembership>
      */
-    public static function activeMembershipsFor(int $driverUserId): \Illuminate\Support\Collection
+    public static function activeMembershipsFor(int $driverUserId): Collection
     {
         return self::query()
             ->where('driver_user_id', $driverUserId)

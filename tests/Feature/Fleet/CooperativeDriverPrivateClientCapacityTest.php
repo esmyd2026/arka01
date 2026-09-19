@@ -6,9 +6,12 @@ use App\Models\Cooperative;
 use App\Models\CooperativeDriverMembership;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Services\Driver\DriverAccessResolver;
+use App\Services\PlanLimits;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -59,7 +62,7 @@ class CooperativeDriverPrivateClientCapacityTest extends TestCase
             ->assertSessionHasNoErrors()
             ->assertRedirect();
 
-        $invitation = \App\Models\FleetInvitation::firstOrFail();
+        $invitation = FleetInvitation::firstOrFail();
 
         $this->actingAs($driver)
             ->post(route('driver.invitations.accept', $invitation))
@@ -76,7 +79,7 @@ class CooperativeDriverPrivateClientCapacityTest extends TestCase
     public function test_reaching_the_plans_real_client_capacity_blocks_further_acceptances_for_a_cooperative_driver(): void
     {
         $driver = $this->cooperativeDriver();
-        $limit = (int) app(\App\Services\PlanLimits::class)->forDriver($driver)['max_clients'];
+        $limit = (int) app(PlanLimits::class)->forDriver($driver)['max_clients'];
 
         for ($i = 0; $i < $limit; $i++) {
             $client = User::factory()->create();
@@ -95,7 +98,7 @@ class CooperativeDriverPrivateClientCapacityTest extends TestCase
             ->post(route('fleet.invitations.store', $oneMoreFleet), ['driver_user_id' => $driver->id])
             ->assertSessionHasNoErrors();
 
-        $invitation = \App\Models\FleetInvitation::firstOrFail();
+        $invitation = FleetInvitation::firstOrFail();
 
         $this->actingAs($driver)
             ->post(route('driver.invitations.accept', $invitation))
@@ -132,8 +135,8 @@ class CooperativeDriverPrivateClientCapacityTest extends TestCase
     {
         $driver = $this->cooperativeDriver();
 
-        $access = app(\App\Services\Driver\DriverAccessResolver::class)->for($driver);
-        $planLimit = (int) app(\App\Services\PlanLimits::class)->forDriver($driver)['max_clients'];
+        $access = app(DriverAccessResolver::class)->for($driver);
+        $planLimit = (int) app(PlanLimits::class)->forDriver($driver)['max_clients'];
 
         $this->assertSame($planLimit, $access['private_clients']['limit']);
         $this->assertSame(0, $access['private_clients']['current']);

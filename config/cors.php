@@ -22,7 +22,10 @@ return [
     // rechazaba la eliminación de cuenta antes de que la petición real
     // llegara a salir (bug encontrado probando en el emulador: el botón se
     // quedaba en "Eliminando…" para siempre).
-    'allowed_methods' => ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    // La SPA Capacitor también actualiza contraseña y cuentas bancarias con
+    // PUT/PATCH. Si no se anuncian acá, el WebView bloquea el preflight aun
+    // cuando la ruta y el token sean válidos.
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
     // Auditoría de seguridad: estaba en '*' (cualquier sitio podía llamar a
     // /api/* con el navegador de un usuario logueado). El riesgo real acá era

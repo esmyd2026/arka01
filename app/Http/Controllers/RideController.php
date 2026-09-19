@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Fleet;
-use App\Models\FleetInvitation;
 use App\Models\FleetMember;
 use App\Models\RatingReason;
 use App\Models\Review;

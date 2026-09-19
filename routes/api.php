@@ -68,12 +68,17 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         ->middleware('throttle:10,1,api.auth.login')
         ->name('auth.login');
 
+    Route::post('/auth/google/exchange', [AuthController::class, 'exchangeGoogleCode'])
+        ->middleware('throttle:10,1,api.auth.google.exchange')
+        ->name('auth.google.exchange');
+
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::get('/auth/me', [AuthController::class, 'me'])->name('auth.me');
         Route::delete('/account', [AccountController::class, 'destroy'])->name('account.destroy');
         Route::put('/device/push-token', [DeviceController::class, 'updatePushToken'])->name('device.push-token');
         Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
         Route::get('/profile/search-referrer', [ProfileController::class, 'searchReferrer'])->name('profile.search-referrer');
         Route::post('/profile/referrer', [ProfileController::class, 'setReferrer'])->name('profile.set-referrer');
         Route::get('/cities', [CityController::class, 'index'])->name('cities.index');

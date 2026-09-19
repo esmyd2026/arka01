@@ -11,6 +11,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\Driver\DriverAccessResolver;
+use App\Services\PlanLimits;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -166,7 +167,7 @@ class DriverAccessResolverTest extends TestCase
     public function test_private_client_capacity_reflects_active_fleet_members_and_the_plans_limit(): void
     {
         $driver = $this->driver();
-        $limit = (int) app(\App\Services\PlanLimits::class)->forDriver($driver)['max_clients'];
+        $limit = (int) app(PlanLimits::class)->forDriver($driver)['max_clients'];
 
         $client = User::factory()->create();
         $fleet = Fleet::factory()->for($client, 'owner')->create();

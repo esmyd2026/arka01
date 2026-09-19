@@ -43,4 +43,18 @@ class CorsSecurityTest extends TestCase
 
         $this->assertNotEquals('https://attacker.com', $response->headers->get('Access-Control-Allow-Origin'));
     }
+
+    public function test_capacitor_can_preflight_update_requests(): void
+    {
+        $response = $this->withHeaders([
+            'Origin' => 'https://localhost',
+            'Access-Control-Request-Method' => 'PUT',
+            'Access-Control-Request-Headers' => 'content-type,authorization',
+        ])->options('/api/v1/profile/password');
+
+        $response->assertNoContent();
+        $this->assertSame('https://localhost', $response->headers->get('Access-Control-Allow-Origin'));
+        $this->assertStringContainsString('PUT', $response->headers->get('Access-Control-Allow-Methods'));
+        $this->assertStringContainsString('PATCH', $response->headers->get('Access-Control-Allow-Methods'));
+    }
 }
