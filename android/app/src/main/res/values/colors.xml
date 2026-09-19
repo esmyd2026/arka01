@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Colores de marca (mismos que public/manifest.json de la PWA) — sin
+    esto, styles.xml caía en los valores por defecto de la librería de
+    Capacitor en vez de los de Arka01. -->
+    <color name="colorPrimary">#22C38F</color>
+    <color name="colorPrimaryDark">#0a0f0c</color>
+    <color name="colorAccent">#22C38F</color>
+</resources>

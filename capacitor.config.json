@@ -1,0 +1,8 @@
+{
+    "appId": "com.arka01.app",
+    "appName": "Arka01",
+    "webDir": "dist-mobile",
+    "server": {
+        "cleartext": true
+    }
+}
