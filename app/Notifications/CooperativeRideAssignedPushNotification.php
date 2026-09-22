@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\RideRequest;
+use App\Notifications\Channels\FcmChannel;
 use App\Services\Haversine;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,7 +21,7 @@ class CooperativeRideAssignedPushNotification extends Notification implements Sh
     {
         // database mantiene la alerta dentro de Arka01; WebPush la hace
         // visible y audible incluso con la aplicación en segundo plano.
-        return ['database', WebPushChannel::class];
+        return ['database', WebPushChannel::class, FcmChannel::class];
     }
 
     public function toArray(object $notifiable): array

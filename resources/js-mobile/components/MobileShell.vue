@@ -1,12 +1,20 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MobileBrand from './MobileBrand.vue';
 import MobileThemeToggle from './MobileThemeToggle.vue';
+import { initPushNotifications } from '../services/push';
 
 const props = defineProps({ role: { type: String, default: 'cliente' }, userName: { type: String, default: '' } });
 const route = useRoute();
 const router = useRouter();
+
+// Notificaciones push nativas (pedido explícito del usuario: "para la
+// carreras o solicitudes"): MobileShell está en toda pantalla autenticada,
+// así que es el único lugar que hace falta tocar — el candado de módulo
+// dentro de initPushNotifications() evita pedir permiso/registrar de nuevo
+// en cada navegación (MobileShell se remonta en cada pantalla).
+onMounted(() => initPushNotifications(router));
 const quickOpen = ref(false);
 const initial = computed(() => props.userName?.trim()?.charAt(0)?.toUpperCase() || 'A');
 const isDriver = computed(() => props.role === 'conductor');

@@ -53,4 +53,10 @@
          dispositivo la tiene. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- @capacitor/push-notifications (Hito 6: "timbre" de carreras y
+         solicitudes con la app cerrada) — Android 13+ (API 33) exige este
+         permiso en el manifest antes de poder pedirlo en tiempo de
+         ejecución (ver PushNotifications.requestPermissions() en
+         services/push.js); versiones anteriores lo ignoran sin problema. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

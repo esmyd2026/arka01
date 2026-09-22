@@ -21,21 +21,34 @@
 **Por qué hace falta:** hoy el "timbre" de una carrera nueva llega por Web
 Push (solo funciona si el navegador/PWA está abierto) o por WhatsApp. Un
 celular con la app instalada necesita **push nativo de verdad** (FCM en
-Android, APNs en iOS) para avisar aunque la app esté cerrada. El backend ya
-tiene el lugar para guardar el token de cada celular (`push_token`/
-`push_provider` en cada sesión) — falta la cuenta que emite esos tokens.
+Android, APNs en iOS) para avisar aunque la app esté cerrada.
+
+**Ya está todo el código listo y probado** (pedido explícito del usuario:
+"aqui si manejaremos notificaciones push para la carreras o solicitudes"):
+el backend sabe enviar por FCM (`App\Services\Push\FcmSender` +
+`App\Notifications\Channels\FcmChannel`, ~19 avisos de carreras/
+cooperativa/círculo de confianza ya lo usan) y la app pide permiso, guarda
+el token del celular y abre la pantalla correcta al tocar el aviso
+(`resources/js-mobile/services/push.js`). Todo eso queda **sin efecto**
+hasta que exista un proyecto real de Firebase — nada bloqueado mientras
+tanto, simplemente no manda nada.
 
 - [ ] Crear un proyecto en **Firebase** (gratis): https://console.firebase.google.com
   - Agregar una app Android con el identificador de paquete definitivo
-    (ver punto 4 más abajo — hay que decidir eso primero).
-  - Descargar `google-services.json` (va dentro del proyecto Android de
-    Capacitor, te aviso dónde exactamente cuando lo tengas).
-  - Generar una "cuenta de servicio" (Service Account) desde
-    Configuración del proyecto → Cuentas de servicio → Generar nueva
-    clave privada (un archivo `.json`) — con eso el backend puede enviar
-    notificaciones de verdad. Variables a llenar cuando lo tengas:
-    `FIREBASE_PROJECT_ID`, y guardar el archivo de credenciales (te
-    indico la ruta exacta cuando integre el paquete).
+    (ver punto 4 más abajo — hoy `com.arka01.app`, provisional).
+  - Descargar `google-services.json` y ponerlo en
+    `android/app/google-services.json` (junto a `build.gradle` de esa
+    misma carpeta) — avisame cuando lo tengas puesto, todavía falta
+    activar el plugin de Gradle de Google Services para que el archivo
+    surta efecto (a propósito no lo activé antes de tener el archivo real:
+    sin él, ese plugin hace fallar la compilación entera).
+  - Generar una "cuenta de servicio" (Configuración del proyecto → Cuentas
+    de servicio → Generar nueva clave privada, un archivo `.json`) — con
+    eso el backend manda de verdad. Variables a llenar en `.env`:
+    - `FIREBASE_PROJECT_ID` = el "ID del proyecto" de Firebase.
+    - `FIREBASE_CREDENTIALS_PATH` = ruta absoluta en el servidor a ese
+      archivo de la cuenta de servicio (fuera de `/public`, nunca se sube
+      al repositorio — mismo criterio que cualquier otra credencial).
 - [ ] Para iOS, el push (APNs) se resuelve dentro de la cuenta de Apple
   Developer del punto 3 — no es una cuenta aparte.
 
