@@ -112,3 +112,34 @@ export async function reviewRide(id, rating, ratingReasonId, comment) {
         comment: comment || null,
     });
 }
+
+// Chat temporal cliente↔conductor (sección 10 del roadmap de mejoras): solo
+// existe mientras la carrera está programada o en curso — mismo criterio que
+// Ride::chatIsOpen() (web), aplicado del lado del frontend en ActiveRide.vue.
+export async function fetchRideMessages(id) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/rides/${id}/messages`, {
+        headers: await authHeaders(),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.message || 'No se pudieron cargar los mensajes.');
+    }
+
+    return data.messages;
+}
+
+export async function sendRideMessage(id, body) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/rides/${id}/messages`, {
+        method: 'POST',
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.errors?.body?.[0] || data.message || 'No se pudo mandar el mensaje.');
+    }
+
+    return data;
+}

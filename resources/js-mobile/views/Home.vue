@@ -6,6 +6,7 @@ import { getStoredUser, fetchCurrentUser } from '../services/auth';
 import { fetchActiveRide } from '../services/activeRide';
 import MobileShell from '../components/MobileShell.vue';
 import MobileMap from '../components/MobileMap.vue';
+import AddressAutocomplete from '../components/AddressAutocomplete.vue';
 
 const router = useRouter();
 const user = ref(null);
@@ -13,6 +14,8 @@ const checkingSession = ref(true);
 const activeRide = ref(null);
 const currentPosition = ref(null);
 const mapRef = ref(null);
+const destinationQuery = ref('');
+const destinationLoading = ref(false);
 
 async function locateForMap() {
     try {
@@ -24,8 +27,29 @@ async function locateForMap() {
     } catch (_) { /* El mapa conserva Guayaquil como respaldo visual. */ }
 }
 
-function openRideRequest(scheduled = false) {
-    router.push({ name: 'request-ride', query: scheduled ? { programar: '1' } : {} });
+function openRideRequest(scheduled = false, place = null) {
+    router.push({
+        name: 'request-ride',
+        query: {
+            ...(scheduled ? { programar: '1' } : {}),
+            ...(currentPosition.value ? {
+                origin_lat: String(currentPosition.value.lat),
+                origin_lng: String(currentPosition.value.lng),
+                origin_address: 'Tu ubicación actual',
+            } : {}),
+            ...(place ? {
+                destination_lat: String(place.lat),
+                destination_lng: String(place.lng),
+                destination_address: place.address,
+            } : {}),
+        },
+    });
+}
+
+function chooseDestination(place) {
+    destinationLoading.value = true;
+    destinationQuery.value = place.address;
+    openRideRequest(false, place);
 }
 
 onMounted(async () => {
@@ -71,10 +95,11 @@ onMounted(async () => {
                 <section class="destination-sheet">
                     <h1>¿A dónde vamos?</h1>
                     <p>Tu ubicación actual será el punto de partida.</p>
-                    <button class="destination-search" @click="openRideRequest(false)">
+                    <div class="destination-search">
                         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-                        <span>Buscar destino</span><b>›</b>
-                    </button>
+                        <AddressAutocomplete v-model="destinationQuery" placeholder="Buscar destino" @place-selected="chooseDestination" @clear="destinationLoading=false" />
+                        <span v-if="destinationLoading" class="mobile-spinner" aria-label="Preparando recorrido"></span>
+                    </div>
                     <small>Consejo: escribe la avenida o calle principal y la transversal. Después podrás ajustar el punto en el mapa.</small>
                     <div class="destination-actions">
                         <button @click="router.push({ name: 'saved-routes' })">＋ Agregar</button>
@@ -112,7 +137,7 @@ onMounted(async () => {
 
 <style scoped>
 .home-page { display: grid; gap: 1.15rem; }
-.client-home{position:fixed;z-index:1;inset:calc(4rem + env(safe-area-inset-top)) 0 calc(4.35rem + env(safe-area-inset-bottom));overflow:hidden;background:#e7efeb}
+.client-home{position:relative;z-index:1;width:100%;height:100%;min-height:0;overflow:hidden;background:#e7efeb}
 .welcome { padding: .35rem .25rem .2rem; }
 .welcome-copy { margin: .5rem 0 0; color: var(--arka-muted); font-size: .9rem; }
 .active-trip { width: 100%; border-color: rgba(52,211,153,.22); color: var(--arka-text); text-align: left; }
@@ -130,6 +155,6 @@ onMounted(async () => {
 .nearby-pill { position: absolute; z-index:2; top: .75rem; left: .75rem; width: max-content; max-width: calc(100% - 4.75rem); padding: .55rem .8rem; border-radius: 999px; background: rgba(31,45,39,.82); color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.18);backdrop-filter:blur(8px); font-size: .72rem; font-weight: 750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .nearby-pill span { width: .5rem; height: .5rem; margin-right: .35rem; display: inline-block; border-radius: 50%; background: #39d7a0; }
 .locate-button{position:absolute;z-index:2;top:.65rem;right:.75rem;width:3rem;height:3rem;display:grid;place-items:center;border:0;border-radius:50%;background:var(--arka-elevated);color:var(--arka-muted);box-shadow:var(--arka-shadow)}.locate-button svg{width:1.25rem;height:1.25rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
-.destination-sheet{position:absolute;z-index:3;right:.85rem;bottom:.85rem;left:.85rem;padding:1rem;border:1px solid var(--arka-border);border-radius:1.4rem;background:color-mix(in srgb,var(--arka-elevated) 96%,transparent);color:var(--arka-text);box-shadow:0 12px 34px rgba(16,24,23,.16);backdrop-filter:blur(14px)}.destination-sheet h1{margin:0;font-size:1.35rem;letter-spacing:-.035em}.destination-sheet>p{margin:.18rem 0 .75rem;color:var(--arka-muted);font-size:.72rem}.destination-search{width:100%;min-height:3.25rem;padding:.7rem .85rem;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.7rem;border:0;border-radius:1rem;background:var(--arka-field);color:var(--arka-muted);text-align:left}.destination-search svg{width:1.15rem;height:1.15rem;fill:none;stroke:currentColor;stroke-width:2}.destination-search b{color:var(--arka-primary);font-size:1.3rem}.destination-sheet>small{display:block;margin:.45rem .25rem 0;color:var(--arka-muted);font-size:.57rem;line-height:1.45}.destination-actions{margin-top:.65rem;display:flex;align-items:center;justify-content:space-between}.destination-actions>button{min-height:2.25rem;border:0;background:transparent;color:var(--arka-muted);font-size:.7rem;font-weight:700}.destination-actions .schedule-button{padding:0 .85rem;display:flex;align-items:center;gap:.4rem;border:1px solid color-mix(in srgb,var(--arka-primary) 35%,transparent);border-radius:999px;background:var(--arka-primary-soft);color:var(--arka-text)}.schedule-button svg{width:1rem;height:1rem;fill:none;stroke:var(--arka-primary);stroke-width:2}
+.destination-sheet{position:absolute;z-index:3;right:.85rem;bottom:.85rem;left:.85rem;padding:1rem;border:1px solid var(--arka-border);border-radius:1.4rem;background:color-mix(in srgb,var(--arka-elevated) 96%,transparent);color:var(--arka-text);box-shadow:0 12px 34px rgba(16,24,23,.16);backdrop-filter:blur(14px)}.destination-sheet h1{margin:0;font-size:1.35rem;letter-spacing:-.035em}.destination-sheet>p{margin:.18rem 0 .75rem;color:var(--arka-muted);font-size:.72rem}.destination-search{position:relative;width:100%;min-height:3.25rem;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.45rem;border-radius:1rem;background:var(--arka-field);color:var(--arka-muted)}.destination-search>svg{width:1.15rem;height:1.15rem;margin-left:.85rem;fill:none;stroke:currentColor;stroke-width:2}.destination-search>.mobile-spinner{margin-right:.75rem}.destination-search :deep(.address-autocomplete){min-width:0}.destination-search :deep(input){min-height:3.25rem;padding-left:.35rem;border:0;background:transparent;box-shadow:none}.destination-search :deep(.clear-btn){right:.15rem}.destination-search :deep(.suggestions){top:auto;bottom:calc(100% + .45rem);min-width:calc(100% + 3rem);margin-left:-2.6rem;max-height:min(16rem,42dvh)}.destination-sheet>small{display:block;margin:.45rem .25rem 0;color:var(--arka-muted);font-size:.57rem;line-height:1.45}.destination-actions{margin-top:.65rem;display:flex;align-items:center;justify-content:space-between}.destination-actions>button{min-height:2.25rem;border:0;background:transparent;color:var(--arka-muted);font-size:.7rem;font-weight:700}.destination-actions .schedule-button{padding:0 .85rem;display:flex;align-items:center;gap:.4rem;border:1px solid color-mix(in srgb,var(--arka-primary) 35%,transparent);border-radius:999px;background:var(--arka-primary-soft);color:var(--arka-text)}.schedule-button svg{width:1rem;height:1rem;fill:none;stroke:var(--arka-primary);stroke-width:2}
 :root:not(.dark) .primary-action { background: var(--arka-card); }
 </style>

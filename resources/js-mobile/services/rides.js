@@ -113,6 +113,26 @@ export async function acceptRideRequest(id) {
     return data.ride;
 }
 
+// Cooperativas disponibles para "Elige tu conductor" (pedido explícito del
+// usuario: "si el conductor pertenece a una cooperativa"), con la misma
+// distancia/tarifa que ya calcula la pantalla web equivalente.
+export async function fetchRideRequestCooperatives(originLat, originLng) {
+    const query = originLat != null && originLng != null
+        ? `?origin_lat=${originLat}&origin_lng=${originLng}`
+        : '';
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/ride-requests/cooperatives${query}`, {
+        headers: await authHeaders(),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.message || 'No se pudieron cargar las cooperativas.');
+    }
+
+    return data.cooperatives;
+}
+
 export async function rejectRideRequest(id) {
     const response = await fetch(`${API_BASE_URL}/api/v1/ride-requests/${id}/reject`, {
         method: 'POST',

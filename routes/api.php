@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\RadioChannelController;
 use App\Http\Controllers\Api\V1\RideController;
+use App\Http\Controllers\Api\V1\RidePaymentController;
 use App\Http\Controllers\Api\V1\RideRequestController;
 use App\Http\Controllers\Api\V1\SavedRouteController;
 use App\Http\Controllers\Api\V1\SosAlertController;
@@ -117,6 +118,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         // (mismo cuidado que la web con /carreras/indicadores vs.
         // /carreras/{ride}): si no, "incoming" se interpreta como el id.
         Route::get('/ride-requests/incoming', [RideRequestController::class, 'incoming'])->name('ride-requests.incoming');
+        Route::get('/ride-requests/cooperatives', [RideRequestController::class, 'cooperatives'])->name('ride-requests.cooperatives');
         Route::get('/ride-requests', [RideRequestController::class, 'index'])->name('ride-requests.index');
         Route::post('/ride-requests', [RideRequestController::class, 'store'])
             ->middleware('throttle:10,1,api.ride-requests.store')
@@ -249,6 +251,14 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/rides/{ride}/messages', [RideController::class, 'sendMessage'])->name('rides.messages.store');
         Route::post('/rides/{ride}/review', [RideController::class, 'review'])->name('rides.review');
         Route::get('/rides/{ride}/tracking-link', [RideController::class, 'trackingLink'])->name('rides.tracking-link');
+        // Pago (pedido explícito del usuario: "cierra todo el backend de
+        // pedir carrera... el tipo de pago si es transferencia que aparezca
+        // las cuentas del conductor, si es efectivo"). Confirmar/rechazar
+        // transferencia son acciones de la cooperativa (panel web), no de
+        // esta app — ver App\Http\Controllers\Api\V1\RidePaymentController.
+        Route::post('/rides/{ride}/payment-proof', [RidePaymentController::class, 'uploadProof'])->name('rides.payment-proof.store');
+        Route::get('/rides/{ride}/payment-proof', [RidePaymentController::class, 'proof'])->name('rides.payment-proof.show');
+        Route::post('/rides/{ride}/confirm-cash', [RidePaymentController::class, 'confirmCash'])->name('rides.confirm-cash');
 
         // /express-routes/mine, /available y /discover van ANTES de
         // /express-routes/{route}, mismo cuidado de orden que el resto de la API.

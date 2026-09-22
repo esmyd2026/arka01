@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Events\RidePaymentUpdated;
 use App\Models\Ride;
 use App\Notifications\RidePaymentStatusNotification;
-use App\Services\PrivateImageOptimizer;
+use App\Services\Ride\RidePaymentManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -14,62 +14,18 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RidePaymentController extends Controller
 {
-    public function __construct(private readonly PrivateImageOptimizer $imageOptimizer) {}
+    public function __construct(private readonly RidePaymentManager $paymentManager) {}
 
     /** El cliente adjunta o reemplaza un comprobante rechazado. */
     public function uploadProof(Request $request, Ride $ride): RedirectResponse
     {
         abort_unless($ride->client_user_id === $request->user()->id, 403);
-        $cooperative = $this->cooperativeFor($ride);
-
-        if ($ride->payment_method !== 'transferencia' || $ride->status !== 'completed') {
-            throw ValidationException::withMessages([
-                'payment_proof' => 'El comprobante se puede adjuntar al finalizar una carrera pagada por transferencia.',
-            ]);
-        }
-
-        if (! in_array($ride->payment_status, ['pending', 'rejected'], true)) {
-            throw ValidationException::withMessages([
-                'payment_proof' => 'Este pago ya está en revisión o fue confirmado.',
-            ]);
-        }
 
         $validated = $request->validate([
             'payment_proof' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ]);
 
-        $stored = $this->imageOptimizer->store(
-            $validated['payment_proof'],
-            'ride-payment-proofs',
-            'ride-'.$ride->public_id,
-        );
-        $previousPath = $ride->payment_proof_path;
-
-        $ride->forceFill([
-            'payment_status' => 'proof_submitted',
-            'payment_proof_path' => $stored['path'],
-            'payment_proof_mime' => $stored['mime'],
-            'payment_proof_original_size' => $stored['original_size'],
-            'payment_proof_stored_size' => $stored['stored_size'],
-            'payment_proof_uploaded_at' => now(),
-            'transfer_payment_notified_at' => now(),
-            'payment_rejected_at' => null,
-            'payment_rejection_reason' => null,
-        ])->save();
-
-        RidePaymentUpdated::dispatch($ride->fresh());
-
-        if ($previousPath && $previousPath !== $stored['path']) {
-            Storage::disk('local')->delete($previousPath);
-        }
-
-        $cooperative->user->notify(new RidePaymentStatusNotification(
-            $ride->id,
-            'Nuevo comprobante de carrera',
-            $ride->client->name.' adjuntó el comprobante de $'.number_format($ride->chargedTotal(), 2).' para la carrera #'.$ride->id.'.',
-            route('cooperative.wallet'),
-            'ride_payment_proof_submitted',
-        ));
+        $this->paymentManager->uploadProof($ride, $validated['payment_proof']);
 
         return back()->with('status', 'Comprobante optimizado y enviado. La cooperativa revisará el pago.');
     }
@@ -146,29 +102,8 @@ class RidePaymentController extends Controller
     public function confirmCash(Request $request, Ride $ride): RedirectResponse
     {
         abort_unless($ride->driver_user_id === $request->user()->id, 403);
-        $cooperative = $this->cooperativeFor($ride);
 
-        if ($ride->payment_method !== 'efectivo' || $ride->status !== 'completed' || $ride->payment_status !== 'pending') {
-            throw ValidationException::withMessages(['payment' => 'Este pago en efectivo no está pendiente de confirmación.']);
-        }
-
-        $ride->forceFill([
-            'payment_status' => 'confirmed',
-            'payment_confirmed_at' => now(),
-            'payment_confirmed_by_user_id' => $request->user()->id,
-        ])->save();
-
-        RidePaymentUpdated::dispatch($ride->fresh());
-
-        $message = $ride->driver->name.' confirmó que recibió $'.number_format($ride->chargedTotal(), 2).' en efectivo por la carrera #'.$ride->id.'.';
-        $cooperative->user->notify(new RidePaymentStatusNotification(
-            $ride->id,
-            'Efectivo recibido por el conductor',
-            $message,
-            route('cooperative.wallet'),
-            'ride_cash_payment_confirmed',
-        ));
-        $ride->client->notify($this->statusNotification($ride, 'Pago confirmado', $message, 'ride_payment_confirmed'));
+        $this->paymentManager->confirmCash($ride);
 
         return back()->with('status', 'Pago en efectivo confirmado. La cooperativa ya puede verlo.');
     }

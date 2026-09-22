@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\City;
-use App\Models\ClientCooperative;
-use App\Models\Cooperative;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
@@ -14,8 +12,8 @@ use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
 use App\Services\FrequentPlaces;
-use App\Services\Haversine;
 use App\Services\PlanLimits;
+use App\Services\Ride\RideRequestCooperativeOptions;
 use App\Services\Ride\RideRequestCreator;
 use App\Services\Ride\RideRequestResponder;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +32,7 @@ class RideRequestController extends Controller
         private readonly PlanLimits $planLimits,
         private readonly RideRequestCreator $rideRequestCreator,
         private readonly RideRequestResponder $rideRequestResponder,
+        private readonly RideRequestCooperativeOptions $cooperativeOptions,
     ) {}
 
     /**
@@ -219,59 +218,13 @@ class RideRequestController extends Controller
         ]);
     }
 
-    /**
-     * Cooperativas visibles para "Elige tu conductor": las que el cliente
-     * agregó a su red (ClientCooperative) más las que un admin marcó como
-     * públicas (Cooperative.is_public). Cada una se marca con is_added para
-     * que el front sepa distinguir "de mi red" de "solo pública" — pedido
-     * explícito del usuario: la de su red debe ganar siempre al recomendar,
-     * sin importar si la pública queda más cerca o más barata.
-     */
     private function cooperativesFor(Request $request): Collection
     {
-        $addedCooperativeIds = ClientCooperative::query()
-            ->where('client_user_id', $request->user()->id)
-            ->pluck('cooperative_id');
-
-        return Cooperative::query()
-            ->where('status', 'approved')
-            ->whereNull('suspended_at')
-            ->where(fn ($query) => $query
-                ->whereIn('id', $addedCooperativeIds)
-                ->orWhere('is_public', true))
-            ->with('activeDriverMemberships.driver.driverProfile')
-            ->withCount('activeDriverMemberships')
-            ->orderBy('name')
-            ->get(['id', 'public_id', 'name', 'logo_path', 'response_timeout_seconds', 'stand_lat', 'stand_lng', 'max_request_distance_km', 'rate_per_km', 'driver_pay_rate_per_km', 'is_public'])
-            ->map(function ($cooperative) use ($request, $addedCooperativeIds) {
-                $lat = $request->query('origin_lat');
-                $lng = $request->query('origin_lng');
-                $cooperative->distance_km = $lat && $lng && $cooperative->stand_lat && $cooperative->stand_lng
-                    ? round(Haversine::distanceKm((float) $lat, (float) $lng, (float) $cooperative->stand_lat, (float) $cooperative->stand_lng), 1)
-                    : null;
-                $cooperative->average_rate_per_km = round((float) $cooperative->activeDriverMemberships
-                    ->pluck('driver.driverProfile.rate_per_km')->filter()->avg(), 2);
-                // Una sola tarifa para la vista y el backend. Antes la
-                // pantalla siempre mostraba el promedio de conductores,
-                // aunque la cooperativa ya hubiera configurado cuánto
-                // cobra al cliente; al confirmar, el total cambiaba.
-                $cooperative->effective_rate_per_km = $cooperative->rate_per_km !== null
-                    ? (float) $cooperative->rate_per_km
-                    : $cooperative->average_rate_per_km;
-                $cooperative->is_added = $addedCooperativeIds->contains($cooperative->id);
-
-                return $cooperative;
-            })
-            // Rango de cobertura (pedido explícito del usuario): la
-            // cooperativa configura hasta qué distancia de su "stand"
-            // acepta solicitudes — mismo criterio que
-            // DriverProfile::isWithinRangeOf(), sin límite configurado
-            // o sin distancia conocida todavía (origen no elegido aún)
-            // no hay nada que descartar.
-            ->filter(fn ($cooperative) => $cooperative->max_request_distance_km === null
-                || $cooperative->distance_km === null
-                || $cooperative->distance_km <= $cooperative->max_request_distance_km)
-            ->sortBy(fn ($cooperative) => $cooperative->distance_km ?? PHP_FLOAT_MAX)->values();
+        return $this->cooperativeOptions->forClient(
+            $request->user(),
+            $request->query('origin_lat') !== null ? (float) $request->query('origin_lat') : null,
+            $request->query('origin_lng') !== null ? (float) $request->query('origin_lng') : null,
+        );
     }
 
     /**

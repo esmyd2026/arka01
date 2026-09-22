@@ -16,17 +16,51 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->string('device_id')->nullable()->after('name')->index();
-            $table->string('platform')->nullable()->after('device_id');
-            $table->string('app_version')->nullable()->after('platform');
-        });
+        // Falla real en producción ("Duplicate column name 'device_id'"):
+        // esa base ya tenía la columna (creada a mano o por una corrida
+        // anterior) pero la tabla `migrations` no tenía registro de esta
+        // migración — Laravel la vuelve a correr entera y MySQL aborta el
+        // deploy completo. Mismo criterio defensivo que ya usa la migración
+        // siguiente (2026_08_28_120000_add_push_token...): cada columna se
+        // agrega solo si todavía no existe, así es segura de correr sin
+        // importar el estado real de esa base.
+        if (! Schema::hasColumn('personal_access_tokens', 'device_id')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('device_id')->nullable()->after('name')->index();
+            });
+        }
+
+        if (! Schema::hasColumn('personal_access_tokens', 'platform')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('platform')->nullable()->after('device_id');
+            });
+        }
+
+        if (! Schema::hasColumn('personal_access_tokens', 'app_version')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('app_version')->nullable()->after('platform');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->dropColumn(['device_id', 'platform', 'app_version']);
-        });
+        if (Schema::hasColumn('personal_access_tokens', 'app_version')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->dropColumn('app_version');
+            });
+        }
+
+        if (Schema::hasColumn('personal_access_tokens', 'platform')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->dropColumn('platform');
+            });
+        }
+
+        if (Schema::hasColumn('personal_access_tokens', 'device_id')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->dropColumn('device_id');
+            });
+        }
     }
 };

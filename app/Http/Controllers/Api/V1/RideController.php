@@ -245,8 +245,12 @@ class RideController extends Controller
         $messages = $ride->messages()->with('sender')->oldest()->get()->map(fn ($message) => [
             'id' => $message->id,
             'ride_id' => $message->ride_id,
-            'sender_user_id' => $message->sender_user_id,
             'sender_name' => $message->sender->name,
+            // El frontend distingue "mío" vs "del otro" comparando esto, no
+            // el id crudo del remitente — UserResource ya expone `id` como el
+            // public_id (no el id numérico real), así que comparar contra el
+            // usuario guardado localmente nunca habría coincidido.
+            'is_mine' => $message->sender_user_id === $userId,
             'body' => $message->body,
             'created_at' => $message->created_at->toIso8601String(),
         ]);
@@ -265,8 +269,8 @@ class RideController extends Controller
         return response()->json([
             'id' => $message->id,
             'ride_id' => $message->ride_id,
-            'sender_user_id' => $message->sender_user_id,
             'sender_name' => $request->user()->name,
+            'is_mine' => true,
             'body' => $message->body,
             'created_at' => $message->created_at->toIso8601String(),
         ], 201);

@@ -20,10 +20,10 @@
     --arka-success-panel: linear-gradient(145deg,#153326,#0d1b15); --arka-status-panel: linear-gradient(135deg,rgba(52,211,153,.16),#11231b);
 }
 * { box-sizing: border-box; }
-html, body, #app { width: 100%; min-height: 100%; margin: 0; overflow-x: hidden; }
-body { min-height: 100dvh; background: var(--arka-bg); overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+html, body, #app { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; }
+body { background: var(--arka-bg); overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 button, input, select, textarea { font: inherit; } button, a { -webkit-tap-highlight-color: transparent; } button { cursor: pointer; }
-.mobile-page { width: 100%; min-width: 0; max-width: 560px; margin: 0 auto; padding: 1.1rem 1rem calc(6rem + env(safe-area-inset-bottom)); overflow-x: clip; }
+.mobile-page { width: 100%; min-width: 0; max-width: 560px; margin: 0 auto; padding: 1.1rem 1rem calc(1.5rem + env(safe-area-inset-bottom)); overflow-x: clip; }
 .mobile-card { border: 1px solid var(--arka-border); border-radius: 1.25rem; background: var(--arka-card); box-shadow: var(--arka-shadow); }
 .mobile-eyebrow { margin: 0; color: var(--arka-primary); font-size: .68rem; font-weight: 850; letter-spacing: .15em; text-transform: uppercase; }
 .mobile-title { margin: 0; color: var(--arka-text); font-size: clamp(1.45rem,6vw,2rem); line-height: 1.12; letter-spacing: -.035em; }

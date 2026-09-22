@@ -76,7 +76,9 @@ function openAction(name){quickOpen.value=false;router.push({name})}
                 <RouterLink class="app-avatar" :to="{ name: 'profile' }" aria-label="Abrir perfil">{{ initial }}</RouterLink>
             </div>
         </header>
-        <slot />
+        <div class="app-viewport">
+            <slot />
+        </div>
         <nav class="bottom-nav" aria-label="Navegación principal">
             <template v-for="item in navItems" :key="item.name">
             <button v-if="item.primary" type="button" class="nav-item primary" :aria-expanded="quickOpen" aria-label="Abrir accesos rápidos" @click="quickOpen=true">
@@ -105,10 +107,11 @@ function openAction(name){quickOpen.value=false;router.push({name})}
 </template>
 
 <style scoped>
-.app-shell{min-height:100dvh;background:var(--arka-bg)}
-.app-header{position:sticky;top:0;z-index:30;height:calc(4rem + env(safe-area-inset-top));padding:env(safe-area-inset-top) 1rem 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--arka-border);background:var(--arka-chrome);backdrop-filter:blur(18px)}
+.app-shell{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--arka-bg)}
+.app-header{position:relative;z-index:30;flex:0 0 auto;height:calc(4rem + env(safe-area-inset-top));padding:env(safe-area-inset-top) 1rem 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--arka-border);background:var(--arka-chrome);backdrop-filter:blur(18px)}
+.app-viewport{position:relative;flex:1 1 auto;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable}
 .header-actions{display:flex;align-items:center;gap:.55rem}.app-avatar{width:2.25rem;height:2.25rem;display:grid;place-items:center;border:1px solid rgba(23,139,98,.25);border-radius:50%;background:var(--arka-primary);color:#fff;font-size:.8rem;font-weight:800;text-decoration:none}
-.bottom-nav{position:fixed;z-index:50;inset:auto 0 0;min-height:calc(4.35rem + env(safe-area-inset-bottom));padding:.35rem .3rem env(safe-area-inset-bottom);display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--arka-border);background:var(--arka-chrome);backdrop-filter:blur(20px)}
+.bottom-nav{position:relative;z-index:50;flex:0 0 auto;min-height:calc(4.35rem + env(safe-area-inset-bottom));padding:.35rem .3rem env(safe-area-inset-bottom);display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--arka-border);background:var(--arka-chrome);backdrop-filter:blur(20px)}
 .nav-item{min-width:0;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;color:var(--arka-muted);font-size:.62rem;font-weight:700;text-decoration:none}.nav-icon{width:1.4rem;height:1.4rem;display:grid;place-items:center}.nav-icon svg{width:1.3rem;height:1.3rem;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.nav-item.active{color:var(--arka-primary)}
 .nav-item.primary .nav-icon{width:3.4rem;height:3.4rem;margin-top:-1.25rem;border-radius:50%;background:var(--arka-primary);color:#fff;box-shadow:0 8px 18px rgba(23,139,98,.3)}.nav-item.primary .nav-icon svg{width:1.65rem;height:1.65rem;stroke-width:2.4}.nav-item.primary>span:last-child{margin-top:.05rem}
 .quick-backdrop{position:fixed;z-index:90;inset:0;display:flex;align-items:flex-end;background:rgba(3,12,8,.62);backdrop-filter:blur(3px)}.quick-sheet{width:100%;max-width:560px;max-height:78dvh;margin:0 auto;padding:.55rem 1rem calc(1rem + env(safe-area-inset-bottom));overflow:auto;border:1px solid var(--arka-border);border-radius:1.5rem 1.5rem 0 0;background:var(--arka-card);box-shadow:0 -18px 50px rgba(0,0,0,.24)}.sheet-handle{display:block;width:2.5rem;height:.24rem;margin:0 auto .8rem;border-radius:999px;background:var(--arka-border)}.quick-heading{display:flex;align-items:start;justify-content:space-between;gap:1rem}.quick-heading p{margin:0;color:var(--arka-primary);font-size:.62rem;font-weight:850;letter-spacing:.14em}.quick-heading h2{margin:.2rem 0 .8rem;font-size:1.15rem}.quick-heading>button{width:2rem;height:2rem;border:0;border-radius:50%;background:var(--arka-surface);color:var(--arka-muted);font-size:1.2rem}.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}.quick-grid>button{min-width:0;padding:.75rem;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.55rem;border:1px solid var(--arka-border);border-radius:1rem;background:var(--arka-card-strong);color:var(--arka-text);text-align:left}.quick-grid>button>span{width:2rem;height:2rem;display:grid;place-items:center;border-radius:.65rem;background:var(--arka-primary-soft);color:var(--arka-primary);font-weight:900}.quick-grid div{min-width:0;display:grid;gap:.12rem}.quick-grid strong{font-size:.76rem}.quick-grid small{color:var(--arka-muted);font-size:.61rem;line-height:1.3}.quick-grid b{color:var(--arka-primary)}

@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\CooperativeRideOptionResource;
 use App\Http\Resources\Api\V1\IncomingRideRequestResource;
 use App\Http\Resources\Api\V1\RideRequestResource;
 use App\Http\Resources\Api\V1\RideResource;
 use App\Models\RideRequest;
 use App\Services\Ride\IncomingRideRequestFinder;
+use App\Services\Ride\RideRequestCooperativeOptions;
 use App\Services\Ride\RideRequestCreator;
 use App\Services\Ride\RideRequestResponder;
 use Illuminate\Http\JsonResponse;
@@ -22,12 +24,11 @@ use Illuminate\Validation\ValidationException;
  * controladores web) — mismo criterio que Fleet: ningún canal puede tener
  * una regla de negocio propia.
  *
- * Alcance: lado cliente (pedir, ver estado, cancelar) Y lado conductor
- * (ver solicitudes entrantes, aceptar, rechazar) para carreras inmediatas.
- * Carreras programadas, paradas, cooperativa y contraoferta de precio
- * quedan para después — el backend ya las soporta (mismo
- * RideRequestCreator::rules()/RideRequestResponder::counter()), falta la
- * pantalla.
+ * Alcance: lado cliente (pedir, ver estado, cancelar, elegir cooperativa) Y
+ * lado conductor (ver solicitudes entrantes, aceptar, rechazar, contraofertar)
+ * para carreras inmediatas. Carreras programadas con paradas siguen
+ * pendientes de pantalla propia — el backend ya las soporta (mismo
+ * RideRequestCreator::rules()).
  */
 class RideRequestController extends Controller
 {
@@ -35,7 +36,32 @@ class RideRequestController extends Controller
         private readonly RideRequestCreator $rideRequestCreator,
         private readonly RideRequestResponder $rideRequestResponder,
         private readonly IncomingRideRequestFinder $incomingRideRequestFinder,
+        private readonly RideRequestCooperativeOptions $cooperativeOptions,
     ) {}
+
+    /**
+     * Cooperativas disponibles para "Elige tu conductor" (pedido explícito
+     * del usuario: "si el conductor pertenece a una cooperativa") — mismos
+     * datos que RideRequestController::create() calcula para la pantalla
+     * web equivalente, vía App\Services\Ride\RideRequestCooperativeOptions.
+     */
+    public function cooperatives(Request $request): JsonResponse
+    {
+        // Mismo criterio que RideRequestController::create() (web): "pedir
+        // una carrera" es del lado cliente — un conductor no tiene una red
+        // de cooperativas propia que listar acá.
+        if (! $request->user()->isClient()) {
+            return response()->json(['cooperatives' => []]);
+        }
+
+        $cooperatives = $this->cooperativeOptions->forClient(
+            $request->user(),
+            $request->filled('origin_lat') ? (float) $request->query('origin_lat') : null,
+            $request->filled('origin_lng') ? (float) $request->query('origin_lng') : null,
+        );
+
+        return response()->json(['cooperatives' => CooperativeRideOptionResource::collection($cooperatives)]);
+    }
 
     /**
      * Solicitudes que este conductor puede atender ahora mismo (dirigidas a
