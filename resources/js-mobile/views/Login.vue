@@ -15,7 +15,14 @@ import backgroundUrl from '../assets/img/fondo-login.jpg';
 const router=useRouter(), loginField=ref(''), password=ref(''), error=ref(null), loading=ref(false), showPassword=ref(false), googleLoading=ref(false);
 let appUrlListener=null;
 async function submit(){loading.value=true;error.value=null;try{await login(loginField.value,password.value);router.replace({name:'home'})}catch(e){error.value=e.message}finally{loading.value=false}}
-async function handleAppUrl(url){if(!url?.startsWith('com.arka01.app://auth/google'))return;const code=new URL(url).searchParams.get('code');if(!code)return;googleLoading.value=true;error.value=null;try{await Browser.close().catch(()=>{});await exchangeGoogleCode(code);router.replace({name:'home'})}catch(e){error.value=e.message}finally{googleLoading.value=false}}
+// Bug real reportado por el usuario (captura del botón "Continuar con
+// Google" girando para siempre): cuando Google rechaza el authorization
+// code (vencido o ya usado), el servidor vuelve a este mismo esquema pero
+// SIN `code` (con `error` en su lugar, ver GoogleAuthController::
+// failedGoogleAuth()) — antes esta función no hacía nada con esa vuelta,
+// así que `googleLoading` quedaba en true para siempre. Ahora cualquier
+// vuelta sin código apaga el spinner y muestra el motivo.
+async function handleAppUrl(url){if(!url?.startsWith('com.arka01.app://auth/google'))return;await Browser.close().catch(()=>{});const params=new URL(url).searchParams;const code=params.get('code');if(!code){googleLoading.value=false;error.value=params.get('error')||'No se pudo iniciar sesión con Google. Inténtalo de nuevo.';return}googleLoading.value=true;error.value=null;try{await exchangeGoogleCode(code);router.replace({name:'home'})}catch(e){error.value=e.message}finally{googleLoading.value=false}}
 async function openGoogle(){googleLoading.value=true;error.value=null;try{const deviceId=await getDeviceId();await Browser.open({url:`${API_BASE_URL}/auth/google/redirect?mobile=1&platform=android&device_id=${encodeURIComponent(deviceId)}`})}catch(e){googleLoading.value=false;error.value='No se pudo abrir Google. Inténtalo de nuevo.'}}
 function openExternal(path){Browser.open({url:`${API_BASE_URL}${path}`})}
 function openForgotPassword(){openExternal('/forgot-password')}

@@ -73,6 +73,41 @@ class GoogleAuthTest extends TestCase
     }
 
     /**
+     * Bug real reportado por el usuario (captura del botón "Continuar con
+     * Google" de la app girando para siempre): si esto pasaba durante un
+     * login MÓVIL, la línea de arriba mandaba igual a la pantalla web de
+     * login — el Custom Tab mostraba el mensaje, pero la app nunca
+     * recuperaba el control porque jamás volvía el esquema
+     * `com.arka01.app://`, dejando el spinner pegado para siempre. Ahora
+     * vuelve por ese mismo esquema con `error=`, que Login.vue/Register.vue
+     * ya saben apagar el spinner y mostrar.
+     */
+    public function test_an_expired_or_reused_google_code_during_a_mobile_login_returns_to_the_app_with_an_error(): void
+    {
+        $redirect = $this->get(route('auth.google.redirect', [
+            'mobile' => 1,
+            'device_id' => 'pixel-test-device',
+            'platform' => 'android',
+        ]));
+        parse_str(parse_url($redirect->headers->get('Location'), PHP_URL_QUERY), $googleQuery);
+
+        $request = new GuzzleRequest('POST', 'https://www.googleapis.com/oauth2/v4/token');
+        $response = new GuzzleResponse(400, [], json_encode(['error' => 'invalid_grant']));
+
+        $provider = Mockery::mock(Provider::class);
+        $provider->shouldReceive('stateless')->zeroOrMoreTimes()->andReturnSelf();
+        $provider->shouldReceive('user')->andThrow(new ClientException('Bad Request', $request, $response));
+        Socialite::shouldReceive('driver')->with('google')->andReturn($provider);
+
+        $callbackResponse = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
+
+        $location = $callbackResponse->headers->get('Location');
+        $this->assertStringStartsWith('com.arka01.app://auth/google?error=', $location);
+        $this->assertGuest();
+        $this->assertSame(0, User::query()->count());
+    }
+
+    /**
      * Pedido explícito del usuario: una cuenta de Google nueva no puede
      * quedar como "cliente" en silencio — se manda a elegir tipo de cuenta,
      * mismo primer paso que ya exige el registro normal (Register.vue).

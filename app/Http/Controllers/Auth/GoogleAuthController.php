@@ -79,7 +79,7 @@ class GoogleAuthController extends Controller
         } catch (InvalidStateException) {
             // El usuario volvió con un link viejo o expirado — se lo manda
             // de nuevo al login en vez de mostrarle un error críptico.
-            return redirect()->route('login')->with('status', 'El enlace de Google expiró, pruebe de nuevo.');
+            return $this->failedGoogleAuth($mobileFromState, 'El enlace de Google expiró, pruebe de nuevo.');
         } catch (ClientException $e) {
             // Error real visto en producción (log de errores del admin):
             // Google responde 400 "invalid_grant" al canjear el
@@ -91,7 +91,7 @@ class GoogleAuthController extends Controller
             // manejar; ahora se trata igual que un enlace vencido.
             report($e);
 
-            return redirect()->route('login')->with('status', 'El enlace de Google ya se usó o expiró, pruebe de nuevo.');
+            return $this->failedGoogleAuth($mobileFromState, 'El enlace de Google ya se usó o expiró, pruebe de nuevo.');
         }
 
         $user = User::query()->where('google_id', $googleUser->getId())->first()
@@ -183,6 +183,9 @@ class GoogleAuthController extends Controller
             // mismo mensaje por 'status' (que Login.vue ya sabía mostrar) más
             // el correo en 'login_hint', para que el widget sepa a qué cuenta
             // pedirle el código sin que el usuario tenga que volver a escribirlo.
+            // Nota: este catch es solo para el flujo web — el móvil ya
+            // devolvió más arriba con su propio código de un solo uso antes
+            // de llegar acá, nunca pasa por Auth::login().
             return redirect()->route('login')
                 ->with('status', $e->getMessage())
                 ->with('login_hint', $user->email);
@@ -195,6 +198,28 @@ class GoogleAuthController extends Controller
         }
 
         return redirect()->intended(route('dashboard', absolute: false));
+    }
+
+    /**
+     * Un fallo antes de resolver la identidad de Google (estado vencido o
+     * el authorization code rechazado) no sabe todavía si esto era un login
+     * de la app o de la web. Bug real reportado por el usuario: para móvil,
+     * mandar siempre a la pantalla web de login dejaba el botón "Continuar
+     * con Google" de la app girando para siempre — el Custom Tab mostraba
+     * el mensaje, pero la app nunca recuperaba el control porque jamás
+     * volvía el esquema `com.arka01.app://`. `$mobileFromState` alcanza acá
+     * (viene del caché por `state`, no de la sesión — la sesión del Custom
+     * Tab puede volver distinta, por eso existe ese caché) porque el flujo
+     * móvil siempre usa `stateless()`, así que Socialite nunca depende de
+     * la sesión para validarlo.
+     */
+    private function failedGoogleAuth(?array $mobileFromState, string $message): RedirectResponse
+    {
+        if (is_array($mobileFromState)) {
+            return redirect()->away('com.arka01.app://auth/google?error='.urlencode($message));
+        }
+
+        return redirect()->route('login')->with('status', $message);
     }
 
     private function mobileStateCacheKey(string $state): string

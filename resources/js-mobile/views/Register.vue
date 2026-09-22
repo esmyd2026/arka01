@@ -57,14 +57,26 @@ function previousStep() {
     document.querySelector('.register-screen')?.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// Bug real reportado por el usuario (captura del botón "Continuar con
+// Google" girando para siempre): cuando Google rechaza el authorization
+// code (vencido o ya usado), el servidor vuelve a este mismo esquema pero
+// SIN `code` (con `error` en su lugar, ver GoogleAuthController::
+// failedGoogleAuth()) — antes esta función no hacía nada con esa vuelta,
+// así que `googleLoading` quedaba en true para siempre. Ahora cualquier
+// vuelta sin código apaga el spinner y muestra el motivo.
 async function handleAppUrl(url) {
     if (!url?.startsWith('com.arka01.app://auth/google')) return;
-    const code = new URL(url).searchParams.get('code');
-    if (!code) return;
+    await Browser.close().catch(() => {});
+    const params = new URL(url).searchParams;
+    const code = params.get('code');
+    if (!code) {
+        googleLoading.value = false;
+        error.value = params.get('error') || 'No se pudo iniciar sesión con Google. Inténtalo de nuevo.';
+        return;
+    }
     googleLoading.value = true;
     error.value = null;
     try {
-        await Browser.close().catch(() => {});
         await exchangeGoogleCode(code);
         router.replace({ name: 'home' });
     } catch (e) {
