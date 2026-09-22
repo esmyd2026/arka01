@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cooperative;
 use App\Models\User;
 use App\Services\ReferralAttribution;
+use GuzzleHttp\Exception\ClientException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -79,6 +80,18 @@ class GoogleAuthController extends Controller
             // El usuario volvió con un link viejo o expirado — se lo manda
             // de nuevo al login en vez de mostrarle un error críptico.
             return redirect()->route('login')->with('status', 'El enlace de Google expiró, pruebe de nuevo.');
+        } catch (ClientException $e) {
+            // Error real visto en producción (log de errores del admin):
+            // Google responde 400 "invalid_grant" al canjear el
+            // authorization code — pasa cuando ese código ya se usó (el
+            // usuario volvió atrás y recargó el link de callback, o el
+            // navegador reintentó la petición) o cuando expiró por tardar
+            // demasiado en la pantalla de consentimiento. Antes esto
+            // quedaba sin capturar y explotaba como excepción crítica sin
+            // manejar; ahora se trata igual que un enlace vencido.
+            report($e);
+
+            return redirect()->route('login')->with('status', 'El enlace de Google ya se usó o expiró, pruebe de nuevo.');
         }
 
         $user = User::query()->where('google_id', $googleUser->getId())->first()

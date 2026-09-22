@@ -3,9 +3,12 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
+use GuzzleHttp\Psr7\Response as GuzzleResponse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use Laravel\Socialite\Contracts\Provider;
 use Laravel\Socialite\Facades\Socialite;
@@ -42,6 +45,31 @@ class GoogleAuthTest extends TestCase
         $response = $this->get(route('auth.google.redirect'));
 
         $response->assertRedirect();
+    }
+
+    /**
+     * Error real visto en producción (log de errores del admin): Google
+     * responde 400 "invalid_grant" al canjear el authorization code —
+     * código ya usado (el usuario volvió atrás y recargó el link de
+     * callback) o vencido por tardar en la pantalla de consentimiento.
+     * Antes quedaba sin capturar y explotaba como excepción crítica; ahora
+     * se trata igual que un enlace vencido, sin crear ninguna cuenta.
+     */
+    public function test_an_expired_or_reused_google_code_shows_a_friendly_message_instead_of_crashing(): void
+    {
+        $request = new GuzzleRequest('POST', 'https://www.googleapis.com/oauth2/v4/token');
+        $response = new GuzzleResponse(400, [], json_encode(['error' => 'invalid_grant', 'error_description' => 'Bad Request']));
+
+        $provider = Mockery::mock(Provider::class);
+        $provider->shouldReceive('stateless')->zeroOrMoreTimes()->andReturnSelf();
+        $provider->shouldReceive('user')->andThrow(new ClientException('Bad Request', $request, $response));
+        Socialite::shouldReceive('driver')->with('google')->andReturn($provider);
+
+        $callbackResponse = $this->get(route('auth.google.callback'));
+
+        $callbackResponse->assertRedirect(route('login'));
+        $this->assertGuest();
+        $this->assertSame(0, User::query()->count());
     }
 
     /**
