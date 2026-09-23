@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\FleetInvitation;
+use App\Notifications\Channels\FcmChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -20,7 +21,7 @@ class FleetInvitationRespondedPushNotification extends Notification implements S
 
     public function via(object $notifiable): array
     {
-        return [WebPushChannel::class];
+        return [WebPushChannel::class, FcmChannel::class];
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage

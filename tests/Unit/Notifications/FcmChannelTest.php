@@ -2,9 +2,14 @@
 
 namespace Tests\Unit\Notifications;
 
+use App\Models\Fleet;
+use App\Models\FleetInvitation;
 use App\Models\Ride;
 use App\Models\User;
 use App\Notifications\Channels\FcmChannel;
+use App\Notifications\FleetInvitationAutoAcceptedPushNotification;
+use App\Notifications\FleetInvitationPushNotification;
+use App\Notifications\FleetInvitationRespondedPushNotification;
 use App\Notifications\RideStartedPushNotification;
 use App\Services\Push\FcmSender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,5 +71,41 @@ class FcmChannelTest extends TestCase
 
         $notification = new RideStartedPushNotification(Ride::factory()->create());
         (new FcmChannel($sender))->send($user, $notification);
+    }
+
+    /**
+     * Pedido explícito del usuario: "esto debe ocurrir en las dos
+     * plataforma web y movil" — el aviso de una invitación de flota nueva
+     * (o de que ya quedó vinculado, si el conductor tiene la aprobación
+     * manual apagada) tiene que llegar por push nativo igual que por
+     * WebPush, no solo al navegador. Las tres notificaciones de esta
+     * familia (pendiente de responder, auto-aceptada, y la respuesta del
+     * cliente/conductor) declaran FcmChannel — este test confirma que un
+     * dispositivo móvil registrado de verdad recibe el envío.
+     */
+    public function test_fleet_invitation_notifications_reach_a_registered_mobile_device(): void
+    {
+        $client = User::factory()->create();
+        $fleet = Fleet::factory()->for($client, 'owner')->create();
+        $driver = User::factory()->create();
+        $driver->createToken('android')->accessToken->forceFill(['push_provider' => 'fcm', 'push_token' => 'driver-token'])->save();
+
+        $invitation = FleetInvitation::query()->create([
+            'fleet_id' => $fleet->id,
+            'driver_user_id' => $driver->id,
+            'invited_by' => $client->id,
+            'initiated_by' => 'client',
+            'status' => 'accepted',
+            'responded_at' => now(),
+        ]);
+
+        $sender = Mockery::mock(FcmSender::class);
+        $sender->shouldReceive('isConfigured')->andReturn(true);
+        $sender->shouldReceive('send')->times(3)->with('driver-token', Mockery::type('string'), Mockery::type('string'), Mockery::type('array'));
+
+        $channel = new FcmChannel($sender);
+        $channel->send($driver, new FleetInvitationPushNotification($invitation));
+        $channel->send($driver, new FleetInvitationAutoAcceptedPushNotification($invitation));
+        $channel->send($driver, new FleetInvitationRespondedPushNotification($invitation, true));
     }
 }

@@ -50,6 +50,16 @@ async function routeForNotification(router, data) {
         return { name: 'active-ride', params: { id: rideIdMatch[1] } };
     }
 
+    // Invitaciones de flota (pedido explícito del usuario: "esto debe
+    // ocurrir en las dos plataforma web y movil") — mismo `data.url` que ya
+    // arma cada FleetInvitation*PushNotification para el navegador.
+    if (data.url === '/mis-clientes') {
+        return { name: 'driver-clients' };
+    }
+    if (typeof data.url === 'string' && data.url.startsWith('/flota')) {
+        return { name: 'fleet' };
+    }
+
     if (data.category === 'incoming_ride') {
         return { name: 'incoming-rides' };
     }
