@@ -208,6 +208,8 @@ function invite(driver) {
                     clickable
                     :auto-fit="false"
                     :dark="false"
+                    :minimal-style="true"
+                    origin-marker-style="dot"
                     @map-click="onMapClick"
                 />
 

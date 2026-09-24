@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\ReferralAttribution;
 use GuzzleHttp\Exception\ClientException;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -68,7 +69,7 @@ class GoogleAuthController extends Controller
             ->redirect();
     }
 
-    public function callback(Request $request): RedirectResponse
+    public function callback(Request $request): RedirectResponse|View
     {
         $mobileFromState = $this->decodeMobileState($request->string('state')->toString());
 
@@ -171,7 +172,7 @@ class GoogleAuthController extends Controller
                 'platform' => $mobile['platform'],
             ], now()->addMinutes(2));
 
-            return redirect()->away('com.arka01.app://auth/google?code='.urlencode($code));
+            return $this->mobileReturn('com.arka01.app://auth/google?code='.urlencode($code));
         }
 
         // Sin "recordarme" (ver App\Listeners\EnforceSingleActiveSession): la
@@ -216,13 +217,31 @@ class GoogleAuthController extends Controller
      * flujo móvil siempre usa `stateless()`, así que Socialite nunca
      * depende de la sesión para validarlo.
      */
-    private function failedGoogleAuth(?array $mobileFromState, string $message): RedirectResponse
+    private function failedGoogleAuth(?array $mobileFromState, string $message): RedirectResponse|View
     {
         if (is_array($mobileFromState)) {
-            return redirect()->away('com.arka01.app://auth/google?error='.urlencode($message));
+            return $this->mobileReturn('com.arka01.app://auth/google?error='.urlencode($message));
         }
 
         return redirect()->route('login')->with('status', $message);
+    }
+
+    /**
+     * Bug real reportado por el usuario ("la app se queda cargando... nunca
+     * entra"): antes esto era `redirect()->away($url)`, una redirección HTTP
+     * directa al esquema personalizado `com.arka01.app://`. Android/Chrome
+     * Custom Tabs puede negarse a entregarle el control a la app cuando esa
+     * navegación llega como una redirección DEL SERVIDOR en vez de como una
+     * acción disparada desde dentro de la propia página — sin aviso, se
+     * queda mostrando la pestaña quieta y la app nunca se entera de nada.
+     * Una página intermedia que navega por JavaScript (y, si el navegador la
+     * bloquea igual, ofrece un botón para un toque real) es el patrón que sí
+     * funciona de forma consistente para este caso — ver
+     * resources/views/auth/mobile-return.blade.php.
+     */
+    private function mobileReturn(string $url): View
+    {
+        return view('auth.mobile-return', ['url' => $url]);
     }
 
     /**

@@ -2335,18 +2335,17 @@ function submit() {
                     </div>
 
                     <!-- Pedido explícito del usuario: un botón bien visible (no
-                         escondido en un mensaje de "no tengo conductores") para
-                         llegar al mapa de "conductores cerca de mí" — nombre
-                         simple que dice lo que hace. -->
-                    <a
-                        :href="route('directory.index')"
-                        class="inline-flex items-center gap-1.5 text-sm font-medium text-arka-primary hover:text-arka-primary-bright"
-                    >
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-7.1 7-12a7 7 0 1 0-14 0c0 4.9 7 12 7 12Z" />
-                            <circle cx="12" cy="9" r="2.5" stroke-linecap="round" />
-                        </svg>
-                        Ver conductores cerca de mí
+                         escondido en un mensaje de "no tengo conductores"), del
+                         mismo tamaño que otros botones secundarios de la pantalla
+                         — nombre simple que dice lo que hace. -->
+                    <a :href="route('directory.index')">
+                        <SecondaryButton size="sm" class="gap-1.5">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-7.1 7-12a7 7 0 1 0-14 0c0 4.9 7 12 7 12Z" />
+                                <circle cx="12" cy="9" r="2.5" stroke-linecap="round" />
+                            </svg>
+                            Ver conductores cerca de mí
+                        </SecondaryButton>
                     </a>
 
                     <!-- Pedido explícito del usuario: "que arriba me salga un mensaje

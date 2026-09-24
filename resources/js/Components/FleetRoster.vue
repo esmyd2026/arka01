@@ -251,17 +251,24 @@ onBeforeUnmount(() => {
                      sí (ver FleetController::searchDrivers()). El teléfono sigue
                      sin mostrarse en los resultados, eso no cambió. -->
                 <InputLabel value="Buscar conductor por nombre, apellido, usuario o código" />
-                <div class="flex shrink-0 items-center gap-3">
+                <div class="flex shrink-0 items-center gap-2">
                     <!-- Pedido explícito del usuario: un botón bien visible (no
-                         escondido en un mensaje de "no tengo conductores") para
-                         llegar al mapa de "conductores cerca de mí" — nombre
-                         simple que dice lo que hace. -->
-                    <Link :href="route('directory.index')" class="text-xs font-semibold text-arka-primary hover:text-arka-primary-bright">
-                        Conductores cerca de mí
+                         escondido en un mensaje de "no tengo conductores"), del
+                         mismo tamaño que "Recomendar" — para llegar al mapa de
+                         "conductores cerca de mí" con nombre simple que dice lo
+                         que hace. -->
+                    <Link :href="route('directory.index')">
+                        <SecondaryButton size="sm" class="gap-1.5">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-7.1 7-12a7 7 0 1 0-14 0c0 4.9 7 12 7 12Z" />
+                                <circle cx="12" cy="9" r="2.5" stroke-linecap="round" />
+                            </svg>
+                            Conductores cerca de mí
+                        </SecondaryButton>
                     </Link>
                     <!-- Pedido explícito del usuario: volver a ver el tutorial de
                          esta pantalla cuando quiera, no solo la primera vez. -->
-                    <button type="button" class="text-xs font-semibold text-arka-primary hover:text-arka-primary-bright" @click="startFleetTour">
+                    <button type="button" class="shrink-0 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright" @click="startFleetTour">
                         Ver tutorial
                     </button>
                 </div>

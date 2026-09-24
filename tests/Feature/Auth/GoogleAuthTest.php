@@ -40,6 +40,22 @@ class GoogleAuthTest extends TestCase
         Socialite::shouldReceive('driver')->with('google')->andReturn($provider);
     }
 
+    /**
+     * La vuelta a la app para un login móvil ya no es una redirección HTTP
+     * directa al esquema `com.arka01.app://` (ver GoogleAuthController::
+     * mobileReturn() y su docblock: Android/Chrome Custom Tabs puede
+     * ignorarla en silencio) — ahora es una página HTML que navega por
+     * JavaScript. Esto extrae esa URL del `<script>` embebido para poder
+     * seguir probando el código/error que trae, igual que antes.
+     */
+    private function extractMobileReturnUrl($response): string
+    {
+        preg_match('/window\.location\.href\s*=\s*(".*?");/', $response->getContent(), $matches);
+        $this->assertNotEmpty($matches, 'No se encontró la URL de retorno en la página intermedia.');
+
+        return json_decode($matches[1]);
+    }
+
     public function test_redirect_sends_the_visitor_to_google(): void
     {
         $response = $this->get(route('auth.google.redirect'));
@@ -101,8 +117,8 @@ class GoogleAuthTest extends TestCase
 
         $callbackResponse = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
 
-        $location = $callbackResponse->headers->get('Location');
-        $this->assertStringStartsWith('com.arka01.app://auth/google?error=', $location);
+        $callbackResponse->assertOk();
+        $this->assertStringStartsWith('com.arka01.app://auth/google?error=', $this->extractMobileReturnUrl($callbackResponse));
         $this->assertGuest();
         $this->assertSame(0, User::query()->count());
     }
@@ -199,7 +215,8 @@ class GoogleAuthTest extends TestCase
 
         $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
 
-        $location = $callback->headers->get('Location');
+        $callback->assertOk();
+        $location = $this->extractMobileReturnUrl($callback);
         $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $location);
         parse_str(parse_url($location, PHP_URL_QUERY), $query);
 
@@ -241,7 +258,8 @@ class GoogleAuthTest extends TestCase
 
         $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
 
-        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $callback->headers->get('Location'));
+        $callback->assertOk();
+        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $this->extractMobileReturnUrl($callback));
     }
 
     /**
@@ -267,6 +285,7 @@ class GoogleAuthTest extends TestCase
 
         $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
 
-        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $callback->headers->get('Location'));
+        $callback->assertOk();
+        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $this->extractMobileReturnUrl($callback));
     }
 }
