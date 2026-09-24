@@ -50,7 +50,80 @@ class MobileDirectoryTest extends TestCase
             ->assertJsonPath('drivers.0.name', 'Conductor Público');
     }
 
-    /** Mismo filtro que tests\Feature\Directory\DriverDirectoryTest::test_the_directory_can_be_filtered_by_sector(). */
+    /**
+     * Fidelización por puntos (pedido explícito del usuario): un conductor
+     * con plan que habilita el directorio pero sin medalla suficiente (por
+     * debajo de Oro, la semilla de App\Models\DriverTier) no aparece — la
+     * visibilidad ahora también se gana con carreras completadas, no solo se
+     * paga. Cobertura de App\Services\Driver\DriverDirectoryFinder::browse(),
+     * movida acá desde tests\Feature\Directory\DriverDirectoryTest cuando la
+     * web pasó a usar el mapa de "conductores cerca de mí" (nearby()) en vez
+     * de esta lista paginada — browse() lo sigue usando la app móvil tal cual.
+     */
+    public function test_a_driver_below_the_public_eligible_tier_does_not_appear_even_if_public(): void
+    {
+        $viewer = User::factory()->create();
+
+        $belowTier = User::factory()->create(['name' => 'Todavía No Llega']);
+        DriverProfile::factory()->for($belowTier)->create(['is_public' => true, 'total_points' => 100]);
+
+        $atTier = User::factory()->create(['name' => 'Ya Llegó']);
+        DriverProfile::factory()->for($atTier)->create(['is_public' => true, 'total_points' => 500]);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($viewer))
+            ->getJson('/api/v1/directory');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'drivers')
+            ->assertJsonPath('drivers.0.name', 'Ya Llegó');
+    }
+
+    /** Diamante por encima de Oro — mismo criterio de origen que la nota arriba. */
+    public function test_a_diamond_driver_is_listed_before_a_gold_driver(): void
+    {
+        $viewer = User::factory()->create();
+
+        $gold = User::factory()->create(['name' => 'Conductor Oro']);
+        DriverProfile::factory()->for($gold)->create(['is_public' => true, 'total_points' => 500]);
+
+        $diamond = User::factory()->create(['name' => 'Conductor Diamante']);
+        DriverProfile::factory()->for($diamond)->create(['is_public' => true, 'total_points' => 1000]);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($viewer))
+            ->getJson('/api/v1/directory');
+
+        $response->assertOk()
+            ->assertJsonPath('drivers.0.name', 'Conductor Diamante')
+            ->assertJsonPath('drivers.1.name', 'Conductor Oro');
+    }
+
+    /**
+     * Confidencialidad (pedido explícito del usuario): la foto del vehículo
+     * ya no se manda al directorio público — solo el propio conductor y un
+     * admin la ven. El tipo de vehículo (SUV, sedán, etc.) es lo que la
+     * reemplaza acá. Mismo criterio de origen que las dos notas de arriba.
+     */
+    public function test_the_directory_does_not_expose_the_vehicle_photo_and_shows_the_vehicle_type(): void
+    {
+        $viewer = User::factory()->create();
+
+        $driver = User::factory()->create(['name' => 'Conductor Público']);
+        DriverProfile::factory()->for($driver)->create([
+            'is_public' => true,
+            'total_points' => 500,
+            'vehicle_type' => 'suv',
+            'vehicle_photo_path' => 'driver-documents/vehiculo.jpg',
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($viewer))
+            ->getJson('/api/v1/directory');
+
+        $response->assertOk()
+            ->assertJsonMissingPath('drivers.0.vehicle_photo_url')
+            ->assertJsonPath('drivers.0.vehicle_type', 'SUV');
+    }
+
+    /** Filtro por sector declarado (App\Models\DriverProfile::coverageSectors()), solo disponible en esta lista paginada — el mapa web (nearby()) filtra por radio, no por sector. */
     public function test_the_directory_can_be_filtered_by_sector(): void
     {
         $city = City::query()->create(['name' => 'Guayaquil', 'province' => 'Guayas', 'is_active' => true]);

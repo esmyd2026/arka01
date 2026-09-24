@@ -433,6 +433,16 @@ const coverageSectorsForm = useForm({
     sector_ids: [...props.coverageSectorIds],
 });
 
+// Pedido explícito del usuario: elegir la ciudad primero y recién ahí
+// mostrar sus sectores, en vez de las 34 ciudades abiertas de una — arranca
+// en la ciudad de alguno de los sectores ya marcados (si tiene), si no en
+// la primera de la lista.
+const cityWithExistingSector = props.cities.find((city) =>
+    city.sectors.some((sector) => props.coverageSectorIds.includes(sector.id))
+);
+const coverageCityId = ref(cityWithExistingSector?.id ?? props.cities[0]?.id ?? null);
+const coverageCitySectors = computed(() => props.cities.find((city) => city.id === coverageCityId.value)?.sectors ?? []);
+
 function toggleCoverageSector(sectorId) {
     const index = coverageSectorsForm.sector_ids.indexOf(sectorId);
     if (index === -1) coverageSectorsForm.sector_ids.push(sectorId);
@@ -1460,31 +1470,50 @@ const VERIFICATION_LABELS = {
                         <div>
                             <InputLabel value="Zona de trabajo (opcional)" />
                             <p class="mt-1 text-xs text-arka-text-muted">
-                                Marque los sectores donde trabaja — un cliente nuevo podrá buscarlo por sector en el
-                                directorio público, aunque todavía no lo conozca. Puede marcar varios.
+                                Elija su ciudad y marque los sectores donde trabaja — un cliente nuevo podrá
+                                buscarlo por sector en el directorio público, aunque todavía no lo conozca. Puede
+                                marcar sectores de más de una ciudad: cambie la ciudad, marque, y vuelva a guardar.
                             </p>
-                            <div class="mt-2 space-y-3">
-                                <div v-for="city in cities" :key="city.id">
-                                    <p class="text-xs font-semibold uppercase tracking-wide text-arka-text-muted">{{ city.name }}</p>
-                                    <div class="mt-1 flex flex-wrap gap-2">
-                                        <label
-                                            v-for="sector in city.sectors"
-                                            :key="sector.id"
-                                            class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs"
-                                            :class="coverageSectorsForm.sector_ids.includes(sector.id)
-                                                ? 'border-arka-primary bg-arka-primary/10 text-arka-primary'
-                                                : 'border-arka-border text-arka-text-muted'"
-                                        >
-                                            <Checkbox
-                                                :checked="coverageSectorsForm.sector_ids.includes(sector.id)"
-                                                class="sr-only"
-                                                @update:checked="toggleCoverageSector(sector.id)"
-                                            />
-                                            {{ sector.name }}
-                                        </label>
-                                    </div>
-                                </div>
+
+                            <div class="mt-2">
+                                <InputLabel for="coverage_city_id" value="Ciudad" class="text-xs" />
+                                <select
+                                    id="coverage_city_id"
+                                    v-model="coverageCityId"
+                                    class="mt-1 block w-full rounded-arka border-arka-border text-sm sm:w-1/2"
+                                >
+                                    <option v-for="city in cities" :key="city.id" :value="city.id">{{ city.name }}</option>
+                                </select>
                             </div>
+
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <label
+                                    v-for="sector in coverageCitySectors"
+                                    :key="sector.id"
+                                    class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs"
+                                    :class="coverageSectorsForm.sector_ids.includes(sector.id)
+                                        ? 'border-arka-primary bg-arka-primary/10 text-arka-primary'
+                                        : 'border-arka-border text-arka-text-muted'"
+                                >
+                                    <Checkbox
+                                        :checked="coverageSectorsForm.sector_ids.includes(sector.id)"
+                                        class="sr-only"
+                                        @update:checked="toggleCoverageSector(sector.id)"
+                                    />
+                                    {{ sector.name }}
+                                </label>
+                                <p v-if="!coverageCitySectors.length" class="text-xs text-arka-text-muted">
+                                    Todavía no hay sectores cargados para esta ciudad.
+                                </p>
+                            </div>
+
+                            <!-- Resumen de lo marcado en OTRAS ciudades (pedido explícito:
+                                 poder cubrir más de una ciudad sin perder de vista lo ya
+                                 elegido al cambiar el select de arriba). -->
+                            <p v-if="coverageSectorsForm.sector_ids.length" class="mt-2 text-xs text-arka-text-muted">
+                                Total marcado: {{ coverageSectorsForm.sector_ids.length }} sector{{ coverageSectorsForm.sector_ids.length === 1 ? '' : 'es' }}.
+                            </p>
+
                             <InputError class="mt-2" :message="coverageSectorsForm.errors.sector_ids" />
                             <PrimaryButton
                                 class="mt-3"

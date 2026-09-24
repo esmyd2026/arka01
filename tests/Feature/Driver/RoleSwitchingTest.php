@@ -154,6 +154,14 @@ class RoleSwitchingTest extends TestCase
         $this->assertDatabaseMissing('driver_profiles', ['user_id' => $client->id]);
     }
 
+    /**
+     * Pedido explícito del usuario ("imaginate un mapa... de conductores
+     * cercanos"): el directorio público web pasó de ser una lista Inertia a
+     * un mapa que pide los conductores por fetch() a directory.nearby() —
+     * mismo criterio de exclusión, otro endpoint. Con ubicación (no null)
+     * para probar de verdad el filtro de deactivated_at, no solo la falta
+     * de posición en vivo.
+     */
     public function test_a_deactivated_driver_does_not_appear_in_the_public_directory(): void
     {
         $viewer = User::factory()->create();
@@ -162,10 +170,12 @@ class RoleSwitchingTest extends TestCase
             'is_public' => true,
             'total_points' => 1000,
             'deactivated_at' => now(),
+            'current_lat' => -0.1807,
+            'current_lng' => -78.4678,
         ]);
 
-        $response = $this->actingAs($viewer)->get(route('directory.index'));
+        $response = $this->actingAs($viewer)->getJson(route('directory.nearby', ['lat' => -0.1807, 'lng' => -78.4678]));
 
-        $response->assertInertia(fn ($page) => $page->has('drivers.data', 0));
+        $response->assertOk()->assertJsonCount(0, 'drivers');
     }
 }

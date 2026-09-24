@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchDriverProfile, updateDriverProfile, updateCoverageSectors } from '../services/driverProfile';
 import { fetchCities } from '../services/profile';
@@ -44,6 +44,11 @@ const coverageSectorIds = ref([]);
 const coverageSaving = ref(false);
 const coverageSaved = ref(false);
 const coverageError = ref(null);
+// Pedido explícito del usuario: elegir la ciudad primero y recién ahí ver
+// sus sectores, en vez de las 34 ciudades abiertas de una (mismo criterio
+// que la web, Driver/Profile.vue).
+const coverageCityId = ref(null);
+const coverageCitySectors = computed(() => cities.value.find((city) => city.id === coverageCityId.value)?.sectors ?? []);
 
 function toggleCoverageSector(sectorId) {
     const index = coverageSectorIds.value.indexOf(sectorId);
@@ -123,6 +128,11 @@ onMounted(async () => {
 
     try {
         cities.value = await fetchCities();
+        // Arranca en la ciudad de algún sector ya marcado (si tiene), si no en la primera.
+        const cityWithExistingSector = cities.value.find((city) =>
+            city.sectors.some((sector) => coverageSectorIds.value.includes(sector.id))
+        );
+        coverageCityId.value = cityWithExistingSector?.id ?? cities.value[0]?.id ?? null;
     } catch (e) {
         // El selector de zona es un extra: si el catálogo falla, el resto del perfil sigue funcionando.
     }
@@ -218,17 +228,22 @@ async function save() {
                 </div>
                 <label class="mobile-field"><span>Distancia máxima de solicitudes (km, opcional)</span><input v-model="maxRequestDistanceKm" class="mobile-input" type="number" min="1" max="500" /></label>
 
-                <p v-if="cities.length" class="section-hint">Zona de trabajo (opcional): marca los sectores donde sí aceptas carreras. Los clientes podrán encontrarte en el directorio filtrando por sector.</p>
+                <p v-if="cities.length" class="section-hint">Zona de trabajo (opcional): elige tu ciudad y marca los sectores donde sí aceptas carreras. Los clientes podrán encontrarte en el directorio filtrando por sector.</p>
                 <div v-if="cities.length" class="coverage-sectors">
-                    <div v-for="city in cities" :key="city.id" class="coverage-city">
-                        <strong>{{ city.name }}</strong>
-                        <div class="coverage-pills">
-                            <label v-for="sector in city.sectors" :key="sector.id" class="coverage-pill" :class="{ 'is-checked': coverageSectorIds.includes(sector.id) }">
-                                <input type="checkbox" :checked="coverageSectorIds.includes(sector.id)" @change="toggleCoverageSector(sector.id)" />
-                                <span>{{ sector.name }}</span>
-                            </label>
-                        </div>
+                    <label class="mobile-field">
+                        <span>Ciudad</span>
+                        <select v-model="coverageCityId" class="mobile-input">
+                            <option v-for="city in cities" :key="city.id" :value="city.id">{{ city.name }}</option>
+                        </select>
+                    </label>
+                    <div class="coverage-pills">
+                        <label v-for="sector in coverageCitySectors" :key="sector.id" class="coverage-pill" :class="{ 'is-checked': coverageSectorIds.includes(sector.id) }">
+                            <input type="checkbox" :checked="coverageSectorIds.includes(sector.id)" @change="toggleCoverageSector(sector.id)" />
+                            <span>{{ sector.name }}</span>
+                        </label>
+                        <p v-if="!coverageCitySectors.length" class="section-hint" style="margin: 0;">Todavía no hay sectores cargados para esta ciudad.</p>
                     </div>
+                    <p v-if="coverageSectorIds.length" class="section-hint" style="margin: 0;">Total marcado: {{ coverageSectorIds.length }} sector{{ coverageSectorIds.length === 1 ? '' : 'es' }}.</p>
                     <p v-if="coverageError" class="mobile-alert">{{ coverageError }}</p>
                     <p v-if="coverageSaved" class="saved-copy">Zona de trabajo actualizada.</p>
                     <button type="button" class="mobile-button mobile-button--secondary" :disabled="coverageSaving" @click="saveCoverageSectors">
@@ -284,8 +299,6 @@ async function save() {
 .checkbox-field input { width: 1.15rem; height: 1.15rem; accent-color: var(--arka-primary); }
 .amenities-grid { display: grid; gap: .3rem; }
 .coverage-sectors { display: grid; gap: .7rem; }
-.coverage-city { display: grid; gap: .4rem; }
-.coverage-city strong { font-size: .78rem; color: var(--arka-muted); }
 .coverage-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
 .coverage-pill { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .7rem; border-radius: 999px; border: 1px solid rgba(147,173,162,.3); font-size: .76rem; color: var(--arka-text); }
 .coverage-pill input { width: .9rem; height: .9rem; accent-color: var(--arka-primary); }

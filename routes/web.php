@@ -465,6 +465,11 @@ Route::middleware('auth')->group(function () {
     // mayor que compartir un perfil concreto).
     Route::get('/conductores', [DriverDirectoryController::class, 'index'])->name('directory.index');
 
+    // Mapa de "conductores cerca de mí" (pedido explícito del usuario) — JSON
+    // puro, lo llama Directory/Index.vue por fetch() cada vez que cambia el
+    // radio o el centro elegido en el mapa, ver DriverDirectoryController.
+    Route::get('/conductores/cercanos', [DriverDirectoryController::class, 'nearby'])->name('directory.nearby');
+
     // "Mi plan" (sección 7 y 7.5): catálogo, plan vigente y cupo usado, para
     // cada rol por separado — un mismo usuario puede tener un plan de
     // conductor y otro de cliente al mismo tiempo (sección 3.1).

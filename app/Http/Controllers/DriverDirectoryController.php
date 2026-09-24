@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\City;
 use App\Services\Driver\DriverDirectoryFinder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,8 +21,19 @@ class DriverDirectoryController extends Controller
     public function __construct(private readonly DriverDirectoryFinder $directoryFinder) {}
 
     /**
-     * Directorio de conductores públicos (sección 3.4). Ordena por cercanía
-     * si el navegador comparte ubicación, si no por mejor calificados.
+     * Mapa de "conductores cerca de mí" (pedido explícito del usuario:
+     * "imaginate un mapa... casi cubriendo toda la pantalla con la ubicación
+     * actual y una barra arriba que indique el radio... y que vayan
+     * apareciendo los conductores cercanos") — reemplaza a la versión previa
+     * de este mismo directorio (lista + filtro por sector): esa lista sigue
+     * existiendo como servicio (DriverDirectoryFinder::browse(), la sigue
+     * usando la app móvil), pero acá en la web el buscador ahora es el mapa
+     * en vivo, no una lista paginada.
+     *
+     * La carga inicial no trae conductores todavía — el navegador recién
+     * tiene la ubicación DESPUÉS de este render, así que el propio
+     * Directory/Index.vue pide la primera tanda a nearby() ni bien la
+     * consigue (ver ese archivo).
      */
     public function index(Request $request): Response|RedirectResponse
     {
@@ -33,23 +44,38 @@ class DriverDirectoryController extends Controller
             return redirect()->route('dashboard')->with('status', self::SINGLE_ROLE_MESSAGE);
         }
 
-        $data = $this->directoryFinder->browse(
+        return Inertia::render('Directory/Index');
+    }
+
+    /**
+     * JSON puro, no Inertia (pedido explícito del usuario: mover el radio o
+     * arrastrar el mapa tiene que sentirse fluido) — Directory/Index.vue lo
+     * llama por fetch() cada vez que cambia el radio o el centro elegido,
+     * sin recargar la página completa cada vez.
+     */
+    public function nearby(Request $request): JsonResponse
+    {
+        if ($request->user()->isDriver()) {
+            abort(403, self::SINGLE_ROLE_MESSAGE);
+        }
+
+        $validated = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+            'radius_km' => ['nullable', 'numeric', 'min:0.5', 'max:25'],
+        ]);
+
+        $data = $this->directoryFinder->nearby(
             $request->user(),
-            $request->float('lat') ?: null,
-            $request->float('lng') ?: null,
-            (int) $request->input('page', 1),
-            $request->filled('sector_id') ? (int) $request->input('sector_id') : null,
+            (float) $validated['lat'],
+            (float) $validated['lng'],
+            isset($validated['radius_km']) ? (float) $validated['radius_km'] : null,
         );
 
-        return Inertia::render('Directory/Index', [
-            'drivers' => $data['drivers'],
+        return response()->json([
+            'drivers' => $data['drivers']->values(),
             'targetFleetId' => $data['targetFleetId'],
-            // Filtro por sector (pedido explícito del usuario: "el cliente...
-            // pueda ver a los conductores de su sector") — mismo catálogo
-            // de ciudades/sectores que ya usa origen/destino al pedir una
-            // carrera.
-            'cities' => City::query()->where('is_active', true)->with(['sectors' => fn ($q) => $q->where('is_active', true)->orderBy('name')])->orderBy('name')->get(),
-            'selectedSectorId' => $request->filled('sector_id') ? (int) $request->input('sector_id') : null,
+            'radiusKm' => $data['radiusKm'],
         ]);
     }
 }

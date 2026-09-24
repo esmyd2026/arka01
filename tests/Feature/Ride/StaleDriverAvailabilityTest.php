@@ -116,6 +116,12 @@ class StaleDriverAvailabilityTest extends TestCase
         ));
     }
 
+    /**
+     * Pedido explícito del usuario ("imaginate un mapa... de conductores
+     * cercanos"): el directorio público web pasó de ser una lista Inertia a
+     * un mapa que pide los conductores por fetch() a directory.nearby() —
+     * mismo criterio de disponibilidad, otro endpoint.
+     */
     public function test_the_public_directory_shows_a_stale_driver_as_unavailable(): void
     {
         $driver = User::factory()->create();
@@ -126,15 +132,14 @@ class StaleDriverAvailabilityTest extends TestCase
             'is_available' => true,
             'location_updated_at' => now()->subMinutes(5),
             'total_points' => 500,
+            'current_lat' => -0.1807,
+            'current_lng' => -78.4678,
         ]);
 
         $viewer = User::factory()->create();
-        $response = $this->actingAs($viewer)->get(route('directory.index'));
+        $response = $this->actingAs($viewer)->getJson(route('directory.nearby', ['lat' => -0.1807, 'lng' => -78.4678]));
 
-        $response->assertInertia(fn ($page) => $page->where(
-            'drivers.data',
-            fn ($drivers) => collect($drivers)->firstWhere('user_id', $driver->id)['is_available'] === false
-        ));
+        $response->assertOk()->assertJsonPath('drivers.0.is_available', false);
     }
 
     public function test_the_dashboard_fleet_widget_shows_a_stale_driver_as_offline(): void
@@ -239,16 +244,15 @@ class StaleDriverAvailabilityTest extends TestCase
             'is_available' => true,
             'location_updated_at' => now()->subMinutes(5),
             'total_points' => 500,
+            'current_lat' => -0.1807,
+            'current_lng' => -78.4678,
         ]);
         $this->openWhatsAppWindowFor($driver);
 
         $viewer = User::factory()->create();
-        $response = $this->actingAs($viewer)->get(route('directory.index'));
+        $response = $this->actingAs($viewer)->getJson(route('directory.nearby', ['lat' => -0.1807, 'lng' => -78.4678]));
 
-        $response->assertInertia(fn ($page) => $page->where(
-            'drivers.data',
-            fn ($drivers) => collect($drivers)->firstWhere('user_id', $driver->id)['is_available'] === true
-        ));
+        $response->assertOk()->assertJsonPath('drivers.0.is_available', true);
     }
 
     public function test_the_dashboard_fleet_widget_shows_a_stale_but_whatsapp_reachable_driver_as_available(): void

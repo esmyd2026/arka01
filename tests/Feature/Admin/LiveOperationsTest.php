@@ -103,7 +103,18 @@ class LiveOperationsTest extends TestCase
 
         $busy = User::factory()->create(['name' => 'Ocupado']);
         DriverProfile::factory()->for($busy)->create(['current_lat' => -0.1811, 'current_lng' => -78.4681]);
-        Ride::factory()->create(['driver_user_id' => $busy->id, 'status' => 'in_progress']);
+        // Bug real encontrado al depurar este test (flaky): Ride::factory()
+        // crea su propia RideRequest de relleno con estado 'pending' por
+        // defecto (RideRequestFactory) si no se indica una — en producción
+        // eso nunca pasa (RideRequestResponder::accept() deja la solicitud
+        // en 'accepted' al crear la carrera). Esa solicitud fantasma, con
+        // coordenadas al azar de Faker, se colaba en $requests->waitingRequests
+        // y volvía no determinista cuál quedaba en el índice 0.
+        Ride::factory()->create([
+            'driver_user_id' => $busy->id,
+            'status' => 'in_progress',
+            'ride_request_id' => RideRequest::factory()->state(['status' => 'accepted']),
+        ]);
 
         $stale = User::factory()->create(['name' => 'Desconectado']);
         DriverProfile::factory()->for($stale)->create([

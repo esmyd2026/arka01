@@ -2,10 +2,8 @@
 
 namespace Tests\Feature\Directory;
 
-use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
-use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -13,52 +11,38 @@ use Tests\TestCase;
 /**
  * Directorio de conductores públicos (sección 3.4): la red de respaldo
  * cuando nadie de la flota personal está disponible.
+ *
+ * Pedido explícito del usuario ("imaginate un mapa... casi cubriendo toda
+ * la pantalla"): en la web esta pantalla pasó de ser una lista paginada con
+ * filtro por sector a un mapa de "conductores cerca de mí" — el render
+ * inicial de esta página ya no trae datos de conductores (los pide
+ * Directory/Index.vue por fetch() ni bien tiene la ubicación, ver
+ * DriverNearbyMapTest). Lo que este archivo cubría antes (medalla mínima,
+ * orden por medalla, foto de vehículo oculta) sigue siendo responsabilidad
+ * real de App\Services\Driver\DriverDirectoryFinder::browse() — ese método
+ * lo sigue usando la app móvil tal cual, así que esa cobertura se movió a
+ * tests\Feature\Api\V1\MobileDirectoryTest.
  */
 class DriverDirectoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_directory_only_lists_public_drivers(): void
+    public function test_the_map_page_renders_for_a_client(): void
     {
         $viewer = User::factory()->create();
-
-        // total_points suficiente para la medalla Oro (auditoría de
-        // fidelización, pedido explícito del usuario): desde esta pasada, el
-        // directorio también exige haber ganado la medalla marcada como
-        // "aparece en público", no solo tener el plan que lo permite.
-        $publicDriver = User::factory()->create(['name' => 'Conductor Público']);
-        DriverProfile::factory()->for($publicDriver)->create([
-            'is_public' => true,
-            'total_points' => 500,
-            'verification_status' => 'approved',
-            'driver_type' => 'public_transport',
-            'public_category' => 'professional',
-        ]);
-
-        $privateDriver = User::factory()->create(['name' => 'Conductor Privado']);
-        DriverProfile::factory()->for($privateDriver)->create(['is_public' => false]);
 
         $response = $this->actingAs($viewer)->get(route('directory.index'));
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page
-            ->component('Directory/Index')
-            ->has('drivers.data', 1)
-            ->where('drivers.data.0.name', 'Conductor Público')
-            ->where('drivers.data.0.public_category_label', 'Conductor Profesional')
-            ->missing('drivers.data.0.driver_type')
-            ->missing('drivers.data.0.trust_label')
-            ->has('drivers.data.0.trust.score')
-            ->has('drivers.data.0.trust.level')
-        );
+        $response->assertInertia(fn ($page) => $page->component('Directory/Index'));
     }
 
     /**
      * Bug real reportado por el usuario (perfil público de un conductor
      * mostrando la insignia "Cliente"): sin este guard, un conductor que
      * pisara esta pantalla por URL directa terminaba con una flota propia
-     * fantasma (el bloque de abajo la crea sola para armar el botón
-     * "Invitar") — mismo criterio que RideRequestController::create().
+     * fantasma (el botón "Agregar a mi flota" la crea sola) — mismo criterio
+     * que RideRequestController::create().
      */
     public function test_a_driver_is_redirected_and_does_not_get_a_phantom_fleet(): void
     {
@@ -69,87 +53,6 @@ class DriverDirectoryTest extends TestCase
 
         $response->assertRedirect(route('dashboard'));
         $this->assertDatabaseMissing('fleets', ['owner_user_id' => $driver->id]);
-    }
-
-    // Nota: existía acá un test "el conductor no se ve a sí mismo en el
-    // directorio" — quedó imposible de reproducir (y de más) desde que
-    // test_a_driver_is_redirected_and_does_not_get_a_phantom_fleet() cierra
-    // el acceso de un conductor a esta pantalla del todo: ya no puede llegar
-    // a verse ni a sí mismo ni a nadie. El `reject()` de autoexclusión sigue
-    // en el controller como defensa extra, sin un camino real para probarlo.
-
-    /**
-     * Fidelización por puntos (pedido explícito del usuario): un conductor
-     * con plan que habilita el directorio pero sin medalla suficiente (por
-     * debajo de Oro, la semilla de App\Models\DriverTier) no aparece —
-     * la visibilidad ahora también se gana con carreras completadas, no
-     * solo se paga.
-     */
-    public function test_a_driver_below_the_public_eligible_tier_does_not_appear_even_if_public(): void
-    {
-        $viewer = User::factory()->create();
-
-        $belowTier = User::factory()->create(['name' => 'Todavía No Llega']);
-        DriverProfile::factory()->for($belowTier)->create(['is_public' => true, 'total_points' => 100]);
-
-        $atTier = User::factory()->create(['name' => 'Ya Llegó']);
-        DriverProfile::factory()->for($atTier)->create(['is_public' => true, 'total_points' => 500]);
-
-        $response = $this->actingAs($viewer)->get(route('directory.index'));
-
-        $response->assertInertia(fn ($page) => $page
-            ->component('Directory/Index')
-            ->has('drivers.data', 1)
-            ->where('drivers.data.0.name', 'Ya Llegó')
-        );
-    }
-
-    /**
-     * Diamante por encima de Oro (pedido explícito del usuario: "mejoralo
-     * como veas conveniente" — la medalla más alta se ve primero).
-     */
-    public function test_a_diamond_driver_is_listed_before_a_gold_driver(): void
-    {
-        $viewer = User::factory()->create();
-
-        $gold = User::factory()->create(['name' => 'Conductor Oro']);
-        DriverProfile::factory()->for($gold)->create(['is_public' => true, 'total_points' => 500]);
-
-        $diamond = User::factory()->create(['name' => 'Conductor Diamante']);
-        DriverProfile::factory()->for($diamond)->create(['is_public' => true, 'total_points' => 1000]);
-
-        $response = $this->actingAs($viewer)->get(route('directory.index'));
-
-        $response->assertInertia(fn ($page) => $page
-            ->where('drivers.data.0.name', 'Conductor Diamante')
-            ->where('drivers.data.1.name', 'Conductor Oro')
-        );
-    }
-
-    /**
-     * Confidencialidad (pedido explícito del usuario): la foto del vehículo
-     * ya no se manda al directorio público — solo el propio conductor y un
-     * admin la ven. El tipo de vehículo (SUV, sedán, etc.) es lo que la
-     * reemplaza acá.
-     */
-    public function test_the_directory_does_not_expose_the_vehicle_photo_and_shows_the_vehicle_type(): void
-    {
-        $viewer = User::factory()->create();
-
-        $driver = User::factory()->create(['name' => 'Conductor Público']);
-        DriverProfile::factory()->for($driver)->create([
-            'is_public' => true,
-            'total_points' => 500,
-            'vehicle_type' => 'suv',
-            'vehicle_photo_path' => 'driver-documents/vehiculo.jpg',
-        ]);
-
-        $response = $this->actingAs($viewer)->get(route('directory.index'));
-
-        $response->assertInertia(fn ($page) => $page
-            ->missing('drivers.data.0.vehicle_photo_url')
-            ->where('drivers.data.0.vehicle_type', 'SUV')
-        );
     }
 
     public function test_can_invite_a_driver_found_in_the_directory(): void
@@ -171,36 +74,5 @@ class DriverDirectoryTest extends TestCase
             'invited_by' => $client->id,
             'status' => 'pending',
         ]);
-    }
-
-    /**
-     * Pedido explícito del usuario: "el cliente... pueda ver a los
-     * conductores de su sector" — filtro opcional del directorio por la
-     * zona que el conductor declaró cubrir (App\Models\DriverProfile::
-     * coverageSectors()).
-     */
-    public function test_the_directory_can_be_filtered_by_sector(): void
-    {
-        $city = City::query()->create(['name' => 'Guayaquil', 'province' => 'Guayas', 'is_active' => true]);
-        $urdesa = Sector::query()->create(['city_id' => $city->id, 'name' => 'Urdesa', 'is_active' => true]);
-        $alborada = Sector::query()->create(['city_id' => $city->id, 'name' => 'Alborada', 'is_active' => true]);
-
-        $viewer = User::factory()->create();
-
-        $inUrdesa = User::factory()->create(['name' => 'Conductor de Urdesa']);
-        $urdesaProfile = DriverProfile::factory()->for($inUrdesa)->create(['is_public' => true, 'total_points' => 500]);
-        $urdesaProfile->coverageSectors()->attach($urdesa->id);
-
-        $inAlborada = User::factory()->create(['name' => 'Conductor de Alborada']);
-        $alboradaProfile = DriverProfile::factory()->for($inAlborada)->create(['is_public' => true, 'total_points' => 500]);
-        $alboradaProfile->coverageSectors()->attach($alborada->id);
-
-        $response = $this->actingAs($viewer)->get(route('directory.index', ['sector_id' => $urdesa->id]));
-
-        $response->assertInertia(fn ($page) => $page
-            ->has('drivers.data', 1)
-            ->where('drivers.data.0.name', 'Conductor de Urdesa')
-            ->where('selectedSectorId', $urdesa->id)
-        );
     }
 }
