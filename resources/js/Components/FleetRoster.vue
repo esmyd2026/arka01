@@ -251,11 +251,20 @@ onBeforeUnmount(() => {
                      sí (ver FleetController::searchDrivers()). El teléfono sigue
                      sin mostrarse en los resultados, eso no cambió. -->
                 <InputLabel value="Buscar conductor por nombre, apellido, usuario o código" />
-                <!-- Pedido explícito del usuario: volver a ver el tutorial de
-                     esta pantalla cuando quiera, no solo la primera vez. -->
-                <button type="button" class="shrink-0 text-xs font-semibold text-arka-primary hover:text-arka-primary-bright" @click="startFleetTour">
-                    Ver tutorial
-                </button>
+                <div class="flex shrink-0 items-center gap-3">
+                    <!-- Pedido explícito del usuario: un botón bien visible (no
+                         escondido en un mensaje de "no tengo conductores") para
+                         llegar al mapa de "conductores cerca de mí" — nombre
+                         simple que dice lo que hace. -->
+                    <Link :href="route('directory.index')" class="text-xs font-semibold text-arka-primary hover:text-arka-primary-bright">
+                        Conductores cerca de mí
+                    </Link>
+                    <!-- Pedido explícito del usuario: volver a ver el tutorial de
+                         esta pantalla cuando quiera, no solo la primera vez. -->
+                    <button type="button" class="text-xs font-semibold text-arka-primary hover:text-arka-primary-bright" @click="startFleetTour">
+                        Ver tutorial
+                    </button>
+                </div>
             </div>
             <TextInput
                 :id="`fleet-driver-search-${fleet.id}`"
@@ -351,12 +360,10 @@ onBeforeUnmount(() => {
         <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka border border-arka-border">
             <h3 class="text-lg font-medium text-arka-text mb-4">Conductores en su flota</h3>
 
+            <!-- El botón "Conductores cerca de mí" de arriba ya cubre esta salida
+                 siempre visible — acá solo queda la otra (buscar por nombre). -->
             <p v-if="!fleet.active_members?.length" class="text-sm text-arka-text-muted">
-                Todavía no tiene conductores en esta flota. Busque a alguien de confianza arriba para
-                invitarlo, o mire el
-                <Link :href="route('directory.index')" class="text-arka-primary hover:text-arka-primary-bright">
-                    directorio de conductores públicos
-                </Link>.
+                Todavía no tiene conductores en esta flota. Busque a alguien de confianza arriba para invitarlo.
             </p>
 
             <!-- La tarjeta prioriza la decisión del cliente: primero identifica

@@ -6,7 +6,7 @@ import RatingStars from '@/Components/RatingStars.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
-import LeafletFleetMap from '@/Components/LeafletFleetMap.vue';
+import FleetMap from '@/Components/FleetMap.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
@@ -200,13 +200,14 @@ function invite(driver) {
 
                 <!-- Mapa casi a pantalla completa (pedido explícito del usuario) —
                      tocar el mapa reubica el punto de búsqueda ahí mismo. -->
-                <LeafletFleetMap
+                <FleetMap
                     :markers="mapMarkers"
                     :center="searchCenter ?? FALLBACK_CENTER"
                     :zoom="mapZoom"
                     height="60vh"
                     clickable
                     :auto-fit="false"
+                    :dark="false"
                     @map-click="onMapClick"
                 />
 

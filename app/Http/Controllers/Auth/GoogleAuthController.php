@@ -8,6 +8,7 @@ use App\Models\Cooperative;
 use App\Models\User;
 use App\Services\ReferralAttribution;
 use GuzzleHttp\Exception\ClientException;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -29,50 +30,53 @@ class GoogleAuthController extends Controller
 
     public function redirect(Request $request): RedirectResponse
     {
-        $mobile = null;
-
-        if ($request->boolean('mobile')) {
-            $mobile = $request->validate([
-                'device_id' => ['required', 'string', 'max:255'],
-                'platform' => ['required', 'string', 'in:android,ios'],
-                'account_type' => ['nullable', 'string', 'in:cliente,conductor,cooperativa'],
-            ]);
-
-            // La sesión del navegador solo transporta datos no secretos del
-            // dispositivo durante el ida y vuelta de Google.
-            $request->session()->put('mobile_google_auth', $mobile);
+        if (! $request->boolean('mobile')) {
+            return Socialite::driver('google')->redirect();
         }
 
-        $redirect = Socialite::driver('google')->redirect();
+        $mobile = $request->validate([
+            'device_id' => ['required', 'string', 'max:255'],
+            'platform' => ['required', 'string', 'in:android,ios'],
+            'account_type' => ['nullable', 'string', 'in:cliente,conductor,cooperativa'],
+        ]);
 
-        if (is_array($mobile)) {
-            parse_str((string) parse_url($redirect->getTargetUrl(), PHP_URL_QUERY), $googleQuery);
-            $state = $googleQuery['state'] ?? null;
-
-            if (is_string($state) && $state !== '') {
-                // Chrome Custom Tabs puede volver con una cookie de sesión
-                // distinta. El state aleatorio generado por Socialite permite
-                // conservar el contexto móvil sin poner device_id en la URL de
-                // callback ni convertir un acceso web normal en móvil.
-                Cache::put($this->mobileStateCacheKey($state), $mobile, now()->addMinutes(10));
-            }
-        }
-
-        return $redirect;
+        // Bug real reportado por el usuario ("le doy [a Continuar con
+        // Google] y me lleva a la web de arka01, y cuando voy a la app se
+        // queda ahí cargando"): la versión anterior guardaba $mobile en
+        // caché bajo una clave derivada del `state` random de Socialite, y
+        // callback() lo recuperaba con Cache::pull() al volver de Google —
+        // en teoría alcanzaba, pero dependía de que ese valor siguiera
+        // disponible en el mismo caché al volver (vencimiento, un despliegue
+        // en el medio, más de un proceso/servidor sirviendo la app sin
+        // caché compartido). Cualquier fallo ahí hacía que callback() nunca
+        // se enterara de que este login era desde la app — terminaba
+        // logueando al usuario en la web normal (adentro del navegador
+        // embebido) en vez de devolverlo a la app con su código, que es
+        // exactamente el síntoma reportado: la app se queda con el spinner
+        // girando para siempre porque el esquema `com.arka01.app://` nunca
+        // vuelve.
+        //
+        // Ahora $mobile viaja cifrado DENTRO del propio `state` que Google
+        // manda de vuelta intacto — así es como funciona el protocolo
+        // siempre, sin depender de que sobreviva nada del lado del
+        // servidor entre la ida y la vuelta. `stateless()` evita que
+        // Socialite intente además comparar este `state` contra la sesión
+        // (que Chrome Custom Tabs puede devolver con una cookie distinta).
+        return Socialite::driver('google')
+            ->stateless()
+            ->with(['state' => encrypt(['mobile' => $mobile])])
+            ->redirect();
     }
 
     public function callback(Request $request): RedirectResponse
     {
-        $oauthState = $request->string('state')->toString();
-        $mobileFromState = $oauthState !== ''
-            ? Cache::pull($this->mobileStateCacheKey($oauthState))
-            : null;
+        $mobileFromState = $this->decodeMobileState($request->string('state')->toString());
 
         try {
             $googleProvider = Socialite::driver('google');
-            // Solo se omite la comprobación de sesión cuando el state existe
-            // en nuestra caché de un flujo móvil iniciado por este servidor.
-            // Google igual valida el authorization code y devuelve la identidad.
+            // Solo se omite la comprobación de sesión cuando el state trae un
+            // payload móvil válido (ver decodeMobileState()) — Google igual
+            // valida el authorization code y devuelve la identidad real.
             $googleUser = is_array($mobileFromState)
                 ? $googleProvider->stateless()->user()
                 : $googleProvider->user();
@@ -141,9 +145,9 @@ class GoogleAuthController extends Controller
             $user->forceFill(['email_verified_at' => now(), 'profile_name_completed_at' => now()])->save();
         }
 
-        $mobileFromSession = $request->session()->pull('mobile_google_auth');
-        $mobile = is_array($mobileFromState) ? $mobileFromState : $mobileFromSession;
-        if (is_array($mobile)) {
+        if (is_array($mobileFromState)) {
+            $mobile = $mobileFromState;
+
             if ($isNewUser && ($mobile['account_type'] ?? null) === 'conductor') {
                 $user->forceFill(['intends_to_drive' => true])->save();
             }
@@ -208,10 +212,9 @@ class GoogleAuthController extends Controller
      * con Google" de la app girando para siempre — el Custom Tab mostraba
      * el mensaje, pero la app nunca recuperaba el control porque jamás
      * volvía el esquema `com.arka01.app://`. `$mobileFromState` alcanza acá
-     * (viene del caché por `state`, no de la sesión — la sesión del Custom
-     * Tab puede volver distinta, por eso existe ese caché) porque el flujo
-     * móvil siempre usa `stateless()`, así que Socialite nunca depende de
-     * la sesión para validarlo.
+     * ya descifrado del propio `state` (ver decodeMobileState()) porque el
+     * flujo móvil siempre usa `stateless()`, así que Socialite nunca
+     * depende de la sesión para validarlo.
      */
     private function failedGoogleAuth(?array $mobileFromState, string $message): RedirectResponse
     {
@@ -222,8 +225,26 @@ class GoogleAuthController extends Controller
         return redirect()->route('login')->with('status', $message);
     }
 
-    private function mobileStateCacheKey(string $state): string
+    /**
+     * Descifra el payload móvil embebido en `state` por redirect() (ver ahí
+     * el porqué). Un `state` de un login web normal — el random de
+     * Socialite, sin cifrar — simplemente no descifra: DecryptException se
+     * trata como "esto no es un login móvil", no como un error real.
+     *
+     * @return array{device_id: string, platform: string, account_type: ?string}|null
+     */
+    private function decodeMobileState(string $state): ?array
     {
-        return 'mobile-google-oauth-state:'.hash('sha256', $state);
+        if ($state === '') {
+            return null;
+        }
+
+        try {
+            $payload = decrypt($state);
+        } catch (DecryptException) {
+            return null;
+        }
+
+        return is_array($payload) && is_array($payload['mobile'] ?? null) ? $payload['mobile'] : null;
     }
 }

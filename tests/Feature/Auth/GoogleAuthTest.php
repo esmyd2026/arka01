@@ -187,13 +187,17 @@ class GoogleAuthTest extends TestCase
 
     public function test_mobile_google_callback_returns_a_one_time_code_that_the_app_can_exchange(): void
     {
-        $this->fakeGoogleUser('google-mobile', 'mobile@example.com', 'Cuenta Móvil');
-
-        $callback = $this->withSession(['mobile_google_auth' => [
+        $redirect = $this->get(route('auth.google.redirect', [
+            'mobile' => 1,
             'device_id' => 'pixel-test-device',
             'platform' => 'android',
             'account_type' => 'cliente',
-        ]])->get(route('auth.google.callback'));
+        ]));
+        parse_str(parse_url($redirect->headers->get('Location'), PHP_URL_QUERY), $googleQuery);
+
+        $this->fakeGoogleUser('google-mobile', 'mobile@example.com', 'Cuenta Móvil');
+
+        $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
 
         $location = $callback->headers->get('Location');
         $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $location);
@@ -211,6 +215,15 @@ class GoogleAuthTest extends TestCase
         $this->postJson(route('api.v1.auth.google.exchange'), ['code' => $query['code']])->assertUnprocessable();
     }
 
+    /**
+     * Pedido explícito del usuario ("sigue... me lleva a la web de arka01 y
+     * se queda ahí cargando"): antes los datos móviles se guardaban en un
+     * caché server-side asociado al `state`, y una sesión de Chrome Custom
+     * Tabs distinta a la del navegador que arrancó el flujo ya se sabía que
+     * podía perderse. Ahora los datos móviles viajan cifrados DENTRO del
+     * propio `state` que Google siempre devuelve intacto (así funciona el
+     * protocolo) — perder la sesión ya no puede romper nada de esto.
+     */
     public function test_mobile_google_callback_survives_a_lost_browser_session(): void
     {
         $redirect = $this->get(route('auth.google.redirect', [
@@ -222,10 +235,35 @@ class GoogleAuthTest extends TestCase
 
         parse_str(parse_url($redirect->headers->get('Location'), PHP_URL_QUERY), $googleQuery);
         $this->assertNotEmpty($googleQuery['state'] ?? null);
-        $this->assertTrue(Cache::has('mobile-google-oauth-state:'.hash('sha256', $googleQuery['state'])));
 
         Session::flush();
         $this->fakeGoogleUser('google-mobile-state', 'mobile-state@example.com', 'Cuenta Móvil State');
+
+        $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
+
+        $this->assertStringStartsWith('com.arka01.app://auth/google?code=', $callback->headers->get('Location'));
+    }
+
+    /**
+     * Regresión directa del bug reportado: el mecanismo viejo dependía de
+     * que un valor guardado en caché durante redirect() todavía estuviera
+     * ahí al volver de Google — un cache:clear, un redeploy, o más de un
+     * servidor sin caché compartido en el medio rompía el login móvil sin
+     * avisar (terminaba logueando al usuario en la web normal, adentro del
+     * navegador embebido, en vez de devolverlo a la app). Ahora no depende
+     * de nada guardado del lado del servidor entre las dos puntas.
+     */
+    public function test_mobile_google_callback_survives_the_cache_being_cleared(): void
+    {
+        $redirect = $this->get(route('auth.google.redirect', [
+            'mobile' => 1,
+            'device_id' => 'pixel-cache-cleared',
+            'platform' => 'android',
+        ]));
+        parse_str(parse_url($redirect->headers->get('Location'), PHP_URL_QUERY), $googleQuery);
+
+        Cache::flush();
+        $this->fakeGoogleUser('google-cache-cleared', 'cache-cleared@example.com', 'Cache Limpio');
 
         $callback = $this->get(route('auth.google.callback', ['state' => $googleQuery['state']]));
 

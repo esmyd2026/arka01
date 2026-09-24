@@ -212,9 +212,9 @@ const quickLinks = computed(() =>
         },
         {
             route: 'directory.index',
-            label: 'Directorio de conductores',
+            label: 'Conductores cerca de mí',
             clientOnly: true,
-            help: 'Conductores públicos verificados, para cuando nadie de su flota está disponible. Desde acá también puede invitarlos a Mis Flotas.',
+            help: 'Mapa en vivo de conductores públicos cerca de su ubicación, para cuando nadie de su flota está disponible. Desde acá también puede invitarlos a Mis Flotas.',
         },
         {
             route: 'express-routes.index',

@@ -2334,6 +2334,21 @@ function submit() {
                         </PrimaryButton>
                     </div>
 
+                    <!-- Pedido explícito del usuario: un botón bien visible (no
+                         escondido en un mensaje de "no tengo conductores") para
+                         llegar al mapa de "conductores cerca de mí" — nombre
+                         simple que dice lo que hace. -->
+                    <a
+                        :href="route('directory.index')"
+                        class="inline-flex items-center gap-1.5 text-sm font-medium text-arka-primary hover:text-arka-primary-bright"
+                    >
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-7.1 7-12a7 7 0 1 0-14 0c0 4.9 7 12 7 12Z" />
+                            <circle cx="12" cy="9" r="2.5" stroke-linecap="round" />
+                        </svg>
+                        Ver conductores cerca de mí
+                    </a>
+
                     <!-- Pedido explícito del usuario: "que arriba me salga un mensaje
                          para comenzar a pedir carreras debes tener conductores
                          agregados a tu flota o cooperativas" — arriba de las
@@ -2640,12 +2655,11 @@ function submit() {
                         </template>
                     </div>
 
+                    <!-- El botón "Ver conductores cerca de mí" de arriba ya cubre este
+                         caso siempre visible — acá solo queda la otra salida (Mi Flota). -->
                     <p v-if="!categoryCounts.fleet && !categoryCounts.cooperative && !categoryCounts.public" class="text-sm text-arka-ink/50 py-2">
                         Todavía no tiene conductores acá.
-                        <a :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">Vaya a Mi Flota para invitar a alguno</a>
-                        o mire el
-                        <a :href="route('directory.index')" class="text-arka-primary hover:text-arka-primary-bright">directorio público</a>
-                        (sección 3.4: la red de respaldo cuando nadie de su flota está disponible).
+                        <a :href="route('fleet.index')" class="text-arka-primary hover:text-arka-primary-bright">Vaya a Mi Flota para invitar a alguno</a>.
                     </p>
                 </div>
 
