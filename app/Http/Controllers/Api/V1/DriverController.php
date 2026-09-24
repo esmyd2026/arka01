@@ -7,6 +7,7 @@ use App\Http\Resources\Api\V1\DriverProfileResource;
 use App\Http\Resources\Api\V1\DriverStatusResource;
 use App\Models\DriverProfile;
 use App\Services\Driver\DriverAvailabilityUpdater;
+use App\Services\Driver\DriverCoverageSectorsUpdater;
 use App\Services\Driver\DriverProfileUpdater;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class DriverController extends Controller
     public function __construct(
         private readonly DriverAvailabilityUpdater $availabilityUpdater,
         private readonly DriverProfileUpdater $driverProfileUpdater,
+        private readonly DriverCoverageSectorsUpdater $coverageSectorsUpdater,
     ) {}
 
     public function status(Request $request): JsonResponse
@@ -90,6 +92,22 @@ class DriverController extends Controller
         $profile = $this->driverProfileUpdater->update($request);
 
         return response()->json(['profile' => new DriverProfileResource($profile->fresh())]);
+    }
+
+    /** Zona de trabajo por sector (pedido explícito del usuario) — mismo criterio que DriverProfileController::updateCoverageSectors() (web). */
+    public function updateCoverageSectors(Request $request): JsonResponse
+    {
+        $driverProfile = $request->user()->driverProfile;
+        abort_unless($driverProfile, 404);
+
+        $validated = $request->validate([
+            'sector_ids' => ['sometimes', 'array'],
+            'sector_ids.*' => ['integer'],
+        ]);
+
+        $this->coverageSectorsUpdater->update($driverProfile, $validated['sector_ids'] ?? []);
+
+        return response()->json(['profile' => new DriverProfileResource($driverProfile->fresh())]);
     }
 
     /** "Pasarme a cliente" — pausa el perfil de conductor sin borrar nada. */

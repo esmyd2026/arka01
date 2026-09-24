@@ -1,7 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { fetchDriverProfile, updateDriverProfile } from '../services/driverProfile';
+import { fetchDriverProfile, updateDriverProfile, updateCoverageSectors } from '../services/driverProfile';
+import { fetchCities } from '../services/profile';
 import { getStoredUser } from '../services/auth';
 import MobileShell from '../components/MobileShell.vue';
 
@@ -34,6 +35,39 @@ const acceptsTransfer = ref(true);
 const hasInsurance = ref(false);
 const isPublic = ref(false);
 const profilePublic = ref(true);
+
+// "Zona de trabajo" (pedido explícito del usuario: "que los conductores
+// puedan indicar la zona de trabajo") — formulario aparte del resto del
+// perfil, mismo criterio que la web (Driver/Profile.vue::coverageSectorsForm).
+const cities = ref([]);
+const coverageSectorIds = ref([]);
+const coverageSaving = ref(false);
+const coverageSaved = ref(false);
+const coverageError = ref(null);
+
+function toggleCoverageSector(sectorId) {
+    const index = coverageSectorIds.value.indexOf(sectorId);
+    if (index === -1) {
+        coverageSectorIds.value.push(sectorId);
+    } else {
+        coverageSectorIds.value.splice(index, 1);
+    }
+}
+
+async function saveCoverageSectors() {
+    coverageSaving.value = true;
+    coverageSaved.value = false;
+    coverageError.value = null;
+    try {
+        const updated = await updateCoverageSectors(coverageSectorIds.value);
+        coverageSectorIds.value = updated.coverage_sector_ids || [];
+        coverageSaved.value = true;
+    } catch (e) {
+        coverageError.value = e.message || 'No se pudo actualizar la zona de trabajo.';
+    } finally {
+        coverageSaving.value = false;
+    }
+}
 
 const countryCode = ref('+593');
 const phoneLocal = ref('');
@@ -80,10 +114,17 @@ onMounted(async () => {
         vehicleTypes.value = data.vehicle_types;
         vehicleAmenities.value = data.vehicle_amenities;
         fillFromProfile(data.profile);
+        coverageSectorIds.value = data.profile?.coverage_sector_ids || [];
     } catch (e) {
         error.value = e.message || 'No se pudo cargar el perfil de conductor.';
     } finally {
         loading.value = false;
+    }
+
+    try {
+        cities.value = await fetchCities();
+    } catch (e) {
+        // El selector de zona es un extra: si el catálogo falla, el resto del perfil sigue funcionando.
     }
 });
 
@@ -176,6 +217,25 @@ async function save() {
                     <label class="mobile-field"><span>Tarifa mínima ($)</span><input v-model="minimumFare" class="mobile-input" type="number" step="0.01" min="0" /></label>
                 </div>
                 <label class="mobile-field"><span>Distancia máxima de solicitudes (km, opcional)</span><input v-model="maxRequestDistanceKm" class="mobile-input" type="number" min="1" max="500" /></label>
+
+                <p v-if="cities.length" class="section-hint">Zona de trabajo (opcional): marca los sectores donde sí aceptas carreras. Los clientes podrán encontrarte en el directorio filtrando por sector.</p>
+                <div v-if="cities.length" class="coverage-sectors">
+                    <div v-for="city in cities" :key="city.id" class="coverage-city">
+                        <strong>{{ city.name }}</strong>
+                        <div class="coverage-pills">
+                            <label v-for="sector in city.sectors" :key="sector.id" class="coverage-pill" :class="{ 'is-checked': coverageSectorIds.includes(sector.id) }">
+                                <input type="checkbox" :checked="coverageSectorIds.includes(sector.id)" @change="toggleCoverageSector(sector.id)" />
+                                <span>{{ sector.name }}</span>
+                            </label>
+                        </div>
+                    </div>
+                    <p v-if="coverageError" class="mobile-alert">{{ coverageError }}</p>
+                    <p v-if="coverageSaved" class="saved-copy">Zona de trabajo actualizada.</p>
+                    <button type="button" class="mobile-button mobile-button--secondary" :disabled="coverageSaving" @click="saveCoverageSectors">
+                        {{ coverageSaving ? 'Guardando…' : 'Guardar zona de trabajo' }}
+                    </button>
+                </div>
+
                 <label class="checkbox-field"><input v-model="acceptsCash" type="checkbox" /><span>Acepta efectivo</span></label>
                 <label class="checkbox-field"><input v-model="acceptsTransfer" type="checkbox" /><span>Acepta transferencia</span></label>
                 <label class="checkbox-field"><input v-model="hasInsurance" type="checkbox" /><span>Cuenta con seguro (representante, pasajeros y vehículo)</span></label>
@@ -223,6 +283,13 @@ async function save() {
 .checkbox-field { display: flex; align-items: center; gap: .55rem; min-height: 2.4rem; font-size: .85rem; color: var(--arka-text); }
 .checkbox-field input { width: 1.15rem; height: 1.15rem; accent-color: var(--arka-primary); }
 .amenities-grid { display: grid; gap: .3rem; }
+.coverage-sectors { display: grid; gap: .7rem; }
+.coverage-city { display: grid; gap: .4rem; }
+.coverage-city strong { font-size: .78rem; color: var(--arka-muted); }
+.coverage-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
+.coverage-pill { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .7rem; border-radius: 999px; border: 1px solid rgba(147,173,162,.3); font-size: .76rem; color: var(--arka-text); }
+.coverage-pill input { width: .9rem; height: .9rem; accent-color: var(--arka-primary); }
+.coverage-pill.is-checked { border-color: var(--arka-primary); background: var(--arka-primary-soft); color: var(--arka-primary); font-weight: 700; }
 .phone { display: grid; grid-template-columns: 6rem 1fr; gap: .5rem; }
 .document-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .6rem 0; border-bottom: 1px solid rgba(147,173,162,.1); }
 .document-info { display: grid; gap: .1rem; }

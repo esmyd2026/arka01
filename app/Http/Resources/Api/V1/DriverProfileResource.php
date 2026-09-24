@@ -32,6 +32,9 @@ class DriverProfileResource extends JsonResource
             'rate_per_km' => $this->rate_per_km !== null ? (float) $this->rate_per_km : null,
             'minimum_fare' => $this->minimum_fare !== null ? (float) $this->minimum_fare : null,
             'max_request_distance_km' => $this->max_request_distance_km,
+            // Zona de cobertura por sector (pedido explícito del usuario) —
+            // ver App\Models\DriverProfile::coverageSectors().
+            'coverage_sector_ids' => $this->coverageSectors()->pluck('sectors.id'),
             'accepts_cash' => (bool) $this->accepts_cash,
             'accepts_transfer' => (bool) $this->accepts_transfer,
             'has_insurance' => (bool) $this->has_insurance,

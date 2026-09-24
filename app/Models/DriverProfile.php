@@ -7,6 +7,7 @@ use App\Services\Haversine;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -157,6 +158,17 @@ class DriverProfile extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Zona de cobertura por sector con nombre (pedido explícito del
+     * usuario: "que los conductores puedan indicar la zona de trabajo").
+     * Vacío significa "sin zona declarada todavía" — no se interpreta como
+     * "no cubre ningún sector" en ningún filtro (ver DriverDirectoryFinder).
+     */
+    public function coverageSectors(): BelongsToMany
+    {
+        return $this->belongsToMany(Sector::class);
     }
 
     public function getLicensePhotoUrlAttribute(): ?string

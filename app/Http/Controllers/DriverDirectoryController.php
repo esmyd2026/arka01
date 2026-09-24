@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\City;
 use App\Services\Driver\DriverDirectoryFinder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,11 +38,18 @@ class DriverDirectoryController extends Controller
             $request->float('lat') ?: null,
             $request->float('lng') ?: null,
             (int) $request->input('page', 1),
+            $request->filled('sector_id') ? (int) $request->input('sector_id') : null,
         );
 
         return Inertia::render('Directory/Index', [
             'drivers' => $data['drivers'],
             'targetFleetId' => $data['targetFleetId'],
+            // Filtro por sector (pedido explícito del usuario: "el cliente...
+            // pueda ver a los conductores de su sector") — mismo catálogo
+            // de ciudades/sectores que ya usa origen/destino al pedir una
+            // carrera.
+            'cities' => City::query()->where('is_active', true)->with(['sectors' => fn ($q) => $q->where('is_active', true)->orderBy('name')])->orderBy('name')->get(),
+            'selectedSectorId' => $request->filled('sector_id') ? (int) $request->input('sector_id') : null,
         ]);
     }
 }

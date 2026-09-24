@@ -58,3 +58,28 @@ export async function updateDriverProfile(fields, files = {}) {
 
     return data.profile;
 }
+
+// "Zona de trabajo" declarada por el conductor (sectores con nombre, no
+// hexágonos/radio — decisión tomada con el usuario). Va en un endpoint
+// aparte de updateDriverProfile() porque es un dato pequeño e independiente
+// (App\Services\Driver\DriverCoverageSectorsUpdater), mismo criterio que
+// bankAccountForm en la web (Driver/Profile.vue).
+export async function updateCoverageSectors(sectorIds) {
+    const form = new FormData();
+    sectorIds.forEach((id) => form.append('sector_ids[]', id));
+
+    const token = await getToken();
+    const response = await fetch(`${API_BASE_URL}/api/v1/driver/profile/coverage-sectors`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+        body: form,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        const firstError = data.errors ? Object.values(data.errors)[0]?.[0] : null;
+        throw new Error(firstError || data.message || 'No se pudo actualizar la zona de trabajo.');
+    }
+
+    return data.profile;
+}

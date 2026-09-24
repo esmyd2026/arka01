@@ -138,6 +138,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         Route::post('/driver/profile', [DriverController::class, 'updateProfile'])
             ->middleware('throttle:10,1,api.driver.profile.update')
             ->name('driver.profile.update');
+        Route::post('/driver/profile/coverage-sectors', [DriverController::class, 'updateCoverageSectors'])->name('driver.profile.coverage-sectors');
         Route::post('/driver/profile/deactivate', [DriverController::class, 'deactivate'])->name('driver.profile.deactivate');
         Route::post('/driver/profile/reactivate', [DriverController::class, 'reactivate'])->name('driver.profile.reactivate');
         // Mismo controlador que la web (App\Http\Controllers\DriverProfileController):

@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Directory;
 
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\Fleet;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -169,5 +171,36 @@ class DriverDirectoryTest extends TestCase
             'invited_by' => $client->id,
             'status' => 'pending',
         ]);
+    }
+
+    /**
+     * Pedido explícito del usuario: "el cliente... pueda ver a los
+     * conductores de su sector" — filtro opcional del directorio por la
+     * zona que el conductor declaró cubrir (App\Models\DriverProfile::
+     * coverageSectors()).
+     */
+    public function test_the_directory_can_be_filtered_by_sector(): void
+    {
+        $city = City::query()->create(['name' => 'Guayaquil', 'province' => 'Guayas', 'is_active' => true]);
+        $urdesa = Sector::query()->create(['city_id' => $city->id, 'name' => 'Urdesa', 'is_active' => true]);
+        $alborada = Sector::query()->create(['city_id' => $city->id, 'name' => 'Alborada', 'is_active' => true]);
+
+        $viewer = User::factory()->create();
+
+        $inUrdesa = User::factory()->create(['name' => 'Conductor de Urdesa']);
+        $urdesaProfile = DriverProfile::factory()->for($inUrdesa)->create(['is_public' => true, 'total_points' => 500]);
+        $urdesaProfile->coverageSectors()->attach($urdesa->id);
+
+        $inAlborada = User::factory()->create(['name' => 'Conductor de Alborada']);
+        $alboradaProfile = DriverProfile::factory()->for($inAlborada)->create(['is_public' => true, 'total_points' => 500]);
+        $alboradaProfile->coverageSectors()->attach($alborada->id);
+
+        $response = $this->actingAs($viewer)->get(route('directory.index', ['sector_id' => $urdesa->id]));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('drivers.data', 1)
+            ->where('drivers.data.0.name', 'Conductor de Urdesa')
+            ->where('selectedSectorId', $urdesa->id)
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\City;
 use App\Models\CooperativeDriverMembership;
 use App\Models\CooperativeWalletEntry;
 use App\Models\DriverBankAccount;
@@ -9,6 +10,7 @@ use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\PricingSetting;
 use App\Models\User;
+use App\Services\Driver\DriverCoverageSectorsUpdater;
 use App\Services\Driver\DriverProfileUpdater;
 use App\Services\DriverVerificationRequirementRegistry;
 use App\Services\PlanLimits;
@@ -28,6 +30,7 @@ class DriverProfileController extends Controller
     public function __construct(
         private readonly PlanLimits $planLimits,
         private readonly DriverProfileUpdater $driverProfileUpdater,
+        private readonly DriverCoverageSectorsUpdater $coverageSectorsUpdater,
     ) {}
 
     /**
@@ -128,6 +131,11 @@ class DriverProfileController extends Controller
             // cédula se enmascara).
             'bankAccounts' => $user->bankAccounts()->get(),
             'banks' => DriverBankAccount::banks(),
+            // Zona de cobertura por sector (pedido explícito del usuario):
+            // mismo catálogo de ciudades/sectores que ya usa origen/destino
+            // al pedir una carrera — ver App\Models\DriverProfile::coverageSectors().
+            'cities' => City::query()->where('is_active', true)->with(['sectors' => fn ($q) => $q->where('is_active', true)->orderBy('name')])->orderBy('name')->get(),
+            'coverageSectorIds' => $user->driverProfile?->coverageSectors()->pluck('sectors.id') ?? [],
         ]);
     }
 
@@ -152,6 +160,28 @@ class DriverProfileController extends Controller
      * cuenta pasa a operar como cliente de inmediato (User::isDriver() da
      * false en cuanto se guarda esto).
      */
+    /**
+     * "Zona de trabajo" del conductor (pedido explícito del usuario: "que
+     * los conductores puedan indicar la zona de trabajo", para que el
+     * cliente pueda ver a los conductores de su sector en el directorio).
+     * Guarda el conjunto completo cada vez (reemplaza, no acumula) — mismo
+     * criterio que un selector de checkboxes en la pantalla.
+     */
+    public function updateCoverageSectors(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user->driverProfile, 404);
+
+        $validated = $request->validate([
+            'sector_ids' => ['sometimes', 'array'],
+            'sector_ids.*' => ['integer'],
+        ]);
+
+        $this->coverageSectorsUpdater->update($user->driverProfile, $validated['sector_ids'] ?? []);
+
+        return back()->with('status', 'Zona de cobertura actualizada.');
+    }
+
     public function deactivate(Request $request): RedirectResponse
     {
         $this->driverProfileUpdater->deactivate($request->user());

@@ -87,6 +87,10 @@ const props = defineProps({
     // opción de la lista.
     banks: { type: Array, default: () => [] },
     reviewCount: { type: Number, required: true },
+    // Zona de trabajo por sector (pedido explícito del usuario) — mismo
+    // catálogo de ciudades/sectores que origen/destino al pedir una carrera.
+    cities: { type: Array, default: () => [] },
+    coverageSectorIds: { type: Array, default: () => [] },
 });
 
 // "Mi cooperativa" (pedido explícito del usuario): mismo prop compartido
@@ -419,6 +423,24 @@ function submitBankAccount() {
 
 function markBankAccountFavorite(account) {
     router.patch(route('driver.bank-accounts.favorite', account.id), {}, { preserveScroll: true });
+}
+
+// Zona de trabajo por sector (pedido explícito del usuario): form propio,
+// aparte del principal, porque postea a un endpoint distinto
+// (DriverProfileController::updateCoverageSectors()) — mismo criterio que
+// bankAccountForm arriba, un ajuste chico e independiente del resto.
+const coverageSectorsForm = useForm({
+    sector_ids: [...props.coverageSectorIds],
+});
+
+function toggleCoverageSector(sectorId) {
+    const index = coverageSectorsForm.sector_ids.indexOf(sectorId);
+    if (index === -1) coverageSectorsForm.sector_ids.push(sectorId);
+    else coverageSectorsForm.sector_ids.splice(index, 1);
+}
+
+function submitCoverageSectors() {
+    coverageSectorsForm.post(route('driver.profile.coverage-sectors'), { preserveScroll: true });
 }
 
 function deleteBankAccount(account) {
@@ -1426,6 +1448,52 @@ const VERIFICATION_LABELS = {
                                 afuera si superan este límite.
                             </p>
                             <InputError class="mt-2" :message="form.errors.max_request_distance_km" />
+                        </div>
+
+                        <!-- Zona de trabajo por sector (pedido explícito del usuario:
+                             "que los conductores puedan indicar la zona de trabajo",
+                             para que un cliente nuevo pueda encontrarlo buscando por
+                             sector en el directorio). Distinto del límite de arriba:
+                             ese es dinámico desde la ubicación actual; esto es una
+                             declaración fija de en qué zonas trabaja, para que lo
+                             descubran aunque todavía no le haya pedido nada nadie. -->
+                        <div>
+                            <InputLabel value="Zona de trabajo (opcional)" />
+                            <p class="mt-1 text-xs text-arka-text-muted">
+                                Marque los sectores donde trabaja — un cliente nuevo podrá buscarlo por sector en el
+                                directorio público, aunque todavía no lo conozca. Puede marcar varios.
+                            </p>
+                            <div class="mt-2 space-y-3">
+                                <div v-for="city in cities" :key="city.id">
+                                    <p class="text-xs font-semibold uppercase tracking-wide text-arka-text-muted">{{ city.name }}</p>
+                                    <div class="mt-1 flex flex-wrap gap-2">
+                                        <label
+                                            v-for="sector in city.sectors"
+                                            :key="sector.id"
+                                            class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs"
+                                            :class="coverageSectorsForm.sector_ids.includes(sector.id)
+                                                ? 'border-arka-primary bg-arka-primary/10 text-arka-primary'
+                                                : 'border-arka-border text-arka-text-muted'"
+                                        >
+                                            <Checkbox
+                                                :checked="coverageSectorsForm.sector_ids.includes(sector.id)"
+                                                class="sr-only"
+                                                @update:checked="toggleCoverageSector(sector.id)"
+                                            />
+                                            {{ sector.name }}
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <InputError class="mt-2" :message="coverageSectorsForm.errors.sector_ids" />
+                            <PrimaryButton
+                                class="mt-3"
+                                type="button"
+                                :disabled="coverageSectorsForm.processing"
+                                @click="submitCoverageSectors"
+                            >
+                                {{ coverageSectorsForm.processing ? 'Guardando…' : 'Guardar zona de trabajo' }}
+                            </PrimaryButton>
                         </div>
 
                         <!-- Cargo por distancia de recogida (pedido explícito del

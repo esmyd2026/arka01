@@ -34,7 +34,7 @@ class DriverDirectoryFinder
     /**
      * @return array{drivers: LengthAwarePaginator, targetFleetId: int}
      */
-    public function browse(User $client, ?float $lat, ?float $lng, int $page): array
+    public function browse(User $client, ?float $lat, ?float $lng, int $page, ?int $sectorId = null): array
     {
         $page = max(1, $page);
 
@@ -43,7 +43,13 @@ class DriverDirectoryFinder
             ->where('verification_status', '!=', 'rejected')
             ->whereNull('suspended_at')
             ->whereNull('deactivated_at')
-            ->with('user.cooperativeDriverMemberships.cooperative')
+            // Filtro por sector (pedido explícito del usuario: "el cliente...
+            // pueda ver a los conductores de su sector") — solo se aplica
+            // cuando el cliente elige uno; sin filtro, todos los públicos
+            // siguen apareciendo como siempre (ver coverageSectors(), vacío
+            // por defecto para un conductor que todavía no declaró zona).
+            ->when($sectorId, fn ($query) => $query->whereHas('coverageSectors', fn ($q) => $q->where('sectors.id', $sectorId)))
+            ->with(['user.cooperativeDriverMemberships.cooperative', 'coverageSectors'])
             ->get();
 
         $userIds = $driverProfiles->pluck('user_id');
@@ -112,6 +118,10 @@ class DriverDirectoryFinder
                         'public_id' => $cooperative->public_id,
                         'name' => $cooperative->name,
                     ] : null,
+                    // Zona de cobertura (pedido explícito del usuario): para
+                    // que el cliente vea, aunque no haya filtrado por
+                    // sector, en qué zonas dice trabajar este conductor.
+                    'coverage_sectors' => $profile->coverageSectors->map(fn ($sector) => ['id' => $sector->id, 'name' => $sector->name])->values(),
                     'clients_count' => (int) ($clientCounts[$profile->user_id] ?? 0),
                     'tier' => DriverTier::forPoints($profile->total_points)->toBadge(),
                     'status' => match (true) {

@@ -30,6 +30,7 @@ class DriverDirectoryController extends Controller
             $request->float('lat') ?: null,
             $request->float('lng') ?: null,
             (int) $request->input('page', 1),
+            $request->filled('sector_id') ? (int) $request->input('sector_id') : null,
         );
 
         return response()->json([

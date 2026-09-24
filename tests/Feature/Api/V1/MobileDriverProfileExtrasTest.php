@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Models\City;
 use App\Models\DriverProfile;
 use App\Models\Ride;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -109,5 +111,20 @@ class MobileDriverProfileExtrasTest extends TestCase
     public function test_it_requires_a_token(): void
     {
         $this->postJson('/api/v1/driver/profile/deactivate')->assertUnauthorized();
+    }
+
+    /** Mismo criterio que tests\Feature\Driver\DriverCoverageSectorsTest (web) — ambos canales comparten App\Services\Driver\DriverCoverageSectorsUpdater. */
+    public function test_a_driver_can_set_their_coverage_sectors(): void
+    {
+        $driver = User::factory()->create();
+        $profile = DriverProfile::factory()->for($driver)->create();
+        $city = City::query()->create(['name' => 'Guayaquil', 'province' => 'Guayas', 'is_active' => true]);
+        $sector = Sector::query()->create(['city_id' => $city->id, 'name' => 'Urdesa', 'is_active' => true]);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($driver))
+            ->postJson('/api/v1/driver/profile/coverage-sectors', ['sector_ids' => [$sector->id]]);
+
+        $response->assertOk()->assertJsonPath('profile.coverage_sector_ids', [$sector->id]);
+        $this->assertSame([$sector->id], $profile->coverageSectors()->pluck('sectors.id')->all());
     }
 }

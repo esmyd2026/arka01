@@ -12,7 +12,20 @@ import { etaMinutes } from '@/Utils/eta';
 const props = defineProps({
     drivers: { type: Object, required: true },
     targetFleetId: { type: Number, required: true },
+    // Filtro por sector (pedido explícito del usuario: "el cliente... pueda
+    // ver a los conductores de su sector") — mismo catálogo de ciudades/
+    // sectores que origen/destino al pedir una carrera.
+    cities: { type: Array, default: () => [] },
+    selectedSectorId: { type: Number, default: null },
 });
+
+function filterBySector(event) {
+    const sectorId = event.target.value || null;
+    router.get(route('directory.index'), sectorId ? { sector_id: sectorId } : {}, {
+        preserveScroll: true,
+        preserveState: true,
+    });
+}
 
 // Pedido explícito del usuario: "Pedir una carrera" es una acción del lado
 // cliente.
@@ -60,6 +73,23 @@ function invite(driver) {
                     3.4). Si la experiencia es buena, invítelo a su flota de confianza.
                 </p>
 
+                <!-- Filtro por sector (pedido explícito del usuario: "el cliente...
+                     pueda ver a los conductores de su sector"). -->
+                <div v-if="cities.length" class="flex items-center gap-2">
+                    <label for="sector_id" class="text-xs font-medium text-arka-text-muted">Filtrar por sector</label>
+                    <select
+                        id="sector_id"
+                        class="rounded-arka border-arka-border text-sm text-arka-text focus:border-arka-primary focus:ring-arka-primary"
+                        :value="selectedSectorId ?? ''"
+                        @change="filterBySector"
+                    >
+                        <option value="">Todos los sectores</option>
+                        <optgroup v-for="city in cities" :key="city.id" :label="city.name">
+                            <option v-for="sector in city.sectors" :key="sector.id" :value="sector.id">{{ sector.name }}</option>
+                        </optgroup>
+                    </select>
+                </div>
+
                 <!-- Estado vacío con CTA claro, no una pantalla en blanco (sección 9.10) -->
                 <div v-if="!drivers.data.length" class="p-6 bg-arka-card shadow rounded-arka text-center">
                     <p class="text-arka-text-muted">Todavía no hay conductores públicos para mostrar.</p>
@@ -100,6 +130,9 @@ function invite(driver) {
                                     Afiliado a <Link :href="route('cooperatives.show', driver.cooperative.public_id)" class="text-arka-primary hover:underline">{{ driver.cooperative.name }}</Link>
                                 </p>
                                 <p class="mt-1 text-xs text-arka-text-muted">{{ driver.clients_count }} cliente{{ driver.clients_count === 1 ? '' : 's' }} lo tienen agregado</p>
+                                <p v-if="driver.coverage_sectors?.length" class="mt-1 text-xs text-arka-text-muted">
+                                    Trabaja en: {{ driver.coverage_sectors.map((s) => s.name).join(', ') }}
+                                </p>
                                 <p class="mt-1 text-sm text-arka-text-muted">
                                     ${{ driver.rate_per_km }}/km
                                     <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>

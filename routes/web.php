@@ -303,6 +303,9 @@ Route::middleware('auth')->group(function () {
     // "Convertirme en conductor" / editar mi perfil de conductor (sección 9.5-B).
     Route::get('/driver/profile', [DriverProfileController::class, 'edit'])->name('driver.profile.edit');
     Route::post('/driver/profile', [DriverProfileController::class, 'update'])->name('driver.profile.update');
+    // Zona de cobertura por sector (pedido explícito del usuario) — ver
+    // DriverProfileController::updateCoverageSectors().
+    Route::post('/driver/profile/zona-de-cobertura', [DriverProfileController::class, 'updateCoverageSectors'])->name('driver.profile.coverage-sectors');
     // Auditoría de seguridad: la foto de licencia vive en disco privado —
     // este endpoint la sirve solo al propio conductor o a un admin (ver
     // DriverProfileController::licensePhoto()).
