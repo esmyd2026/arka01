@@ -21,6 +21,8 @@ import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import { canInstallApp, installApp } from '@/pwaInstall';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { startGuidedTour } from '@/Utils/guidedTour';
+import { buildCountryCodeOptions } from '@/Utils/countries';
+import { formatCurrency } from '@/Utils/currency';
 
 // Pedido explícito del usuario: mostrar una lista de colores para elegir en
 // vez de obligar a escribirlo a mano (evita variantes como "blanco"/"Blanco
@@ -49,6 +51,11 @@ const props = defineProps({
     // declarado, que es el que se valida contra el que usa para conectarse.
     currentPhone: { type: String, default: null },
     phoneVerified: { type: Boolean, default: false },
+    // Catálogo de países administrable desde /admin/paises (pedido
+    // explícito del usuario: "arka01 debe funcionar en cualquier país") —
+    // antes esta lista era fija en el código, ahora sale de
+    // App\Models\Country::active().
+    countries: { type: Array, required: true },
     // Medallas por puntos (pedido explícito del usuario): carreras
     // completadas por la app suman puntos, que suben de medalla — a partir
     // de cierta medalla (hoy Oro) aparece en el directorio público.
@@ -111,19 +118,28 @@ onMounted(() => {
     }
 });
 
-// Misma lista que RegisteredUserController::COUNTRY_CODES. shortLabel (ver
-// SearchableSelect.vue): bug real reportado por el usuario, el selector con
-// el nombre del país entero le dejaba casi nada de ancho al campo del
-// número en móvil, que quedaba aplastado.
-const countryCodes = [
-    { code: '+593', label: '🇪🇨 +593 Ecuador', shortLabel: '🇪🇨 +593' },
-    { code: '+51', label: '🇵🇪 +51 Perú', shortLabel: '🇵🇪 +51' },
-    { code: '+57', label: '🇨🇴 +57 Colombia', shortLabel: '🇨🇴 +57' },
-    { code: '+58', label: '🇻🇪 +58 Venezuela', shortLabel: '🇻🇪 +58' },
-    { code: '+56', label: '🇨🇱 +56 Chile', shortLabel: '🇨🇱 +56' },
-    { code: '+54', label: '🇦🇷 +54 Argentina', shortLabel: '🇦🇷 +54' },
-];
-const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.label, shortLabel: c.shortLabel }));
+// shortLabel (ver SearchableSelect.vue): bug real reportado por el usuario,
+// el selector con el nombre del país entero le dejaba casi nada de ancho al
+// campo del número en móvil, que quedaba aplastado.
+const countryCodeOptions = computed(() => buildCountryCodeOptions(props.countries));
+
+// Moneda del propio país del conductor (pedido explícito del usuario:
+// "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2) fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
+
+function countryFor(countryCode) {
+    return props.countries.find((c) => c.phone_prefix === countryCode) ?? null;
+}
+
+// El selector arranca en el país del teléfono YA declarado (si lo hay,
+// buscando el prefijo más largo primero para no confundir '+5' con '+56'),
+// y si no en el predeterminado del sistema — nunca fijo en Ecuador.
+const defaultCountryCode = (
+    [...props.countries].sort((a, b) => b.phone_prefix.length - a.phone_prefix.length)
+        .find((c) => props.currentPhone?.startsWith(c.phone_prefix))
+    ?? props.countries.find((c) => c.is_default)
+    ?? props.countries[0]
+)?.phone_prefix ?? '';
 
 const whatsappOptInUrl = buildWhatsAppOptInUrl(props.whatsappBusinessNumber, usePage().props.auth.user.id);
 
@@ -182,7 +198,7 @@ const whatsappInviteUrl = computed(() => {
 const form = useForm({
     // Cambio de número de WhatsApp (pedido explícito del usuario): en blanco
     // por defecto — el backend no toca el teléfono actual si no se completa.
-    country_code: '+593',
+    country_code: defaultCountryCode,
     phone_local: '',
     vehicle_make: props.driverProfile?.vehicle_make ?? '',
     vehicle_model: props.driverProfile?.vehicle_model ?? '',
@@ -893,7 +909,7 @@ const VERIFICATION_LABELS = {
                                 />
                             </div>
                             <p class="mt-1 text-xs text-arka-text-muted">
-                                <template v-if="form.country_code === '+593'">9 dígitos, empieza en 9 — </template>
+                                <template v-if="countryFor(form.country_code)?.phone_format_hint">{{ countryFor(form.country_code).phone_format_hint }} — </template>
                                 Sin el 0 inicial ni espacios. Si lo cambia, va a tener que verificarlo de nuevo por
                                 WhatsApp.
                             </p>
@@ -1380,7 +1396,7 @@ const VERIFICATION_LABELS = {
                                 <span class="min-w-0 flex-1">
                                     <span class="block font-semibold text-arka-text">5. Tarifas y forma de trabajo</span>
                                     <span class="mt-0.5 block text-xs text-arka-text-muted">
-                                        {{ form.rate_per_km !== '' ? `$${Number(form.rate_per_km).toFixed(2)}/km` : 'Tarifa pendiente' }} · {{ form.max_request_distance_km ? `${form.max_request_distance_km} km de cobertura` : 'Sin límite de cobertura' }}
+                                        {{ form.rate_per_km !== '' ? `${money(form.rate_per_km)}/km` : 'Tarifa pendiente' }} · {{ form.max_request_distance_km ? `${form.max_request_distance_km} km de cobertura` : 'Sin límite de cobertura' }}
                                     </span>
                                 </span>
                                 <svg class="h-5 w-5 shrink-0 text-arka-text-muted transition-transform" :class="activeProfileSection === 'work' ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1431,7 +1447,7 @@ const VERIFICATION_LABELS = {
                                      tope general — puede poner una MENOR, esa sí se respeta
                                      en el cálculo del precio (ver PriceCalculator). -->
                                 <p class="mt-1 text-xs text-arka-text-muted">
-                                    No puede superar ${{ platformMinimumFare.toFixed(2) }} (tope de la plataforma). Si la deja en blanco, se usa ese tope.
+                                    No puede superar {{ money(platformMinimumFare) }} (tope de la plataforma). Si la deja en blanco, se usa ese tope.
                                 </p>
                                 <InputError class="mt-2" :message="form.errors.minimum_fare" />
                             </div>
@@ -1686,8 +1702,8 @@ const VERIFICATION_LABELS = {
                         <div v-if="cooperativeWallet && cooperativeWallet.balance !== 0" class="p-3 rounded-arka" :class="cooperativeWallet.balance > 0 ? 'bg-arka-warning/10' : 'bg-arka-primary/10'">
                             <p class="text-sm font-medium" :class="cooperativeWallet.balance > 0 ? 'text-arka-warning' : 'text-arka-primary'">
                                 {{ cooperativeWallet.balance > 0
-                                    ? `Le debe $${cooperativeWallet.balance.toFixed(2)} a ${cooperativeWallet.cooperative_name}`
-                                    : `${cooperativeWallet.cooperative_name} le debe $${Math.abs(cooperativeWallet.balance).toFixed(2)}` }}
+                                    ? `Le debe ${money(cooperativeWallet.balance)} a ${cooperativeWallet.cooperative_name}`
+                                    : `${cooperativeWallet.cooperative_name} le debe ${money(Math.abs(cooperativeWallet.balance))}` }}
                             </p>
                             <p class="mt-1 text-xs text-arka-text-muted">
                                 {{ cooperativeWallet.balance > 0

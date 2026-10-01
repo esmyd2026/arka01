@@ -1,6 +1,7 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
 
 const props = defineProps({
     ride: { type: Object, required: true },
@@ -39,8 +40,11 @@ function formatDate(value) {
     return new Date(value).toLocaleString('es-EC', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Moneda DE LA CARRERA mostrada, no la del admin que la está mirando
+// (pedido explícito del usuario: "arka01 debe funcionar en cualquier
+// país") — ver Admin\RideController::show().
 function money(value) {
-    return `$${Number(value ?? 0).toFixed(2)}`;
+    return formatCurrency(value, props.ride.country);
 }
 
 // Línea de tiempo de la carrera: solo se muestran los pasos que de verdad

@@ -11,6 +11,12 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { pushIncomingRideRequest } from '@/Utils/incomingRideRequest';
 import { waitingMessage as sharedWaitingMessage, secondsLeft as sharedSecondsLeft } from '@/Utils/rideWaitingMessage';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 const props = defineProps({
     pendingRequestsAsClient: { type: Array, required: true },
@@ -595,7 +601,7 @@ function confirmRaiseOffer(id) {
                                                  aparecer") — el dato ya venía del backend, solo faltaba
                                                  pintarlo acá. -->
                                             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">
-                                                Parada {{ stop.sequence ?? index + 1 }}<span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span><span v-if="stop.leg_price != null"> · ${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                                Parada {{ stop.sequence ?? index + 1 }}<span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span><span v-if="stop.leg_price != null"> · {{ money(stop.leg_price) }}</span>
                                             </p>
                                             <p class="mt-0.5 text-sm font-semibold leading-snug text-arka-text">{{ stop.address || 'Parada marcada en el mapa' }}</p>
                                         </div>
@@ -621,7 +627,7 @@ function confirmRaiseOffer(id) {
                                  solo el tramo final — sin sumar stops_price, la "Oferta" que
                                  veía el propio cliente no coincidía con lo que el conductor
                                  termina viendo (ya corregido) ni con el total real. -->
-                            <div class="shrink-0 text-right"><p class="text-[10px] text-arka-text-muted">Oferta</p><p class="font-bold text-arka-primary">${{ (Number(activeImmediateRequest.current_offered_price) + Number(activeImmediateRequest.stops_price ?? 0)).toFixed(2) }}</p></div>
+                            <div class="shrink-0 text-right"><p class="text-[10px] text-arka-text-muted">Oferta</p><p class="font-bold text-arka-primary">{{ money(Number(activeImmediateRequest.current_offered_price) + Number(activeImmediateRequest.stops_price ?? 0)) }}</p></div>
                         </div>
 
                         <button type="button" class="mx-auto mt-4 flex min-h-11 items-center gap-2 rounded-full border border-arka-danger/25 px-5 text-sm font-semibold text-arka-danger transition hover:bg-arka-danger/10" @click="cancelRequest(activeImmediateRequest.id)">
@@ -765,7 +771,7 @@ function confirmRaiseOffer(id) {
                                          conductor igual"): current_offered_price es solo el tramo
                                          final — sin sumar stops_price, el conductor veía menos de
                                          lo que en realidad le corresponde por todo el recorrido. -->
-                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">${{ Number(r.driver_total_offered_price ?? r.total_offered_price ?? r.current_offered_price).toFixed(2) }}</p>
+                                    <p class="mt-0.5 text-2xl font-bold text-arka-primary-bright">{{ money(r.driver_total_offered_price ?? r.total_offered_price ?? r.current_offered_price) }}</p>
                                     <p class="mt-1 text-[11px] font-medium text-arka-primary">
                                         {{ r.is_cooperative_request ? 'Carrera asignada por tu cooperativa' : 'Cliente privado' }}
                                     </p>
@@ -791,10 +797,10 @@ function confirmRaiseOffer(id) {
                                     :class="Number(r.offer_comparison.difference) >= 0 ? 'text-arka-primary-bright' : 'text-arka-warning'"
                                 >
                                     <template v-if="Number(r.offer_comparison.difference) > 0">
-                                        +${{ Number(r.offer_comparison.difference).toFixed(2) }} sobre su tarifa estimada
+                                        +{{ money(r.offer_comparison.difference) }} sobre su tarifa estimada
                                     </template>
                                     <template v-else-if="Number(r.offer_comparison.difference) < 0">
-                                        -${{ Math.abs(Number(r.offer_comparison.difference)).toFixed(2) }} por debajo de su tarifa estimada
+                                        -{{ money(Math.abs(Number(r.offer_comparison.difference))) }} por debajo de su tarifa estimada
                                     </template>
                                     <template v-else>Coincide con su tarifa estimada</template>
                                 </p>
@@ -867,10 +873,10 @@ function confirmRaiseOffer(id) {
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-primary">Pago acordado por la cooperativa</p>
                                     <div class="mt-2 flex items-end justify-between gap-3">
                                         <p class="text-sm text-arka-text-muted">
-                                            <span v-if="r.cooperative_driver_rate_per_km">Tarifa conductor: ${{ Number(r.cooperative_driver_rate_per_km).toFixed(2) }}/km</span>
+                                            <span v-if="r.cooperative_driver_rate_per_km">Tarifa conductor: {{ money(r.cooperative_driver_rate_per_km) }}/km</span>
                                             <span v-else>Valor calculado según el reparto configurado</span>
                                         </p>
-                                        <p class="text-xl font-bold text-arka-primary-bright">${{ Number(r.driver_total_offered_price).toFixed(2) }}</p>
+                                        <p class="text-xl font-bold text-arka-primary-bright">{{ money(r.driver_total_offered_price) }}</p>
                                     </div>
                                     <p class="mt-2 text-xs text-arka-text-muted">El margen de la cooperativa no se presenta como parte de su ganancia.</p>
                                 </div>
@@ -878,15 +884,15 @@ function confirmRaiseOffer(id) {
                                     <p class="text-xs font-semibold uppercase tracking-wider text-arka-text-muted">Desglose de tu ganancia</p>
                                     <div class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Origen → destino · {{ Number(r.distance_km).toFixed(1) }} km</span>
-                                        <span class="text-arka-text font-medium">${{ (Number(r.current_offered_price) - Number(r.pickup_fare ?? 0)).toFixed(2) }}</span>
+                                        <span class="text-arka-text font-medium">{{ money(Number(r.current_offered_price) - Number(r.pickup_fare ?? 0)) }}</span>
                                     </div>
                                     <div v-if="r.route_padding_fare != null" class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Margen fijo de ruta · {{ Number(r.route_padding_km).toFixed(1) }} km (ya incluido arriba)</span>
-                                        <span class="text-arka-text font-medium">${{ Number(r.route_padding_fare).toFixed(2) }}</span>
+                                        <span class="text-arka-text font-medium">{{ money(r.route_padding_fare) }}</span>
                                     </div>
                                     <div v-if="r.pickup_distance_km != null" class="flex items-center justify-between text-sm">
                                         <span class="text-arka-text-muted">Recogida · {{ Number(r.pickup_distance_km).toFixed(1) }} km (ya incluida arriba)</span>
-                                        <span class="text-arka-text font-medium">${{ Number(r.pickup_fare).toFixed(2) }}</span>
+                                        <span class="text-arka-text font-medium">{{ money(r.pickup_fare) }}</span>
                                     </div>
                                     <!-- Bug real reportado por el usuario: antes las paradas ni
                                          aparecían acá — el conductor aceptaba sin saber que el
@@ -894,7 +900,7 @@ function confirmRaiseOffer(id) {
                                     <template v-if="r.stops?.length">
                                         <div v-for="stop in r.stops" :key="stop.sequence" class="flex items-center justify-between text-sm">
                                             <span class="text-arka-text-muted truncate pr-2">Parada {{ stop.sequence }} · {{ stop.address ?? 'sin referencia' }}{{ stop.leg_distance_km != null ? ` · ${Number(stop.leg_distance_km).toFixed(1)} km` : '' }}</span>
-                                            <span class="shrink-0 text-arka-text font-medium">${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                            <span class="shrink-0 text-arka-text font-medium">{{ money(stop.leg_price) }}</span>
                                         </div>
                                     </template>
                                 </div>
@@ -936,7 +942,7 @@ function confirmRaiseOffer(id) {
                                     {{ r.driver ? r.driver.name : 'Toda la flota disponible' }}
                                 </span>
                                 <span class="text-sm text-arka-text-muted">
-                                    ${{ Number(r.current_offered_price).toFixed(2) }}
+                                    {{ money(r.current_offered_price) }}
                                 </span>
                             </div>
 
@@ -1068,7 +1074,7 @@ function confirmRaiseOffer(id) {
                                     </span>
                                     <span class="block text-xs text-arka-text-muted mt-0.5">{{ formatHistoryDate(ride.occurred_at) }}</span>
                                 </span>
-                                <span class="text-arka-text font-semibold shrink-0">${{ ride.price.toFixed(2) }}</span>
+                                <span class="text-arka-text font-semibold shrink-0">{{ money(ride.price) }}</span>
                             </Link>
                         </li>
                     </ul>

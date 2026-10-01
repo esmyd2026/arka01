@@ -57,7 +57,7 @@ export const ADMIN_NAV_GROUPS = [
         items: [
             { route: 'admin.subscriptions.index', match: 'admin.subscriptions.*', label: 'Suscripciones' },
             { route: 'admin.plans.index', match: 'admin.plans.*', label: 'Planes' },
-            { route: 'admin.pricing.edit', match: 'admin.pricing.*', label: 'Tarifas' },
+            { route: 'admin.pricing.index', match: 'admin.pricing.*', label: 'Tarifas' },
             { route: 'admin.plan-promotions.index', match: 'admin.plan-promotions.*', label: 'Promociones' },
             { route: 'admin.plan-coupons.index', match: 'admin.plan-coupons.*', label: 'Cupones de planes' },
             { route: 'admin.coupons.index', match: 'admin.coupons.*', label: 'Beneficios para usuarios' },
@@ -96,6 +96,7 @@ export const ADMIN_NAV_GROUPS = [
             { route: 'admin.system.index', match: 'admin.system.*', label: 'Configuración general' },
             { route: 'admin.integrations.whatsapp.edit', match: 'admin.integrations.*', label: 'Integración de WhatsApp' },
             { route: 'admin.locations.index', match: 'admin.locations.*', label: 'Zonas y cobertura' },
+            { route: 'admin.countries.index', match: 'admin.countries.*', label: 'Países' },
             { route: 'admin.rating-reasons.index', match: 'admin.rating-reasons.*', label: 'Reglas de calificación' },
         ],
     },

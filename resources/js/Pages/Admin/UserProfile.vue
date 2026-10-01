@@ -12,9 +12,13 @@ import InputLabel from '@/Components/InputLabel.vue';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { formatCurrency } from '@/Utils/currency';
 
 const props = defineProps({
     profileUser: { type: Object, required: true },
+    // País DE ESTE USUARIO, no el del admin (pedido explícito del usuario:
+    // "arka01 debe funcionar en cualquier país") — ver UserProfileController::show().
+    country: { type: Object, required: true },
     driverPlan: { type: Object, default: null },
     driverTier: { type: Object, default: null },
     clientPlan: { type: Object, default: null },
@@ -395,7 +399,7 @@ function formatMessageTime(value) {
                             <span v-if="profileUser.driver_profile.has_trunk"> · con cajuela</span>
                         </dd>
                         <dt class="text-arka-text-muted">Tarifa</dt>
-                        <dd class="text-arka-text">${{ profileUser.driver_profile.rate_per_km }}/km</dd>
+                        <dd class="text-arka-text">{{ formatCurrency(profileUser.driver_profile.rate_per_km, country) }}/km</dd>
                         <dt class="text-arka-text-muted">Disponible ahora</dt>
                         <dd class="text-arka-text">{{ profileUser.driver_profile.is_available ? 'Sí' : 'No' }}</dd>
                         <dt class="text-arka-text-muted">Directorio público</dt>
@@ -584,7 +588,7 @@ function formatMessageTime(value) {
                             </p>
                             <p class="text-xs text-arka-text-muted">
                                 {{ formatRideDate(ride.started_at || ride.created_at) }}
-                                <span v-if="ride.price != null"> · ${{ ride.price.toFixed(2) }}</span>
+                                <span v-if="ride.price != null"> · {{ formatCurrency(ride.price, country) }}</span>
                                 <span v-if="ride.distance_km != null"> · {{ ride.distance_km.toFixed(1) }} km</span>
                             </p>
                         </li>

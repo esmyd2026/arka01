@@ -2,7 +2,7 @@
 
 namespace App\Services\Driver;
 
-use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\PricingSetting;
 use App\Models\Ride;
@@ -83,7 +83,15 @@ class DriverProfileUpdater
         // PriceCalculator::suggestedPrice()), pero no una mayor — si no, un
         // conductor podría inflar el piso de sus carreras por encima de lo
         // que el admin definió como base general.
-        $adminMinimumFare = (float) PricingSetting::current()->minimum_fare;
+        //
+        // Bug reportado por el usuario: antes esto leía SIEMPRE la fila
+        // global de Ecuador, así que un tope puesto en dólares (ej. 3) le
+        // rechazaba el registro a un conductor en Chile, que necesita
+        // declarar miles de pesos. Ahora se usa la fila de tarifas DEL PAÍS
+        // del conductor (derivado de su propio teléfono, ver User::country()) —
+        // si su teléfono no matchea ningún país activo (dato viejo), cae al
+        // país predeterminado del sistema, mismo comportamiento que antes.
+        $adminMinimumFare = (float) PricingSetting::forCountry($user->country() ?? Country::default())->minimum_fare;
 
         // Pedido explícito del usuario: si escribe el 0 inicial (ej.
         // "0988492339"), se lo quitamos solo en vez de rechazarlo.
@@ -97,7 +105,7 @@ class DriverProfileUpdater
             // desde el que escribe por WhatsApp (WhatsAppWebhookController) y
             // al que le llegan los avisos de carrera nueva. Opcional: si lo
             // deja en blanco, no se toca lo que ya tenía.
-            'country_code' => ['nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'country_code' => ['nullable', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
             'driver_type' => ['sometimes', 'required', 'string', Rule::in(['independent', 'public_transport'])],
             // Datos del vehículo, TODOS obligatorios (pedido explícito del

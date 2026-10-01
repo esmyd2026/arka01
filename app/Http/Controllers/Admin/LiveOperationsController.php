@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\Ride;
 use App\Models\RideRequest;
@@ -157,6 +158,10 @@ class LiveOperationsController extends Controller
             'price' => $request->current_offered_price !== null
                 ? round((float) $request->current_offered_price + (float) ($request->stops_price ?? 0), 2)
                 : null,
+            // País DE ESTA SOLICITUD (pedido explícito del usuario: "arka01
+            // debe funcionar en cualquier país") — por fila, un listado en
+            // vivo puede mezclar países.
+            'country' => (Country::forPhone($request->client->phone) ?? Country::default())->publicPayload(),
             'is_scheduled' => (bool) $request->is_scheduled,
             'scheduled_at' => $request->scheduled_at?->toIso8601String(),
             'requested_at' => $request->requested_at?->toIso8601String(),
@@ -208,6 +213,9 @@ class LiveOperationsController extends Controller
             'destination_lng' => (float) $ride->destination_lng,
             'distance_km' => $ride->distance_km !== null ? (float) $ride->distance_km : null,
             'price' => $ride->price !== null ? (float) $ride->price : null,
+            // País DE ESTA CARRERA (pedido explícito del usuario: "arka01
+            // debe funcionar en cualquier país") — por fila.
+            'country' => (Country::forPhone($ride->client->phone) ?? Country::default())->publicPayload(),
             'started_at' => $ride->started_at?->toIso8601String(),
         ];
     }

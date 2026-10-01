@@ -9,6 +9,12 @@ import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del cliente logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — el directorio
+// busca por cercanía (lat/lng), así que casi siempre es el mismo país.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 // Quito, de respaldo hasta que el navegador entregue la ubicación real o el
 // cliente toque el mapa (mismo centro por defecto que el resto de la app).
@@ -269,7 +275,7 @@ function invite(driver) {
                                     Zona de trabajo no declarada — aparece por su ubicación actual.
                                 </p>
                                 <p class="mt-1 text-sm text-arka-text-muted">
-                                    ${{ driver.rate_per_km }}/km
+                                    {{ money(driver.rate_per_km) }}/km
                                     <span v-if="driver.vehicle_type"> · {{ driver.vehicle_type }}</span>
                                     <span v-if="driver.distance_km != null"> · a {{ driver.distance_km.toFixed(1) }} km</span>
                                     <span v-if="!driver.is_available"> · no disponible ahora</span>

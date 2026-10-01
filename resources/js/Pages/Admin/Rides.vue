@@ -6,6 +6,7 @@ import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
+import { formatCurrency } from '@/Utils/currency';
 
 const props = defineProps({
     rides: { type: Object, required: true },
@@ -113,7 +114,7 @@ async function destroyRide(ride) {
                                         {{ ride.origin_address ?? '—' }} → {{ ride.destination_address ?? '—' }}
                                     </td>
                                     <td class="py-2 pr-3 font-medium" :class="STATUS_CLASS[ride.status]">{{ STATUS_LABEL[ride.status] ?? ride.status }}</td>
-                                    <td class="py-2 pr-3 text-arka-text">${{ ride.price.toFixed(2) }}</td>
+                                    <td class="py-2 pr-3 text-arka-text">{{ formatCurrency(ride.price, ride.country) }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ formatDate(ride.created_at) }}</td>
                                     <td class="py-2">
                                         <DangerButton size="sm" @click.stop="destroyRide(ride)">Eliminar</DangerButton>

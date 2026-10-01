@@ -9,7 +9,13 @@ import InputError from '@/Components/InputError.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { distanceKm } from '@/Utils/haversine';
 import { fetchOsrmRoute } from '@/Utils/osrmRoute';
 
@@ -228,7 +234,7 @@ function submit() {
                                     {{ trip.reserved_seats_count ?? 0 }}/{{ trip.total_seats }} asientos reservados
                                 </p>
                             </div>
-                            <span class="text-sm text-arka-text-muted shrink-0">${{ trip.price_per_seat }}/asiento</span>
+                            <span class="text-sm text-arka-text-muted shrink-0">{{ money(trip.price_per_seat) }}/asiento</span>
                         </Link>
                     </li>
                 </ul>
@@ -334,9 +340,9 @@ function submit() {
                                 Distancia aproximada entre los puntos marcados: <strong>{{ estimatedDistanceKm.toFixed(1) }} km</strong>
                             </p>
                             <p v-if="estimatedTotalCost != null" class="text-sm text-arka-text-muted">
-                                A su tarifa (${{ Number(driverRatePerKm).toFixed(2) }}/km): costo aproximado del viaje completo
-                                <strong class="text-arka-text">${{ estimatedTotalCost.toFixed(2) }}</strong>
-                                <span v-if="estimatedPerSeat != null"> — con {{ form.total_seats }} asiento(s), ~${{ estimatedPerSeat.toFixed(2) }}/asiento.</span>
+                                A su tarifa ({{ money(driverRatePerKm) }}/km): costo aproximado del viaje completo
+                                <strong class="text-arka-text">{{ money(estimatedTotalCost) }}</strong>
+                                <span v-if="estimatedPerSeat != null"> — con {{ form.total_seats }} asiento(s), ~{{ money(estimatedPerSeat) }}/asiento.</span>
                             </p>
                             <p v-else class="text-xs text-arka-text-muted">
                                 Active su perfil de conductor con una tarifa por km para ver acá un costo aproximado sugerido.

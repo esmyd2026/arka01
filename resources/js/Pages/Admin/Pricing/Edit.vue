@@ -4,9 +4,10 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps({
+    country: { type: Object, required: true },
     settings: { type: Object, required: true },
 });
 
@@ -23,52 +24,56 @@ const form = useForm({
     pickup_surcharge_percent: props.settings.pickup_surcharge_percent,
     minimum_fare: props.settings.minimum_fare,
     average_ticket_price: props.settings.average_ticket_price,
-    driver_stale_after_minutes: props.settings.driver_stale_after_minutes,
 });
 
 const submit = () => {
-    form.patch(route('admin.pricing.update'));
+    form.patch(route('admin.pricing.update', props.country.id));
 };
 </script>
 
 <template>
-    <Head title="Admin · Tarifas" />
+    <Head :title="`Admin · Tarifas · ${country.name}`" />
 
-    <AdminLayout title="Cálculo de precio sugerido">
+    <AdminLayout :title="`Cálculo de precio sugerido — ${country.name}`">
         <div class="py-12">
             <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <Link :href="route('admin.pricing.index')" class="text-sm text-arka-primary hover:text-arka-primary-bright">
+                    ← Todos los países
+                </Link>
+
                 <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka">
                     <p class="text-sm text-arka-text-muted mb-6">
                         Precio sugerido = distancia × tarifa del conductor, más un recargo cuando la carrera se pide
                         dentro del horario nocturno o de hora pico (sección 5) — nunca los dos juntos, solo uno a la
-                        vez. Esto se aplica a toda la plataforma — no hace falta tocar código para ajustarlo.
+                        vez. Esto se aplica a todos los conductores de {{ country.name }}, en {{ country.currency_code }}
+                        — no hace falta tocar código para ajustarlo.
                     </p>
 
                     <form @submit.prevent="submit" class="space-y-4">
                         <div>
-                            <InputLabel value="Tarifa base mínima (USD)" />
+                            <InputLabel :value="`Tarifa base mínima (${country.currency_code})`" />
                             <TextInput
                                 type="number"
-                                step="0.01"
+                                :step="1 / 10 ** country.decimal_digits"
                                 min="0"
-                                max="100"
                                 class="mt-1 block w-full"
                                 v-model="form.minimum_fare"
                             />
                             <p class="mt-1 text-xs text-arka-text-muted">
                                 Si distancia × tarifa del conductor da menos que esto, se cobra este mínimo — evita
-                                carreras cortas que no le convienen al conductor por los km.
+                                carreras cortas que no le convienen al conductor por los km. También es el tope que no
+                                puede superar la tarifa mínima que cada conductor de este país declara en su propio
+                                perfil.
                             </p>
                             <InputError class="mt-1" :message="form.errors.minimum_fare" />
                         </div>
 
                         <div>
-                            <InputLabel value="Ticket promedio por carrera (USD)" />
+                            <InputLabel :value="`Ticket promedio por carrera (${country.currency_code})`" />
                             <TextInput
                                 type="number"
-                                step="0.01"
+                                :step="1 / 10 ** country.decimal_digits"
                                 min="0"
-                                max="1000"
                                 class="mt-1 block w-full"
                                 v-model="form.average_ticket_price"
                             />
@@ -188,28 +193,11 @@ const submit = () => {
                                 v-model="form.pickup_surcharge_percent"
                             />
                             <p class="mt-1 text-xs text-arka-text-muted">
-                                Ejemplo: conductor a $0.30/km, 8 km hasta el cliente, 55% → 8 × 0.30 × 0.55 = $1.32.
-                                El conductor ve este desglose al recibir la solicitud y decide si lo cobra al cliente.
+                                Ejemplo: conductor a {{ country.currency_symbol }}0.30/km, 8 km hasta el cliente, 55% →
+                                8 × 0.30 × 0.55 = {{ country.currency_symbol }}1.32. El conductor ve este desglose al
+                                recibir la solicitud y decide si lo cobra al cliente.
                             </p>
                             <InputError class="mt-1" :message="form.errors.pickup_surcharge_percent" />
-                        </div>
-
-                        <div class="pt-2 border-t border-arka-border">
-                            <InputLabel value="Minutos sin ubicación antes de marcar a un conductor desconectado" />
-                            <TextInput
-                                type="number"
-                                min="1"
-                                max="60"
-                                class="mt-1 block w-full"
-                                v-model="form.driver_stale_after_minutes"
-                            />
-                            <p class="mt-1 text-xs text-arka-text-muted">
-                                Un conductor "disponible" sin un ping de ubicación más reciente que esto se muestra
-                                desconectado (roster de sus clientes, despacho de carreras) — salvo que siga
-                                alcanzable por WhatsApp. El barrido automático que lo desconecta de verdad en la base
-                                sigue corriendo cada 2 min sin importar este valor.
-                            </p>
-                            <InputError class="mt-1" :message="form.errors.driver_stale_after_minutes" />
                         </div>
 
                         <div class="flex items-center gap-4">

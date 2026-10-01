@@ -3,6 +3,8 @@ import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { Geolocation } from '@capacitor/geolocation';
 import { fetchIncomingRideRequests, acceptRideRequest, rejectRideRequest } from '../services/rides';
+import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 import MobileMap from '../components/MobileMap.vue';
 
@@ -14,6 +16,10 @@ const error = ref(null);
 const actingId = ref(null);
 const selectedRequest = ref(null);
 const driverPosition = ref(null);
+// Moneda del propio país del conductor logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const userCountry = ref(null);
+const money = (value) => formatCurrency(value, userCountry.value);
 
 let pollTimer = null;
 
@@ -43,6 +49,7 @@ function schedulePoll() {
 }
 
 onMounted(async () => {
+    userCountry.value = (await getStoredUser())?.country ?? null;
     try {
         const permission = await Geolocation.checkPermissions();
         if (permission.location === 'granted' || permission.coarseLocation === 'granted') {
@@ -103,7 +110,7 @@ async function reject(request) {
 
             <ul class="requests">
                 <li v-for="request in requests" :key="request.id" class="request mobile-card" :class="{ selected: selectedRequest?.id === request.id }" @click="selectedRequest = request">
-                    <div class="request-label"><span>{{ request.is_directed ? 'Solicitud directa' : 'Carrera disponible' }}</span><strong>${{ request.current_offered_price }}</strong></div>
+                    <div class="request-label"><span>{{ request.is_directed ? 'Solicitud directa' : 'Carrera disponible' }}</span><strong>{{ money(request.current_offered_price) }}</strong></div>
                     <div class="request-main">
                         <span class="client-avatar">{{ request.client.name?.charAt(0) }}</span><p><strong>{{ request.client.name }}</strong><small v-if="request.client.rating">Calificación {{ request.client.rating }}</small><small v-else>Cliente sin calificar</small></p>
                     </div>

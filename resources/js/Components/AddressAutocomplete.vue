@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 import { loadGooglePlaces } from '@/Utils/googleMaps';
 
 // Input de dirección con sugerencias de Google Places (decisión explícita del
@@ -42,6 +43,14 @@ const props = defineProps({
 // reemplaza ni cambia el manejo interno de foco de este componente (abrir
 // favoritos/sugerencias), solo le avisa al padre que puede reaccionar visualmente.
 const emit = defineEmits(['update:modelValue', 'place-selected', 'clear', 'selection-loading', 'focus']);
+
+// Región de búsqueda de Google Places (pedido explícito del usuario: "arka01
+// debe funcionar en cualquier país") — antes 'ec' fijo acá, ahora sale del
+// país del usuario logueado (o el predeterminado del sistema sin sesión),
+// compartido por HandleInertiaRequests::share() en TODA página Inertia, así
+// que no hace falta que cada pantalla que usa este componente se lo pase a
+// mano. Ver App\Models\Country::publicPayload().
+const geocodingRegionCode = computed(() => usePage().props.auth?.country?.geocoding_region_code ?? 'ec');
 
 let placesLib = null;
 let placesLoading = null;
@@ -187,7 +196,7 @@ async function fetchSuggestions(text) {
         const request = {
             input: text,
             sessionToken: sessionToken ?? newSessionToken(),
-            includedRegionCodes: ['ec'],
+            includedRegionCodes: [geocodingRegionCode.value],
         };
 
         // Preferir resultados cerca de la ciudad elegida, sin restringir el

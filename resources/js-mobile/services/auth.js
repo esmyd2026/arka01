@@ -135,6 +135,26 @@ export async function deleteAccount(password) {
     }
 }
 
+// Catálogo de países administrable desde /admin/paises (pedido explícito
+// del usuario: "arka01 debe funcionar en cualquier país") — antes el
+// selector de país del registro traía una lista de prefijos fija en el
+// bundle de la app. Se cuelga del mismo endpoint público de arranque que ya
+// usa la app para versión mínima/mantenimiento (Api\V1\ConfigController),
+// en vez de sumar un endpoint nuevo solo para esto. Sin sesión — se llama
+// antes de loguearse, en la pantalla de registro.
+export async function getCountries() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/config`, {
+            headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.countries ?? [];
+    } catch {
+        return [];
+    }
+}
+
 export async function getToken() {
     const value = await SecureStorage.get(TOKEN_KEY);
     return value ?? null;

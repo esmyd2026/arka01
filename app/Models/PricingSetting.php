@@ -3,27 +3,33 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Fila única con los parámetros del cálculo de precio sugerido (sección 5).
- * Ver la migración create_pricing_settings_table: siempre existe una fila,
- * sembrada ahí mismo, así que current() nunca necesita un valor por defecto
- * en código — el único "default" real es el de esa migración inicial.
+ * Una fila POR PAÍS con los parámetros del cálculo de precio sugerido
+ * (sección 5). Antes era una tabla singleton (una sola fila para toda la
+ * plataforma) — bug reportado por el usuario: un tope de tarifa mínima
+ * puesto en dólares para Ecuador le rompía el registro a un conductor que
+ * cobra en pesos chilenos. Ahora cada país tiene su propia fila,
+ * administrable desde /admin/tarifas/{pais} (ver Admin\CountriesController,
+ * que crea la fila con valores por defecto apenas se da de alta un país
+ * nuevo — nunca queda uno sin tarifas configuradas).
  *
  * Optimización de escala (pedido explícito del usuario: "anticiparme a que
- * esto no suceda cuando comience a crecer la demanda"): current() se llama
- * decenas de veces por request bajo carga real (cada cálculo de precio,
- * cada parada de una carrera con paradas) — todas leyendo la misma fila que
- * casi nunca cambia. Cachearla evita esa cantidad de queries redundantes;
- * el hook de abajo invalida el cache apenas se guarda un cambio real, así
- * que nunca queda una lectura vieja después de tocar /admin/tarifas.
+ * esto no suceda cuando comience a crecer la demanda"): se consulta decenas
+ * de veces por request bajo carga real (cada cálculo de precio, cada parada
+ * de una carrera con paradas) — todas leyendo filas que casi nunca cambian.
+ * Se cachea una key por país; el hook de abajo invalida SOLO la key del país
+ * que se guardó, así que nunca queda una lectura vieja después de tocar
+ * /admin/tarifas/{pais}, sin tener que tirar el cache de países que nadie tocó.
  */
 class PricingSetting extends Model
 {
-    private const CACHE_KEY = 'pricing_settings.current';
+    private const CACHE_PREFIX = 'pricing_settings.';
 
     protected $fillable = [
+        'country_id',
         'night_surcharge_percent',
         'night_starts_at',
         'night_ends_at',
@@ -48,15 +54,29 @@ class PricingSetting extends Model
         // el catálogo de planes de conductor (ver SubscriptionPlan y
         // MyPlanController::attachEarningsProjection()).
         'average_ticket_price',
-        // Antes era DriverProfile::STALE_AFTER_MINUTES, fija en el código
-        // (pedido explícito del usuario: poder ajustarla sin desplegar) —
-        // ver DriverProfile::staleAfterMinutes().
-        'driver_stale_after_minutes',
     ];
 
+    public function country(): BelongsTo
+    {
+        return $this->belongsTo(Country::class);
+    }
+
+    /**
+     * @deprecated Wrapper de compatibilidad mientras se migran los
+     * callsites que todavía no reciben un Country explícito — siempre
+     * devuelve la fila del país predeterminado (Ecuador). Usar
+     * forCountry() en código nuevo.
+     */
     public static function current(): self
     {
-        return Cache::remember(self::CACHE_KEY, now()->addHour(), fn () => self::query()->firstOrFail());
+        return self::forCountry(Country::default());
+    }
+
+    public static function forCountry(Country $country): self
+    {
+        return Cache::remember(self::CACHE_PREFIX.$country->id, now()->addHour(), fn () => self::query()
+            ->where('country_id', $country->id)
+            ->firstOrFail());
     }
 
     protected static function booted(): void
@@ -64,8 +84,8 @@ class PricingSetting extends Model
         // Invalida el cache de arriba con CUALQUIER cambio real — sin
         // importar si vino de Admin\PricingSettingController::update() o de
         // un ->update() directo (ej. en tests) — nunca queda una lectura
-        // vieja después de tocar /admin/tarifas.
-        static::saved(fn () => Cache::forget(self::CACHE_KEY));
-        static::deleted(fn () => Cache::forget(self::CACHE_KEY));
+        // vieja después de tocar /admin/tarifas/{pais}.
+        static::saved(fn (self $setting) => Cache::forget(self::CACHE_PREFIX.$setting->country_id));
+        static::deleted(fn (self $setting) => Cache::forget(self::CACHE_PREFIX.$setting->country_id));
     }
 }

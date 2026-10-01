@@ -9,6 +9,7 @@ use App\Models\CooperativeDriverMembership;
 use App\Models\Ride;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Support\Currency;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -334,7 +335,9 @@ class WhatsAppFreeformSender
         // sumar stops_price el conductor aceptaba por WhatsApp creyendo que
         // era un viaje directo más barato, sin saber que había paradas.
         $stops = $rideRequest->stops()->orderBy('sequence')->get();
-        $totalPrice = $rideRequest->driverPayEstimate();
+        // Moneda DEL CONDUCTOR que recibe este mensaje (pedido explícito
+        // del usuario: "arka01 debe funcionar en cualquier país").
+        $totalPrice = Currency::format((float) $rideRequest->driverPayEstimate(), $driver->country());
         $stopsLine = $stops->isEmpty() ? '' : 'Paradas: '.$stops->count()."\n".$stops->map(
             fn ($stop, $i) => '  '.($i + 1).'. '.($stop->address ?? 'ver en la app')
         )->implode("\n")."\n";
@@ -347,7 +350,7 @@ class WhatsAppFreeformSender
             .'Destino: '.($rideRequest->destination_address ?? 'ver en la app')."\n"
             .($tripDistanceKm !== null ? "Distancia del viaje: {$tripDistanceKm} km\n" : '')
             .($distanceKm !== null ? "Km hasta el pasajero: {$distanceKm} km\n" : '')
-            .($rideRequest->cooperative_id ? "Pago de la cooperativa: \${$totalPrice}\n" : "Valor aproximado: \${$totalPrice}\n")
+            .($rideRequest->cooperative_id ? "Pago de la cooperativa: {$totalPrice}\n" : "Valor aproximado: {$totalPrice}\n")
             .($secondsLeft !== null ? "⏱ Tiene {$secondsLeft} segundos para aceptar antes de que pase al siguiente conductor.\n" : '')
             ."\nAbra Arka01 para aceptarla:\n".route('rides.index')
             // Pedido explícito del usuario: un conductor puede seguir
@@ -494,9 +497,13 @@ class WhatsAppFreeformSender
             ->map(fn (int $stars) => ['id' => "wa_rate:{$ride->id}:{$stars}", 'title' => str_repeat('⭐', $stars)])
             ->all();
 
+        // Moneda DEL CLIENTE que recibe este mensaje (pedido explícito del
+        // usuario: "arka01 debe funcionar en cualquier país").
+        $settledPrice = Currency::format((float) $ride->settled_price, $client->country());
+
         self::sendList(
             $client->phone,
-            "✅ Carrera completada — \${$ride->settled_price}.\n\n¿Cómo le fue con {$ride->driver->name}? Califique tocando una opción, o revise el recibo completo en Arka01: ".route('rides.show', $ride),
+            "✅ Carrera completada — {$settledPrice}.\n\n¿Cómo le fue con {$ride->driver->name}? Califique tocando una opción, o revise el recibo completo en Arka01: ".route('rides.show', $ride),
             'Calificar',
             $rows,
             'ride_completed'

@@ -2,7 +2,7 @@
 
 namespace App\Services\Profile;
 
-use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Models\Country;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\WhatsAppVerificationSender;
@@ -36,7 +36,7 @@ class ProfileUpdater
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($userId)],
             'city_id' => ['nullable', 'integer', 'exists:cities,id'],
             'avatar' => ['nullable', 'image', 'max:4096'],
-            'country_code' => ['nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'country_code' => ['nullable', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
         ];
     }

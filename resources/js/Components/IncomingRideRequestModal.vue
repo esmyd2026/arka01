@@ -1,12 +1,18 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { dismissIncomingRideRequest, incomingRideRequestState } from '@/Utils/incomingRideRequest';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del conductor logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de este modal.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 // Pedido explícito del usuario: la carrera entrante tiene que ocupar media
 // pantalla (no un renglón más en una lista), con Aceptar/Descartar y también
@@ -160,7 +166,7 @@ async function discard() {
                          conductor veía menos de lo que en realidad le
                          corresponde por todo el recorrido con paradas. -->
                     <p class="text-3xl font-bold leading-none text-arka-primary-bright">
-                        ${{ Number(current.driver_total_offered_price ?? current.total_offered_price ?? current.current_offered_price).toFixed(2) }}
+                        {{ money(current.driver_total_offered_price ?? current.total_offered_price ?? current.current_offered_price) }}
                     </p>
                     <p v-if="current.is_cooperative_request" class="mt-1 text-xs font-medium text-arka-primary-bright">
                         Pago de la cooperativa por esta carrera
@@ -188,10 +194,10 @@ async function discard() {
                     :class="Number(current.offer_comparison.difference) >= 0 ? 'text-arka-primary-bright' : 'text-arka-warning'"
                 >
                     <template v-if="Number(current.offer_comparison.difference) > 0">
-                        +${{ Number(current.offer_comparison.difference).toFixed(2) }} sobre su tarifa estimada
+                        +{{ money(current.offer_comparison.difference) }} sobre su tarifa estimada
                     </template>
                     <template v-else-if="Number(current.offer_comparison.difference) < 0">
-                        -${{ Math.abs(Number(current.offer_comparison.difference)).toFixed(2) }} por debajo de su tarifa estimada
+                        -{{ money(Math.abs(Number(current.offer_comparison.difference))) }} por debajo de su tarifa estimada
                     </template>
                     <template v-else>Coincide con su tarifa estimada</template>
                 </p>
@@ -250,7 +256,7 @@ async function discard() {
                         <div v-for="stop in (current.stops ?? [])" :key="stop.sequence">
                             <p class="text-arka-text font-medium truncate">
                                 Parada {{ stop.sequence }}{{ stop.leg_distance_km != null ? ` · ${Number(stop.leg_distance_km).toFixed(1)} km` : '' }}
-                                <span class="font-semibold text-amber-600">· ${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                <span class="font-semibold text-amber-600">· {{ money(stop.leg_price) }}</span>
                             </p>
                             <p class="text-xs text-arka-text-muted">{{ stop.address ?? 'Sin referencia' }}</p>
                         </div>

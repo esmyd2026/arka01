@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\RideRequest;
 use App\Notifications\Channels\FcmChannel;
+use App\Support\Currency;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -36,7 +37,10 @@ class RideRequestedPushNotification extends Notification implements ShouldQueue
         // conductor igual"): current_offered_price es solo el tramo final —
         // sumar stops_price para no subdeclarar cuánto le corresponde por
         // todo el recorrido (ver IncomingRideRequestFinder::forDriver()).
-        $price = $this->rideRequest->driverPayEstimate();
+        // Moneda DEL CONDUCTOR que recibe este aviso (pedido explícito del
+        // usuario: "arka01 debe funcionar en cualquier país") — $notifiable
+        // es el conductor destinatario, ver User::country().
+        $price = Currency::format((float) $this->rideRequest->driverPayEstimate(), $notifiable->country());
         $stopsCount = $this->rideRequest->stops()->count();
         $stopsNote = $stopsCount > 0 ? ' con '.$stopsCount.' parada'.($stopsCount === 1 ? '' : 's') : '';
 
@@ -44,10 +48,10 @@ class RideRequestedPushNotification extends Notification implements ShouldQueue
         // que decirlo — si no, el conductor entiende que es "para ahora" y
         // puede confundirse (o preocuparse de más) sin la fecha/hora real.
         $body = $this->rideRequest->is_scheduled
-            ? "{$clientName} programó una carrera{$stopsNote} para el {$this->rideRequest->scheduled_at->format('d/m')} a las {$this->rideRequest->scheduled_at->format('H:i')} por \${$price}."
+            ? "{$clientName} programó una carrera{$stopsNote} para el {$this->rideRequest->scheduled_at->format('d/m')} a las {$this->rideRequest->scheduled_at->format('H:i')} por {$price}."
             : ($this->rideRequest->cooperative_id
-                ? "{$this->rideRequest->cooperative->name} te asignó una carrera{$stopsNote}. Recibirás \${$price}."
-                : "{$clientName} te pidió una carrera{$stopsNote} por \${$price}.");
+                ? "{$this->rideRequest->cooperative->name} te asignó una carrera{$stopsNote}. Recibirás {$price}."
+                : "{$clientName} te pidió una carrera{$stopsNote} por {$price}.");
 
         return (new WebPushMessage)
             ->title($this->rideRequest->is_scheduled ? 'Carrera programada nueva' : 'Nueva solicitud de carrera')

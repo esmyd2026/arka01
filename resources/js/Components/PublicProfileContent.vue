@@ -1,7 +1,14 @@
 <script setup>
 import UserAvatar from '@/Components/UserAvatar.vue';
 import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda de quien mira este perfil (pedido explícito del usuario: "arka01
+// debe funcionar en cualquier país") — auth.country siempre existe, con o
+// sin sesión (ver HandleInertiaRequests::share()), así que funciona igual
+// para un visitante sin cuenta.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 // Cuerpo del perfil público, aparte del layout que lo envuelve (pedido
 // explícito del usuario: "compartir mi perfil" ahora es accesible sin
@@ -148,7 +155,7 @@ const componentWidth = (component) => `${Math.min(100, Math.round((component.poi
                     · Placa {{ profileUser.driver_profile.vehicle_plate }}
                 </span>
             </p>
-            <p>${{ profileUser.driver_profile.rate_per_km }}/km</p>
+            <p>{{ money(profileUser.driver_profile.rate_per_km) }}/km</p>
             <p>
                 Acepta:
                 <span v-if="profileUser.driver_profile.accepts_cash">efectivo</span>

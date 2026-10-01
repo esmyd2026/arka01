@@ -13,6 +13,12 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { playAttentionAlert, playUpdateChime } from '@/Utils/liveAlert';
 import { buildWhatsAppOptInUrl } from '@/Utils/whatsapp';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { etaMinutes } from '@/Utils/eta';
 import { saveClientLocation } from '@/Utils/sessionLocation';
 import { startGuidedTour, RIDE_TOUR_RESUME_KEY } from '@/Utils/guidedTour';
@@ -772,7 +778,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                 <p v-if="newRequestAlert" class="mt-1 text-sm text-arka-text-muted">
                                     {{ newRequestAlert.isCooperative ? newRequestAlert.cooperativeName : newRequestAlert.clientName }}
                                     {{ newRequestAlert.isCooperative ? 'le pagará' : (newRequestAlert.isScheduled ? 'le programó una carrera por' : 'le ofrece') }}
-                                    <strong class="text-arka-primary-bright">${{ Number(newRequestAlert.price).toFixed(2) }}</strong>
+                                    <strong class="text-arka-primary-bright">{{ money(newRequestAlert.price) }}</strong>
                                 </p>
                                 <p v-else class="mt-1 text-sm text-arka-text-muted">Tiene {{ pendingRequestsCount }} solicitud{{ pendingRequestsCount === 1 ? '' : 'es' }} esperando respuesta.</p>
                             </div>
@@ -896,7 +902,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                     </svg>
                                     Ingresos de hoy
                                 </div>
-                                <p class="mt-1 text-3xl font-bold tracking-tight text-arka-primary-bright">${{ driverStats.earnings_today.toFixed(2) }}</p>
+                                <p class="mt-1 text-3xl font-bold tracking-tight text-arka-primary-bright">{{ money(driverStats.earnings_today) }}</p>
                                 <p class="mt-1 text-[10px] text-arka-text-muted">Generado durante el día</p>
                             </div>
                             <Link :href="route('rides.index')" class="bg-arka-card p-4 transition hover:bg-arka-base/40">
@@ -914,7 +920,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <div class="grid grid-cols-2 gap-px border-t border-arka-border bg-arka-text-muted/10 sm:grid-cols-4">
                             <div class="bg-arka-card px-3 py-3">
                                 <p class="text-[10px] leading-tight text-arka-text-muted">Ingresos del mes</p>
-                                <p class="mt-1 text-lg font-semibold text-arka-text">${{ driverStats.earnings_this_month.toFixed(2) }}</p>
+                                <p class="mt-1 text-lg font-semibold text-arka-text">{{ money(driverStats.earnings_this_month) }}</p>
                             </div>
                             <Link :href="route('rides.index')" class="bg-arka-card px-3 py-3 transition hover:bg-arka-base/40">
                                 <p class="text-[10px] leading-tight text-arka-text-muted">Viajes del mes</p>
@@ -978,7 +984,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                                     </p>
                                 </div>
                                 <div class="shrink-0 text-right">
-                                    <p class="text-lg font-bold text-arka-primary-bright">${{ upcomingTrips[0].price.toFixed(2) }}</p>
+                                    <p class="text-lg font-bold text-arka-primary-bright">{{ money(upcomingTrips[0].price) }}</p>
                                     <p class="text-[10px] text-arka-text-muted">Ver detalle →</p>
                                 </div>
                             </div>
@@ -1038,7 +1044,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                         <div class="mt-3 flex items-center gap-6 rounded-xl bg-arka-base/45 px-3 py-2.5">
                             <div>
                                 <p class="text-lg font-semibold text-arka-text">
-                                    <template v-if="driverStats.rate_per_km != null">${{ driverStats.rate_per_km.toFixed(2) }}</template>
+                                    <template v-if="driverStats.rate_per_km != null">{{ money(driverStats.rate_per_km) }}</template>
                                     <template v-else>—</template>
                                 </p>
                                 <p class="text-[10px] text-arka-text-muted">Por kilómetro</p>
@@ -1046,7 +1052,7 @@ const pendingRideToClose = computed(() => (props.upcomingTrips ?? []).find((trip
                             <div class="h-8 w-px bg-arka-text-muted/15"></div>
                             <div>
                                 <p class="text-lg font-semibold text-arka-text">
-                                    <template v-if="driverStats.minimum_fare != null">${{ driverStats.minimum_fare.toFixed(2) }}</template>
+                                    <template v-if="driverStats.minimum_fare != null">{{ money(driverStats.minimum_fare) }}</template>
                                     <template v-else>Sin mínimo</template>
                                 </p>
                                 <p class="text-[10px] text-arka-text-muted">Tarifa base</p>

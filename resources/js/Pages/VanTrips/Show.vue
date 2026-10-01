@@ -8,7 +8,12 @@ import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del cliente logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { confirmDialog } from '@/Utils/confirmDialog';
 
 const props = defineProps({
@@ -69,7 +74,7 @@ async function cancelTrip() {
                         </Link>
                     </div>
                     <p class="text-sm text-arka-text-muted">{{ trip.travel_date }} · sale {{ trip.departure_time }}</p>
-                    <p class="text-arka-text font-medium">${{ trip.price_per_seat }}/asiento · {{ seatsAvailable }} de {{ trip.total_seats }} libres</p>
+                    <p class="text-arka-text font-medium">{{ money(trip.price_per_seat) }}/asiento · {{ seatsAvailable }} de {{ trip.total_seats }} libres</p>
                     <p v-if="trip.luggage_allowance" class="text-sm text-arka-text-muted">Equipaje: {{ trip.luggage_allowance }}</p>
                     <p v-if="trip.description" class="text-sm text-arka-text-muted pt-2 border-t border-arka-border">{{ trip.description }}</p>
 

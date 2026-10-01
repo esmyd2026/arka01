@@ -6,6 +6,7 @@ use App\Events\RidePaymentUpdated;
 use App\Models\Ride;
 use App\Notifications\RidePaymentStatusNotification;
 use App\Services\PrivateImageOptimizer;
+use App\Support\Currency;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -64,7 +65,9 @@ class RidePaymentManager
         $cooperative->user->notify(new RidePaymentStatusNotification(
             $ride->id,
             'Nuevo comprobante de carrera',
-            $ride->client->name.' adjuntó el comprobante de $'.number_format($ride->chargedTotal(), 2).' para la carrera #'.$ride->id.'.',
+            // Moneda DEL CLIENTE de esta carrera (pedido explícito del
+            // usuario: "arka01 debe funcionar en cualquier país").
+            $ride->client->name.' adjuntó el comprobante de '.Currency::format((float) $ride->chargedTotal(), $ride->client->country()).' para la carrera #'.$ride->id.'.',
             route('cooperative.wallet'),
             'ride_payment_proof_submitted',
         ));
@@ -89,7 +92,7 @@ class RidePaymentManager
 
         RidePaymentUpdated::dispatch($ride->fresh());
 
-        $message = $ride->driver->name.' confirmó que recibió $'.number_format($ride->chargedTotal(), 2).' en efectivo por la carrera #'.$ride->id.'.';
+        $message = $ride->driver->name.' confirmó que recibió '.Currency::format((float) $ride->chargedTotal(), $ride->client->country()).' en efectivo por la carrera #'.$ride->id.'.';
         $cooperative->user->notify(new RidePaymentStatusNotification(
             $ride->id,
             'Efectivo recibido por el conductor',

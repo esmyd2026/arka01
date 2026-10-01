@@ -5,7 +5,13 @@ import DonutChart from '@/Components/charts/DonutChart.vue';
 import BarChart from '@/Components/charts/BarChart.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del conductor logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
 const props = defineProps({
@@ -121,8 +127,8 @@ const statusSegments = computed(() => [
                 <div v-if="cooperativeWallet && cooperativeWallet.balance !== 0" class="p-4 sm:p-6 rounded-arka" :class="cooperativeWallet.balance > 0 ? 'bg-arka-warning/10' : 'bg-arka-primary/10'">
                     <p class="text-sm font-medium" :class="cooperativeWallet.balance > 0 ? 'text-arka-warning' : 'text-arka-primary'">
                         {{ cooperativeWallet.balance > 0
-                            ? `Le debe $${cooperativeWallet.balance.toFixed(2)} a ${cooperativeWallet.cooperative_name}`
-                            : `${cooperativeWallet.cooperative_name} le debe $${Math.abs(cooperativeWallet.balance).toFixed(2)}` }}
+                            ? `Le debe ${money(cooperativeWallet.balance)} a ${cooperativeWallet.cooperative_name}`
+                            : `${cooperativeWallet.cooperative_name} le debe ${money(Math.abs(cooperativeWallet.balance))}` }}
                     </p>
                     <p class="mt-1 text-xs text-arka-text-muted">
                         {{ cooperativeWallet.balance > 0
@@ -180,7 +186,7 @@ const statusSegments = computed(() => [
                     </div>
                     <div class="p-4 bg-arka-card shadow rounded-arka">
                         <p class="text-xs text-arka-text-muted">Ganado</p>
-                        <p class="text-xl font-semibold text-arka-text">${{ totals.earnings.toFixed(2) }}</p>
+                        <p class="text-xl font-semibold text-arka-text">{{ money(totals.earnings) }}</p>
                     </div>
                     <div class="p-4 bg-arka-card shadow rounded-arka">
                         <p class="text-xs text-arka-text-muted">Distancia</p>
@@ -239,10 +245,10 @@ const statusSegments = computed(() => [
                                         {{ ride.origin }} → {{ ride.destination }}
                                     </td>
                                     <td class="py-2 pr-3 text-arka-text-muted capitalize">{{ ride.payment_method }}</td>
-                                    <td class="py-2 pr-3 text-right text-arka-text font-semibold">${{ Number(ride.price).toFixed(2) }}</td>
-                                    <td class="py-2 pr-3 text-right text-arka-text">${{ Number(ride.driver_pay).toFixed(2) }}</td>
-                                    <td class="py-2 pr-3 text-right" :class="ride.driver_owes > 0 ? 'font-semibold text-arka-warning' : 'text-arka-text-muted'">{{ ride.driver_owes > 0 ? `$${Number(ride.driver_owes).toFixed(2)}` : '—' }}</td>
-                                    <td class="py-2 pr-3 text-right" :class="ride.cooperative_owes > 0 ? 'font-semibold text-arka-primary' : 'text-arka-text-muted'">{{ ride.cooperative_owes > 0 ? `$${Number(ride.cooperative_owes).toFixed(2)}` : '—' }}</td>
+                                    <td class="py-2 pr-3 text-right text-arka-text font-semibold">{{ money(ride.price) }}</td>
+                                    <td class="py-2 pr-3 text-right text-arka-text">{{ money(ride.driver_pay) }}</td>
+                                    <td class="py-2 pr-3 text-right" :class="ride.driver_owes > 0 ? 'font-semibold text-arka-warning' : 'text-arka-text-muted'">{{ ride.driver_owes > 0 ? money(ride.driver_owes) : '—' }}</td>
+                                    <td class="py-2 pr-3 text-right" :class="ride.cooperative_owes > 0 ? 'font-semibold text-arka-primary' : 'text-arka-text-muted'">{{ ride.cooperative_owes > 0 ? money(ride.cooperative_owes) : '—' }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -292,7 +298,7 @@ const statusSegments = computed(() => [
                                         {{ ride.origin_address }} → {{ ride.destination_address }}
                                     </td>
                                     <td class="py-2 pr-3 text-arka-text-muted whitespace-nowrap">{{ Number(ride.distance_km).toFixed(1) }} km</td>
-                                    <td class="py-2 pr-3 text-arka-text">${{ Number(ride.price).toFixed(2) }}</td>
+                                    <td class="py-2 pr-3 text-arka-text">{{ money(ride.price) }}</td>
                                     <td class="py-2 pr-3 text-arka-text-muted">{{ PAYMENT_LABEL[ride.payment_method] ?? ride.payment_method }}</td>
                                     <td class="py-2 pr-3">
                                         <span :class="ride.status === 'completed' ? 'text-arka-primary-bright' : ride.status === 'cancelled' ? 'text-arka-danger' : 'text-arka-text-muted'">

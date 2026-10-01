@@ -12,7 +12,13 @@ import InputError from '@/Components/InputError.vue';
 import TextInput from '@/Components/TextInput.vue';
 import BottomSheet from '@/Components/BottomSheet.vue';
 import RidePaymentSheet from '@/Components/RidePaymentSheet.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { etaBetween } from '@/Utils/eta';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { playAttentionAlert, playCabinChime, playUpdateChime } from '@/Utils/liveAlert';
@@ -1646,7 +1652,7 @@ function addDriverToFleet() {
                         </div>
                         <div class="ps-3 text-right">
                             <p class="text-[9px] font-semibold uppercase tracking-[0.12em] text-arka-text-muted">Total del viaje</p>
-                            <p class="mt-0.5 text-base font-bold text-arka-primary">${{ tripTotalCost.toFixed(2) }}</p>
+                            <p class="mt-0.5 text-base font-bold text-arka-primary">{{ money(tripTotalCost) }}</p>
                         </div>
                     </div>
 
@@ -1703,7 +1709,7 @@ function addDriverToFleet() {
                         </div>
                         <div class="text-right">
                             <p class="text-[10px] uppercase tracking-wide text-arka-text-muted">Costo de la carrera</p>
-                            <p class="text-lg font-bold text-arka-primary">${{ tripTotalCost.toFixed(2) }}</p>
+                            <p class="text-lg font-bold text-arka-primary">{{ money(tripTotalCost) }}</p>
                         </div>
                     </div>
 
@@ -1733,7 +1739,7 @@ function addDriverToFleet() {
                                 <p v-if="stop.leg_distance_km != null || stop.leg_price != null" class="mt-1 text-[11px] text-arka-text-muted">
                                     <span v-if="stop.leg_distance_km != null">{{ Number(stop.leg_distance_km).toFixed(1) }} km</span>
                                     <span v-if="stop.leg_distance_km != null && stop.leg_price != null"> · </span>
-                                    <span v-if="stop.leg_price != null" class="font-medium text-arka-text">${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                    <span v-if="stop.leg_price != null" class="font-medium text-arka-text">{{ money(stop.leg_price) }}</span>
                                 </p>
                             </div>
                         </div>
@@ -1746,7 +1752,7 @@ function addDriverToFleet() {
                                 <p class="mt-1 text-[11px]" :class="ride.status === 'completed' ? 'text-arka-primary' : 'text-arka-text-muted'">
                                     {{ ride.status === 'completed' ? 'Viaje completado' : 'Pendiente' }}
                                     <span v-if="ride.distance_km != null"> · {{ Number(ride.distance_km).toFixed(1) }} km</span>
-                                    <span class="font-medium text-arka-text"> · ${{ Number(ride.price).toFixed(2) }}</span>
+                                    <span class="font-medium text-arka-text"> · {{ money(ride.price) }}</span>
                                 </p>
                             </div>
                         </div>
@@ -2210,7 +2216,7 @@ function addDriverToFleet() {
                         </div>
                         <div class="flex items-center justify-between col-span-2 pt-1.5 border-t border-arka-border text-base">
                             <span class="text-arka-text-muted">Total</span>
-                            <span class="text-arka-primary-bright font-semibold">${{ tripTotalCost.toFixed(2) }}</span>
+                            <span class="text-arka-primary-bright font-semibold">{{ money(tripTotalCost) }}</span>
                         </div>
                     </div>
 
@@ -2451,7 +2457,7 @@ function addDriverToFleet() {
                         <div>
                             <h3 class="text-lg font-semibold text-arka-text">Parada {{ currentStop.sequence }} completada</h3>
                             <p class="mt-1 text-sm text-arka-text-muted">
-                                ${{ Number(currentStop.leg_price).toFixed(2) }} de este tramo. ¿Sigue el viaje o lo cierra acá?
+                                {{ money(currentStop.leg_price) }} de este tramo. ¿Sigue el viaje o lo cierra acá?
                             </p>
                         </div>
                         <!-- Pedido explícito del usuario: "coloca en esa misma
@@ -2463,7 +2469,7 @@ function addDriverToFleet() {
                         <div class="rounded-arka bg-arka-base/45 p-3">
                             <p class="text-xs text-arka-text-muted">Costo total de la carrera</p>
                             <p class="text-lg font-bold text-arka-primary">
-                                ${{ tripTotalCost.toFixed(2) }}
+                                {{ money(tripTotalCost) }}
                             </p>
                             <details class="mt-2">
                                 <summary class="cursor-pointer text-xs font-medium text-arka-primary">Ver detalle por parada</summary>
@@ -2474,11 +2480,11 @@ function addDriverToFleet() {
                                             <span v-if="stop.leg_distance_km != null"> · {{ Number(stop.leg_distance_km).toFixed(1) }} km</span>
                                             {{ stop.status !== 'pending' ? ` (${stop.status === 'completed' ? 'completada' : 'cancelada'})` : '' }}
                                         </span>
-                                        <span class="shrink-0 text-arka-text">${{ Number(stop.leg_price).toFixed(2) }}</span>
+                                        <span class="shrink-0 text-arka-text">{{ money(stop.leg_price) }}</span>
                                     </div>
                                     <div class="flex items-center justify-between gap-2 font-medium text-arka-text">
                                         <span>Tramo final · {{ Number(ride.distance_km).toFixed(1) }} km</span>
-                                        <span>${{ Number(ride.price).toFixed(2) }}</span>
+                                        <span>{{ money(ride.price) }}</span>
                                     </div>
                                 </div>
                             </details>
@@ -2730,7 +2736,7 @@ function addDriverToFleet() {
                              ser menor a price+stops_price si se cerró antes de tiempo
                              (ver RideController::completeStop()). Sin paradas, es
                              simplemente ride.price de siempre. -->
-                        <p class="text-3xl font-semibold text-arka-primary-bright">${{ ride.settled_price ?? ride.price }}</p>
+                        <p class="text-3xl font-semibold text-arka-primary-bright">{{ money(ride.settled_price ?? ride.price) }}</p>
                     </div>
                     <!-- Desglose por parada, solo si hubo alguna. -->
                     <div v-if="ride.stops?.length" class="pt-3 border-t border-arka-border space-y-2">
@@ -2741,13 +2747,13 @@ function addDriverToFleet() {
                                 <span v-if="stop.status === 'cancelled'" class="text-arka-danger">(cancelada)</span>
                             </span>
                             <span :class="stop.status === 'cancelled' ? 'text-arka-text-muted line-through' : 'text-arka-text'">
-                                ${{ stop.leg_price }}
+                                {{ money(stop.leg_price) }}
                             </span>
                         </div>
                         <div class="flex items-center justify-between gap-3 text-sm">
                             <span class="text-arka-text-muted">Tramo final · {{ Number(ride.distance_km).toFixed(1) }} km</span>
                             <span :class="ride.stops.some((stop) => stop.status === 'cancelled') ? 'text-arka-text-muted line-through' : 'text-arka-text'">
-                                ${{ Number(ride.price).toFixed(2) }}
+                                {{ money(ride.price) }}
                             </span>
                         </div>
                     </div>
@@ -2761,7 +2767,7 @@ function addDriverToFleet() {
                              separadas del tramo origen-destino, para trazabilidad. -->
                         <div v-if="ride.pickup_fare_charged" class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Trayecto de recogida</span>
-                            <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · ${{ ride.pickup_fare }}</span>
+                            <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · {{ money(ride.pickup_fare) }}</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Distancia total del recorrido</span>
@@ -2769,7 +2775,7 @@ function addDriverToFleet() {
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-arka-text-muted">Tarifa por km</span>
-                            <span class="text-arka-text">${{ ride.rate_per_km_snapshot }}</span>
+                            <span class="text-arka-text">{{ money(ride.rate_per_km_snapshot) }}</span>
                         </div>
                         <!-- Solo tiene sentido si arriba se mostró un desglose por
                              parada (bloque de la línea 2703) — sin paradas no hay
@@ -2853,7 +2859,7 @@ function addDriverToFleet() {
                     </div>
                     <div v-if="ride.pickup_fare_charged" class="flex items-center justify-between">
                         <span class="text-arka-text-muted">Trayecto de recogida</span>
-                        <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · ${{ ride.pickup_fare }}</span>
+                        <span class="text-arka-text">{{ Number(ride.pickup_distance_km).toFixed(1) }} km · {{ money(ride.pickup_fare) }}</span>
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-arka-text-muted">Distancia total del recorrido</span>
@@ -2861,7 +2867,7 @@ function addDriverToFleet() {
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-arka-text-muted">Tarifa por km</span>
-                        <span class="text-arka-text">${{ ride.rate_per_km_snapshot }}</span>
+                        <span class="text-arka-text">{{ money(ride.rate_per_km_snapshot) }}</span>
                     </div>
                     <p class="pt-1 text-[11px] leading-relaxed text-arka-text-muted/80">
                         El total incluye todos los tramos y las condiciones de tarifa aplicadas al confirmar la solicitud.
@@ -2882,7 +2888,7 @@ function addDriverToFleet() {
                     </div>
                     <div class="flex items-center justify-between text-lg">
                         <span class="text-arka-text-muted">Total</span>
-                        <span class="text-arka-primary-bright font-semibold">${{ tripTotalCost.toFixed(2) }}</span>
+                        <span class="text-arka-primary-bright font-semibold">{{ money(tripTotalCost) }}</span>
                     </div>
                 </div>
 

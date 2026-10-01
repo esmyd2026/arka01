@@ -56,7 +56,12 @@ class DriverDirectoryFinder
             // por defecto para un conductor que todavía no declaró zona).
             ->when($sectorId, fn ($query) => $query->whereHas('coverageSectors', fn ($q) => $q->where('sectors.id', $sectorId)))
             ->get()
-            ->reject(fn (DriverProfile $profile) => $profile->user_id === $client->id);
+            ->reject(fn (DriverProfile $profile) => $profile->user_id === $client->id)
+            // Pedido explícito del usuario: "que las personas no puedan ver
+            // conductores... de otros países" — el directorio público nunca
+            // muestra un conductor de otro país, sin importar su medalla ni
+            // su cercanía. Ver User::isInSameCountryAs().
+            ->reject(fn (DriverProfile $profile) => ! $client->isInSameCountryAs($profile->user));
 
         $fleet = $this->fleetFor($client);
         $lookups = $this->lookupsFor($driverProfiles->pluck('user_id'), $fleet);
@@ -122,6 +127,10 @@ class DriverDirectoryFinder
             ->whereNotNull('current_lng')
             ->get()
             ->reject(fn (DriverProfile $profile) => $profile->user_id === $client->id)
+            // Pedido explícito del usuario: "que las personas no puedan ver
+            // conductores... de otros países" — ver browse() arriba, mismo
+            // criterio acá para el mapa de "conductores cerca de mí".
+            ->reject(fn (DriverProfile $profile) => ! $client->isInSameCountryAs($profile->user))
             ->filter(fn (DriverProfile $profile) => Haversine::distanceKm(
                 $lat,
                 $lng,

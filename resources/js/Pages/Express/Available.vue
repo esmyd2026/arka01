@@ -4,7 +4,13 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del conductor logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+valor
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 const props = defineProps({
     routes: { type: Array, required: true },
@@ -111,7 +117,7 @@ function submitApplication(routeId) {
                             </div>
                             <div class="p-3 rounded-arka bg-arka-base">
                                 <p class="text-arka-text-muted">Pago pactado</p>
-                                <p class="text-arka-text">${{ r.offered_price }} por carrera</p>
+                                <p class="text-arka-text">{{ money(r.offered_price) }} por carrera</p>
                             </div>
                         </div>
 
@@ -189,7 +195,7 @@ function submitApplication(routeId) {
                                 </p>
                             </div>
                             <div class="text-right shrink-0">
-                                <p class="text-arka-text font-semibold mb-2">${{ r.offered_price }}/carrera</p>
+                                <p class="text-arka-text font-semibold mb-2">{{ money(r.offered_price) }}/carrera</p>
                                 <span v-if="myApplications[r.id]" class="text-sm text-arka-lime">
                                     Postulación: {{ myApplications[r.id] }}
                                 </span>
@@ -205,7 +211,7 @@ function submitApplication(routeId) {
                                 min="0.01"
                                 class="block w-full"
                                 v-model="proposedPrice"
-                                :placeholder="`Deje vacío para aceptar $${r.offered_price} tal cual`"
+                                :placeholder="`Deje vacío para aceptar ${money(r.offered_price)} tal cual`"
                             />
                             <PrimaryButton>Confirmar</PrimaryButton>
                             <SecondaryButton type="button" @click="applyingTo = null">Cancelar</SecondaryButton>

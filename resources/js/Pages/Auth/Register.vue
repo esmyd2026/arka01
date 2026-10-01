@@ -9,6 +9,7 @@ import TextInput from '@/Components/TextInput.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { buildResendCodeWhatsAppUrl } from '@/Utils/whatsapp';
+import { buildCountryCodeOptions, isValidPhoneLocal as isValidPhoneLocalGeneric, maxPhoneLocalLength } from '@/Utils/countries';
 
 const props = defineProps({
     // Pedido explícito del usuario: si el código no llega por la plantilla,
@@ -19,27 +20,30 @@ const props = defineProps({
         type: String,
         default: null,
     },
+    // Catálogo de países administrable desde /admin/paises (pedido
+    // explícito del usuario: "arka01 debe funcionar en cualquier país") —
+    // antes esta lista era fija en el código, ahora sale de
+    // App\Models\Country::active(). Cada entrada trae su propio formato de
+    // celular (phone_local_regex/phone_format_hint) para validar en vivo
+    // sin asumir el formato de Ecuador.
+    countries: {
+        type: Array,
+        required: true,
+    },
 });
 
 const resendCodeWhatsAppUrl = computed(() => buildResendCodeWhatsAppUrl(props.whatsappBusinessNumber));
 
-// Misma lista que RegisteredUserController::COUNTRY_CODES — es una lista fija
-// de indicativos telefónicos reales, no un catálogo de negocio que necesite
-// pantalla de mantenimiento (a diferencia de planes, tarifas o zonas).
 // Bug real reportado por el usuario (con capturas): en móvil, mostrar el
 // nombre del país entero en el selector ya cerrado le dejaba casi nada de
 // ancho al campo del número, que quedaba aplastado en una cajita minúscula
 // — shortLabel (ver SearchableSelect.vue) resuelve eso sin perder el nombre
 // completo en la lista desplegable, donde sí hay espacio de sobra.
-const countryCodes = [
-    { code: '+593', label: '🇪🇨 +593 Ecuador', shortLabel: '🇪🇨 +593' },
-    { code: '+51', label: '🇵🇪 +51 Perú', shortLabel: '🇵🇪 +51' },
-    { code: '+57', label: '🇨🇴 +57 Colombia', shortLabel: '🇨🇴 +57' },
-    { code: '+58', label: '🇻🇪 +58 Venezuela', shortLabel: '🇻🇪 +58' },
-    { code: '+56', label: '🇨🇱 +56 Chile', shortLabel: '🇨🇱 +56' },
-    { code: '+54', label: '🇦🇷 +54 Argentina', shortLabel: '🇦🇷 +54' },
-];
-const countryCodeOptions = countryCodes.map((c) => ({ value: c.code, label: c.label, shortLabel: c.shortLabel }));
+const countryCodeOptions = computed(() => buildCountryCodeOptions(props.countries));
+
+function countryFor(countryCode) {
+    return props.countries.find((c) => c.phone_prefix === countryCode) ?? null;
+}
 
 // Pedido explícito del usuario: "Crear mi círculo" en Welcome.vue linkea acá
 // con ?tipo=cliente — ya declaró la intención en ese botón, no hace falta
@@ -74,7 +78,7 @@ const form = useForm({
     first_name: '',
     last_name: '',
     email: '',
-    country_code: '+593',
+    country_code: (props.countries.find((c) => c.is_default) ?? props.countries[0])?.phone_prefix ?? '',
     phone_local: prefilledPhoneLocal,
     password: '',
     password_confirmation: '',
@@ -148,21 +152,20 @@ const passwordChecks = computed(() => ({
 // obvios como 999999999. Pedido explícito del usuario, con ejemplos reales
 // que antes pasaban el formato viejo sin ser un celular de verdad.
 function isValidPhoneLocal(value, countryCode) {
-    if (countryCode !== '+593') return /^[0-9]{7,10}$/.test(value);
-    return /^9\d{8}$/.test(value) && !/^(\d)\1{8}$/.test(value);
+    return isValidPhoneLocalGeneric(value, countryFor(countryCode));
 }
 
 // Bug real reportado por el usuario (con captura: el campo dejaba escribir
 // más de 20 dígitos aunque un celular ecuatoriano son 9): antes solo se
 // invalidaba el paso al mandar el formulario, nada impedía seguir tecleando
 // de más. Ahora se sanea en cada tecla — saca todo lo que no sea dígito, el
-// 0 inicial si es Ecuador (ya lo reemplaza el código de país, sección de
-// teléfono del alcance) y corta al máximo real de ese país.
-const phoneMaxLength = computed(() => (form.country_code === '+593' ? 9 : 10));
+// 0 inicial si el país lo antepone (strips_leading_zero) y corta al máximo
+// real de ese país (derivado de su phone_local_regex, ver Utils/countries.js).
+const phoneMaxLength = computed(() => maxPhoneLocalLength(countryFor(form.country_code)));
 
 function sanitizePhoneLocal() {
     let digits = form.phone_local.replace(/\D/g, '');
-    if (form.country_code === '+593') digits = digits.replace(/^0+/, '');
+    if (countryFor(form.country_code)?.strips_leading_zero) digits = digits.replace(/^0+/, '');
     form.phone_local = digits.slice(0, phoneMaxLength.value);
 }
 
@@ -541,11 +544,14 @@ const submit = () => {
                     />
                 </div>
                 <!-- Pedido explícito del usuario: validar que sea un celular
-                     ecuatoriano real (9 dígitos, empieza en 9) y no cualquier
-                     cadena — ver App\Rules\ValidPhoneNumberLocal (backend) e
-                     isValidPhoneLocal() acá arriba (mismo criterio, en vivo). -->
+                     real del país elegido y no cualquier cadena — ver
+                     App\Rules\ValidPhoneNumberLocal (backend) e
+                     isValidPhoneLocal() acá arriba (mismo criterio, en vivo).
+                     El texto de ayuda sale de phone_format_hint del país
+                     (administrable en /admin/paises), no queda fijo para
+                     Ecuador como antes. -->
                 <p class="mt-1 text-xs text-arka-text-muted">
-                    <template v-if="form.country_code === '+593'">9 dígitos, empieza en 9 — sin el 0 inicial ni espacios.</template>
+                    <template v-if="countryFor(form.country_code)?.phone_format_hint">{{ countryFor(form.country_code).phone_format_hint }} — sin espacios ni guiones.</template>
                     <template v-else>Sin el 0 inicial ni espacios — solo los dígitos.</template>
                 </p>
 

@@ -5,7 +5,13 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país de la cooperativa (pedido explícito del usuario:
+// "arka01 debe funcionar en cualquier país") — antes "$10" fijo como
+// ejemplo de este texto, sin importar el país.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import { computed, ref } from 'vue';
@@ -311,8 +317,8 @@ function uploadLogo(event) {
                     </div>
 
                     <p v-if="form.rate_per_km && form.driver_pay_rate_per_km" class="mt-4 rounded-arka bg-arka-base/50 p-3 text-xs text-arka-text-muted">
-                        Ejemplo: una carrera de $10 en efectivo — el conductor se queda los $10, pero le
-                        corresponden ${{ (10 * (Number(form.driver_pay_rate_per_km) / Number(form.rate_per_km))).toFixed(2) }},
+                        Ejemplo: una carrera de {{ money(10) }} en efectivo — el conductor se queda los {{ money(10) }}, pero le
+                        corresponden {{ money(10 * (Number(form.driver_pay_rate_per_km) / Number(form.rate_per_km))) }},
                         así que le queda debiendo el resto a la cooperativa. Si esa misma carrera fuera por
                         transferencia, es la cooperativa quien le debe esa parte al conductor.
                     </p>

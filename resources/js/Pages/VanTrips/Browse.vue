@@ -5,7 +5,12 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del cliente logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 const props = defineProps({
     trips: { type: Array, required: true },
@@ -101,7 +106,7 @@ function search() {
                                             {{ trip.total_seats - (trip.reserved_seats_count ?? 0) }} asiento(s) libre(s)
                                         </p>
                                     </div>
-                                    <span class="text-sm text-arka-text-muted shrink-0">${{ trip.price_per_seat }}/asiento</span>
+                                    <span class="text-sm text-arka-text-muted shrink-0">{{ money(trip.price_per_seat) }}/asiento</span>
                                 </Link>
                             </li>
                         </ul>
@@ -126,7 +131,7 @@ function search() {
                                     {{ trip.total_seats - (trip.reserved_seats_count ?? 0) }} asiento(s) libre(s)
                                 </p>
                             </div>
-                            <span class="text-sm text-arka-text-muted shrink-0">${{ trip.price_per_seat }}/asiento</span>
+                            <span class="text-sm text-arka-text-muted shrink-0">{{ money(trip.price_per_seat) }}/asiento</span>
                         </Link>
                     </li>
                 </ul>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Country;
 use App\Models\PricingSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,18 +13,30 @@ use Inertia\Response;
 /**
  * Pantalla de mantenimiento del cálculo de precio sugerido (sección 5): el
  * recargo nocturno y su horario. Antes eran constantes de config/arka.php;
- * ahora se editan acá y App\Services\PriceCalculator los lee de la base.
+ * después pasaron a una única fila global en la base — bug reportado por el
+ * usuario: un tope de tarifa mínima en dólares le rompía el registro a un
+ * conductor que cobra en pesos chilenos. Ahora hay UNA fila por país (ver
+ * App\Models\PricingSetting::forCountry()) — index() lista los países,
+ * edit()/update() trabajan sobre la fila de uno puntual.
  */
 class PricingSettingController extends Controller
 {
-    public function edit(): Response
+    public function index(): Response
     {
-        return Inertia::render('Admin/Pricing', [
-            'settings' => PricingSetting::current(),
+        return Inertia::render('Admin/Pricing/Index', [
+            'countries' => Country::active()->values(),
         ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function edit(Country $country): Response
+    {
+        return Inertia::render('Admin/Pricing/Edit', [
+            'country' => $country,
+            'settings' => PricingSetting::forCountry($country),
+        ]);
+    }
+
+    public function update(Request $request, Country $country): RedirectResponse
     {
         $validated = $request->validate([
             'night_surcharge_percent' => ['required', 'integer', 'min:0', 'max:200'],
@@ -46,25 +59,20 @@ class PricingSettingController extends Controller
             'pickup_surcharge_threshold_km' => ['required', 'numeric', 'min:0', 'max:50'],
             'pickup_surcharge_percent' => ['required', 'integer', 'min:0', 'max:200'],
             // Tarifa base mínima (pedido explícito del usuario): toda la
-            // plataforma, no por conductor (eso ya existe como campo
-            // opcional propio del conductor en su perfil, para tarifas MÁS
-            // altas — este es el piso general que aplica a todos).
-            'minimum_fare' => ['required', 'numeric', 'min:0', 'max:100'],
+            // plataforma DE ESE PAÍS, no por conductor (eso ya existe como
+            // campo opcional propio del conductor en su perfil, para
+            // tarifas MÁS altas — este es el piso general que aplica a
+            // todos los conductores de este país). Sin tope fijo en código:
+            // cada país cobra en su propia moneda y escala (3 para Ecuador,
+            // 3000 para Chile son ambos razonables).
+            'minimum_fare' => ['required', 'numeric', 'min:0'],
             // Ticket promedio por carrera (pedido explícito del usuario):
             // alimenta la proyección de ganancia mensual del catálogo de
             // planes de conductor (ver SubscriptionPlan).
-            'average_ticket_price' => ['required', 'numeric', 'min:0', 'max:1000'],
-            // Antes fija en código (pedido explícito del usuario: poder
-            // ajustarla sin desplegar) — ver DriverProfile::staleAfterMinutes().
-            // El barrido automático (drivers:sweep-stale-availability) sigue
-            // corriendo cada 2 min sin importar este valor, así que bajarlo
-            // por debajo de eso puede tardar hasta 2 min en aplicarse del
-            // lado de ESE comando puntual (el resto de la app lo aplica al
-            // instante).
-            'driver_stale_after_minutes' => ['required', 'integer', 'min:1', 'max:60'],
+            'average_ticket_price' => ['required', 'numeric', 'min:0'],
         ]);
 
-        PricingSetting::current()->update($validated);
+        PricingSetting::forCountry($country)->update($validated);
 
         return back()->with('status', 'Tarifas actualizadas.');
     }

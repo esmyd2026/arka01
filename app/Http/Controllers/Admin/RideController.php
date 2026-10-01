@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\Review;
 use App\Models\Ride;
@@ -50,6 +51,13 @@ class RideController extends Controller
             'destination_address' => $ride->destination_address,
             'distance_km' => (float) $ride->distance_km,
             'price' => (float) $ride->price,
+            // País DE ESTA CARRERA (pedido explícito del usuario: "arka01
+            // debe funcionar en cualquier país") — por fila, porque un
+            // mismo listado puede mezclar carreras de distintos países. Ver
+            // User::country() (Country::forPhone ya cachea el catálogo
+            // activo, así que esto no agrega queries extra por fila).
+            'country' => ($ride->client ? Country::forPhone($ride->client->phone) : null)?->publicPayload()
+                ?? Country::default()->publicPayload(),
             'points_earned' => $ride->points_earned,
             'started_at' => $ride->started_at?->toIso8601String(),
             'completed_at' => $ride->completed_at?->toIso8601String(),
@@ -110,6 +118,12 @@ class RideController extends Controller
                 'status' => $ride->status,
                 'client' => $ride->client ? ['id' => $ride->client->id, 'name' => $ride->client->name, 'phone' => $ride->client->phone] : null,
                 'driver' => $ride->driver ? ['id' => $ride->driver->id, 'name' => $ride->driver->name, 'phone' => $ride->driver->phone] : null,
+                // País DEL CLIENTE de esta carrera, no el del admin que la
+                // está mirando (pedido explícito del usuario: "arka01 debe
+                // funcionar en cualquier país") — un admin ecuatoriano
+                // revisando una carrera chilena tiene que ver los montos en
+                // pesos, no en dólares. Ver User::country().
+                'country' => ($ride->client?->country() ?? Country::default())->publicPayload(),
                 'fleet_name' => $ride->fleet?->name,
                 'cooperative_name' => $ride->rideRequest?->cooperative?->name,
                 'origin_address' => $ride->origin_address,

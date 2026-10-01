@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Actions\Auth\RegisterUser;
 use App\Http\Controllers\Controller;
 use App\Models\Cooperative;
+use App\Models\Country;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use App\Rules\ValidPhoneNumberLocal;
@@ -35,6 +36,11 @@ class RegisteredUserController extends Controller
             // ver App\Services\Chatbot\IntentActionHandlers\ResendVerificationCodeHandler.
             // Mismo dato que ya usa Auth/Login.vue para el mismo propósito.
             'whatsappBusinessNumber' => WhatsAppConfig::businessNumber(),
+            // Catálogo de países administrable desde /admin/paises (pedido
+            // explícito del usuario: "arka01 debe funcionar en cualquier
+            // país") — antes esta lista de prefijos estaba fija en el
+            // código, ahora el selector se arma con lo que haya activo.
+            'countries' => Country::active()->map->publicPayload()->values(),
         ]);
     }
 
@@ -43,16 +49,6 @@ class RegisteredUserController extends Controller
      *
      * @throws ValidationException
      */
-    /**
-     * Código de país aceptado en el formulario (sección "manejemos el código
-     * de país" del alcance) — no es un catálogo de negocio como planes o
-     * zonas, es una lista fija de referencia (indicativos telefónicos
-     * reales), por eso vive acá y no en una tabla administrable. Pedido
-     * explícito del usuario: solo Sudamérica (el mercado real de la app) —
-     * Ecuador, Perú, Colombia, Venezuela, Chile, Argentina.
-     */
-    public const COUNTRY_CODES = ['+593', '+51', '+57', '+58', '+56', '+54'];
-
     public function store(Request $request, ReferralAttribution $referralAttribution, RegisterUser $registerUser): RedirectResponse
     {
         // Pedido explícito del usuario: si escribe el 0 inicial (ej.
@@ -88,7 +84,7 @@ class RegisteredUserController extends Controller
             // a este usuario a su flota (sección 3.2), por eso es obligatorio y único.
             // Se arma en dos partes (código de país + número local) para poder
             // validar y normalizar el formato E.164 antes de guardarlo.
-            'country_code' => ['required', 'string', Rule::in(self::COUNTRY_CODES)],
+            'country_code' => ['required', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['required', 'string', new ValidPhoneNumberLocal],
             'password' => [
                 'required', 'confirmed',

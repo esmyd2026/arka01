@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Models\ClientCooperative;
 use App\Models\Cooperative;
+use App\Models\Country;
 use App\Models\Fleet;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
@@ -37,7 +37,7 @@ class GuestRideController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'country_code' => ['required', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'country_code' => ['required', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['required', 'string', new ValidPhoneNumberLocal],
             'cooperative_id' => ['required', 'integer', 'exists:cooperatives,id'],
             'origin_address' => ['required', 'string', 'max:255'],

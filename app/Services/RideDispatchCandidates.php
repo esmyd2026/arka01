@@ -111,7 +111,12 @@ class RideDispatchCandidates
             );
         }
 
-        return $drivers->unique('id');
+        // Pedido explícito del usuario: "que las personas no puedan ver
+        // conductores... de otros países" — un conductor de otro país NUNCA
+        // entra a la bolsa, ni siquiera a "mi flota" (si el cliente llegó a
+        // agregar a alguien así antes de este cambio, igual deja de
+        // ofrecérsele una carrera). Ver User::isInSameCountryAs().
+        return $drivers->unique('id')->filter(fn (User $driver) => $client->isInSameCountryAs($driver));
     }
 
     /**

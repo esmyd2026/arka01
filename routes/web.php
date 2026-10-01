@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ChatbotSettingController;
 use App\Http\Controllers\Admin\ChatbotUnrecognizedController;
 use App\Http\Controllers\Admin\ClientController as AdminClientController;
 use App\Http\Controllers\Admin\CooperativeController as AdminCooperativeController;
+use App\Http\Controllers\Admin\CountriesController;
 use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\DriverController as AdminDriverController;
 use App\Http\Controllers\Admin\DriverTierController;
@@ -86,6 +87,7 @@ use App\Http\Controllers\VanTripController;
 use App\Http\Controllers\VanTripReservationController;
 use App\Http\Controllers\WhatsAppLocationPickerController;
 use App\Models\Cooperative;
+use App\Models\Country;
 use App\Models\SiteSetting;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -117,6 +119,11 @@ Route::get('/', function () {
         // configurable desde /admin/sitio — ver App\Models\SiteSetting.
         'heroBackgroundUrl' => SiteSetting::current()->hero_background_url,
         'ctaInteractionToken' => $ctaToken,
+        // Catálogo de países administrable desde /admin/paises (pedido
+        // explícito del usuario: "arka01 debe funcionar en cualquier
+        // país") — antes el selector de "Pedí tu carrera" acá abajo tenía
+        // la lista de prefijos fija en el código.
+        'countries' => Country::active()->map->publicPayload()->values(),
         'guestCooperatives' => Cooperative::query()
             ->where('status', 'approved')
             ->whereNull('suspended_at')
@@ -682,9 +689,23 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::patch('/medallas/{driverTier}', [DriverTierController::class, 'update'])->name('driver-tiers.update');
     Route::delete('/medallas/{driverTier}', [DriverTierController::class, 'destroy'])->name('driver-tiers.destroy');
 
-    // Mantenimiento del cálculo de precio sugerido (sección 5): recargo y horario nocturno.
-    Route::get('/tarifas', [PricingSettingController::class, 'edit'])->name('pricing.edit');
-    Route::patch('/tarifas', [PricingSettingController::class, 'update'])->name('pricing.update');
+    // Catálogo de países (pedido explícito del usuario: "arka01 debe
+    // funcionar en cualquier país") — de acá sale la moneda, el prefijo
+    // telefónico y la región de geocodificación que usa el resto del
+    // sistema. Ver App\Models\Country.
+    Route::get('/paises', [CountriesController::class, 'index'])->name('countries.index');
+    Route::post('/paises', [CountriesController::class, 'store'])->name('countries.store');
+    Route::patch('/paises/{country}', [CountriesController::class, 'update'])->name('countries.update');
+    Route::delete('/paises/{country}', [CountriesController::class, 'destroy'])->name('countries.destroy');
+
+    // Mantenimiento del cálculo de precio sugerido (sección 5): recargo y
+    // horario nocturno. Una fila de tarifas POR PAÍS (pedido explícito del
+    // usuario: un tope en dólares no puede aplicarle a un conductor que
+    // cobra en pesos chilenos) — /tarifas lista los países, /tarifas/{pais}
+    // edita la fila de ese país puntual.
+    Route::get('/tarifas', [PricingSettingController::class, 'index'])->name('pricing.index');
+    Route::get('/tarifas/{country}', [PricingSettingController::class, 'edit'])->name('pricing.edit');
+    Route::patch('/tarifas/{country}', [PricingSettingController::class, 'update'])->name('pricing.update');
 
     // Configuración del sitio público (pedido explícito del usuario: subir
     // la imagen de fondo del hero de Welcome.vue desde acá, en vez de
@@ -822,6 +843,15 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // que las pueda activar desde el panel administrativo. y que tenga todo
     // el volumen").
     Route::patch('/sistema/sonidos', [AdminSystemController::class, 'updateNotificationSounds'])->name('system.notification-sounds.update');
+    // Umbral de "conductor desconectado" (pedido explícito del usuario) —
+    // antes vivía en /admin/tarifas; se movió acá por ser un dato global,
+    // no por país (ver App\Models\DriverProfile::staleAfterMinutes()).
+    Route::patch('/sistema/inactividad-conductor', [AdminSystemController::class, 'updateDriverStaleAfterMinutes'])->name('system.driver-stale.update');
+    // Tope de distancia entre el origen de una carrera y el conductor
+    // (pedido explícito del usuario: "que las personas no puedan ver
+    // conductores a mas de 50 km... para evitar solicitudes asi tan
+    // extensas") — ver App\Models\DriverProfile::isWithinRangeOf().
+    Route::patch('/sistema/distancia-maxima', [AdminSystemController::class, 'updateMaxRideRequestDistance'])->name('system.max-distance.update');
 
     // Configuración → Integraciones → WhatsApp (roadmap de mejoras, sección
     // 8): evita tener que tocar el .env para cambiar el token.

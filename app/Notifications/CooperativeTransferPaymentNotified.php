@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Ride;
+use App\Support\Currency;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -44,7 +45,10 @@ class CooperativeTransferPaymentNotified extends Notification implements ShouldQ
             'type' => 'cooperative_transfer_payment_notified',
             'ride_id' => $ride->id,
             'client_user_id' => $ride->client_user_id,
-            'message' => $ride->client->name.' informó una transferencia de $'.number_format($total, 2).' por la carrera #'.$ride->id.'. Revise su cuenta bancaria.',
+            // Moneda DEL CLIENTE que hizo la transferencia (pedido
+            // explícito del usuario: "arka01 debe funcionar en cualquier
+            // país") — ver User::country().
+            'message' => $ride->client->name.' informó una transferencia de '.Currency::format($total, $ride->client->country()).' por la carrera #'.$ride->id.'. Revise su cuenta bancaria.',
         ];
     }
 }

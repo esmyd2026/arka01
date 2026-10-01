@@ -2,8 +2,10 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\PricingSetting;
+use App\Models\SiteSetting;
 use App\Models\User;
 use App\Services\PriceCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,15 +25,17 @@ class AdminPricingMaintenanceTest extends TestCase
     public function test_a_regular_user_cannot_access_the_pricing_maintenance_screen(): void
     {
         $user = User::factory()->create(['is_admin' => false]);
+        $ecuador = Country::where('iso_code', 'EC')->firstOrFail();
 
-        $this->actingAs($user)->get(route('admin.pricing.edit'))->assertForbidden();
+        $this->actingAs($user)->get(route('admin.pricing.edit', $ecuador))->assertForbidden();
     }
 
     public function test_an_admin_can_update_the_night_surcharge_settings(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);
+        $ecuador = Country::where('iso_code', 'EC')->firstOrFail();
 
-        $this->actingAs($admin)->patch(route('admin.pricing.update'), [
+        $this->actingAs($admin)->patch(route('admin.pricing.update', $ecuador), [
             'night_surcharge_percent' => 35,
             'night_starts_at' => 21,
             'night_ends_at' => 5,
@@ -44,10 +48,10 @@ class AdminPricingMaintenanceTest extends TestCase
             'pickup_surcharge_percent' => 55,
             'minimum_fare' => 2.5,
             'average_ticket_price' => 3.5,
-            'driver_stale_after_minutes' => 5,
         ])->assertRedirect();
 
         $this->assertDatabaseHas('pricing_settings', [
+            'country_id' => $ecuador->id,
             'night_surcharge_percent' => 35,
             'night_starts_at' => 21,
             'night_ends_at' => 5,
@@ -60,19 +64,19 @@ class AdminPricingMaintenanceTest extends TestCase
             'pickup_surcharge_percent' => 55,
             'minimum_fare' => 2.5,
             'average_ticket_price' => 3.5,
-            'driver_stale_after_minutes' => 5,
         ]);
     }
 
     /**
      * Cargo por trayecto de recogida (pedido explícito del usuario): umbral
-     * y porcentaje configurables desde /admin/tarifas, no constantes.
+     * y porcentaje configurables desde /admin/tarifas/{pais}, no constantes.
      */
     public function test_an_admin_can_update_the_pickup_surcharge_settings(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);
+        $ecuador = Country::where('iso_code', 'EC')->firstOrFail();
 
-        $this->actingAs($admin)->patch(route('admin.pricing.update'), [
+        $this->actingAs($admin)->patch(route('admin.pricing.update', $ecuador), [
             'night_surcharge_percent' => 20,
             'night_starts_at' => 20,
             'night_ends_at' => 6,
@@ -85,25 +89,27 @@ class AdminPricingMaintenanceTest extends TestCase
             'pickup_surcharge_percent' => 60,
             'minimum_fare' => 2,
             'average_ticket_price' => 3,
-            'driver_stale_after_minutes' => 5,
         ])->assertRedirect();
 
         $this->assertDatabaseHas('pricing_settings', [
+            'country_id' => $ecuador->id,
             'pickup_surcharge_threshold_km' => 4.5,
             'pickup_surcharge_percent' => 60,
         ]);
     }
 
     /**
-     * Pedido explícito del usuario: "ese tiempo de inactividad, ¿lo puedo
-     * subir desde el panel de administrador?" — antes era la constante
-     * DriverProfile::STALE_AFTER_MINUTES, fija en el código.
+     * Bug reportado por el usuario: un tope de tarifa mínima en dólares
+     * (Ecuador) le rompía el registro a un conductor que cobra en pesos
+     * chilenos — ahora cada país tiene su propia fila, sin pisarse.
      */
-    public function test_an_admin_can_change_how_long_a_driver_can_go_without_a_location_ping(): void
+    public function test_updating_one_country_does_not_affect_another(): void
     {
         $admin = User::factory()->create(['is_admin' => true]);
+        $ecuador = Country::where('iso_code', 'EC')->firstOrFail();
+        $chile = Country::where('iso_code', 'CL')->firstOrFail();
 
-        $this->actingAs($admin)->patch(route('admin.pricing.update'), [
+        $this->actingAs($admin)->patch(route('admin.pricing.update', $chile), [
             'night_surcharge_percent' => 20,
             'night_starts_at' => 20,
             'night_ends_at' => 6,
@@ -114,8 +120,27 @@ class AdminPricingMaintenanceTest extends TestCase
             'peak_evening_ends_at' => 19,
             'pickup_surcharge_threshold_km' => 3,
             'pickup_surcharge_percent' => 55,
-            'minimum_fare' => 2,
-            'average_ticket_price' => 3,
+            'minimum_fare' => 3000,
+            'average_ticket_price' => 4000,
+        ])->assertRedirect();
+
+        $this->assertEquals(3000, PricingSetting::forCountry($chile)->minimum_fare);
+        // La fila de Ecuador no se tocó — sigue con lo que tenía antes de
+        // este update, sin importar el valor exacto de fábrica.
+        $this->assertNotEquals(3000, PricingSetting::forCountry($ecuador)->minimum_fare);
+    }
+
+    /**
+     * Pedido explícito del usuario: "ese tiempo de inactividad, ¿lo puedo
+     * subir desde el panel de administrador?" — antes era la constante
+     * DriverProfile::STALE_AFTER_MINUTES, fija en el código; después vivió
+     * en /admin/tarifas; ahora en /admin/sistema porque no varía por país.
+     */
+    public function test_an_admin_can_change_how_long_a_driver_can_go_without_a_location_ping(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->patch(route('admin.system.driver-stale.update'), [
             'driver_stale_after_minutes' => 10,
         ])->assertRedirect();
 

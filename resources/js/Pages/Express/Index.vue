@@ -9,7 +9,13 @@ import InputError from '@/Components/InputError.vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
 import Checkbox from '@/Components/Checkbox.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del cliente logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { fetchOsrmRoute } from '@/Utils/osrmRoute';
 import { distanceKm } from '@/Utils/haversine';
 
@@ -269,7 +275,7 @@ function submit() {
                                     <span v-if="r.share_enabled" class="text-arka-primary-bright"> · abierto a compartir</span>
                                 </p>
                             </div>
-                            <span class="text-sm text-arka-text-muted shrink-0">${{ r.offered_price }}/carrera</span>
+                            <span class="text-sm text-arka-text-muted shrink-0">{{ money(r.offered_price) }}/carrera</span>
                         </Link>
                     </li>
                 </ul>
@@ -386,16 +392,16 @@ function submit() {
                         <div v-if="estimatedPrice != null" class="p-4 rounded-arka border border-arka-border space-y-1">
                             <div class="flex items-center justify-between text-sm text-arka-text-muted">
                                 <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
-                                <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × ${{ Number(referenceRatePerKm).toFixed(2) }}/km</span>
-                                <span class="text-arka-text font-medium">${{ estimatedPrice.toFixed(2) }} (estimado por trayecto)</span>
+                                <span v-else>{{ estimatedDistanceKm.toFixed(1) }} km × {{ money(referenceRatePerKm) }}/km</span>
+                                <span class="text-arka-text font-medium">{{ money(estimatedPrice) }} (estimado por trayecto)</span>
                             </div>
                             <div v-if="roundTripTotalEstimate != null" class="flex items-center justify-between text-sm text-arka-text-muted border-t border-arka-border pt-1">
-                                <span>Ida y vuelta: ${{ estimatedPrice.toFixed(2) }} × 2 carreras/día</span>
-                                <span class="text-arka-text font-medium">${{ roundTripTotalEstimate.toFixed(2) }}/día</span>
+                                <span>Ida y vuelta: {{ money(estimatedPrice) }} × 2 carreras/día</span>
+                                <span class="text-arka-text font-medium">{{ money(roundTripTotalEstimate) }}/día</span>
                             </div>
                             <p class="text-xs text-arka-text-muted">
                                 El precio por carrera que fije puede ser menor al estimado por trayecto, pero no menos de
-                                ${{ minimumAllowedPrice.toFixed(2) }} (mitad del estimado) — se cobra ese monto en cada
+                                {{ money(minimumAllowedPrice) }} (mitad del estimado) — se cobra ese monto en cada
                                 carrera<span v-if="form.is_round_trip">, ida y vuelta por separado</span>.
                             </p>
                         </div>
@@ -414,7 +420,7 @@ function submit() {
                                 v-if="minimumAllowedPrice != null && form.offered_price && Number(form.offered_price) < minimumAllowedPrice"
                                 class="mt-1 text-xs text-arka-danger"
                             >
-                                No puede ser menor a ${{ minimumAllowedPrice.toFixed(2) }} (mitad del precio estimado).
+                                No puede ser menor a {{ money(minimumAllowedPrice) }} (mitad del precio estimado).
                             </p>
                             <InputError class="mt-1" :message="form.errors.offered_price" />
                         </div>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -23,6 +24,11 @@ class ConfigController extends Controller
                 ? config("mobile.min_version.{$platform}")
                 : config('mobile.min_version'),
             'maintenance' => (bool) config('mobile.maintenance'),
+            // Catálogo de países administrable desde /admin/paises (pedido
+            // explícito del usuario: "arka01 debe funcionar en cualquier
+            // país") — antes el selector de país del registro móvil traía
+            // una lista de prefijos fija en el bundle de la app.
+            'countries' => Country::active()->map->publicPayload()->values(),
         ]);
     }
 }

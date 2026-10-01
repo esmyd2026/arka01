@@ -24,11 +24,17 @@ class RideOfferComparison
         $minimumFare = $profile?->minimum_fare !== null ? (float) $profile->minimum_fare : null;
         $at = $rideRequest->requested_at;
 
+        // País DEL CONDUCTOR que está viendo la oferta (bug reportado por el
+        // usuario: un tope de tarifa en dólares no puede aplicarle a un
+        // conductor que cobra en pesos chilenos) — ver User::country().
+        $driverCountry = $driver->country();
+
         $driverTotal = PriceCalculator::suggestedPrice(
             (float) $rideRequest->distance_km,
             $rate,
             $at,
             $minimumFare,
+            $driverCountry,
         )['total'];
 
         foreach ($rideRequest->stops as $stop) {
@@ -37,6 +43,7 @@ class RideOfferComparison
                 $rate,
                 $at,
                 $minimumFare,
+                $driverCountry,
             )['total'];
         }
 

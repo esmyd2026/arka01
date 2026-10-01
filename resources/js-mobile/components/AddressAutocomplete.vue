@@ -1,6 +1,7 @@
 <script setup>
-import { ref, shallowRef, onBeforeUnmount } from 'vue';
+import { ref, shallowRef, onBeforeUnmount, onMounted } from 'vue';
 import { loadGooglePlaces } from '../utils/googleMaps';
+import { getStoredUser } from '../services/auth';
 
 // Versión móvil de resources/js/Components/AddressAutocomplete.vue: misma
 // lógica de Google Places (sesión de autocompletado, debounce, token de
@@ -22,6 +23,18 @@ let selectionToken = 0;
 
 const suggestions = shallowRef([]);
 const open = ref(false);
+
+// Región de búsqueda de Google Places (pedido explícito del usuario: "arka01
+// debe funcionar en cualquier país") — antes 'ec' fijo acá, ahora sale del
+// país del usuario (cacheado en Preferences, ver UserResource/services/auth.js).
+// Sin usuario logueado (ej. registro) se queda en el default de Ecuador.
+const geocodingRegionCode = ref('ec');
+onMounted(async () => {
+    const user = await getStoredUser();
+    if (user?.country?.geocoding_region_code) {
+        geocodingRegionCode.value = user.country.geocoding_region_code;
+    }
+});
 
 function ensurePlacesLoaded() {
     if (placesLib) return Promise.resolve(placesLib);
@@ -67,7 +80,7 @@ async function fetchSuggestions(text) {
         const { suggestions: results } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
             input: text,
             sessionToken: sessionToken ?? newSessionToken(),
-            includedRegionCodes: ['ec'],
+            includedRegionCodes: [geocodingRegionCode.value],
         });
 
         if (requestId !== suggestionRequest) return;

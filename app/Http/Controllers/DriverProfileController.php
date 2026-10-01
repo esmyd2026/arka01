@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\City;
 use App\Models\CooperativeDriverMembership;
 use App\Models\CooperativeWalletEntry;
+use App\Models\Country;
 use App\Models\DriverBankAccount;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
@@ -70,6 +71,11 @@ class DriverProfileController extends Controller
             ]);
         }
 
+        // Tarifas DEL PAÍS del conductor (bug reportado por el usuario: un
+        // tope puesto en dólares para Ecuador le bloqueaba el registro a un
+        // conductor que cobra en pesos chilenos) — ver User::country().
+        $driverPricingSettings = PricingSetting::forCountry($user->country() ?? Country::default());
+
         return Inertia::render('Driver/Profile', [
             'driverProfile' => $request->user()->driverProfile,
             // La pantalla de perfil debe explicar exactamente la misma causa
@@ -104,17 +110,24 @@ class DriverProfileController extends Controller
             // el que usa para conectarse por WhatsApp.
             'currentPhone' => $user->phone,
             'phoneVerified' => $user->phone_verified_at !== null,
+            // Catálogo de países administrable desde /admin/paises (pedido
+            // explícito del usuario: "arka01 debe funcionar en cualquier
+            // país") — mismo catálogo que usa el registro.
+            'countries' => Country::active()->map->publicPayload()->values(),
             // Pedido explícito del usuario: la tarifa mínima que el
             // conductor declara acá no puede superar la de la plataforma
-            // (/admin/tarifas) — se muestra como tope junto al campo, y
-            // update() la rechaza si la supera (ver PriceCalculator para
-            // dónde se aplica esta jerarquía en el cálculo del precio).
-            'platformMinimumFare' => (float) PricingSetting::current()->minimum_fare,
+            // (/admin/tarifas/{pais}) — se muestra como tope junto al campo,
+            // y update() la rechaza si la supera (ver PriceCalculator para
+            // dónde se aplica esta jerarquía en el cálculo del precio). Es
+            // la tarifa DEL PAÍS del conductor (bug reportado por el
+            // usuario: antes esto mostraba siempre el tope de Ecuador, sin
+            // importar en qué país estuviera el conductor).
+            'platformMinimumFare' => (float) $driverPricingSettings->minimum_fare,
             // Cargo por distancia de recogida (pedido explícito del usuario):
             // umbral y porcentaje vigentes, para explicarle al conductor qué
             // significa el interruptor de acá abajo (ver PriceCalculator).
-            'pickupSurchargeThresholdKm' => (float) PricingSetting::current()->pickup_surcharge_threshold_km,
-            'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
+            'pickupSurchargeThresholdKm' => (float) $driverPricingSettings->pickup_surcharge_threshold_km,
+            'pickupSurchargePercent' => (int) $driverPricingSettings->pickup_surcharge_percent,
             // Billetera cooperativa-conductor (pedido explícito del
             // usuario): el conductor también tiene que poder ver si debe
             // pagarle a la cooperativa o si le deben a él, no solo la

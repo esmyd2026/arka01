@@ -4,10 +4,14 @@ import { useRouter } from 'vue-router';
 import { browseVanTrips, reserveVanTripSeats } from '../services/vanTrips';
 import { fetchCities } from '../services/profile';
 import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 
 const router = useRouter();
 const user = ref(null);
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, user.value?.country);
 const loading = ref(true);
 const error = ref(null);
 
@@ -111,7 +115,7 @@ async function reserve(trip) {
                     <p class="trip-driver">{{ trip.driver?.full_name || trip.driver?.name }} · {{ seatsAvailable(trip) }} asiento(s) libres</p>
                     <p v-if="trip.description" class="trip-desc">{{ trip.description }}</p>
                     <div class="trip-footer">
-                        <strong class="trip-price">${{ Number(trip.price_per_seat).toFixed(2) }}/asiento</strong>
+                        <strong class="trip-price">{{ money(trip.price_per_seat) }}/asiento</strong>
                         <div class="reserve-row">
                             <input v-model="seatsById[trip.id]" type="number" min="1" :max="seatsAvailable(trip)" class="seats-input" placeholder="1" />
                             <button class="mini-button accept" :disabled="reservingId === trip.id" @click="reserve(trip)">
@@ -130,7 +134,7 @@ async function reserve(trip) {
                         </div>
                         <p class="trip-driver">{{ trip.driver?.full_name || trip.driver?.name }} · {{ seatsAvailable(trip) }} asiento(s) libres<span v-if="trip.is_own_fleet"> · De tu flota</span></p>
                         <div class="trip-footer">
-                            <strong class="trip-price">${{ Number(trip.price_per_seat).toFixed(2) }}/asiento</strong>
+                            <strong class="trip-price">{{ money(trip.price_per_seat) }}/asiento</strong>
                             <div class="reserve-row">
                                 <input v-model="seatsById[trip.id]" type="number" min="1" :max="seatsAvailable(trip)" class="seats-input" placeholder="1" />
                                 <button class="mini-button accept" :disabled="reservingId === trip.id" @click="reserve(trip)">

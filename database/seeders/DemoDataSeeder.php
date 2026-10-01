@@ -60,7 +60,7 @@ class DemoDataSeeder extends Seeder
      * veo conductores en el mapa" incluso después de arreglar las
      * coordenadas): `DriverProfile::isReachable()` exige un ping de
      * ubicación de los últimos `driver_stale_after_minutes` (2 minutos por
-     * defecto, ver PricingSetting) — SALVO que el conductor tenga una
+     * defecto, ver SiteSetting) — SALVO que el conductor tenga una
      * ventana de WhatsApp abierta. `location_updated_at` de acá arriba solo
      * queda fresco al momento de sembrar; sin esto, cualquiera de estos
      * conductores de prueba se cae de todos los mapas/listas apenas pasan

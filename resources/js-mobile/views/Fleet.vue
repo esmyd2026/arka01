@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchFleet, searchDrivers, inviteDriver, removeMember, createFleet, cancelInvitation } from '../services/fleet';
 import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 
 const router = useRouter();
@@ -10,6 +11,9 @@ const fleets = ref([]);
 const loading = ref(true);
 const error = ref(null);
 const user = ref(null);
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, user.value?.country);
 const limits = ref({ max_fleets: null, max_drivers_per_fleet: null, plan_name: '' });
 const selectedFleetId = ref(null);
 const newFleetName = ref('');
@@ -216,7 +220,7 @@ async function recommend(member) {
                             <span v-if="member.average_rating">★ {{ member.average_rating }} ({{ member.review_count }})</span>
                             <span v-else>Sin calificaciones</span>
                             · {{ member.rides_count }} carreras
-                            <span v-if="member.rate_per_km"> · ${{ member.rate_per_km }}/km</span>
+                            <span v-if="member.rate_per_km"> · {{ money(member.rate_per_km) }}/km</span>
                         </p>
                         <div class="member-actions"><button class="ride-btn" @click="requestRide(member)">Pedir carrera</button><button class="recommend-btn" @click="recommend(member)">Recomendar</button></div>
                         <details class="member-menu"><summary>Más opciones</summary><button class="remove-btn" :disabled="removingMemberId === member.member_id" @click="remove(member)">{{ removingMemberId === member.member_id ? 'Quitando…' : 'Quitar de la flota' }}</button></details>

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import { exchangeGoogleCode, getDeviceId, register } from '../services/auth';
+import { exchangeGoogleCode, getCountries, getDeviceId, register } from '../services/auth';
 import { API_BASE_URL } from '../apiBase';
 import MobileBrand from '../components/MobileBrand.vue';
 import MobileThemeToggle from '../components/MobileThemeToggle.vue';
@@ -23,7 +23,12 @@ const loading = ref(false);
 const googleLoading = ref(false);
 const step = ref(1);
 const showPassword = ref(false);
-const countryCodes = ['+593', '+51', '+57', '+58', '+56', '+54'];
+// Catálogo de países administrable desde /admin/paises (pedido explícito
+// del usuario: "arka01 debe funcionar en cualquier país") — antes esta lista
+// de prefijos era fija en el bundle de la app. Se carga al montar la
+// pantalla (getCountries(), ver services/auth.js) y, mientras llega, el
+// selector arranca con solo el valor por defecto para no dejarlo vacío.
+const countryCodes = ref(['+593']);
 let appUrlListener = null;
 
 const roleCopy = computed(() => ({
@@ -130,6 +135,12 @@ onMounted(async () => {
     appUrlListener = await App.addListener('appUrlOpen', ({ url }) => handleAppUrl(url));
     const launch = await App.getLaunchUrl();
     if (launch?.url) handleAppUrl(launch.url);
+
+    const countries = await getCountries();
+    if (countries.length) {
+        countryCodes.value = countries.map((c) => c.phone_prefix);
+        countryCode.value = (countries.find((c) => c.is_default) ?? countries[0]).phone_prefix;
+    }
 });
 onBeforeUnmount(() => appUrlListener?.remove());
 </script>

@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { reactive } from 'vue';
+import { formatCurrency } from '@/Utils/currency';
 
 // Pedido explícito del usuario ("la cooperativa ve la trazabilidad de las
 // carreras, cuánto hizo su equipo y cuánto le deben o cuánto ella le debe a
@@ -17,7 +18,9 @@ const props = defineProps({
     rides: { type: Object, required: true },
 });
 
-const money = (value) => new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(value || 0);
+// Moneda del país de la cooperativa (pedido explícito del usuario: "arka01
+// debe funcionar en cualquier país") — antes 'es-EC'/'USD' fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 const date = (value) => value ? new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progress: 'En curso', scheduled: 'Programada' };
 const paymentStatusLabel = { pending: 'Pendiente', proof_submitted: 'Por revisar', confirmed: 'Pagada', rejected: 'Rechazada' };

@@ -17,8 +17,15 @@ import {
 } from '../services/activeRide';
 import { triggerSos } from '../services/sos';
 import { uploadPaymentProof, confirmCashPayment } from '../services/payments';
+import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 import MobileMap from '../components/MobileMap.vue';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const userCountry = ref(null);
+const money = (value) => formatCurrency(value, userCountry.value);
 
 // Mismas listas que App\Services\Ride\RideLifecycle (CLIENT_CANCEL_REASONS/
 // DRIVER_CANCEL_REASONS) — solo texto de UI, la validación real sigue
@@ -157,6 +164,7 @@ function handlePosition(position, err) {
 }
 
 onMounted(async () => {
+    userCountry.value = (await getStoredUser())?.country ?? null;
     await load();
     await loadMessages();
     if (ride.value?.is_driver) currentDevicePosition.value = await currentPositionOrNull();
@@ -415,7 +423,7 @@ async function confirmCash() {
             <section class="details mobile-card">
                 <p><strong>{{ ride.is_driver ? 'Cliente' : 'Conductor' }}:</strong> {{ ride.is_driver ? ride.client.name : ride.driver.name }}</p>
                 <p><strong>Destino:</strong> {{ ride.destination_address || '—' }}</p>
-                <p><strong>Precio:</strong> ${{ ride.price }}</p>
+                <p><strong>Precio:</strong> {{ money(ride.price) }}</p>
                 <p v-if="ride.distance_km"><strong>Distancia:</strong> {{ ride.distance_km }} km</p>
                 <p><strong>Pago:</strong> {{ ride.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo' }}</p>
                 <p v-if="ride.cooperative"><strong>Cooperativa:</strong> {{ ride.cooperative.name }}</p>

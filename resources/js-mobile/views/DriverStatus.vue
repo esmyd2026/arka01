@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { Geolocation } from '@capacitor/geolocation';
 import { fetchDriverStatus, updateDriverLocation } from '../services/driver';
 import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 
 // Mismo patrón que resources/js/Components/DriverAvailabilityToggle.vue
@@ -21,6 +22,9 @@ const ratePerKm = ref(null);
 const error = ref('');
 const sending = ref(false);
 const user = ref(null);
+// Moneda del propio país del conductor logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, user.value?.country);
 
 let watchId = null;
 let lastSentAt = 0;
@@ -176,7 +180,7 @@ async function toggle() {
                 </section>
 
                 <section v-if="ratePerKm" class="rate-card mobile-card">
-                    <div><p class="mobile-eyebrow">Tu tarifa declarada</p><strong>${{ ratePerKm }}</strong><small>por kilómetro</small></div>
+                    <div><p class="mobile-eyebrow">Tu tarifa declarada</p><strong>{{ money(ratePerKm) }}</strong><small>por kilómetro</small></div>
                     <button @click="router.push({ name: 'home' })">Ver inicio</button>
                 </section>
 

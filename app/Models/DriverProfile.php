@@ -444,7 +444,11 @@ class DriverProfile extends Model
      */
     public static function staleAfterMinutes(): int
     {
-        return (int) PricingSetting::current()->driver_stale_after_minutes;
+        // Config global (no por país, ver migración
+        // move_driver_stale_after_minutes_to_site_settings_table) — este
+        // barrido corre sobre TODOS los conductores de una sola pasada, sin
+        // importar en qué país estén.
+        return (int) SiteSetting::current()->driver_stale_after_minutes;
     }
 
     /**
@@ -655,18 +659,29 @@ class DriverProfile extends Model
         return $this->verification_status !== 'pending';
     }
 
+    /**
+     * Pedido explícito del usuario: "que las personas no puedan ver
+     * conductores a mas de 50 km mas o menos para evitar solicitudes asi
+     * tan extensas" — tope GLOBAL de la plataforma (SiteSetting::current()->
+     * max_ride_request_distance_km, editable desde /admin/sistema), que
+     * nunca se puede superar. El conductor puede seguir declarando un radio
+     * PROPIO más angosto (max_request_distance_km) si quiere recibir
+     * solicitudes solo más cerca todavía — el menor de los dos manda, pero
+     * el del conductor jamás ensancha el techo de la plataforma.
+     */
     public function isWithinRangeOf(float $originLat, float $originLng): bool
     {
-        if ($this->max_request_distance_km === null) {
-            return true;
-        }
-
         if ($this->current_lat === null || $this->current_lng === null) {
             return true;
         }
 
         $distanceKm = Haversine::distanceKm($originLat, $originLng, (float) $this->current_lat, (float) $this->current_lng);
 
-        return $distanceKm <= $this->max_request_distance_km;
+        $platformMaxKm = (int) SiteSetting::current()->max_ride_request_distance_km;
+        $effectiveMaxKm = $this->max_request_distance_km !== null
+            ? min($this->max_request_distance_km, $platformMaxKm)
+            : $platformMaxKm;
+
+        return $distanceKm <= $effectiveMaxKm;
     }
 }

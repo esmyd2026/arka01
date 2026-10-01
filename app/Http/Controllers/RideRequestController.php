@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\City;
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
@@ -111,6 +112,11 @@ class RideRequestController extends Controller
             ->take(20)
             ->values();
 
+        // Tarifas DEL PAÍS del cliente (bug reportado por el usuario: un
+        // tope/recargo en dólares no tiene sentido para un cliente que paga
+        // en pesos chilenos) — ver User::country().
+        $clientPricingSettings = PricingSetting::forCountry($request->user()->country() ?? Country::default());
+
         return Inertia::render('Ride/Request', [
             'fleet' => $fleet,
             'fleets' => $fleets,
@@ -145,14 +151,14 @@ class RideRequestController extends Controller
             // que en realidad iba a cobrar el mínimo configurado. Con esto el
             // frontend puede replicar el mismo `max(...)` y avisar cuándo se
             // está aplicando el mínimo en vez del cálculo por km.
-            'minimumFare' => (float) PricingSetting::current()->minimum_fare,
+            'minimumFare' => (float) $clientPricingSettings->minimum_fare,
             // Cargo por trayecto de recogida (pedido explícito del usuario:
             // "debe bajar un costo porque la recogida es más cerca" — el
             // precio mostrado por conductor tiene que reflejar su distancia
             // real de recogida, no solo la del viaje). El frontend replica
             // PriceCalculator::pickupSurcharge() con estos dos valores.
-            'pickupSurchargeThresholdKm' => (float) PricingSetting::current()->pickup_surcharge_threshold_km,
-            'pickupSurchargePercent' => (int) PricingSetting::current()->pickup_surcharge_percent,
+            'pickupSurchargeThresholdKm' => (float) $clientPricingSettings->pickup_surcharge_threshold_km,
+            'pickupSurchargePercent' => (int) $clientPricingSettings->pickup_surcharge_percent,
             // Bug real reportado por el usuario ("sale que un conductor
             // cobra 2.00 y cuando pide la carrera sale luego que es 2.30... el
             // tema de costo debe ser transparente"): el estimado del frontend
@@ -164,14 +170,14 @@ class RideRequestController extends Controller
             // puede replicar exactamente la misma regla horaria (ver
             // Ride/Request.vue, estimatedPrice/estimatedPriceForDriver).
             'timeSurcharge' => [
-                'night_percent' => (int) PricingSetting::current()->night_surcharge_percent,
-                'night_starts_at' => (int) PricingSetting::current()->night_starts_at,
-                'night_ends_at' => (int) PricingSetting::current()->night_ends_at,
-                'peak_percent' => (int) PricingSetting::current()->peak_surcharge_percent,
-                'peak_morning_starts_at' => (int) PricingSetting::current()->peak_morning_starts_at,
-                'peak_morning_ends_at' => (int) PricingSetting::current()->peak_morning_ends_at,
-                'peak_evening_starts_at' => (int) PricingSetting::current()->peak_evening_starts_at,
-                'peak_evening_ends_at' => (int) PricingSetting::current()->peak_evening_ends_at,
+                'night_percent' => (int) $clientPricingSettings->night_surcharge_percent,
+                'night_starts_at' => (int) $clientPricingSettings->night_starts_at,
+                'night_ends_at' => (int) $clientPricingSettings->night_ends_at,
+                'peak_percent' => (int) $clientPricingSettings->peak_surcharge_percent,
+                'peak_morning_starts_at' => (int) $clientPricingSettings->peak_morning_starts_at,
+                'peak_morning_ends_at' => (int) $clientPricingSettings->peak_morning_ends_at,
+                'peak_evening_starts_at' => (int) $clientPricingSettings->peak_evening_starts_at,
+                'peak_evening_ends_at' => (int) $clientPricingSettings->peak_evening_ends_at,
             ],
             // Pedido explícito del usuario ("guardá las que ya ha realizado
             // para que aparezcan como favoritas"): direcciones que este

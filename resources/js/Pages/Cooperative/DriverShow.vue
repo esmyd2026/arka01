@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
 
 const props = defineProps({
     membership: { type: Object, required: true },
@@ -9,7 +10,9 @@ const props = defineProps({
     rides: { type: Object, required: true },
 });
 
-const money = (value) => new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(value || 0);
+// Moneda del país de la cooperativa (pedido explícito del usuario: "arka01
+// debe funcionar en cualquier país") — antes 'es-EC'/'USD' fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 const hours = (minutes) => `${Math.floor((minutes || 0) / 60)} h ${Math.round((minutes || 0) % 60)} min`;
 const date = (value) => value ? new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const statusLabel = { completed: 'Completada', cancelled: 'Cancelada', in_progress: 'En curso', scheduled: 'Programada' };

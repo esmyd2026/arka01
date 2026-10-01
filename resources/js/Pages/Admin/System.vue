@@ -3,6 +3,9 @@ import { computed } from 'vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { previewSound } from '@/Utils/liveAlert';
@@ -23,6 +26,16 @@ const props = defineProps({
     notificationSounds: { type: Array, required: true },
     notificationSoundOptions: { type: Array, required: true },
     notificationVolume: { type: Number, required: true },
+    // Umbral de "conductor desconectado" (pedido explícito del usuario: "ese
+    // tiempo de inactividad, ¿lo puedo subir desde el panel de
+    // administrador?") — antes vivía en /admin/tarifas; se movió acá porque
+    // es un dato global, no por país (ver App\Models\DriverProfile::staleAfterMinutes()).
+    driverStaleAfterMinutes: { type: Number, required: true },
+    // Tope de distancia entre el origen de una carrera y el conductor
+    // (pedido explícito del usuario: "que las personas no puedan ver
+    // conductores a mas de 50 km... para evitar solicitudes asi tan
+    // extensas") — ver App\Models\DriverProfile::isWithinRangeOf().
+    maxRideRequestDistanceKm: { type: Number, required: true },
 });
 
 const QUICK_LINK_GROUP_LABEL = {
@@ -71,6 +84,28 @@ function toggleRequirement(key) {
 }
 function saveDriverRequirements() {
     driverRequirementsForm.patch(route('admin.system.driver-requirements.update'), { preserveScroll: true });
+}
+
+// Umbral de "conductor desconectado" (pedido explícito del usuario) — antes
+// vivía en /admin/tarifas junto al resto del cálculo de precio, pero no
+// varía por país (ver App\Models\DriverProfile::staleAfterMinutes()).
+const driverStaleForm = useForm({
+    driver_stale_after_minutes: props.driverStaleAfterMinutes,
+});
+
+function saveDriverStale() {
+    driverStaleForm.patch(route('admin.system.driver-stale.update'), { preserveScroll: true });
+}
+
+// Tope de distancia entre el origen de una carrera y el conductor (pedido
+// explícito del usuario: "que las personas no puedan ver conductores a mas
+// de 50 km... para evitar solicitudes asi tan extensas").
+const maxDistanceForm = useForm({
+    max_ride_request_distance_km: props.maxRideRequestDistanceKm,
+});
+
+function saveMaxDistance() {
+    maxDistanceForm.patch(route('admin.system.max-distance.update'), { preserveScroll: true });
 }
 
 // Sonidos de notificaciones + volumen (pedido explícito del usuario: "una
@@ -236,6 +271,92 @@ async function resetDemo() {
                             leave-to-class="opacity-0"
                         >
                             <p v-if="driverRequirementsForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
+                        </Transition>
+                    </div>
+                </div>
+
+                <!-- Umbral de "conductor desconectado" (pedido explícito del
+                     usuario: "ese tiempo de inactividad, ¿lo puedo subir
+                     desde el panel de administrador?") — antes vivía en
+                     /admin/tarifas; se movió acá porque es un dato global,
+                     no por país. -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-arka-text">Inactividad de conductores</h3>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Un conductor "disponible" sin un ping de ubicación más reciente que esto se muestra
+                            desconectado (roster de sus clientes, despacho de carreras) — salvo que siga alcanzable
+                            por WhatsApp. El barrido automático que lo desconecta de verdad en la base sigue
+                            corriendo cada 2 min sin importar este valor.
+                        </p>
+                    </div>
+
+                    <div class="max-w-xs">
+                        <InputLabel value="Minutos sin ubicación antes de marcar a un conductor desconectado" />
+                        <TextInput
+                            type="number"
+                            min="1"
+                            max="60"
+                            class="mt-1 block w-full"
+                            v-model="driverStaleForm.driver_stale_after_minutes"
+                        />
+                        <InputError class="mt-1" :message="driverStaleForm.errors.driver_stale_after_minutes" />
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <PrimaryButton :disabled="driverStaleForm.processing" @click="saveDriverStale">Guardar</PrimaryButton>
+                        <Transition
+                            enter-active-class="transition ease-in-out"
+                            enter-from-class="opacity-0"
+                            leave-active-class="transition ease-in-out"
+                            leave-to-class="opacity-0"
+                        >
+                            <p v-if="driverStaleForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
+                        </Transition>
+                    </div>
+                </div>
+
+                <!-- Tope de distancia entre el origen de una carrera y el
+                     conductor (pedido explícito del usuario: "que las
+                     personas no puedan ver conductores a mas de 50 km...
+                     para evitar solicitudes asi tan extensas. y menos de
+                     otros paises") — el bloqueo entre países no tiene
+                     interruptor, es siempre así (ver
+                     RideDispatchCandidates/DriverDirectoryFinder), solo el
+                     número de km es configurable acá. -->
+                <div class="p-4 sm:p-6 bg-arka-card shadow rounded-arka space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-arka-text">Distancia máxima para pedir una carrera</h3>
+                        <p class="mt-1 text-sm text-arka-text-muted">
+                            Un cliente nunca ve ni puede pedirle una carrera a un conductor a más de esta distancia de
+                            su origen (en "Mi flota", el directorio público o el despacho automático) — evita
+                            solicitudes larguísimas por error. Un conductor puede declarar un radio propio todavía
+                            más angosto desde su perfil, pero nunca uno mayor a este. Conductores de otro país nunca
+                            aparecen, sin importar la distancia.
+                        </p>
+                    </div>
+
+                    <div class="max-w-xs">
+                        <InputLabel value="Distancia máxima (km)" />
+                        <TextInput
+                            type="number"
+                            min="1"
+                            max="500"
+                            class="mt-1 block w-full"
+                            v-model="maxDistanceForm.max_ride_request_distance_km"
+                        />
+                        <InputError class="mt-1" :message="maxDistanceForm.errors.max_ride_request_distance_km" />
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <PrimaryButton :disabled="maxDistanceForm.processing" @click="saveMaxDistance">Guardar</PrimaryButton>
+                        <Transition
+                            enter-active-class="transition ease-in-out"
+                            enter-from-class="opacity-0"
+                            leave-active-class="transition ease-in-out"
+                            leave-to-class="opacity-0"
+                        >
+                            <p v-if="maxDistanceForm.recentlySuccessful" class="text-sm text-arka-text-muted">Guardado.</p>
                         </Transition>
                     </div>
                 </div>

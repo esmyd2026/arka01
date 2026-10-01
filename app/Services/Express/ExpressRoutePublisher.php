@@ -2,6 +2,7 @@
 
 namespace App\Services\Express;
 
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\ExpressRoute;
 use App\Models\Fleet;
@@ -95,16 +96,16 @@ class ExpressRoutePublisher
         return $platformAverage ? round((float) $platformAverage, 2) : 0.0;
     }
 
-    public function suggestedPrice(float $originLat, float $originLng, float $destinationLat, float $destinationLng, float $ratePerKm): float
+    public function suggestedPrice(float $originLat, float $originLng, float $destinationLat, float $destinationLng, float $ratePerKm, ?Country $country = null): float
     {
         $distanceKm = Haversine::distanceKm($originLat, $originLng, $destinationLat, $destinationLng);
 
-        return PriceCalculator::suggestedPrice($distanceKm, $ratePerKm)['base'];
+        return PriceCalculator::suggestedPrice($distanceKm, $ratePerKm, country: $country)['base'];
     }
 
-    public function minimumFare(): float
+    public function minimumFare(?Country $country = null): float
     {
-        return (float) PricingSetting::current()->minimum_fare;
+        return (float) PricingSetting::forCountry($country ?? Country::default())->minimum_fare;
     }
 
     public function create(User $client, array $validated): ExpressRoute
@@ -119,6 +120,7 @@ class ExpressRoutePublisher
             $validated['destination_lat'],
             $validated['destination_lng'],
             $this->referenceRatePerKm($client->id),
+            $client->country(),
         );
         $minimumPrice = round($suggestedPrice * self::MINIMUM_PRICE_FACTOR, 2);
 
@@ -173,6 +175,7 @@ class ExpressRoutePublisher
             (float) $route->destination_lat,
             (float) $route->destination_lng,
             $this->referenceRatePerKm($route->client_user_id),
+            $route->client->country(),
         );
         $minimumPrice = round($suggestedPrice * self::MINIMUM_PRICE_FACTOR, 2);
 

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchCities, updateProfile, updatePassword } from '../services/profile';
-import { getStoredUser, fetchCurrentUser, logout, deleteAccount } from '../services/auth';
+import { getStoredUser, fetchCurrentUser, logout, deleteAccount, getCountries } from '../services/auth';
 import MobileShell from '../components/MobileShell.vue';
 
 const router = useRouter();
@@ -34,7 +34,10 @@ const cities = ref([]);
 // el mismo número y disparar una verificación innecesaria.
 const countryCode = ref('+593');
 const phoneLocal = ref('');
-const countryCodes = ['+593', '+51', '+57', '+58', '+56', '+54'];
+// Catálogo de países administrable desde /admin/paises (pedido explícito
+// del usuario: "arka01 debe funcionar en cualquier país") — antes fijo en
+// el bundle de la app, ahora se carga al montar la pantalla.
+const countryCodes = ref(['+593']);
 
 const avatarFile = ref(null);
 const avatarPreview = ref(null);
@@ -62,6 +65,14 @@ onMounted(async () => {
         // Sin bloquear el resto del formulario si el catálogo falla.
     } finally {
         loading.value = false;
+    }
+
+    const countries = await getCountries();
+    if (countries.length) {
+        countryCodes.value = countries.map((c) => c.phone_prefix);
+        const currentCountry = [...countries].sort((a, b) => b.phone_prefix.length - a.phone_prefix.length)
+            .find((c) => user.value?.phone?.startsWith(c.phone_prefix));
+        countryCode.value = (currentCountry ?? countries.find((c) => c.is_default) ?? countries[0]).phone_prefix;
     }
 });
 

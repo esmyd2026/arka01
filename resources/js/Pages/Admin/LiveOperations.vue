@@ -4,6 +4,7 @@ import AdminLayout from '@/Layouts/AdminLayout.vue';
 import FleetMap from '@/Components/FleetMap.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
 
 // Pedido explícito del usuario: "ver las transaciones que se estan
 // ejecutando ahorita... cliente esperando conductor de tal lado a tal lado
@@ -194,7 +195,7 @@ const hasAnyLocatedNearbyDriver = computed(() => props.waitingRequests.some((r) 
                             {{ request.destination_address || 'Destino sin dirección' }}
                         </p>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
-                            <span v-if="request.price != null" class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-bold text-arka-primary">${{ request.price.toFixed(2) }}</span>
+                            <span v-if="request.price != null" class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-bold text-arka-primary">{{ formatCurrency(request.price, request.country) }}</span>
                             <span v-if="request.distance_km != null" class="rounded-full bg-arka-base/60 px-2.5 py-1 text-arka-text-muted">{{ request.distance_km.toFixed(1) }} km</span>
                             <span v-if="request.is_scheduled" class="rounded-full bg-arka-warning/10 px-2.5 py-1 text-arka-warning">🗓 Programada</span>
                         </div>
@@ -253,7 +254,7 @@ const hasAnyLocatedNearbyDriver = computed(() => props.waitingRequests.some((r) 
                             {{ ride.destination_address || 'Destino sin dirección' }}
                         </p>
                         <div class="flex flex-wrap items-center gap-2 text-xs">
-                            <span v-if="ride.price != null" class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-bold text-arka-primary">${{ ride.price.toFixed(2) }}</span>
+                            <span v-if="ride.price != null" class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-bold text-arka-primary">{{ formatCurrency(ride.price, ride.country) }}</span>
                             <span v-if="ride.distance_km != null" class="rounded-full bg-arka-base/60 px-2.5 py-1 text-arka-text-muted">{{ ride.distance_km.toFixed(1) }} km</span>
                         </div>
                     </article>

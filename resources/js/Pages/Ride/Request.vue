@@ -19,7 +19,7 @@ import { fetchOsrmRoute, fetchOsrmMultiRoute } from '@/Utils/osrmRoute';
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 import { etaMinutes } from '@/Utils/eta';
-import { roundUpToDime } from '@/Utils/currency';
+import { roundUpToDime, formatCurrency } from '@/Utils/currency';
 import { startGuidedTour, RIDE_TOUR_RESUME_KEY } from '@/Utils/guidedTour';
 
 const props = defineProps({
@@ -1346,9 +1346,16 @@ const categoryStartingPrices = computed(() => {
     };
 });
 
+// Moneda del propio país del cliente logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
+// fijo en cada monto de esta pantalla.
+function money(value) {
+    return formatCurrency(value, usePage().props.auth.country);
+}
+
 function formattedStartingPrice(category) {
     const price = categoryStartingPrices.value[category];
-    return price == null ? null : `$${price.toFixed(2)}`;
+    return price == null ? null : money(price);
 }
 
 // El cliente puede aceptar el precio estimado tal cual, o proponer otro monto
@@ -2638,7 +2645,7 @@ function submit() {
                                      distancia"): nunca km exacto hasta un conductor puntual. -->
                                 <span class="text-right shrink-0">
                                     <span v-if="estimatedTotalPriceForDriver(driver) != null" class="block text-sm font-semibold text-arka-ink">
-                                        ${{ estimatedTotalPriceForDriver(driver).toFixed(2) }}
+                                        {{ money(estimatedTotalPriceForDriver(driver)) }}
                                     </span>
                                     <span v-if="driver.etaMinutes != null" class="block text-xs text-arka-ink/50">{{ driver.etaMinutes }} min</span>
                                 </span>
@@ -2736,7 +2743,7 @@ function submit() {
                              con su propio precio, antes del tramo final. -->
                         <div v-for="(stop, index) in stopsWithPrices" :key="index" class="flex items-center justify-between text-sm text-arka-ink/50">
                             <span>Parada {{ index + 1 }}{{ stop.distanceKm != null ? ` · ${stop.distanceKm.toFixed(1)} km` : '' }}</span>
-                            <span class="text-arka-ink font-medium">{{ stop.price != null ? `$${stop.price.toFixed(2)}` : 'Calculando…' }}</span>
+                            <span class="text-arka-ink font-medium">{{ stop.price != null ? money(stop.price) : 'Calculando…' }}</span>
                         </div>
 
                         <div class="flex items-center justify-between text-sm text-arka-ink/50">
@@ -2744,13 +2751,13 @@ function submit() {
                                  tarifa, mostrar ese cálculo sería engañoso — no es lo que se
                                  termina cobrando (fix reportado por el usuario). -->
                             <span v-if="isMinimumFareApplied">Tarifa mínima de la plataforma</span>
-                            <span v-else>{{ realDistanceKm.toFixed(1) }} km × ${{ referenceRatePerKm.toFixed(2) }}/km{{ stops.length ? ' (tramo final)' : '' }}</span>
-                            <span class="text-arka-ink font-medium">${{ estimatedPrice.toFixed(2) }} (estimado)</span>
+                            <span v-else>{{ realDistanceKm.toFixed(1) }} km × {{ money(referenceRatePerKm) }}/km{{ stops.length ? ' (tramo final)' : '' }}</span>
+                            <span class="text-arka-ink font-medium">{{ money(estimatedPrice) }} (estimado)</span>
                         </div>
 
                         <div v-if="stopsTotalPrice != null" class="flex items-center justify-between text-sm font-semibold pt-1 border-t border-arka-ink/10">
                             <span class="text-arka-ink">Total del recorrido</span>
-                            <span class="text-arka-primary-bright">${{ estimatedTotalPrice.toFixed(2) }}</span>
+                            <span class="text-arka-primary-bright">{{ money(estimatedTotalPrice) }}</span>
                         </div>
 
                         <label class="flex items-center gap-2">
@@ -2774,7 +2781,7 @@ function submit() {
                             v-if="useCustomPrice && customPrice && estimatedPrice != null && Number(customPrice) < estimatedPrice"
                             class="text-xs text-arka-danger"
                         >
-                            No puede ser menor al precio estimado (${{ estimatedPrice.toFixed(2) }}).
+                            No puede ser menor al precio estimado ({{ money(estimatedPrice) }}).
                         </p>
                         <InputError :message="form.errors.offered_price" />
 

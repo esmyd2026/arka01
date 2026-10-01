@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Models\Country;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -27,6 +28,11 @@ class UserResource extends JsonResource
             'role' => $this->role,
             'avatar_url' => $this->avatar_url,
             'public_profile_url' => $this->public_profile_url,
+            // País del usuario (pedido explícito del usuario: "arka01 debe
+            // funcionar en cualquier país") — moneda, tope de tarifa y
+            // región de búsqueda de direcciones en la app móvil salen de
+            // acá (ver App\Models\User::country()).
+            'country' => ($this->country() ?? Country::default())->publicPayload(),
         ];
     }
 }

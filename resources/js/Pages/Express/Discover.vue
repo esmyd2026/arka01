@@ -4,7 +4,12 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del cliente logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 
 // Buscar Expresos de otros clientes, abiertos a compartir, cuyo origen y
 // destino queden cerca de los propios (pedido explícito del usuario: "que se
@@ -91,7 +96,7 @@ function requestToJoin(routeId) {
                                 {{ r.origin_address ?? 'Origen sin referencia' }} &rarr; {{ r.destination_address ?? 'Destino sin referencia' }}
                             </p>
                             <p class="text-sm text-arka-text-muted">
-                                Sale {{ r.departure_time }} · ${{ r.price_per_person }}/persona ·
+                                Sale {{ r.departure_time }} · {{ money(r.price_per_person) }}/persona ·
                                 a {{ Math.max(r.origin_distance_km, r.destination_distance_km) }} km de su ruta
                             </p>
                         </div>

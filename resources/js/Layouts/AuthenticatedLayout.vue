@@ -19,6 +19,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { pushSupported, subscribeToPush, syncGrantedPushSubscription } from '@/push.js';
 import { canInstallApp, installApp } from '@/pwaInstall.js';
 import { armAudioUnlockOnFirstInteraction, configureNotificationSounds, playAttentionAlert, playCabinChime, playIncomingRideAlert, playUpdateChime, unlockAudioContext } from '@/Utils/liveAlert';
+import { formatCurrency } from '@/Utils/currency';
 import { dismissIncomingRideRequest, pushIncomingRideRequest, reconcileIncomingRideRequests } from '@/Utils/incomingRideRequest';
 import { clientOnboardingSteps, driverOnboardingSteps } from '@/Utils/onboardingSteps';
 import { confirmDialog } from '@/Utils/confirmDialog';
@@ -436,7 +437,7 @@ onMounted(() => {
         });
         clientRideChannel.listen('.ride-request.accepted', (e) => showClientRideAlert(`🚗 ${e.driver_name} aceptó su carrera.`, e.ride_id));
         clientRideChannel.listen('.ride-request.countered', (e) => showClientRideAlert(
-            `${e.driver_name} propone $${Number(e.offered_amount).toFixed(2)}. Revise la contrapropuesta.`,
+            `${e.driver_name} propone ${formatCurrency(e.offered_amount, usePage().props.auth.country)}. Revise la contrapropuesta.`,
             null,
             'attention'
         ));

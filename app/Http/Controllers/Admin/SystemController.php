@@ -54,6 +54,18 @@ class SystemController extends Controller
             'notificationSounds' => NotificationSoundRegistry::withState(SiteSetting::current()->notification_sounds ?? []),
             'notificationSoundOptions' => NotificationSoundRegistry::soundOptions(),
             'notificationVolume' => SiteSetting::current()->notification_volume ?? 100,
+            // Umbral de "conductor desconectado" (pedido explícito del
+            // usuario: "ese tiempo de inactividad, ¿lo puedo subir desde el
+            // panel de administrador?") — antes vivía en /admin/tarifas,
+            // ahora acá porque es un dato global, no por país (ver
+            // App\Models\DriverProfile::staleAfterMinutes()).
+            'driverStaleAfterMinutes' => SiteSetting::current()->driver_stale_after_minutes,
+            // Tope de distancia entre el origen de una carrera y el
+            // conductor (pedido explícito del usuario: "que las personas no
+            // puedan ver conductores a mas de 50 km... para evitar
+            // solicitudes asi tan extensas") — ver
+            // App\Models\DriverProfile::isWithinRangeOf().
+            'maxRideRequestDistanceKm' => SiteSetting::current()->max_ride_request_distance_km,
         ]);
     }
 
@@ -127,6 +139,38 @@ class SystemController extends Controller
         ]);
 
         return back()->with('status', 'Sonidos de notificaciones actualizados.');
+    }
+
+    /**
+     * Umbral de "conductor desconectado" (pedido explícito del usuario) —
+     * antes vivía en Admin\PricingSettingController, ver
+     * App\Models\DriverProfile::staleAfterMinutes() para quién lo usa.
+     */
+    public function updateDriverStaleAfterMinutes(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'driver_stale_after_minutes' => ['required', 'integer', 'min:1', 'max:60'],
+        ]);
+
+        SiteSetting::current()->update($validated);
+
+        return back()->with('status', 'Umbral de inactividad actualizado.');
+    }
+
+    /**
+     * Tope de distancia entre el origen de una carrera y el conductor
+     * (pedido explícito del usuario) — ver
+     * App\Models\DriverProfile::isWithinRangeOf() para quién lo usa.
+     */
+    public function updateMaxRideRequestDistance(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'max_ride_request_distance_km' => ['required', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        SiteSetting::current()->update($validated);
+
+        return back()->with('status', 'Tope de distancia actualizado.');
     }
 
     public function resetDemo(Request $request): RedirectResponse

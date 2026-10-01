@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\PricingSetting;
 use Carbon\Carbon;
@@ -45,12 +46,19 @@ class PriceCalculator
      * aplicado sobre la distancia con margen incluido — nada de sumarlo
      * aparte ni de tocar esa lógica.
      *
+     * Bug reportado por el usuario: antes esto SIEMPRE leía la fila de
+     * tarifas de Ecuador (PricingSetting::current()), así que un tope en
+     * dólares se aplicaba también a conductores en otros países. Ahora
+     * recibe el país explícito de quien llama — nunca lo adivina — y cae al
+     * predeterminado del sistema si no se lo pasan (compatibilidad con los
+     * llamadores que todavía no lo migraron).
+     *
      * @return array{base: float, night_surcharge: float, peak_surcharge: float, total: float, is_night: bool, is_peak: bool}
      */
-    public static function suggestedPrice(float $distanceKm, float $ratePerKm, ?Carbon $at = null, ?float $driverMinimumFare = null): array
+    public static function suggestedPrice(float $distanceKm, float $ratePerKm, ?Carbon $at = null, ?float $driverMinimumFare = null, ?Country $country = null): array
     {
         $at ??= now();
-        $settings = PricingSetting::current();
+        $settings = PricingSetting::forCountry($country ?? Country::default());
         $distanceKm += self::DISTANCE_PADDING_KM;
 
         // Tarifa base mínima (pedido explícito del usuario, editable desde

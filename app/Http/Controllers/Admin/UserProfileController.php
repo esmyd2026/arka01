@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Controller;
 use App\Models\ChatbotMessage;
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\DriverTier;
 use App\Models\Fleet;
@@ -168,6 +168,10 @@ class UserProfileController extends Controller
             // es la única pantalla donde un admin ve si la cuenta está
             // bloqueada y puede reactivarla.
             'profileUser' => $user->makeVisible('locked_at'),
+            // País DE ESTE USUARIO, no el del admin que lo está mirando
+            // (pedido explícito del usuario: "arka01 debe funcionar en
+            // cualquier país") — ver User::country().
+            'country' => ($user->country() ?? Country::default())->publicPayload(),
             'driverPlan' => $user->isDriver() ? $this->planLimits->forDriver($user) : null,
             // Medalla vigente por puntos (pedido explícito del usuario: poder
             // ver y ajustar los puntos desde acá) — ver updatePoints() abajo.
@@ -180,7 +184,7 @@ class UserProfileController extends Controller
             'reviewCount' => $reviewCount,
             'recentReviews' => $recentReviews,
             'whatsappMessages' => $whatsappMessages,
-            'countryCodes' => RegisteredUserController::COUNTRY_CODES,
+            'countryCodes' => Country::active()->pluck('phone_prefix')->values(),
         ]);
     }
 
@@ -204,7 +208,7 @@ class UserProfileController extends Controller
 
         $validated = $request->validate([
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($user->id)],
-            'country_code' => ['required_with:phone_local', 'nullable', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'country_code' => ['required_with:phone_local', 'nullable', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['nullable', 'string', new ValidPhoneNumberLocal],
         ]);
 

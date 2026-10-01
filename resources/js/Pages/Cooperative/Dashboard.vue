@@ -5,9 +5,13 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import FleetMap from '@/Components/FleetMap.vue';
 import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import { isAudioUnlocked, playIncomingRideAlert, unlockAudioContext } from '@/Utils/liveAlert';
+import { formatCurrency } from '@/Utils/currency';
 
 const props = defineProps({ cooperative: { type: Object, required: true }, stats: { type: Object, required: true }, requests: { type: Array, required: true }, drivers: { type: Array, required: true } });
 const page = usePage();
+// Moneda del propio país de la cooperativa (pedido explícito del usuario:
+// "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2) fijo acá.
+const money = (value) => formatCurrency(value, page.props.auth.country);
 const selectedDrivers = reactive({});
 const activeView = ref('dispatch');
 const expandedRequests = reactive({});
@@ -355,7 +359,7 @@ onBeforeUnmount(() => {
 
                                 <div v-if="!openDispatchCards[request.id]" class="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
                                     <p class="truncate text-sm text-arka-text"><span class="text-arka-primary">●</span> {{ operationalOrigin(request) }} <span class="px-1 text-arka-text-muted">→</span> {{ request.destination_address || 'Destino sin dirección' }}</p>
-                                    <div class="flex flex-wrap items-center gap-1.5 text-xs"><span class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-bold text-arka-primary">${{ Number(request.current_offered_price ?? 0).toFixed(2) }}</span><span class="rounded-full bg-arka-card px-2.5 py-1 text-arka-text-muted">{{ Number(request.distance_km ?? 0).toFixed(1) }} km</span><span class="rounded-full bg-arka-card px-2.5 py-1 text-arka-text-muted">~{{ request.trip_eta_minutes }} min</span></div>
+                                    <div class="flex flex-wrap items-center gap-1.5 text-xs"><span class="rounded-full bg-arka-primary/10 px-2.5 py-1 font-bold text-arka-primary">{{ money(request.current_offered_price ?? 0) }}</span><span class="rounded-full bg-arka-card px-2.5 py-1 text-arka-text-muted">{{ Number(request.distance_km ?? 0).toFixed(1) }} km</span><span class="rounded-full bg-arka-card px-2.5 py-1 text-arka-text-muted">~{{ request.trip_eta_minutes }} min</span></div>
                                     <p class="truncate text-xs text-arka-text-muted"><template v-if="recommendedDriver(request)"><span class="font-semibold text-arka-text">Recomendado:</span> {{ recommendedDriver(request).name }} · ~{{ recommendedDriver(request).eta_minutes ?? '—' }} min</template><template v-else>Sin unidades disponibles</template></p>
                                 </div>
 
@@ -367,7 +371,7 @@ onBeforeUnmount(() => {
                                 <div v-if="openDispatchCards[request.id]" class="mt-4 grid grid-cols-3 gap-2">
                                     <div class="rounded-xl border border-arka-border bg-arka-card px-3 py-2.5">
                                         <p class="text-[10px] font-semibold uppercase tracking-wide text-arka-text-muted">Valor</p>
-                                        <p class="mt-0.5 text-base font-bold text-arka-primary">${{ Number(request.current_offered_price ?? 0).toFixed(2) }}</p>
+                                        <p class="mt-0.5 text-base font-bold text-arka-primary">{{ money(request.current_offered_price ?? 0) }}</p>
                                     </div>
                                     <div class="rounded-xl border border-arka-border bg-arka-card px-3 py-2.5">
                                         <p class="text-[10px] font-semibold uppercase tracking-wide text-arka-text-muted">Distancia</p>

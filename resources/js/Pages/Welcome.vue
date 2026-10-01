@@ -7,6 +7,7 @@ import SocialLinks from '@/Components/SocialLinks.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
 import SearchableSelect from '@/Components/SearchableSelect.vue';
 import AddressAutocomplete from '@/Components/AddressAutocomplete.vue';
+import { buildCountryCodeOptions } from '@/Utils/countries';
 
 // Bug real reportado por el usuario (con captura): el <select> nativo del
 // "Tipo" se veía blanco, con el tema del sistema operativo en vez del oscuro
@@ -33,7 +34,13 @@ const props = defineProps({
     // un admin suba una, el hero conserva el fondo claro de la aplicación.
     heroBackgroundUrl: { type: String, default: null },
     ctaInteractionToken: { type: String, default: '' },
+    // Catálogo de países administrable desde /admin/paises (pedido
+    // explícito del usuario: "arka01 debe funcionar en cualquier país").
+    countries: { type: Array, default: () => [] },
 });
+
+const guestCountryCodeOptions = computed(() => buildCountryCodeOptions(props.countries));
+const defaultGuestCountryCode = computed(() => (props.countries.find((c) => c.is_default) ?? props.countries[0])?.phone_prefix ?? '');
 
 const authUser = usePage().props.auth?.user ?? null;
 
@@ -148,7 +155,7 @@ const guestForm = useForm({
     origin_address: '', origin_lat: null, origin_lng: null,
     destination_address: '', destination_lat: null, destination_lng: null,
     cooperative_id: null,
-    name: '', country_code: '+593', phone_local: '',
+    name: '', country_code: defaultGuestCountryCode.value, phone_local: '',
     website: '',
 });
 
@@ -1159,7 +1166,7 @@ function submitFeedback() {
                     <div>
                         <label class="mb-1.5 block text-sm font-medium text-arka-text">Número de WhatsApp</label>
                         <div class="grid grid-cols-[7rem_1fr] gap-2">
-                            <SearchableSelect v-model="guestForm.country_code" :options="[{value: '+593', label: '🇪🇨 +593'}, {value: '+51', label: '🇵🇪 +51'}, {value: '+57', label: '🇨🇴 +57'}, {value: '+58', label: '🇻🇪 +58'}, {value: '+56', label: '🇨🇱 +56'}, {value: '+54', label: '🇦🇷 +54'}]" />
+                            <SearchableSelect v-model="guestForm.country_code" :options="guestCountryCodeOptions" />
                             <input v-model="guestForm.phone_local" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="999 000 222" class="min-w-0 rounded-arka border-arka-border bg-transparent text-arka-text placeholder:text-arka-text-muted focus:border-arka-primary focus:ring-arka-primary" />
                         </div>
                         <p v-if="guestForm.errors.phone_local" class="mt-1 text-xs text-arka-danger">{{ guestForm.errors.phone_local }}</p>

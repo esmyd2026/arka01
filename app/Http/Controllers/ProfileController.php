@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\City;
+use App\Models\Country;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\PlanLimits;
@@ -54,7 +54,7 @@ class ProfileController extends Controller
             // Pedido explícito del usuario ("que tambien pueda actualizar su
             // numero de telefono") — mismo catálogo de países que ya usa el
             // registro y el formulario de conductor.
-            'countryCodes' => RegisteredUserController::COUNTRY_CODES,
+            'countryCodes' => Country::active()->pluck('phone_prefix')->values(),
             // Pedido explícito del usuario: una tarjeta de perfil "profesional"
             // arriba de todo, mismo lenguaje visual que la tarjeta de "Te
             // recomendaron viajar con..." (Referral/Show.vue) — necesita su

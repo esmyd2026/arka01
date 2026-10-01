@@ -9,6 +9,11 @@ import UserAvatar from '@/Components/UserAvatar.vue';
 import TrustScoreBadge from '@/Components/TrustScoreBadge.vue';
 import DriverCategoryBadge from '@/Components/DriverCategoryBadge.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { confirmDialog } from '@/Utils/confirmDialog';
 import { tierLabel } from '@/Utils/tierBadge';
 import { openWhatsAppChooser } from '@/Utils/whatsapp';
@@ -302,7 +307,7 @@ onBeforeUnmount(() => {
                                 <span class="text-xs">{{ tierLabel(driver.tier) }}</span>
                             </p>
                             <p class="text-sm text-arka-text-muted">
-                                ${{ driver.rate_per_km }}/km
+                                {{ money(driver.rate_per_km) }}/km
                                 <span v-if="driver.username">· @{{ driver.username }}</span>
                             </p>
                             <DriverCategoryBadge class="mt-1" :label="driver.public_category_label" />
@@ -436,7 +441,7 @@ onBeforeUnmount(() => {
                             <!-- Pedido explícito del usuario: no mostrar el teléfono acá
                                  (privacidad) — solo la tarifa. -->
                             <p v-if="member.driver.driver_profile" class="mt-1 text-xs text-arka-text-muted">
-                                Tarifa · <span class="font-medium text-arka-primary">${{ member.driver.driver_profile.rate_per_km }}/km</span>
+                                Tarifa · <span class="font-medium text-arka-primary">{{ money(member.driver.driver_profile.rate_per_km) }}/km</span>
                             </p>
                             <DriverCategoryBadge
                                 v-if="memberStats[member.driver.id]"

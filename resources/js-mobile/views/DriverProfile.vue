@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchDriverProfile, updateDriverProfile, updateCoverageSectors } from '../services/driverProfile';
 import { fetchCities } from '../services/profile';
-import { getStoredUser } from '../services/auth';
+import { getStoredUser, getCountries } from '../services/auth';
 import MobileShell from '../components/MobileShell.vue';
 
 const router = useRouter();
@@ -76,7 +76,10 @@ async function saveCoverageSectors() {
 
 const countryCode = ref('+593');
 const phoneLocal = ref('');
-const countryCodes = ['+593', '+51', '+57', '+58', '+56', '+54'];
+// Catálogo de países administrable desde /admin/paises (pedido explícito
+// del usuario: "arka01 debe funcionar en cualquier país") — antes fijo en
+// el bundle de la app, ahora se carga al montar la pantalla.
+const countryCodes = ref(['+593']);
 
 const documentFiles = ref({ identity_document: null, license_photo: null, police_record: null });
 const documentLabels = { identity_document: 'Cédula o documento de identidad', license_photo: 'Licencia de conducir', police_record: 'Certificado de antecedentes' };
@@ -135,6 +138,14 @@ onMounted(async () => {
         coverageCityId.value = cityWithExistingSector?.id ?? cities.value[0]?.id ?? null;
     } catch (e) {
         // El selector de zona es un extra: si el catálogo falla, el resto del perfil sigue funcionando.
+    }
+
+    const countries = await getCountries();
+    if (countries.length) {
+        countryCodes.value = countries.map((c) => c.phone_prefix);
+        const currentCountry = [...countries].sort((a, b) => b.phone_prefix.length - a.phone_prefix.length)
+            .find((c) => user.value?.phone?.startsWith(c.phone_prefix));
+        countryCode.value = (currentCountry ?? countries.find((c) => c.is_default) ?? countries[0]).phone_prefix;
     }
 });
 

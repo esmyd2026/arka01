@@ -11,6 +11,7 @@ use App\Models\Fleet;
 use App\Models\FleetMember;
 use App\Models\RideRequest;
 use App\Models\User;
+use App\Support\Currency;
 use App\Models\WhatsAppSetting;
 use App\Services\GoogleGeocodingService;
 use App\Services\Haversine;
@@ -695,7 +696,7 @@ class WhatsAppRideBookingHandler
             // WhatsAppPendingRequestHandler para una solicitud sin aceptar.
             WhatsAppFreeformSender::sendButtons(
                 $phone,
-                '✅ Solicitud #'.$rideRequest->id.' creada por $'.number_format((float) $rideRequest->current_offered_price, 2).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.',
+                '✅ Solicitud #'.$rideRequest->id.' creada por '.Currency::format((float) $rideRequest->current_offered_price, $user->country()).'. Le avisaremos por aquí y en Arka01 cuando un conductor acepte.',
                 [['id' => 'wa_pending_cancel', 'title' => 'Cancelar solicitud']],
             );
             // Pedido explícito del usuario: "si no ha recibido ninguna

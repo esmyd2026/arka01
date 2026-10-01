@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchDriverStats } from '../services/driverStats';
 import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 
 const router = useRouter();
@@ -13,8 +14,10 @@ const stats = ref(null);
 
 const statusLabels = { completed: 'Completada', cancelled: 'Cancelada', in_progress: 'En curso', scheduled: 'Programada' };
 
+// Moneda del país del conductor (pedido explícito del usuario: "arka01 debe
+// funcionar en cualquier país") — antes '$'+toFixed(2) fijo acá.
 function formatMoney(value) {
-    return `$${Number(value).toFixed(2)}`;
+    return formatCurrency(value, user.value?.country);
 }
 
 function formatDate(dateString) {

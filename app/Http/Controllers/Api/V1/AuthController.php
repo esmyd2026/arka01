@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Auth\RegisterUser;
 use App\Exceptions\ActiveSessionExistsException;
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\Cooperative;
+use App\Models\Country;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\Auth\DriverOfflineOnLogout;
@@ -67,7 +67,7 @@ class AuthController extends Controller
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255'],
-            'country_code' => ['required', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'country_code' => ['required', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['required', 'string', new ValidPhoneNumberLocal],
             'password' => ['required', 'confirmed', Rules\Password::defaults()->min(8)->mixedCase()->numbers()],
             'ref' => ['nullable', 'uuid', 'exists:users,public_id'],

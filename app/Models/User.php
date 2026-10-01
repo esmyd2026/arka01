@@ -581,6 +581,44 @@ class User extends Authenticatable
         return $this->cooperative()->exists();
     }
 
+    /**
+     * País del usuario (pedido explícito del usuario: "arka01 debe
+     * funcionar en cualquier país") — NO es una columna propia: se deduce
+     * emparejando `phone` (country_code+phone_local concatenado) contra el
+     * catálogo de App\Models\Country. Es la única fuente de verdad para
+     * saber en qué moneda cobra, qué tope de tarifa le aplica y en qué
+     * región restringir la búsqueda de direcciones (ver PriceCalculator,
+     * DriverProfileUpdater, AddressAutocomplete). Null solo si el teléfono
+     * no matchea ningún prefijo activo (dato viejo o país desactivado) —
+     * quien la llame debe caer a Country::default() en ese caso.
+     */
+    public function country(): ?Country
+    {
+        return Country::forPhone($this->phone);
+    }
+
+    /**
+     * Pedido explícito del usuario: "que las personas no puedan ver
+     * conductores... de otros países" — un cliente nunca debe ver ni poder
+     * pedirle una carrera a un conductor de otro país, sin importar la
+     * distancia (ver RideDispatchCandidates::gatherPoolDrivers() y
+     * DriverDirectoryFinder). Si cualquiera de los dos teléfonos no matchea
+     * ningún país activo (dato viejo), se trata como "mismo país" para no
+     * ocultar de más por un caso raro de catálogo — el filtro de distancia
+     * sigue aplicando igual.
+     */
+    public function isInSameCountryAs(User $other): bool
+    {
+        $thisCountry = $this->country();
+        $otherCountry = $other->country();
+
+        if ($thisCountry === null || $otherCountry === null) {
+            return true;
+        }
+
+        return $thisCountry->id === $otherCountry->id;
+    }
+
     public function isAdmin(): bool
     {
         // Cast explícito: un modelo recién creado (ej. actingAs() en tests

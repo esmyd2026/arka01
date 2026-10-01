@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\CooperativeDriverMembership;
+use App\Models\Country;
 use App\Models\DriverProfile;
 use App\Models\FleetInvitation;
 use App\Models\RideRequest;
@@ -97,6 +98,14 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
+                // País del usuario (pedido explícito del usuario: "arka01
+                // debe funcionar en cualquier país") — moneda, tope de
+                // tarifa y región de búsqueda de direcciones salen de acá
+                // en todo el frontend web (ver User::country(),
+                // AddressAutocomplete.vue, Utils/currency.js). Sin usuario
+                // logueado (Welcome.vue, Register.vue) cae al país
+                // predeterminado del sistema.
+                'country' => ($user?->country() ?? Country::default())->publicPayload(),
                 // Cada cuenta es cliente O conductor, nunca las dos (ver
                 // App\Models\User::isClient()/isDriver() y los chequeos de
                 // exclusividad en FleetController/DriverProfileController).

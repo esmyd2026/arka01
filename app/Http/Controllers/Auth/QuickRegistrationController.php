@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Exceptions\ActiveSessionExistsException;
 use App\Http\Controllers\Controller;
 use App\Mail\QuickRegistrationCodeMail;
+use App\Models\Country;
 use App\Models\User;
 use App\Rules\ValidPhoneNumberLocal;
 use App\Services\WhatsAppVerificationSender;
@@ -52,7 +53,7 @@ class QuickRegistrationController extends Controller
         ]);
 
         $validated = $request->validate([
-            'country_code' => ['required', 'string', Rule::in(RegisteredUserController::COUNTRY_CODES)],
+            'country_code' => ['required', 'string', Rule::in(Country::active()->pluck('phone_prefix'))],
             'phone_local' => ['required', 'string', new ValidPhoneNumberLocal],
             // Pedido explícito del usuario ("priorizar el teléfono pero si
             // no que sea por email"): opcional, solo como respaldo si

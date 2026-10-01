@@ -20,6 +20,7 @@ use App\Notifications\CooperativeRideRequestedPushNotification;
 use App\Notifications\RideRequestedPushNotification;
 use App\Services\Haversine;
 use App\Services\PriceCalculator;
+use App\Support\Currency;
 use App\Services\RideDispatchCandidates;
 use App\Services\SmartDispatchScorer;
 use App\Services\WhatsAppFreeformSender;
@@ -412,7 +413,7 @@ class RideRequestCreator
                 ? round((float) $legRouteDistanceKm, 2)
                 : $legHaversineKm;
 
-            $legPrice = PriceCalculator::suggestedPrice($legDistanceKm, $ratePerKm, driverMinimumFare: $driverMinimumFareForStops)['total'];
+            $legPrice = PriceCalculator::suggestedPrice($legDistanceKm, $ratePerKm, driverMinimumFare: $driverMinimumFareForStops, country: $client->country())['total'];
             $stopsPrice += $legPrice;
 
             $stopsData[] = [
@@ -435,6 +436,7 @@ class RideRequestCreator
             $distanceKm,
             $ratePerKm,
             driverMinimumFare: $this->referenceMinimumFare($driverUserId),
+            country: $client->country(),
         )['total'];
 
         // Cargo por trayecto de recogida (pedido explícito del usuario: "el
@@ -454,7 +456,7 @@ class RideRequestCreator
 
         if (isset($validated['offered_price']) && $validated['offered_price'] < $minimumAcceptablePrice) {
             throw ValidationException::withMessages([
-                'offered_price' => 'Su propuesta no puede ser menor al precio estimado ($'.number_format($minimumAcceptablePrice, 2).').',
+                'offered_price' => 'Su propuesta no puede ser menor al precio estimado ('.Currency::format($minimumAcceptablePrice, $client->country()).').',
             ]);
         }
 

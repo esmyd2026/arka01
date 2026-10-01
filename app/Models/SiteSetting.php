@@ -37,6 +37,17 @@ class SiteSetting extends Model
         // App\Services\NotificationSoundRegistry.
         'notification_sounds',
         'notification_volume',
+        // Umbral operativo (pedido explícito del usuario: "ese tiempo de
+        // inactividad, ¿lo puedo subir desde el panel de administrador?") —
+        // antes vivía en pricing_settings, pero es un dato global (no varía
+        // por país) — ver App\Models\DriverProfile::staleAfterMinutes().
+        'driver_stale_after_minutes',
+        // Tope de distancia entre el origen de una carrera y el conductor
+        // (pedido explícito del usuario: "que las personas no puedan ver
+        // conductores a mas de 50 km... para evitar solicitudes asi tan
+        // extensas") — global, no por país, mismo criterio que el de
+        // arriba. Ver App\Models\DriverProfile::isWithinRangeOf().
+        'max_ride_request_distance_km',
     ];
 
     protected $casts = [

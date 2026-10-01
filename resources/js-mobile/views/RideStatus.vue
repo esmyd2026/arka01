@@ -2,6 +2,8 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { fetchRideRequest, cancelRideRequest } from '../services/rides';
+import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 import MobileMap from '../components/MobileMap.vue';
 
@@ -12,6 +14,10 @@ const rideRequest = ref(null);
 const loading = ref(true);
 const error = ref(null);
 const cancelling = ref(false);
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const userCountry = ref(null);
+const money = (value) => formatCurrency(value, userCountry.value);
 
 // Sin WebSocket todavía del lado móvil (pendiente en el roadmap) — el
 // estado en vivo se resuelve con sondeo cada 3 segundos, igual que
@@ -61,6 +67,7 @@ function schedulePoll() {
 }
 
 onMounted(async () => {
+    userCountry.value = (await getStoredUser())?.country ?? null;
     await load();
     schedulePoll();
 });
@@ -102,7 +109,7 @@ async function cancel() {
             <section class="details mobile-card">
                 <div class="destination"><span></span><p><small>Destino</small><strong>{{ rideRequest.destination_address || '—' }}</strong></p></div>
                 <div v-if="rideRequest.driver" class="detail-row"><span>Conductor</span><strong>{{ rideRequest.driver.name }}</strong></div>
-                <div class="detail-row"><span>Oferta</span><strong class="price">${{ rideRequest.current_offered_price }}</strong></div>
+                <div class="detail-row"><span>Oferta</span><strong class="price">{{ money(rideRequest.current_offered_price) }}</strong></div>
                 <div v-if="rideRequest.distance_km" class="detail-row"><span>Distancia estimada</span><strong>{{ rideRequest.distance_km }} km</strong></div>
             </section>
 

@@ -5,7 +5,12 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import DangerButton from '@/Components/DangerButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { formatCurrency } from '@/Utils/currency';
+
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, usePage().props.auth.country);
 import { confirmDialog } from '@/Utils/confirmDialog';
 
 // La prop se llama "expressRoute" (no "route") a propósito: route() es el
@@ -136,12 +141,12 @@ function submitIncident() {
                     <p class="text-sm text-arka-text-muted">
                         {{ expressRoute.days_of_week.map((d) => DAY_LABELS[d]).join(', ') }} · sale {{ expressRoute.departure_time }}
                     </p>
-                    <p class="text-arka-text font-medium">${{ expressRoute.offered_price }}/carrera</p>
+                    <p class="text-arka-text font-medium">{{ money(expressRoute.offered_price) }}/carrera</p>
 
                     <!-- Compartido (pedido explícito del usuario): el precio total
                          no cambia, se reparte entre el dueño y sus acompañantes. -->
                     <p v-if="expressRoute.share_enabled" class="text-sm text-arka-primary-bright">
-                        Abierto a compartir · ${{ expressRoute.price_per_person }}/persona con
+                        Abierto a compartir · {{ money(expressRoute.price_per_person) }}/persona con
                         {{ expressRoute.companions.filter((c) => c.status === 'accepted').length }} acompañante(s) aceptado(s)
                         (cupo {{ expressRoute.max_companions ?? 1 }})
                     </p>
@@ -173,7 +178,7 @@ function submitIncident() {
                     <div>
                         <p class="text-arka-text">Su postulación: <span class="font-medium">{{ myApplication.status }}</span></p>
                         <p v-if="myApplication.proposed_price" class="text-sm text-arka-text-muted">
-                            Propuso ${{ myApplication.proposed_price }}
+                            Propuso {{ money(myApplication.proposed_price) }}
                         </p>
                     </div>
                     <SecondaryButton v-if="myApplication.status === 'pending'" @click="withdrawApplication(myApplication.id)">
@@ -188,7 +193,7 @@ function submitIncident() {
                             Su pedido para compartir: <span class="font-medium">{{ COMPANION_STATUS_LABELS[myCompanionRequest.status] }}</span>
                         </p>
                         <p v-if="myCompanionRequest.status === 'accepted'" class="text-sm text-arka-text-muted">
-                            Le toca pagar ${{ expressRoute.price_per_person }} por carrera.
+                            Le toca pagar {{ money(expressRoute.price_per_person) }} por carrera.
                         </p>
                     </div>
                     <SecondaryButton v-if="['pending', 'accepted'].includes(myCompanionRequest.status)" @click="leaveShared">
@@ -270,7 +275,7 @@ function submitIncident() {
                         >
                             <div>
                                 <p class="text-arka-text font-medium">{{ a.driver.name }}</p>
-                                <p v-if="a.proposed_price" class="text-sm text-arka-text-muted">Propone ${{ a.proposed_price }}</p>
+                                <p v-if="a.proposed_price" class="text-sm text-arka-text-muted">Propone {{ money(a.proposed_price) }}</p>
                                 <p v-else class="text-sm text-arka-text-muted">Acepta el precio ofrecido</p>
                             </div>
                             <div class="flex gap-2 shrink-0">

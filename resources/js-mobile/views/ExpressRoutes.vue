@@ -14,11 +14,15 @@ import {
     fetchExpressRoute,
 } from '../services/express';
 import { getStoredUser } from '../services/auth';
+import { formatCurrency } from '../utils/currency';
 import MobileShell from '../components/MobileShell.vue';
 import AddressAutocomplete from '../components/AddressAutocomplete.vue';
 
 const router = useRouter();
 const user = ref(null);
+// Moneda del propio país del usuario logueado (pedido explícito del
+// usuario: "arka01 debe funcionar en cualquier país") — antes "$" fijo acá.
+const money = (value) => formatCurrency(value, user.value?.country);
 const loading = ref(true);
 const error = ref(null);
 const notice = ref(null);
@@ -242,7 +246,7 @@ async function apply(route) {
                         <span class="route-info">
                             <strong>{{ route.name }}</strong>
                             <small>{{ route.origin_address }} → {{ route.destination_address }}</small>
-                            <small>{{ route.departure_time }} · ${{ route.offered_price.toFixed(2) }}</small>
+                            <small>{{ route.departure_time }} · {{ money(route.offered_price) }}</small>
                         </span>
                         <span class="status-chip" :class="route.status">{{ route.status }}</span>
                     </button>
@@ -291,7 +295,7 @@ async function apply(route) {
                     <span class="route-info">
                         <strong>{{ route.name }}</strong>
                         <small>{{ route.origin_address }} → {{ route.destination_address }}</small>
-                        <small>{{ route.client?.name }} · ${{ route.offered_price.toFixed(2) }}</small>
+                        <small>{{ route.client?.name }} · {{ money(route.offered_price) }}</small>
                     </span>
 
                     <template v-if="!myApplications[route.id]">
@@ -326,7 +330,7 @@ async function apply(route) {
                 <label class="checkbox-field"><input v-model="form.is_round_trip" type="checkbox" /><span>Ida y vuelta</span></label>
                 <label v-if="form.is_round_trip" class="mobile-field"><span>Hora de regreso</span><input v-model="form.return_time" type="time" class="mobile-input" /></label>
                 <label class="mobile-field"><span>Precio ofrecido ($)</span><input v-model="form.offered_price" type="number" step="0.01" min="0.01" class="mobile-input" /></label>
-                <p v-if="referenceRate" class="hint-copy">Tarifa de referencia de tu flota: ${{ referenceRate.toFixed(2) }}/km. Mínimo general: ${{ minimumFare?.toFixed(2) }}.</p>
+                <p v-if="referenceRate" class="hint-copy">Tarifa de referencia de tu flota: {{ money(referenceRate) }}/km. Mínimo general: {{ money(minimumFare) }}.</p>
                 <label class="checkbox-field"><input v-model="form.share_enabled" type="checkbox" /><span>Permitir que otros clientes se sumen a compartirlo</span></label>
                 <label v-if="form.share_enabled" class="mobile-field"><span>Máximo de acompañantes</span><input v-model="form.max_companions" type="number" min="1" max="6" class="mobile-input" /></label>
                 <p v-if="formError" class="mobile-alert">{{ formError }}</p>
