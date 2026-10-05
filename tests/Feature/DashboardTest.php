@@ -498,6 +498,12 @@ class DashboardTest extends TestCase
      */
     public function test_driver_stats_report_earnings_today_separately_from_the_month(): void
     {
+        // Bug de flakiness real (detectado corriendo el suite completo los
+        // primeros días de un mes): "hoy" sin congelar + subDays(5) podía
+        // cruzar al mes anterior, restando esa carrera del total mensual.
+        // Día 18 a mitad de mes: restarle 5 días nunca sale del mismo mes.
+        Carbon::setTestNow(Carbon::parse('2026-03-18 12:00:00'));
+
         $driver = User::factory()->create();
         DriverProfile::factory()->for($driver)->create();
 
@@ -525,6 +531,8 @@ class DashboardTest extends TestCase
             ->where('driverStats.completed_rides_this_month', 2)
             ->where('driverStats.completed_rides', 2)
         );
+
+        Carbon::setTestNow();
     }
 
     /**

@@ -7,12 +7,12 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { formatCurrency } from '@/Utils/currency';
+import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
 // Moneda del propio país del conductor logueado (pedido explícito del
 // usuario: "arka01 debe funcionar en cualquier país") — antes "$"+toFixed(2)
 // fijo en cada monto de esta pantalla.
 const money = (value) => formatCurrency(value, usePage().props.auth.country);
-import { tierColorClass, tierLabel } from '@/Utils/tierBadge';
 
 const props = defineProps({
     filters: { type: Object, required: true },
